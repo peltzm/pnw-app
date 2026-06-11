@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sozialraumanalyse — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  /* ── Tokens (1:1 aus Berichtsgenerator) ──────────────────────────────── */
+  :root {
+    --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
+    --text: #1a1916; --text-muted: #6b6860; --text-hint: #a09e99;
+    --accent: #7b3f1e; --accent-light: #f5ede7; --accent-mid: #c47848;
+    --success: #2d6a4f; --success-bg: #eaf4ee;
+    --error: #9b1c1c; --error-bg: #fef2f2;
+    --info-bg: #eff6ff; --info: #1d4ed8;
+    --radius: 8px; --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+  /* ── Header (aus Berichtsgenerator) ─────────────────────────────────── */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .header-brand { display: flex; align-items: center; gap: 12px; }
+  .user-badge { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+  .user-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-mid); }
+
+  /* ── Tab-Nav ─────────────────────────────────────────────────────────── */
+  .tab-nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; gap: 2px; overflow-x: auto; }
+  .tab-nav::-webkit-scrollbar { display: none; }
+  .tab-btn { padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: inherit; transition: color .12s, border-color .12s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  /* ── Main ────────────────────────────────────────────────────────────── */
+  .main { max-width: 1080px; margin: 0 auto; padding: 1.75rem 2rem 4rem; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Cards (aus Berichtsgenerator) ──────────────────────────────────── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
+
+  /* ── Alerts (aus Berichtsgenerator) ─────────────────────────────────── */
+  .alert { border-radius: var(--radius); padding: 10px 14px; font-size: 12px; line-height: 1.5; margin-bottom: 1rem; }
+  .alert-info { background: var(--info-bg); color: var(--info); border: 1px solid #bfdbfe; }
+  .alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; }
+  .alert-error { background: var(--error-bg); color: var(--error); border: 1px solid #fecaca; }
+
+  /* ── Buttons (aus Berichtsgenerator) ────────────────────────────────── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.12s; border: none; font-family: inherit; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #6a3418; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: white; color: var(--text); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--bg); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-add { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent-mid); background: none; border: 1px dashed var(--accent-mid); border-radius: var(--radius); padding: 6px 14px; cursor: pointer; font-family: inherit; }
+  .btn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 1rem; }
+  .btn-remove { font-size: 11px; color: var(--error); background: none; border: 1px solid currentColor; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-family: inherit; }
+
+  /* ── Status bar (aus Berichtsgenerator) ─────────────────────────────── */
+  .status-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: var(--radius); font-size: 12px; margin-bottom: 1rem; }
+  .status-bar.uploading { background: var(--info-bg); color: var(--info); border: 1px solid #bfdbfe; }
+  .status-bar.done { background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; }
+  .info-card { background: var(--accent-light); border: 1px solid #e8c4a8; border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid #e8c4a8; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: var(--text-muted); }
+  .info-val { color: var(--accent); font-weight: 500; }
+
+  /* ── Login (aus Berichtsgenerator) ──────────────────────────────────── */
+  .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem; max-width: 400px; width: 100%; text-align: center; }
+  .login-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .login-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.6; }
+
+  /* ── Field (aus Berichtsgenerator) ──────────────────────────────────── */
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .field input, .field select, .field textarea { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; color: var(--text); background: white; outline: none; font-family: inherit; transition: border-color 0.12s; width: 100%; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent-mid); }
+  .field textarea { min-height: 80px; resize: vertical; }
+  select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+
+  /* ── KPI Grid ────────────────────────────────────────────────────────── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1rem; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; }
+  .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .kpi-value { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1.1; }
+  .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+  .kpi-delta { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-top: 6px; }
+  .delta-neg { background: #fee2e2; color: var(--error); }
+  .delta-pos { background: var(--success-bg); color: var(--success); }
+  .delta-neu { background: var(--accent-light); color: var(--accent); }
+
+  /* ── Two-col ─────────────────────────────────────────────────────────── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── Pilot box ───────────────────────────────────────────────────────── */
+  .pilot-box { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-mid) 100%); color: #fff; border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .pilot-box h2 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .pilot-box p { font-size: 12px; opacity: .88; line-height: 1.6; }
+  .pilot-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pilot-tag { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); border-radius: 20px; padding: 3px 11px; font-size: 11px; font-weight: 600; }
+
+  /* ── Table ───────────────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); background: var(--bg); border-bottom: 1px solid var(--border); }
+  thead th.r { text-align: right; }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg); }
+  td { padding: 9px 12px; vertical-align: middle; font-size: 13px; }
+  td.r { text-align: right; font-variant-numeric: tabular-nums; }
+  td[contenteditable] { outline: none; cursor: text; }
+  td[contenteditable]:focus { background: #fffbf8; outline: 1px solid var(--accent-mid); border-radius: 3px; }
+
+  /* ── Träger grid ─────────────────────────────────────────────────────── */
+  .traeger-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .traeger-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; transition: border-color .12s; }
+  .traeger-card:hover { border-color: var(--accent-mid); }
+  .traeger-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .traeger-type { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; display: inline-block; margin-bottom: 8px; }
+  .type-amb   { background: #dbeafe; color: #1e40af; }
+  .type-stat  { background: #f3e8ff; color: #6b21a8; }
+  .type-breit { background: var(--success-bg); color: var(--success); }
+  .type-sonder{ background: #fef3c7; color: #92400e; }
+  .type-soz   { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .traeger-note { font-size: 12px; color: var(--text-muted); line-height: 1.45; }
+  .traeger-bew { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .traeger-bew textarea { width: 100%; min-height: 56px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; resize: vertical; background: var(--bg); color: var(--text); font-family: inherit; }
+  .traeger-bew textarea:focus { outline: 1px solid var(--accent-mid); border-color: var(--accent-mid); }
+
+  /* ── Analyse grid ────────────────────────────────────────────────────── */
+  .analyse-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .ana-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .ana-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .ana-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+  .ana-card textarea { width: 100%; min-height: 80px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; resize: vertical; background: var(--bg); color: var(--text); font-family: inherit; }
+  .ana-card textarea:focus { outline: 1px solid var(--accent-mid); border-color: var(--accent-mid); }
+
+  /* ── Empfehlungen ────────────────────────────────────────────────────── */
+  .empf-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .empf-textarea { width: 100%; min-height: 90px; font-size: 13px; line-height: 1.6; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; resize: vertical; background: var(--surface); color: var(--text); font-family: inherit; margin-bottom: 1rem; }
+  .empf-textarea:focus { outline: 1px solid var(--accent-mid); border-color: var(--accent-mid); }
+
+  /* ── SP dot ──────────────────────────────────────────────────────────── */
+  .sp-bar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; margin-bottom: 1rem; }
+  .sp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+  .sp-dot.ok { background: var(--success); }
+  .sp-dot.warn { background: #d97706; }
+
+  /* ── Status badge inline ─────────────────────────────────────────────── */
+  .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .badge-pilot { background: var(--accent-light); color: var(--accent); }
+  .badge-aktiv { background: var(--success-bg); color: var(--success); }
+  .badge-beob  { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* ── Responsive ──────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .main { padding: 1rem; }
+    .tab-nav { padding: 0 1rem; }
+    .header { padding: 0 1rem; }
+  }
+  input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN (aus Berichtsgenerator) ══ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:60px; width:auto; margin-bottom:1.5rem;" alt="Praxis NeueWege">
+    <div class="login-title">Sozialraumanalyse</div>
+    <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an um die Sozialraumanalyse Landkreis Dachau zu bearbeiten.</div>
+    <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="login()">
+      <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <div id="loginError" class="alert alert-error" style="display:none; margin-top:1rem; text-align:left;"></div>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="appScreen" style="display:none">
+
+  <div class="header">
+    <div class="header-brand">
+      <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:32px; width:auto;" alt="Praxis NeueWege">
+      <span style="font-size:14px; font-weight:600; color:var(--text); margin-left:4px;">Sozialraumanalyse</span>
+      <span style="font-size:12px; color:var(--text-muted); margin-left:4px;">LK Dachau</span>
+    </div>
+    <div class="user-badge" id="userBadge">
+      <div class="user-dot"></div>
+      <span id="userName"></span>
+      <button onclick="logout()" style="margin-left:8px; font-size:11px; background:none; border:1px solid var(--border); border-radius:4px; padding:2px 8px; cursor:pointer; color:var(--text-muted);">Abmelden</button>
+    </div>
+  </div>
+
+  <nav class="tab-nav">
+    <button class="tab-btn active" onclick="showTab('dashboard',this)">Dashboard</button>
+    <button class="tab-btn" onclick="showTab('gemeinden',this)">Gemeinden</button>
+    <button class="tab-btn" onclick="showTab('traeger',this)">Träger</button>
+    <button class="tab-btn" onclick="showTab('analyse',this)">Analyse</button>
+    <button class="tab-btn" onclick="showTab('empfehlungen',this)">Empfehlungen</button>
+  </nav>
+
+  <div class="main">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div class="tab-panel active" id="tab-dashboard">
+      <div class="sp-bar">
+        <div class="sp-dot" id="spDot"></div>
+        <span id="spStatus">SharePoint wird verbunden…</span>
+        <span style="margin-left:auto; color:var(--text-hint); font-size:11px;">Stand: Januar 2025</span>
+      </div>
+
+      <div class="pilot-box">
+        <h2>🎯 Empfehlung: Selektiver Pilot Nordkreis</h2>
+        <p>Geografische Verlängerung des bestehenden Pfaffenhofen-Einzugsgebiets. Unterdurchschnittliche HzE-Quoten (Unterversorgung), geringe Trägerdichte, kein direkter AmpEr-Wettbewerb im ambulanten HzE-Segment.</p>
+        <div class="pilot-tags">
+          <span class="pilot-tag">Markt Indersdorf</span>
+          <span class="pilot-tag">Altomünster</span>
+          <span class="pilot-tag">Petershausen</span>
+          <span class="pilot-tag">Hilgertshausen-Tandern</span>
+          <span class="pilot-tag">Weichs</span>
+          <span class="pilot-tag">Vierkirchen</span>
+        </div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-label">Einwohner</div>
+          <div class="kpi-value">157.744</div>
+          <div class="kpi-sub">16 Gemeinden + Stadt Dachau</div>
+          <div class="kpi-delta delta-neu">+78 % seit 1970</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">HzE gesamt p.a.</div>
+          <div class="kpi-value">610</div>
+          <div class="kpi-sub">Jahresmittel 2020–2022</div>
+          <div class="kpi-delta delta-neg">−27 % vs. Bayern</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Quote / 100 Mj.</div>
+          <div class="kpi-value">2,53</div>
+          <div class="kpi-sub">Bayern: 3,45</div>
+          <div class="kpi-delta delta-neg">−27 %</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Minderjährigenanteil</div>
+          <div class="kpi-value">17,9 %</div>
+          <div class="kpi-sub">Bayern: 16,9 %</div>
+          <div class="kpi-delta delta-pos">+1,0 PP</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Ambulante §35a</div>
+          <div class="kpi-value">376</div>
+          <div class="kpi-sub">Wachstumssegment</div>
+          <div class="kpi-delta delta-pos">+33 % seit 2014–16</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Wachstum Bayern</div>
+          <div class="kpi-value">#1</div>
+          <div class="kpi-sub">Stärkstes LK-Wachstum</div>
+          <div class="kpi-delta delta-neu">Expansionspotenzial</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">HzE-Quoten LK Dachau vs. Bayern</div>
+          <canvas id="chartHze" height="210"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-title">Fallverteilung nach Gemeinde</div>
+          <canvas id="chartGemeinden" height="210"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Hilfeartenübersicht</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Hilfeart</th>
+                <th class="r">Fälle p.a.</th>
+                <th class="r">Quote LK</th>
+                <th class="r">Quote Bayern</th>
+                <th class="r">Delta</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Erziehungsbeistand §30</td><td class="r">49</td><td class="r">0,22</td><td class="r">0,41</td><td class="r"><span class="badge badge-beob">−46 %</span></td></tr>
+              <tr><td>SPFH §31</td><td class="r">219</td><td class="r">0,78</td><td class="r">1,27</td><td class="r"><span class="badge badge-beob">−39 %</span></td></tr>
+              <tr><td>Tagesgruppen §32/§35a</td><td class="r">114</td><td class="r">0,88</td><td class="r">0,81</td><td class="r"><span class="badge badge-aktiv">+9 %</span></td></tr>
+              <tr><td>Vollzeitpflege §33</td><td class="r">55</td><td class="r">0,23</td><td class="r">0,42</td><td class="r"><span class="badge badge-beob">−45 %</span></td></tr>
+              <tr><td>Heimerziehung §34/§35a</td><td class="r">127</td><td class="r">0,42</td><td class="r">0,54</td><td class="r"><span class="badge badge-beob">−22 %</span></td></tr>
+              <tr style="font-weight:600; background:var(--accent-light);"><td>HzE gesamt</td><td class="r">610</td><td class="r">2,53</td><td class="r">3,45</td><td class="r"><span class="badge badge-pilot">−27 %</span></td></tr>
+              <tr><td>Ambulante §35a</td><td class="r">376</td><td class="r">—</td><td class="r">—</td><td class="r"><span class="badge badge-aktiv">+33 % seit 2014–16</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ GEMEINDEN ══ -->
+    <div class="tab-panel" id="tab-gemeinden">
+      <div id="spBarGemeinden" class="sp-bar" style="display:none">
+        <div class="sp-dot ok"></div>
+        <span id="spBarGemeindenMsg">Änderungen werden automatisch in SharePoint gespeichert.</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Gemeinden — Fallaufkommen &amp; Status</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Gemeinde</th>
+                <th class="r">Fälle p.a.</th>
+                <th class="r">Quote / 100 Mj.</th>
+                <th class="r">Bayern Ø</th>
+                <th>Status</th>
+                <th>Notiz</th>
+              </tr>
+            </thead>
+            <tbody id="gemeindenTbody"></tbody>
+          </table>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnSaveGemeinden" onclick="saveGemeinden()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg>
+            In SharePoint speichern
+          </button>
+          <button class="btn-add" onclick="addGemeinde()">+ Gemeinde hinzufügen</button>
+        </div>
+        <div id="statusGemeinden" class="status-bar" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- ══ TRÄGER ══ -->
+    <div class="tab-panel" id="tab-traeger">
+      <div class="card">
+        <div class="card-title">Bekannte Träger im Landkreis Dachau</div>
+        <div class="traeger-grid" id="traegerGrid"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnSaveTraeger" onclick="saveTraeger()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg>
+            Bewertungen in SharePoint speichern
+          </button>
+          <button class="btn-add" onclick="addTraeger()">+ Träger hinzufügen</button>
+        </div>
+        <div id="statusTraeger" class="status-bar" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- ══ ANALYSE ══ -->
+    <div class="tab-panel" id="tab-analyse">
+      <div class="card">
+        <div class="card-title">Gemeinde-Analyse — Freitextbewertungen</div>
+        <div class="analyse-grid" id="analyseGrid"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="saveAnalyse()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg>
+            In SharePoint speichern
+          </button>
+        </div>
+        <div id="statusAnalyse" class="status-bar" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- ══ EMPFEHLUNGEN ══ -->
+    <div class="tab-panel" id="tab-empfehlungen">
+      <div class="card">
+        <div class="card-title">Strategische Notizen &amp; Empfehlungen</div>
+
+        <div class="empf-label">Pilotregion Nordkreis</div>
+        <textarea class="empf-textarea" id="empfPilot">Selektiver Einstieg über Nordkreis empfohlen: Markt Indersdorf, Altomünster, Petershausen, Hilgertshausen-Tandern, Weichs, Vierkirchen. Diese Gemeinden liegen im direkten Verlängerungsbereich des bestehenden Pfaffenhofen-Einzugsgebiets, zeigen unterdurchschnittliche HzE-Quoten (Unterversorgungspotenzial) und weisen eine geringe Trägerdichte auf. AmpEr e.V. dominiert das ambulante Feld — Differenzierungsstrategie erforderlich.</textarea>
+
+        <div class="empf-label">Wettbewerbssituation</div>
+        <textarea class="empf-textarea" id="empfWettbewerb">AmpEr e.V. ist dominierender ambulanter Träger. Positionierung über Spezialisierung (Systemische Arbeit, aufsuchend, SGB IX-Kompetenz) statt Breitenabdeckung. Caritas hat breites Portfolio — direkte Konkurrenz in SPFH und §30. Keine Überschneidung mit Weitblick/Ampertal (stationär). Franziskuswerk im §35a-Bereich relevant für ggf. Kooperation.</textarea>
+
+        <div class="empf-label">Timing &amp; nächste Schritte</div>
+        <textarea class="empf-textarea" id="empfTiming" placeholder="Zeitplanung und konkrete nächste Schritte…"></textarea>
+
+        <div class="empf-label">Risiken &amp; offene Fragen</div>
+        <textarea class="empf-textarea" id="empfRisiken" placeholder="Offene Punkte, Risiken, Abhängigkeiten…"></textarea>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnSaveEmpf" onclick="saveEmpfehlungen()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg>
+            In SharePoint speichern
+          </button>
+        </div>
+        <div id="statusEmpf" class="status-bar" style="display:none;"></div>
+      </div>
+    </div>
+
+  </div><!-- .main -->
+</div><!-- #appScreen -->
+
+<script>
+// ─── KONFIGURATION (aus Berichtsgenerator) ─────────────────────────────────
+const CONFIG = {
+  clientId:    'bffa1594-9408-42a1-a3c6-091a485792a7',
+  tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://peltzm.github.io/pnw-app/sozialraum.html',
+  siteUrl:     'https://praxisneuewegesonjapeltz978.sharepoint.com',
+  listName:    'Sozialraumanalyse'
+};
+
+let msalInstance = null;
+let currentAccount = null;
+let accessToken = null;
+
+// ─── MSAL (1:1 aus Berichtsgenerator) ─────────────────────────────────────
+async function initMsal() {
+  const msalConfig = {
+    auth: {
+      clientId: CONFIG.clientId,
+      authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
+      redirectUri: CONFIG.redirectUri
+    },
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
+  };
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  try {
+    const response = await msalInstance.handleRedirectPromise();
+    if (response) { currentAccount = response.account; accessToken = response.accessToken; showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) { currentAccount = accounts[0]; await getToken(); showApp(); }
+}
+
+async function login() {
+  try {
+    await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read'] });
+  } catch(e) {
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('loginError').textContent = 'Fehler: ' + (e.errorMessage || e.message);
+  }
+}
+
+async function logout() {
+  await msalInstance.logoutRedirect({ postLogoutRedirectUri: CONFIG.redirectUri });
+}
+
+async function getToken() {
+  if (!currentAccount) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All'], account: currentAccount });
+    accessToken = r.accessToken; return accessToken;
+  } catch(e) {
+    await msalInstance.acquireTokenRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All'] });
+  }
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
+  renderAll();
+  setTimeout(initCharts, 80);
+  connectSharePoint();
+}
+
+// ─── GRAPH API (aus Berichtsgenerator, angepasst) ──────────────────────────
+let _graphSiteId = null;
+let _graphListId = null;
+
+async function getGraphListIds() {
+  if (_graphSiteId && _graphListId) return { siteId: _graphSiteId, listId: _graphListId };
+  const token = await getToken();
+  const siteHost = CONFIG.siteUrl.replace('https://','').split('/')[0];
+  const siteResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteHost}`, {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  if (!siteResp.ok) throw new Error('Site nicht gefunden');
+  const site = await siteResp.json();
+  _graphSiteId = site.id;
+  // Try to find list, create if missing
+  const listResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$filter=displayName eq '${CONFIG.listName}'`, {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  const lists = await listResp.json();
+  if (lists.value && lists.value.length > 0) {
+    _graphListId = lists.value[0].id;
+  } else {
+    // Create list
+    const createResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        displayName: CONFIG.listName,
+        columns: [
+          { name: 'Landkreis', text: {} },
+          { name: 'Gemeinde', text: {} },
+          { name: 'Hilfeart', text: {} },
+          { name: 'Faelle_pa', number: {} },
+          { name: 'Quote_Gemeinde', number: {} },
+          { name: 'Quote_Bayern', number: {} },
+          { name: 'Traeger', text: { allowMultipleLines: true } },
+          { name: 'Bewertung', text: { allowMultipleLines: true } },
+          { name: 'Status', choice: { choices: ['Aktiv','Pilot','Beobachtung'], defaultValue: 'Aktiv' } },
+          { name: 'Letzte_Aktualisierung', dateTime: {} }
+        ],
+        list: { template: 'genericList' }
+      })
+    });
+    if (!createResp.ok) throw new Error('Liste konnte nicht angelegt werden');
+    const created = await createResp.json();
+    _graphListId = created.id;
+  }
+  return { siteId: _graphSiteId, listId: _graphListId };
+}
+
+// saveToList: 1:1-Logik aus Berichtsgenerator
+async function saveToList(fields, existingId = null) {
+  const token = await getToken();
+  const { siteId, listId } = await getGraphListIds();
+  let url, method;
+  if (existingId) {
+    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}/fields`;
+    method = 'PATCH';
+  } else {
+    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`;
+    method = 'POST';
+  }
+  const body = existingId ? fields : { fields };
+  const resp = await fetch(url, {
+    method,
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error('Speichern fehlgeschlagen: ' + (err.error?.message || resp.status));
+  }
+  if (!existingId) { const result = await resp.json(); return result.id; }
+  return existingId;
+}
+
+// ─── SHAREPOINT CONNECT ────────────────────────────────────────────────────
+async function connectSharePoint() {
+  try {
+    await getGraphListIds();
+    setSpStatus(true, 'SharePoint verbunden · Liste "' + CONFIG.listName + '" bereit');
+    loadFromSharePoint();
+  } catch(e) {
+    setSpStatus(false, 'SharePoint: ' + e.message.substring(0,80));
+  }
+}
+
+function setSpStatus(ok, msg) {
+  document.getElementById('spDot').className = 'sp-dot ' + (ok ? 'ok' : 'warn');
+  document.getElementById('spStatus').textContent = msg;
+}
+
+async function loadFromSharePoint() {
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const resp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!resp.ok) return;
+    const result = await resp.json();
+    if (!result.value || result.value.length === 0) return;
+    // Apply SP data back into gemeindenData
+    result.value.forEach(item => {
+      const f = item.fields;
+      if (!f.Gemeinde) return;
+      const idx = gemeindenData.findIndex(g => g.name === f.Gemeinde);
+      if (idx >= 0) {
+        if (f.Faelle_pa       !== undefined) gemeindenData[idx].faelle   = f.Faelle_pa;
+        if (f.Quote_Gemeinde  !== undefined) gemeindenData[idx].quote    = f.Quote_Gemeinde;
+        if (f.Bewertung       !== undefined) gemeindenData[idx].notiz    = f.Bewertung;
+        if (f.Status          !== undefined) gemeindenData[idx].status   = f.Status;
+        gemeindenData[idx]._spId = item.id;
+      }
+      // Träger bewertungen
+      const ti = traegerData.findIndex(t => t.name === f.Traeger);
+      if (ti >= 0 && f.Bewertung) {
+        traegerData[ti].bewertung = f.Bewertung;
+        traegerData[ti]._spId = item.id;
+      }
+    });
+    renderGemeinden();
+    renderAnalyse();
+    renderTraeger();
+    setStatus('statusGemeinden', 'done', '✓ Daten aus SharePoint geladen');
+    setTimeout(() => document.getElementById('statusGemeinden').style.display = 'none', 2500);
+  } catch(e) { console.warn('SP load:', e); }
+}
+
+// ─── DATA ──────────────────────────────────────────────────────────────────
+const gemeindenData = [
+  { name: 'Stadt Dachau',              faelle: 208,  quote: 2.9,  bayernQ: 3.45, status: 'Beobachtung', notiz: '' },
+  { name: 'Karlsfeld',                 faelle: 81,   quote: 2.9,  bayernQ: 3.45, status: 'Beobachtung', notiz: '' },
+  { name: 'Markt Indersdorf',          faelle: 59,   quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
+  { name: 'Altomünster',               faelle: 42,   quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
+  { name: 'Petershausen',              faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
+  { name: 'Hilgertshausen-Tandern',    faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
+  { name: 'Weichs',                    faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
+  { name: 'Vierkirchen',               faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
+  { name: 'Übrige Gemeinden',          faelle: 220,  quote: 1.7,  bayernQ: 3.45, status: 'Aktiv',        notiz: '' },
+];
+
+const traegerData = [
+  { name: 'AmpEr e.V.',                    type: 'amb',    typeLabel: 'Ambulant HzE',      note: 'Dominierender ambulanter HzE-Träger im LK. Breite Abdeckung SPFH §31, §30, §35a.',             bewertung: '' },
+  { name: 'Caritas-Zentrum Dachau',        type: 'breit',  typeLabel: 'Breites Portfolio', note: 'Umfassendes Angebot inkl. HOT, Beratung, ambulante HzE. Kirchlicher Träger.',                  bewertung: '' },
+  { name: 'Kinder- & Jugendhilfe Ampertal GmbH', type: 'stat', typeLabel: 'Stationär',    note: 'VPK-Mitglied. Vollzeitpflege und stationäre Erziehungshilfen.',                               bewertung: '' },
+  { name: 'Weitblick Jugendhilfe e.V.',    type: 'stat',   typeLabel: 'Stationär',         note: 'Stationäre Einrichtungen in Eisenhofen.',                                                     bewertung: '' },
+  { name: 'KINDERSCHUTZ MÜNCHEN e.V.',     type: 'amb',    typeLabel: 'Ambulant HzE',      note: '3 Einrichtungen in Karlsfeld. Schwerpunkt Kinderschutz.',                                      bewertung: '' },
+  { name: 'AWO Dachau',                    type: 'soz',    typeLabel: 'Jugendsozialarbeit',note: 'Jugendsozialarbeit. Kein ambulantes HzE — kein direkter Wettbewerb.',                          bewertung: '' },
+  { name: 'Brücke Dachau e.V.',            type: 'soz',    typeLabel: 'Jugendsozialarbeit',note: 'Jugendgerichtshilfe und Straffälligenhilfe.',                                                  bewertung: '' },
+  { name: 'Franziskuswerk Schönbrunn',     type: 'sonder', typeLabel: '§35a / EGH',        note: 'Schwerpunkt §35a und Eingliederungshilfe. Möglicher Kooperationspartner.',                    bewertung: '' },
+  { name: 'PFIFF gGmbH',                   type: 'amb',    typeLabel: 'Ambulant HzE',      note: 'Ambulante Jugendhilfe.',                                                                      bewertung: '' },
+];
+
+// ─── RENDER ────────────────────────────────────────────────────────────────
+function slug(s) { return s.replace(/[^a-z0-9]/gi,'_').toLowerCase(); }
+
+function renderAll() { renderGemeinden(); renderTraeger(); renderAnalyse(); }
+
+function renderGemeinden() {
+  const tbody = document.getElementById('gemeindenTbody');
+  tbody.innerHTML = '';
+  gemeindenData.forEach((g, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${g.name}</strong></td>
+      <td class="r" contenteditable="true" data-i="${i}" data-f="faelle">${g.faelle ?? ''}</td>
+      <td class="r" contenteditable="true" data-i="${i}" data-f="quote">${g.quote  ?? ''}</td>
+      <td class="r" style="color:var(--text-muted)">${g.bayernQ}</td>
+      <td>
+        <select style="font-size:12px; padding:3px 24px 3px 6px;" data-i="${i}" onchange="gemeindenData[this.dataset.i].status=this.value">
+          ${['Aktiv','Pilot','Beobachtung'].map(s=>`<option${g.status===s?' selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td contenteditable="true" data-i="${i}" data-f="notiz" style="color:var(--text-muted); font-size:12px;">${g.notiz}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('[contenteditable]').forEach(td => {
+    td.addEventListener('blur', () => {
+      const i = +td.dataset.i, f = td.dataset.f;
+      const v = td.textContent.trim().replace(',','.');
+      gemeindenData[i][f] = (f === 'notiz') ? v : (v === '' ? null : parseFloat(v) || null);
+      // sync to analyse
+      const ta = document.getElementById('ana-' + slug(gemeindenData[i].name));
+      if (ta && f === 'notiz') ta.value = v;
+    });
+  });
+}
+
+function addGemeinde() {
+  const name = prompt('Name der Gemeinde:');
+  if (!name || !name.trim()) return;
+  gemeindenData.push({ name: name.trim(), faelle: null, quote: null, bayernQ: 3.45, status: 'Beobachtung', notiz: '' });
+  renderGemeinden(); renderAnalyse();
+}
+
+function renderTraeger() {
+  const grid = document.getElementById('traegerGrid');
+  grid.innerHTML = '';
+  traegerData.forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'traeger-card';
+    div.innerHTML = `
+      <div class="traeger-name">${t.name}</div>
+      <span class="traeger-type type-${t.type}">${t.typeLabel}</span>
+      <div class="traeger-note">${t.note}</div>
+      <div class="traeger-bew">
+        <textarea id="bew-${slug(t.name)}" placeholder="Eigene Bewertung / Wettbewerb / Kooperation…">${t.bewertung}</textarea>
+      </div>`;
+    grid.appendChild(div);
+  });
+}
+
+function addTraeger() {
+  const name = prompt('Name des Trägers:');
+  if (!name || !name.trim()) return;
+  const note = prompt('Kurzbeschreibung:') || '';
+  traegerData.push({ name: name.trim(), type: 'amb', typeLabel: 'Ambulant HzE', note, bewertung: '' });
+  renderTraeger();
+}
+
+function renderAnalyse() {
+  const grid = document.getElementById('analyseGrid');
+  grid.innerHTML = '';
+  gemeindenData.forEach(g => {
+    const div = document.createElement('div');
+    div.className = 'ana-card';
+    div.innerHTML = `
+      <div class="ana-name">${g.name}</div>
+      <div class="ana-meta">
+        ${g.faelle != null ? g.faelle + ' Fälle p.a.' : 'Fallzahl unbekannt'}
+        ${g.quote != null ? ' · Quote: ' + g.quote : ''}
+        · <span style="color:var(--accent)">${g.status}</span>
+      </div>
+      <textarea id="ana-${slug(g.name)}" placeholder="Einschätzung, Potenzial, Besonderheiten…">${g.notiz}</textarea>`;
+    grid.appendChild(div);
+  });
+  document.querySelectorAll('#analyseGrid textarea').forEach(ta => {
+    ta.addEventListener('input', () => {
+      const i = gemeindenData.findIndex(g => 'ana-'+slug(g.name) === ta.id);
+      if (i >= 0) gemeindenData[i].notiz = ta.value;
+    });
+  });
+}
+
+// ─── SAVE FUNCTIONS ────────────────────────────────────────────────────────
+async function saveGemeinden() {
+  const btn = document.getElementById('btnSaveGemeinden');
+  btn.disabled = true; btn.textContent = 'Wird gespeichert…';
+  setStatus('statusGemeinden', 'uploading', 'Wird in SharePoint gespeichert…');
+  let saved = 0;
+  for (const g of gemeindenData) {
+    const fields = {
+      Title: g.name,
+      Landkreis: 'Dachau',
+      Gemeinde: g.name,
+      Faelle_pa: g.faelle || 0,
+      Quote_Gemeinde: g.quote || 0,
+      Quote_Bayern: g.bayernQ || 3.45,
+      Bewertung: g.notiz || '',
+      Status: g.status || 'Aktiv',
+      Letzte_Aktualisierung: new Date().toISOString()
+    };
+    try {
+      g._spId = await saveToList(fields, g._spId || null);
+      saved++;
+    } catch(e) { console.warn(g.name, e); }
+  }
+  setStatus('statusGemeinden', 'done', `✓ ${saved} Gemeinden in SharePoint gespeichert`);
+  btn.textContent = '✓ Gespeichert';
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg> In SharePoint speichern'; }, 2500);
+}
+
+async function saveTraeger() {
+  const btn = document.getElementById('btnSaveTraeger');
+  btn.disabled = true; btn.textContent = 'Wird gespeichert…';
+  setStatus('statusTraeger', 'uploading', 'Wird gespeichert…');
+  let saved = 0;
+  for (const t of traegerData) {
+    const ta = document.getElementById('bew-' + slug(t.name));
+    if (ta) t.bewertung = ta.value;
+    const fields = {
+      Title: t.name,
+      Landkreis: 'Dachau',
+      Gemeinde: '—',
+      Traeger: t.name,
+      Hilfeart: t.typeLabel,
+      Bewertung: t.bewertung || '',
+      Status: 'Aktiv',
+      Letzte_Aktualisierung: new Date().toISOString()
+    };
+    try {
+      t._spId = await saveToList(fields, t._spId || null);
+      saved++;
+    } catch(e) { console.warn(t.name, e); }
+  }
+  setStatus('statusTraeger', 'done', `✓ ${saved} Träger-Bewertungen gespeichert`);
+  btn.textContent = '✓ Gespeichert';
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg> Bewertungen in SharePoint speichern'; }, 2500);
+}
+
+async function saveAnalyse() {
+  // sync textarea → gemeindenData
+  gemeindenData.forEach(g => {
+    const ta = document.getElementById('ana-' + slug(g.name));
+    if (ta) g.notiz = ta.value;
+  });
+  await saveGemeinden();
+  setStatus('statusAnalyse', 'done', '✓ Analyse gespeichert');
+}
+
+async function saveEmpfehlungen() {
+  const btn = document.getElementById('btnSaveEmpf');
+  btn.disabled = true; btn.textContent = 'Wird gespeichert…';
+  setStatus('statusEmpf', 'uploading', 'Wird gespeichert…');
+  const entries = [
+    { key: 'Empfehlung_Pilot',       val: document.getElementById('empfPilot').value },
+    { key: 'Empfehlung_Wettbewerb',  val: document.getElementById('empfWettbewerb').value },
+    { key: 'Empfehlung_Timing',      val: document.getElementById('empfTiming').value },
+    { key: 'Empfehlung_Risiken',     val: document.getElementById('empfRisiken').value },
+  ];
+  let saved = 0;
+  for (const e of entries) {
+    try {
+      await saveToList({ Title: e.key, Landkreis: 'Dachau', Gemeinde: e.key, Bewertung: e.val, Status: 'Aktiv', Letzte_Aktualisierung: new Date().toISOString() }, null);
+      saved++;
+    } catch(err) { console.warn(err); }
+  }
+  setStatus('statusEmpf', 'done', `✓ ${saved} Einträge gespeichert`);
+  btn.textContent = '✓ Gespeichert';
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg> In SharePoint speichern'; }, 2500);
+}
+
+// ─── STATUS HELPER (aus Berichtsgenerator-Muster) ─────────────────────────
+function setStatus(id, type, msg) {
+  const bar = document.getElementById(id);
+  if (!bar) return;
+  bar.style.display = 'flex';
+  bar.className = 'status-bar ' + (type === 'done' ? 'done' : 'uploading');
+  if (type === 'error') Object.assign(bar.style, { background:'var(--error-bg)', color:'var(--error)', border:'1px solid #fecaca' });
+  bar.textContent = msg;
+}
+
+// ─── TABS ──────────────────────────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ─── CHARTS ───────────────────────────────────────────────────────────────
+function initCharts() {
+  new Chart(document.getElementById('chartHze'), {
+    type: 'bar',
+    data: {
+      labels: ['§30','§31 SPFH','§32/35a TG','§33 VZP','§34/35a HE','HzE ges.'],
+      datasets: [
+        { label: 'LK Dachau', data: [0.22,0.78,0.88,0.23,0.42,2.53], backgroundColor: '#7b3f1e', borderRadius: 4 },
+        { label: 'Bayern Ø',  data: [0.41,1.27,0.81,0.42,0.54,3.45], backgroundColor: 'rgba(0,0,0,.1)', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { labels: { font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { size: 11 } } },
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+
+  new Chart(document.getElementById('chartGemeinden'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Stadt Dachau','Karlsfeld','Markt Indersdorf','Altomünster','Übrige'],
+      datasets: [{
+        data: [208,81,59,42,220],
+        backgroundColor: ['#7b3f1e','#a05030','#c47848','#e0a878','#ede3da'],
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: '60%',
+      plugins: { legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 10, padding: 8 } } }
+    }
+  });
+}
+
+// ─── BOOT ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.msal) { initMsal(); }
+  else { setTimeout(() => { if (window.msal) initMsal(); else { document.getElementById('loginError').style.display='block'; document.getElementById('loginError').textContent='MSAL konnte nicht geladen werden. Bitte Seite neu laden.'; }}, 2000); }
+});
+</script>
+</body>
+</html>
