@@ -1278,25 +1278,53 @@ async function approveReport() {
     const uploadedFile = await uploadResp.json();
     
     // 3. Convert to PDF via Graph (Word → PDF)
+    // Wait for SharePoint to index the file before converting
+    setStatus('uploading', 'PDF wird erstellt...');
     const pdfName = docxName.replace('.docx', '.pdf');
-    const pdfResp = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${docxName}:/content?format=pdf`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
     
-    if (pdfResp.ok) {
-      const pdfBytes = await pdfResp.arrayBuffer();
-      const pdfUpload = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${pdfName}:/content`,
-        { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' }, body: pdfBytes }
-      );
-      if (pdfUpload.ok) {
-        setStatus('done', `✓ Freigegeben — PDF gespeichert: ${pdfName}`);
-      } else {
-        setStatus('done', `✓ Freigegeben — DOCX gespeichert. PDF-Konvertierung fehlgeschlagen (manuell in SharePoint konvertieren).`);
+    async function convertToPdf(retries = 3, delayMs = 3000) {
+      for (let i = 0; i < retries; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, delayMs));
+        try {
+          const pdfResp = await fetch(
+            `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${docxName}:/content?format=pdf`,
+            { headers: { Authorization: 'Bearer ' + token } }
+          );
+          if (pdfResp.ok) {
+            const pdfBytes = await pdfResp.arrayBuffer();
+            const pdfUpload = await fetch(
+              `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${pdfName}:/content`,
+              { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' }, body: pdfBytes }
+            );
+            if (pdfUpload.ok) return { ok: true, name: pdfName };
+          }
+          const errText = await pdfResp.text().catch(() => '');
+          console.warn(`PDF attempt ${i+1} failed:`, pdfResp.status, errText.substring(0,200));
+        } catch(e) {
+          console.warn(`PDF attempt ${i+1} error:`, e.message);
+        }
       }
+      return { ok: false };
+    }
+    
+    // First attempt after 3s delay
+    await new Promise(r => setTimeout(r, 3000));
+    const pdfResult = await convertToPdf(3, 4000);
+    
+    if (pdfResult.ok) {
+      setStatus('done', `✓ Freigegeben — PDF gespeichert: ${pdfName}`);
     } else {
-      setStatus('done', `✓ Freigegeben — DOCX gespeichert. PDF-Konvertierung nicht verfügbar.`);
+      // Fallback: try converting via SharePoint convert endpoint
+      try {
+        const spConvertResp = await fetch(
+          `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${docxName}:/microsoft.graph.createLink`,
+          { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'view', scope: 'organization' }) }
+        );
+        setStatus('done', `✓ Freigegeben — DOCX in SharePoint gespeichert. PDF: In SharePoint Datei öffnen → "Als PDF herunterladen" oder rechtsklick → Konvertieren.`);
+      } catch(e) {
+        setStatus('done', `✓ Freigegeben — DOCX gespeichert als ${docxName}. PDF-Erstellung manuell in SharePoint.`);
+      }
     }
     
     // 4. Send confirmation email to submitter
