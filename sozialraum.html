@@ -341,7 +341,7 @@ const CONFIG = {
   tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
   redirectUri: 'https://peltzm.github.io/pnw-app/sozialraum.html',
   siteUrl:     'https://praxisneuewegesonjapeltz978.sharepoint.com',
-  listName:    'SozialraumAngebote'
+  listName:    'Sozialraum-Angebote'
 };
 
 let msalInstance = null, currentAccount = null, accessToken = null;
@@ -394,15 +394,27 @@ function showApp() {
 async function getGraphListIds() {
   if (_graphSiteId && _graphListId) return { siteId: _graphSiteId, listId: _graphListId };
   const token = await getToken();
-  const siteHost = CONFIG.siteUrl.replace('https://','').split('/')[0];
-  const siteResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteHost}`, { headers: { Authorization: 'Bearer '+token } });
-  if (!siteResp.ok) throw new Error('Site nicht gefunden');
-  const site = await siteResp.json();
-  _graphSiteId = site.id;
-  const listResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$filter=displayName eq '${CONFIG.listName}'`, { headers: { Authorization: 'Bearer '+token } });
-  const lists = await listResp.json();
-  if (!lists.value?.length) throw new Error('Liste "'+CONFIG.listName+'" nicht gefunden');
-  _graphListId = lists.value[0].id;
+
+  // Site-ID direkt (ermittelt via SharePoint REST API)
+  _graphSiteId = '2d413d43-e9b6-41bd-8879-137937a86ba9';
+
+  // Alle Listen laden, nach name oder displayName matchen (case-insensitive)
+  const listResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$select=id,name,displayName&$top=100`, {
+    headers: { Authorization: 'Bearer '+token }
+  });
+  if (!listResp.ok) throw new Error('Listen konnten nicht geladen werden: '+listResp.status);
+  const allLists = await listResp.json();
+  const target = CONFIG.listName.toLowerCase();
+  const found = (allLists.value||[]).find(l =>
+    (l.displayName||'').toLowerCase() === target ||
+    (l.name||'').toLowerCase() === target ||
+    (l.name||'').toLowerCase() === 'sozialraumangebote'
+  );
+  if (!found) {
+    const names = (allLists.value||[]).map(l => `"${l.displayName}" (${l.name})`).join(', ');
+    throw new Error(`Liste nicht gefunden. Verfügbar: ${names||'keine'}`);
+  }
+  _graphListId = found.id;
   return { siteId: _graphSiteId, listId: _graphListId };
 }
 
