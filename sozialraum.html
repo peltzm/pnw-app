@@ -393,28 +393,9 @@ function showApp() {
 // ── Graph helpers (aus Berichtsgenerator) ────────────────────────────────
 async function getGraphListIds() {
   if (_graphSiteId && _graphListId) return { siteId: _graphSiteId, listId: _graphListId };
-  const token = await getToken();
-
-  // Site-ID direkt (ermittelt via SharePoint REST API)
+  // Site-ID und Listen-GUID direkt (ermittelt via SharePoint REST API)
   _graphSiteId = '2d413d43-e9b6-41bd-8879-137937a86ba9';
-
-  // Alle Listen laden, nach name oder displayName matchen (case-insensitive)
-  const listResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$select=id,name,displayName&$top=100`, {
-    headers: { Authorization: 'Bearer '+token }
-  });
-  if (!listResp.ok) throw new Error('Listen konnten nicht geladen werden: '+listResp.status);
-  const allLists = await listResp.json();
-  const target = CONFIG.listName.toLowerCase();
-  const found = (allLists.value||[]).find(l =>
-    (l.displayName||'').toLowerCase() === target ||
-    (l.name||'').toLowerCase() === target ||
-    (l.name||'').toLowerCase() === 'sozialraumangebote'
-  );
-  if (!found) {
-    const names = (allLists.value||[]).map(l => `"${l.displayName}" (${l.name})`).join(', ');
-    throw new Error(`Liste nicht gefunden. Verfügbar: ${names||'keine'}`);
-  }
-  _graphListId = found.id;
+  _graphListId = '19edae76-19ef-4bf5-ab48-c7eb760ecaf2';
   return { siteId: _graphSiteId, listId: _graphListId };
 }
 
@@ -460,21 +441,21 @@ async function loadData() {
 function mapItem(item) {
   const f = item.fields;
   return {
-    _spId:       item.id,
-    name:        f.Title || '',
-    kategorie:   f.Kategorie || '',
-    landkreis:   f.Landkreis || '',
-    ort:         f.Ort || '',
-    zielgruppe:  f.Zielgruppe || '',
-    beschreibung:f.Kurzbeschreibung || '',
-    strasse:     f['Stra_x00df_eundHausnummer'] || f['Straße und Hausnummer'] || '',
-    telefon:     f.Telefonnummer || '',
-    email:       f.eMail || '',
-    homepage:    f.Homepage || '',
-    link:        f['LinkzumAngebot'] || f['Link zum Angebot'] || '',
-    kosten:      f.Kosten != null ? f.Kosten : '',
-    kontakt:     f.Kontaktperson || '',
-    hinweis:     f['HinweisIntern'] || f['Hinweis Intern'] || '',
+    _spId:        item.id,
+    name:         f.Title    || '',
+    kategorie:    f.field_1  || '',   // Kategorie
+    landkreis:    f.field_2  || '',   // Landkreis
+    ort:          f.field_3  || '',   // Ort
+    zielgruppe:   f.field_4  || '',   // Zielgruppe
+    beschreibung: f.field_5  || '',   // Kurzbeschreibung
+    strasse:      f.field_6  || '',   // Straße und Hausnummer
+    telefon:      f.field_7  || '',   // Telefonnummer
+    email:        f.field_8  || '',   // eMail
+    homepage:     f.field_9  || '',   // Homepage
+    link:         f.field_10 || '',   // Link zum Angebot
+    kosten:       f.field_11 != null ? f.field_11 : '', // Kosten
+    kontakt:      f.field_12 || '',   // Kontaktperson
+    hinweis:      f.field_13 || '',   // Hinweis Intern
   };
 }
 
@@ -650,23 +631,22 @@ async function saveAngebot() {
   showFormStatus('uploading','Wird in SharePoint gespeichert…');
 
   const fields = {
-    Title:             title,
-    Kategorie:         document.getElementById('fKategorie').value,
-    Landkreis:         document.getElementById('fLandkreis').value,
-    Ort:               document.getElementById('fOrt').value,
-    Zielgruppe:        document.getElementById('fZielgruppe').value,
-    Kurzbeschreibung:  document.getElementById('fBeschreibung').value,
-    Telefonnummer:     document.getElementById('fTelefon').value,
-    eMail:             document.getElementById('fEmail').value,
-    Homepage:          document.getElementById('fHomepage').value,
-    LinkzumAngebot:    document.getElementById('fLink').value,
-    Kontaktperson:     document.getElementById('fKontakt').value,
-    HinweisIntern:     document.getElementById('fHinweis').value,
+    Title:    title,
+    field_1:  document.getElementById('fKategorie').value,   // Kategorie
+    field_2:  document.getElementById('fLandkreis').value,   // Landkreis
+    field_3:  document.getElementById('fOrt').value,         // Ort
+    field_4:  document.getElementById('fZielgruppe').value,  // Zielgruppe
+    field_5:  document.getElementById('fBeschreibung').value,// Kurzbeschreibung
+    field_6:  document.getElementById('fStrasse').value,     // Straße und Hausnummer
+    field_7:  document.getElementById('fTelefon').value,     // Telefonnummer
+    field_8:  document.getElementById('fEmail').value,       // eMail
+    field_9:  document.getElementById('fHomepage').value,    // Homepage
+    field_10: document.getElementById('fLink').value,        // Link zum Angebot
+    field_12: document.getElementById('fKontakt').value,     // Kontaktperson
+    field_13: document.getElementById('fHinweis').value,     // Hinweis Intern
   };
   const kostenVal = document.getElementById('fKosten').value;
-  if (kostenVal !== '') fields.Kosten = parseFloat(kostenVal) || 0;
-  // Straße: try both known internal names
-  fields['Stra_x00df_eundHausnummer'] = document.getElementById('fStrasse').value;
+  if (kostenVal !== '') fields.field_11 = parseFloat(kostenVal) || 0; // Kosten
 
   try {
     const newId = await saveToList(fields, currentEditId);
