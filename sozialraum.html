@@ -3,180 +3,172 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sozialraumanalyse — Praxis NeueWege</title>
+<title>Sozialraumangebote — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-  /* ── Tokens (1:1 aus Berichtsgenerator) ──────────────────────────────── */
-  :root {
-    --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
-    --text: #1a1916; --text-muted: #6b6860; --text-hint: #a09e99;
-    --accent: #7b3f1e; --accent-light: #f5ede7; --accent-mid: #c47848;
-    --success: #2d6a4f; --success-bg: #eaf4ee;
-    --error: #9b1c1c; --error-bg: #fef2f2;
-    --info-bg: #eff6ff; --info: #1d4ed8;
-    --radius: 8px; --radius-lg: 12px;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+/* ── Tokens (1:1 Berichtsgenerator) ─────────────────────────────────────── */
+:root {
+  --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
+  --text: #1a1916; --text-muted: #6b6860; --text-hint: #a09e99;
+  --accent: #7b3f1e; --accent-light: #f5ede7; --accent-mid: #c47848;
+  --success: #2d6a4f; --success-bg: #eaf4ee;
+  --error: #9b1c1c; --error-bg: #fef2f2;
+  --info-bg: #eff6ff; --info: #1d4ed8;
+  --radius: 8px; --radius-lg: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
 
-  /* ── Header (aus Berichtsgenerator) ─────────────────────────────────── */
-  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
-  .header-brand { display: flex; align-items: center; gap: 12px; }
-  .user-badge { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
-  .user-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-mid); }
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+.header-brand { display: flex; align-items: center; gap: 10px; }
+.user-badge { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.user-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-mid); flex-shrink:0; }
 
-  /* ── Tab-Nav ─────────────────────────────────────────────────────────── */
-  .tab-nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; gap: 2px; overflow-x: auto; }
-  .tab-nav::-webkit-scrollbar { display: none; }
-  .tab-btn { padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: inherit; transition: color .12s, border-color .12s; }
-  .tab-btn:hover { color: var(--text); }
-  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+/* ── Login ──────────────────────────────────────────────────────────────── */
+.login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.login-card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem; max-width: 400px; width: 100%; text-align: center; }
+.login-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.login-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.6; }
 
-  /* ── Main ────────────────────────────────────────────────────────────── */
-  .main { max-width: 1080px; margin: 0 auto; padding: 1.75rem 2rem 4rem; }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.app-layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 56px); }
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 1.25rem 0; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto; display: flex; flex-direction: column; }
+.content { padding: 1.5rem; overflow: hidden; }
 
-  /* ── Cards (aus Berichtsgenerator) ──────────────────────────────────── */
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
-  .card-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
+/* ── Sidebar sections ───────────────────────────────────────────────────── */
+.sidebar-section { padding: 0 1rem 1rem; border-bottom: 1px solid var(--border); margin-bottom: 0.5rem; }
+.sidebar-label { font-size: 10px; font-weight: 700; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; padding-top: 0.75rem; }
+.filter-group { display: flex; flex-direction: column; gap: 6px; }
+.filter-chip { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: var(--radius); font-size: 13px; color: var(--text-muted); cursor: pointer; border: none; background: none; font-family: inherit; text-align: left; transition: background .1s, color .1s; width: 100%; }
+.filter-chip:hover { background: var(--bg); color: var(--text); }
+.filter-chip.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+.filter-chip .count { font-size: 11px; font-weight: 600; background: var(--border); border-radius: 10px; padding: 1px 7px; color: var(--text-muted); }
+.filter-chip.active .count { background: var(--accent); color: #fff; }
 
-  /* ── Alerts (aus Berichtsgenerator) ─────────────────────────────────── */
-  .alert { border-radius: var(--radius); padding: 10px 14px; font-size: 12px; line-height: 1.5; margin-bottom: 1rem; }
-  .alert-info { background: var(--info-bg); color: var(--info); border: 1px solid #bfdbfe; }
-  .alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; }
-  .alert-error { background: var(--error-bg); color: var(--error); border: 1px solid #fecaca; }
+/* ── Search bar ─────────────────────────────────────────────────────────── */
+.search-row { display: flex; gap: 8px; margin-bottom: 1rem; align-items: center; }
+.search-wrap { flex: 1; position: relative; }
+.search-wrap input { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px 9px 36px; font-size: 13px; color: var(--text); background: var(--surface); outline: none; font-family: inherit; transition: border-color .12s; }
+.search-wrap input:focus { border-color: var(--accent-mid); }
+.search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-hint); pointer-events: none; }
+.result-count { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
-  /* ── Buttons (aus Berichtsgenerator) ────────────────────────────────── */
-  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.12s; border: none; font-family: inherit; }
-  .btn-primary { background: var(--accent); color: white; }
-  .btn-primary:hover { background: #6a3418; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-secondary { background: white; color: var(--text); border: 1px solid var(--border-strong); }
-  .btn-secondary:hover { background: var(--bg); }
-  .btn-success { background: var(--success); color: white; }
-  .btn-add { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent-mid); background: none; border: 1px dashed var(--accent-mid); border-radius: var(--radius); padding: 6px 14px; cursor: pointer; font-family: inherit; }
-  .btn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 1rem; }
-  .btn-remove { font-size: 11px; color: var(--error); background: none; border: 1px solid currentColor; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-family: inherit; }
+/* ── Landkreis filter row ───────────────────────────────────────────────── */
+.lk-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }
+.lk-chip { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; transition: all .1s; white-space: nowrap; }
+.lk-chip:hover { border-color: var(--accent-mid); color: var(--accent); }
+.lk-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
-  /* ── Status bar (aus Berichtsgenerator) ─────────────────────────────── */
-  .status-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: var(--radius); font-size: 12px; margin-bottom: 1rem; }
-  .status-bar.uploading { background: var(--info-bg); color: var(--info); border: 1px solid #bfdbfe; }
-  .status-bar.done { background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; }
-  .info-card { background: var(--accent-light); border: 1px solid #e8c4a8; border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
-  .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid #e8c4a8; }
-  .info-row:last-child { border-bottom: none; }
-  .info-label { color: var(--text-muted); }
-  .info-val { color: var(--accent); font-weight: 500; }
+/* ── Card grid ──────────────────────────────────────────────────────────── */
+.angebote-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.angebot-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 8px; transition: border-color .12s, box-shadow .12s; cursor: default; }
+.angebot-card:hover { border-color: var(--accent-mid); box-shadow: 0 2px 12px rgba(123,63,30,.08); }
+.angebot-name { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.angebot-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.badge-kat  { background: var(--accent-light); color: var(--accent); }
+.badge-lk   { background: var(--info-bg); color: var(--info); }
+.badge-zg   { background: #f3e8ff; color: #6b21a8; }
+.angebot-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.angebot-meta { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.angebot-meta a { color: var(--accent); text-decoration: none; }
+.angebot-meta a:hover { text-decoration: underline; }
+.angebot-actions { display: flex; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border); }
+.btn-edit { font-size: 11px; padding: 3px 10px; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--text-muted); font-family: inherit; transition: all .1s; }
+.btn-edit:hover { border-color: var(--accent-mid); color: var(--accent); }
+.hinweis-badge { font-size: 10px; background: #fef3c7; color: #92400e; border-radius: 4px; padding: 2px 6px; }
 
-  /* ── Login (aus Berichtsgenerator) ──────────────────────────────────── */
-  .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-  .login-card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem; max-width: 400px; width: 100%; text-align: center; }
-  .login-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-  .login-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.6; }
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.empty-state { text-align: center; padding: 4rem 2rem; color: var(--text-muted); }
+.empty-state .icon { font-size: 40px; margin-bottom: 1rem; }
+.empty-state h3 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.empty-state p { font-size: 13px; }
 
-  /* ── Field (aus Berichtsgenerator) ──────────────────────────────────── */
-  .field { display: flex; flex-direction: column; gap: 4px; }
-  .field label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
-  .field input, .field select, .field textarea { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; color: var(--text); background: white; outline: none; font-family: inherit; transition: border-color 0.12s; width: 100%; }
-  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent-mid); }
-  .field textarea { min-height: 80px; resize: vertical; }
-  select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.12s; border: none; font-family: inherit; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: #6a3418; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background: white; color: var(--text); border: 1px solid var(--border-strong); }
+.btn-secondary:hover { background: var(--bg); }
 
-  /* ── KPI Grid ────────────────────────────────────────────────────────── */
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1rem; }
-  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; }
-  .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-  .kpi-value { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1.1; }
-  .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
-  .kpi-delta { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-top: 6px; }
-  .delta-neg { background: #fee2e2; color: var(--error); }
-  .delta-pos { background: var(--success-bg); color: var(--success); }
-  .delta-neu { background: var(--accent-light); color: var(--accent); }
+/* ── Fields ─────────────────────────────────────────────────────────────── */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.field input, .field select, .field textarea { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; color: var(--text); background: white; outline: none; font-family: inherit; transition: border-color 0.12s; width: 100%; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent-mid); }
+.field textarea { min-height: 72px; resize: vertical; }
+select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+.field-row { display: grid; gap: 10px; margin-bottom: 10px; }
+.field-row.two { grid-template-columns: 1fr 1fr; }
+.field-row.one { grid-template-columns: 1fr; }
 
-  /* ── Two-col ─────────────────────────────────────────────────────────── */
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+/* ── Alert ──────────────────────────────────────────────────────────────── */
+.alert { border-radius: var(--radius); padding: 10px 14px; font-size: 12px; line-height: 1.5; }
+.alert-error { background: var(--error-bg); color: var(--error); border: 1px solid #fecaca; }
+.alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; }
+.alert-info { background: var(--info-bg); color: var(--info); border: 1px solid #bfdbfe; }
+.status-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: var(--radius); font-size: 12px; margin-top: 0.75rem; }
+.status-bar.uploading { background: var(--info-bg); color: var(--info); border: 1px solid #bfdbfe; }
+.status-bar.done { background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; }
 
-  /* ── Pilot box ───────────────────────────────────────────────────────── */
-  .pilot-box { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-mid) 100%); color: #fff; border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
-  .pilot-box h2 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
-  .pilot-box p { font-size: 12px; opacity: .88; line-height: 1.6; }
-  .pilot-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .pilot-tag { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); border-radius: 20px; padding: 3px 11px; font-size: 11px; font-weight: 600; }
+/* ── SP indicator ───────────────────────────────────────────────────────── */
+.sp-indicator { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); padding: 0 1rem 0.75rem; }
+.sp-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+.sp-dot.ok { background: var(--success); }
+.sp-dot.warn { background: #d97706; }
 
-  /* ── Table ───────────────────────────────────────────────────────────── */
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); background: var(--bg); border-bottom: 1px solid var(--border); }
-  thead th.r { text-align: right; }
-  tbody tr { border-bottom: 1px solid var(--border); }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: var(--bg); }
-  td { padding: 9px 12px; vertical-align: middle; font-size: 13px; }
-  td.r { text-align: right; font-variant-numeric: tabular-nums; }
-  td[contenteditable] { outline: none; cursor: text; }
-  td[contenteditable]:focus { background: #fffbf8; outline: 1px solid var(--accent-mid); border-radius: 3px; }
+/* ── Modal ──────────────────────────────────────────────────────────────── */
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; max-width: 640px; width: 100%; max-height: 92vh; overflow-y: auto; position: relative; }
+.modal-title { font-size: 16px; font-weight: 600; margin-bottom: 1.25rem; padding-right: 2rem; }
+.modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1; }
+.modal-close:hover { color: var(--text); }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 
-  /* ── Träger grid ─────────────────────────────────────────────────────── */
-  .traeger-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-  .traeger-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; transition: border-color .12s; }
-  .traeger-card:hover { border-color: var(--accent-mid); }
-  .traeger-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-  .traeger-type { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; display: inline-block; margin-bottom: 8px; }
-  .type-amb   { background: #dbeafe; color: #1e40af; }
-  .type-stat  { background: #f3e8ff; color: #6b21a8; }
-  .type-breit { background: var(--success-bg); color: var(--success); }
-  .type-sonder{ background: #fef3c7; color: #92400e; }
-  .type-soz   { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
-  .traeger-note { font-size: 12px; color: var(--text-muted); line-height: 1.45; }
-  .traeger-bew { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-  .traeger-bew textarea { width: 100%; min-height: 56px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; resize: vertical; background: var(--bg); color: var(--text); font-family: inherit; }
-  .traeger-bew textarea:focus { outline: 1px solid var(--accent-mid); border-color: var(--accent-mid); }
+/* ── Detail panel (slide-in) ────────────────────────────────────────────── */
+.detail-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 150; }
+.detail-backdrop.open { display: block; }
+.detail-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); background: var(--surface); border-left: 1px solid var(--border); z-index: 151; display: flex; flex-direction: column; transform: translateX(100%); transition: transform .22s ease; overflow: hidden; }
+.detail-panel.open { transform: translateX(0); }
+.detail-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 10px; }
+.detail-header-text { flex: 1; }
+.detail-body { flex: 1; overflow-y: auto; padding: 1.25rem 1.5rem; }
+.detail-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); margin-top: -2px; }
+.detail-row { margin-bottom: 1rem; }
+.detail-label { font-size: 11px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+.detail-val { font-size: 13px; color: var(--text); line-height: 1.55; }
+.detail-val a { color: var(--accent); text-decoration: none; }
+.detail-val a:hover { text-decoration: underline; }
+.detail-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 8px; }
 
-  /* ── Analyse grid ────────────────────────────────────────────────────── */
-  .analyse-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-  .ana-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
-  .ana-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
-  .ana-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
-  .ana-card textarea { width: 100%; min-height: 80px; font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; resize: vertical; background: var(--bg); color: var(--text); font-family: inherit; }
-  .ana-card textarea:focus { outline: 1px solid var(--accent-mid); border-color: var(--accent-mid); }
-
-  /* ── Empfehlungen ────────────────────────────────────────────────────── */
-  .empf-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-  .empf-textarea { width: 100%; min-height: 90px; font-size: 13px; line-height: 1.6; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; resize: vertical; background: var(--surface); color: var(--text); font-family: inherit; margin-bottom: 1rem; }
-  .empf-textarea:focus { outline: 1px solid var(--accent-mid); border-color: var(--accent-mid); }
-
-  /* ── SP dot ──────────────────────────────────────────────────────────── */
-  .sp-bar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; margin-bottom: 1rem; }
-  .sp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
-  .sp-dot.ok { background: var(--success); }
-  .sp-dot.warn { background: #d97706; }
-
-  /* ── Status badge inline ─────────────────────────────────────────────── */
-  .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
-  .badge-pilot { background: var(--accent-light); color: var(--accent); }
-  .badge-aktiv { background: var(--success-bg); color: var(--success); }
-  .badge-beob  { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
-
-  /* ── Responsive ──────────────────────────────────────────────────────── */
-  @media (max-width: 640px) {
-    .main { padding: 1rem; }
-    .tab-nav { padding: 0 1rem; }
-    .header { padding: 0 1rem; }
-  }
-  input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .app-layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; padding: 0.75rem; gap: 0.25rem; }
+  .sidebar-section { padding: 0; border: none; margin: 0; }
+  .sidebar-label { display: none; }
+  .filter-group { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .filter-chip { padding: 4px 10px; font-size: 12px; }
+  .sp-indicator { display: none; }
+  .content { padding: 1rem; }
+}
+@media (max-width: 480px) {
+  .angebote-grid { grid-template-columns: 1fr; }
+}
+input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 </style>
 </head>
 <body>
 
-<!-- ══ LOGIN (aus Berichtsgenerator) ══ -->
+<!-- ══ LOGIN ══ -->
 <div id="loginScreen" class="login-screen">
   <div class="login-card">
-    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:60px; width:auto; margin-bottom:1.5rem;" alt="Praxis NeueWege">
-    <div class="login-title">Sozialraumanalyse</div>
-    <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an um die Sozialraumanalyse Landkreis Dachau zu bearbeiten.</div>
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:56px; width:auto; margin-bottom:1.5rem;" alt="Praxis NeueWege">
+    <div class="login-title">Sozialraumangebote</div>
+    <div class="login-desc">Angebote in der Region finden, pflegen und ergänzen.<br>Melden Sie sich mit Ihrem M365-Konto an.</div>
     <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="login()">
       <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
       Mit Microsoft anmelden
@@ -186,13 +178,12 @@
 </div>
 
 <!-- ══ APP ══ -->
-<div id="appScreen" style="display:none">
+<div id="appScreen" style="display:none;">
 
   <div class="header">
     <div class="header-brand">
-      <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:32px; width:auto;" alt="Praxis NeueWege">
-      <span style="font-size:14px; font-weight:600; color:var(--text); margin-left:4px;">Sozialraumanalyse</span>
-      <span style="font-size:12px; color:var(--text-muted); margin-left:4px;">LK Dachau</span>
+      <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:30px; width:auto;" alt="Praxis NeueWege">
+      <span style="font-size:14px; font-weight:600; color:var(--text);">Sozialraumangebote</span>
     </div>
     <div class="user-badge" id="userBadge">
       <div class="user-dot"></div>
@@ -201,245 +192,150 @@
     </div>
   </div>
 
-  <nav class="tab-nav">
-    <button class="tab-btn active" onclick="showTab('dashboard',this)">Dashboard</button>
-    <button class="tab-btn" onclick="showTab('gemeinden',this)">Gemeinden</button>
-    <button class="tab-btn" onclick="showTab('traeger',this)">Träger</button>
-    <button class="tab-btn" onclick="showTab('analyse',this)">Analyse</button>
-    <button class="tab-btn" onclick="showTab('empfehlungen',this)">Empfehlungen</button>
-  </nav>
+  <div class="app-layout">
 
-  <div class="main">
-
-    <!-- ══ DASHBOARD ══ -->
-    <div class="tab-panel active" id="tab-dashboard">
-      <div class="sp-bar">
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+      <div class="sp-indicator">
         <div class="sp-dot" id="spDot"></div>
-        <span id="spStatus">SharePoint wird verbunden…</span>
-        <span style="margin-left:auto; color:var(--text-hint); font-size:11px;">Stand: Januar 2025</span>
+        <span id="spStatus">Verbinde…</span>
       </div>
 
-      <div class="pilot-box">
-        <h2>🎯 Empfehlung: Selektiver Pilot Nordkreis</h2>
-        <p>Geografische Verlängerung des bestehenden Pfaffenhofen-Einzugsgebiets. Unterdurchschnittliche HzE-Quoten (Unterversorgung), geringe Trägerdichte, kein direkter AmpEr-Wettbewerb im ambulanten HzE-Segment.</p>
-        <div class="pilot-tags">
-          <span class="pilot-tag">Markt Indersdorf</span>
-          <span class="pilot-tag">Altomünster</span>
-          <span class="pilot-tag">Petershausen</span>
-          <span class="pilot-tag">Hilgertshausen-Tandern</span>
-          <span class="pilot-tag">Weichs</span>
-          <span class="pilot-tag">Vierkirchen</span>
-        </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Kategorie</div>
+        <div class="filter-group" id="katFilter"></div>
       </div>
 
-      <div class="kpi-grid">
-        <div class="kpi">
-          <div class="kpi-label">Einwohner</div>
-          <div class="kpi-value">157.744</div>
-          <div class="kpi-sub">16 Gemeinden + Stadt Dachau</div>
-          <div class="kpi-delta delta-neu">+78 % seit 1970</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">HzE gesamt p.a.</div>
-          <div class="kpi-value">610</div>
-          <div class="kpi-sub">Jahresmittel 2020–2022</div>
-          <div class="kpi-delta delta-neg">−27 % vs. Bayern</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Quote / 100 Mj.</div>
-          <div class="kpi-value">2,53</div>
-          <div class="kpi-sub">Bayern: 3,45</div>
-          <div class="kpi-delta delta-neg">−27 %</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Minderjährigenanteil</div>
-          <div class="kpi-value">17,9 %</div>
-          <div class="kpi-sub">Bayern: 16,9 %</div>
-          <div class="kpi-delta delta-pos">+1,0 PP</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Ambulante §35a</div>
-          <div class="kpi-value">376</div>
-          <div class="kpi-sub">Wachstumssegment</div>
-          <div class="kpi-delta delta-pos">+33 % seit 2014–16</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">Wachstum Bayern</div>
-          <div class="kpi-value">#1</div>
-          <div class="kpi-sub">Stärkstes LK-Wachstum</div>
-          <div class="kpi-delta delta-neu">Expansionspotenzial</div>
-        </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Zielgruppe</div>
+        <div class="filter-group" id="zgFilter"></div>
       </div>
 
-      <div class="two-col">
-        <div class="card">
-          <div class="card-title">HzE-Quoten LK Dachau vs. Bayern</div>
-          <canvas id="chartHze" height="210"></canvas>
+      <div style="padding: 1rem; margin-top: auto;">
+        <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="openNew()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          Angebot hinzufügen
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── CONTENT ── -->
+    <div class="content">
+      <!-- Search + LK filter -->
+      <div class="search-row">
+        <div class="search-wrap">
+          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="searchInput" placeholder="Name, Ort, Beschreibung suchen…" oninput="applyFilters()">
         </div>
-        <div class="card">
-          <div class="card-title">Fallverteilung nach Gemeinde</div>
-          <canvas id="chartGemeinden" height="210"></canvas>
-        </div>
+        <span id="resultCount" class="result-count"></span>
       </div>
 
-      <div class="card">
-        <div class="card-title">Hilfeartenübersicht</div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Hilfeart</th>
-                <th class="r">Fälle p.a.</th>
-                <th class="r">Quote LK</th>
-                <th class="r">Quote Bayern</th>
-                <th class="r">Delta</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>Erziehungsbeistand §30</td><td class="r">49</td><td class="r">0,22</td><td class="r">0,41</td><td class="r"><span class="badge badge-beob">−46 %</span></td></tr>
-              <tr><td>SPFH §31</td><td class="r">219</td><td class="r">0,78</td><td class="r">1,27</td><td class="r"><span class="badge badge-beob">−39 %</span></td></tr>
-              <tr><td>Tagesgruppen §32/§35a</td><td class="r">114</td><td class="r">0,88</td><td class="r">0,81</td><td class="r"><span class="badge badge-aktiv">+9 %</span></td></tr>
-              <tr><td>Vollzeitpflege §33</td><td class="r">55</td><td class="r">0,23</td><td class="r">0,42</td><td class="r"><span class="badge badge-beob">−45 %</span></td></tr>
-              <tr><td>Heimerziehung §34/§35a</td><td class="r">127</td><td class="r">0,42</td><td class="r">0,54</td><td class="r"><span class="badge badge-beob">−22 %</span></td></tr>
-              <tr style="font-weight:600; background:var(--accent-light);"><td>HzE gesamt</td><td class="r">610</td><td class="r">2,53</td><td class="r">3,45</td><td class="r"><span class="badge badge-pilot">−27 %</span></td></tr>
-              <tr><td>Ambulante §35a</td><td class="r">376</td><td class="r">—</td><td class="r">—</td><td class="r"><span class="badge badge-aktiv">+33 % seit 2014–16</span></td></tr>
-            </tbody>
-          </table>
-        </div>
+      <div class="lk-chips" id="lkFilter"></div>
+
+      <!-- Grid -->
+      <div id="angeboteGrid" class="angebote-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DETAIL PANEL ══ -->
+<div class="detail-backdrop" id="detailBackdrop" onclick="closeDetail()"></div>
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-header">
+    <div class="detail-header-text">
+      <div id="detailName" style="font-size:16px; font-weight:700; margin-bottom:6px;"></div>
+      <div id="detailBadges" class="angebot-badges"></div>
+    </div>
+    <button class="detail-close" onclick="closeDetail()">×</button>
+  </div>
+  <div class="detail-body" id="detailBody"></div>
+  <div class="detail-footer">
+    <button class="btn btn-secondary" onclick="closeDetail()">Schließen</button>
+    <button class="btn btn-primary" id="detailEditBtn" onclick="editFromDetail()">✏ Bearbeiten</button>
+  </div>
+</div>
+
+<!-- ══ FORMULAR MODAL ══ -->
+<div class="modal-backdrop" id="formModal">
+  <div class="modal">
+    <div class="modal-title" id="formTitle">Neues Angebot</div>
+    <button class="modal-close" onclick="closeForm()">×</button>
+
+    <div class="field-row two">
+      <div class="field"><label>Anbieter / Titel *</label><input type="text" id="fTitle" placeholder="Name des Trägers / Angebots"></div>
+      <div class="field"><label>Kategorie</label>
+        <select id="fKategorie">
+          <option value="">— wählen —</option>
+          <option>Ambulante HzE</option>
+          <option>Stationäre HzE</option>
+          <option>Eingliederungshilfe §35a</option>
+          <option>Jugendsozialarbeit</option>
+          <option>Beratung</option>
+          <option>Frühförderung</option>
+          <option>Schulsozialarbeit</option>
+          <option>Offene Jugendarbeit</option>
+          <option>Familienbildung</option>
+          <option>Sonstiges</option>
+        </select>
       </div>
     </div>
 
-    <!-- ══ GEMEINDEN ══ -->
-    <div class="tab-panel" id="tab-gemeinden">
-      <div id="spBarGemeinden" class="sp-bar" style="display:none">
-        <div class="sp-dot ok"></div>
-        <span id="spBarGemeindenMsg">Änderungen werden automatisch in SharePoint gespeichert.</span>
+    <div class="field-row two">
+      <div class="field"><label>Landkreis</label>
+        <select id="fLandkreis">
+          <option value="">— wählen —</option>
+          <option>Dachau</option><option>Freising</option><option>Pfaffenhofen</option>
+          <option>Kelheim</option><option>Eichstätt</option>
+          <option>Neuburg-Schrobenhausen</option><option>Ingolstadt</option>
+        </select>
       </div>
-      <div class="card">
-        <div class="card-title">Gemeinden — Fallaufkommen &amp; Status</div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Gemeinde</th>
-                <th class="r">Fälle p.a.</th>
-                <th class="r">Quote / 100 Mj.</th>
-                <th class="r">Bayern Ø</th>
-                <th>Status</th>
-                <th>Notiz</th>
-              </tr>
-            </thead>
-            <tbody id="gemeindenTbody"></tbody>
-          </table>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-primary" id="btnSaveGemeinden" onclick="saveGemeinden()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg>
-            In SharePoint speichern
-          </button>
-          <button class="btn-add" onclick="addGemeinde()">+ Gemeinde hinzufügen</button>
-        </div>
-        <div id="statusGemeinden" class="status-bar" style="display:none;"></div>
-      </div>
+      <div class="field"><label>Ort</label><input type="text" id="fOrt" placeholder="z.B. Dachau, Karlsfeld"></div>
     </div>
 
-    <!-- ══ TRÄGER ══ -->
-    <div class="tab-panel" id="tab-traeger">
-      <!-- Filter bar -->
-      <div class="card" style="margin-bottom:1rem; padding:1rem 1.25rem;">
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
-          <div class="field" style="min-width:160px; flex:1;">
-            <label>Landkreis</label>
-            <select id="filterLandkreis" onchange="renderTraegerSP()">
-              <option value="">Alle Landkreise</option>
-              <option>Dachau</option><option>Freising</option><option>Pfaffenhofen</option>
-              <option>Kelheim</option><option>Eichstätt</option><option>Neuburg-Schrobenhausen</option><option>Ingolstadt</option>
-            </select>
-          </div>
-          <div class="field" style="min-width:160px; flex:1;">
-            <label>Kategorie</label>
-            <select id="filterKategorie" onchange="renderTraegerSP()">
-              <option value="">Alle Kategorien</option>
-              <option>Ambulante HzE</option><option>Stationär</option><option>Jugendsozialarbeit</option>
-              <option>§35a / EGH</option><option>Beratung</option><option>Sonstiges</option>
-            </select>
-          </div>
-          <div class="field" style="min-width:200px; flex:2;">
-            <label>Suche</label>
-            <input type="text" id="filterSearch" placeholder="Name, Ort, Beschreibung…" oninput="renderTraegerSP()">
-          </div>
-          <div style="padding-bottom:1px;">
-            <span id="traegerCount" style="font-size:12px; color:var(--text-muted); white-space:nowrap;">— Angebote</span>
-          </div>
-        </div>
+    <div class="field-row two">
+      <div class="field"><label>Zielgruppe</label>
+        <select id="fZielgruppe">
+          <option value="">— wählen —</option>
+          <option>Kinder</option><option>Jugendliche</option><option>Familien</option>
+          <option>Junge Volljährige</option><option>Eltern</option><option>Alle</option>
+        </select>
       </div>
-      <div class="card">
-        <div class="card-title" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
-          <span>Angebote &amp; Träger (aus SharePoint)</span>
-          <button class="btn-add" onclick="addTraeger()">+ Neues Angebot</button>
-        </div>
-        <div class="traeger-grid" id="traegerGrid">
-          <div style="color:var(--text-muted); font-size:13px;">Wird geladen…</div>
-        </div>
-        <div id="statusTraeger" class="status-bar" style="display:none;"></div>
-      </div>
+      <div class="field"><label>Straße &amp; Hausnummer</label><input type="text" id="fStrasse" placeholder="Musterstr. 1"></div>
     </div>
 
-    <!-- ══ ANGEBOT MODAL ══ -->
-    <div id="angebotModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:200; align-items:center; justify-content:center; padding:1rem;">
-      <div style="background:var(--surface); border-radius:var(--radius-lg); padding:1.5rem; max-width:620px; width:100%; max-height:90vh; overflow-y:auto; position:relative;">
-        <button onclick="closeModal()" style="position:absolute; top:1rem; right:1rem; background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted);">×</button>
-        <div id="angebotModalContent"></div>
-      </div>
+    <div class="field-row one">
+      <div class="field"><label>Kurzbeschreibung</label><textarea id="fBeschreibung" placeholder="Was bietet dieses Angebot? Für wen ist es geeignet?"></textarea></div>
     </div>
 
-    <!-- ══ ANALYSE ══ -->
-    <div class="tab-panel" id="tab-analyse">
-      <div class="card">
-        <div class="card-title">Gemeinde-Analyse — Freitextbewertungen</div>
-        <div class="analyse-grid" id="analyseGrid"></div>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="saveAnalyse()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg>
-            In SharePoint speichern
-          </button>
-        </div>
-        <div id="statusAnalyse" class="status-bar" style="display:none;"></div>
-      </div>
+    <div class="field-row two">
+      <div class="field"><label>Telefon</label><input type="text" id="fTelefon" placeholder="089 / 123 456"></div>
+      <div class="field"><label>E-Mail</label><input type="email" id="fEmail" placeholder="kontakt@traeger.de"></div>
     </div>
 
-    <!-- ══ EMPFEHLUNGEN ══ -->
-    <div class="tab-panel" id="tab-empfehlungen">
-      <div class="card">
-        <div class="card-title">Strategische Notizen &amp; Empfehlungen</div>
-
-        <div class="empf-label">Pilotregion Nordkreis</div>
-        <textarea class="empf-textarea" id="empfPilot">Selektiver Einstieg über Nordkreis empfohlen: Markt Indersdorf, Altomünster, Petershausen, Hilgertshausen-Tandern, Weichs, Vierkirchen. Diese Gemeinden liegen im direkten Verlängerungsbereich des bestehenden Pfaffenhofen-Einzugsgebiets, zeigen unterdurchschnittliche HzE-Quoten (Unterversorgungspotenzial) und weisen eine geringe Trägerdichte auf. AmpEr e.V. dominiert das ambulante Feld — Differenzierungsstrategie erforderlich.</textarea>
-
-        <div class="empf-label">Wettbewerbssituation</div>
-        <textarea class="empf-textarea" id="empfWettbewerb">AmpEr e.V. ist dominierender ambulanter Träger. Positionierung über Spezialisierung (Systemische Arbeit, aufsuchend, SGB IX-Kompetenz) statt Breitenabdeckung. Caritas hat breites Portfolio — direkte Konkurrenz in SPFH und §30. Keine Überschneidung mit Weitblick/Ampertal (stationär). Franziskuswerk im §35a-Bereich relevant für ggf. Kooperation.</textarea>
-
-        <div class="empf-label">Timing &amp; nächste Schritte</div>
-        <textarea class="empf-textarea" id="empfTiming" placeholder="Zeitplanung und konkrete nächste Schritte…"></textarea>
-
-        <div class="empf-label">Risiken &amp; offene Fragen</div>
-        <textarea class="empf-textarea" id="empfRisiken" placeholder="Offene Punkte, Risiken, Abhängigkeiten…"></textarea>
-
-        <div class="btn-row">
-          <button class="btn btn-primary" id="btnSaveEmpf" onclick="saveEmpfehlungen()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg>
-            In SharePoint speichern
-          </button>
-        </div>
-        <div id="statusEmpf" class="status-bar" style="display:none;"></div>
-      </div>
+    <div class="field-row two">
+      <div class="field"><label>Homepage</label><input type="url" id="fHomepage" placeholder="https://"></div>
+      <div class="field"><label>Link zum Angebot</label><input type="url" id="fLink" placeholder="https://"></div>
     </div>
 
-  </div><!-- .main -->
-</div><!-- #appScreen -->
+    <div class="field-row two">
+      <div class="field"><label>Kontaktperson</label><input type="text" id="fKontakt" placeholder="Name Ansprechpartner*in"></div>
+      <div class="field"><label>Kosten (€)</label><input type="number" id="fKosten" placeholder="0 = kostenlos" min="0"></div>
+    </div>
+
+    <div class="field-row one">
+      <div class="field"><label>Hinweis Intern</label><textarea id="fHinweis" placeholder="Interne Notizen (nicht öffentlich sichtbar)…"></textarea></div>
+    </div>
+
+    <div id="formStatus" style="display:none;" class="status-bar"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeForm()">Abbrechen</button>
+      <button class="btn btn-primary" id="formSaveBtn" onclick="saveAngebot()">Speichern</button>
+    </div>
+  </div>
+</div>
 
 <script>
-// ─── KONFIGURATION (aus Berichtsgenerator) ─────────────────────────────────
+// ── Config ────────────────────────────────────────────────────────────────
 const CONFIG = {
   clientId:    'bffa1594-9408-42a1-a3c6-091a485792a7',
   tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
@@ -448,18 +344,18 @@ const CONFIG = {
   listName:    'SozialraumAngebote'
 };
 
-let msalInstance = null;
-let currentAccount = null;
-let accessToken = null;
+let msalInstance = null, currentAccount = null, accessToken = null;
+let _graphSiteId = null, _graphListId = null;
+let allItems = [];       // all loaded SP items
+let activeKat = '';      // sidebar category filter
+let activeZg  = '';      // sidebar zielgruppe filter
+let activeLk  = '';      // landkreis chip filter
+let currentEditId = null; // SP item id being edited
 
-// ─── MSAL (1:1 aus Berichtsgenerator) ─────────────────────────────────────
+// ── MSAL (1:1 Berichtsgenerator) ─────────────────────────────────────────
 async function initMsal() {
   const msalConfig = {
-    auth: {
-      clientId: CONFIG.clientId,
-      authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
-      redirectUri: CONFIG.redirectUri
-    },
+    auth: { clientId: CONFIG.clientId, authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`, redirectUri: CONFIG.redirectUri },
     cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
@@ -473,502 +369,350 @@ async function initMsal() {
 }
 
 async function login() {
-  try {
-    await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read'] });
-  } catch(e) {
-    document.getElementById('loginError').style.display = 'block';
-    document.getElementById('loginError').textContent = 'Fehler: ' + (e.errorMessage || e.message);
-  }
+  try { await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','User.Read'] }); }
+  catch(e) { document.getElementById('loginError').style.display='block'; document.getElementById('loginError').textContent='Fehler: '+(e.errorMessage||e.message); }
 }
 
-async function logout() {
-  await msalInstance.logoutRedirect({ postLogoutRedirectUri: CONFIG.redirectUri });
-}
+async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CONFIG.redirectUri }); }
 
 async function getToken() {
   if (!currentAccount) return null;
   try {
-    const r = await msalInstance.acquireTokenSilent({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All'], account: currentAccount });
+    const r = await msalInstance.acquireTokenSilent({ scopes: ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All'], account: currentAccount });
     accessToken = r.accessToken; return accessToken;
-  } catch(e) {
-    await msalInstance.acquireTokenRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All'] });
-  }
+  } catch(e) { await msalInstance.acquireTokenRedirect({ scopes: ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All'] }); }
 }
 
 function showApp() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
-  renderAll();
-  setTimeout(initCharts, 80);
-  connectSharePoint();
+  loadData();
 }
 
-// ─── GRAPH API (aus Berichtsgenerator, angepasst) ──────────────────────────
-let _graphSiteId = null;
-let _graphListId = null;
-
+// ── Graph helpers (aus Berichtsgenerator) ────────────────────────────────
 async function getGraphListIds() {
   if (_graphSiteId && _graphListId) return { siteId: _graphSiteId, listId: _graphListId };
   const token = await getToken();
   const siteHost = CONFIG.siteUrl.replace('https://','').split('/')[0];
-  const siteResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteHost}`, {
-    headers: { Authorization: 'Bearer ' + token }
-  });
+  const siteResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteHost}`, { headers: { Authorization: 'Bearer '+token } });
   if (!siteResp.ok) throw new Error('Site nicht gefunden');
   const site = await siteResp.json();
   _graphSiteId = site.id;
-  const listResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$filter=displayName eq '${CONFIG.listName}'`, {
-    headers: { Authorization: 'Bearer ' + token }
-  });
+  const listResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$filter=displayName eq '${CONFIG.listName}'`, { headers: { Authorization: 'Bearer '+token } });
   const lists = await listResp.json();
-  if (!lists.value || lists.value.length === 0) throw new Error('Liste "' + CONFIG.listName + '" nicht gefunden');
+  if (!lists.value?.length) throw new Error('Liste "'+CONFIG.listName+'" nicht gefunden');
   _graphListId = lists.value[0].id;
   return { siteId: _graphSiteId, listId: _graphListId };
 }
 
-// saveToList: 1:1-Logik aus Berichtsgenerator
 async function saveToList(fields, existingId = null) {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
   let url, method;
-  if (existingId) {
-    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}/fields`;
-    method = 'PATCH';
-  } else {
-    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`;
-    method = 'POST';
-  }
+  if (existingId) { url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}/fields`; method = 'PATCH'; }
+  else            { url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`; method = 'POST'; }
   const body = existingId ? fields : { fields };
-  const resp = await fetch(url, {
-    method,
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error('Speichern fehlgeschlagen: ' + (err.error?.message || resp.status));
-  }
+  const resp = await fetch(url, { method, headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!resp.ok) { const err = await resp.json().catch(()=>({})); throw new Error('Speichern fehlgeschlagen: '+(err.error?.message||resp.status)); }
   if (!existingId) { const result = await resp.json(); return result.id; }
   return existingId;
 }
 
-// ─── SHAREPOINT CONNECT ────────────────────────────────────────────────────
-async function connectSharePoint() {
-  try {
-    await getGraphListIds();
-    setSpStatus(true, 'SharePoint verbunden · Liste "' + CONFIG.listName + '" bereit');
-    loadFromSharePoint();
-  } catch(e) {
-    setSpStatus(false, 'SharePoint: ' + e.message.substring(0,80));
-  }
-}
-
-function setSpStatus(ok, msg) {
-  document.getElementById('spDot').className = 'sp-dot ' + (ok ? 'ok' : 'warn');
-  document.getElementById('spStatus').textContent = msg;
-}
-
-async function loadFromSharePoint() {
+// ── Load data ─────────────────────────────────────────────────────────────
+async function loadData() {
+  setSpStatus(null, 'Lädt…');
+  document.getElementById('angeboteGrid').innerHTML = '<div class="empty-state"><div class="icon">⏳</div><h3>Daten werden geladen…</h3></div>';
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    // Load all items, paginate if needed
     let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`;
-    let allItems = [];
+    allItems = [];
     while (url) {
-      const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-      if (!resp.ok) throw new Error('Laden fehlgeschlagen: ' + resp.status);
-      const result = await resp.json();
-      allItems = allItems.concat(result.value || []);
-      url = result['@odata.nextLink'] || null;
+      const resp = await fetch(url, { headers: { Authorization: 'Bearer '+token } });
+      if (!resp.ok) throw new Error('HTTP '+resp.status);
+      const data = await resp.json();
+      allItems = allItems.concat((data.value||[]).map(mapItem));
+      url = data['@odata.nextLink'] || null;
     }
-    if (allItems.length === 0) {
-      setSpStatus(true, 'SharePoint verbunden · Liste leer (0 Einträge)');
-      return;
-    }
-    // Rebuild traegerSpData from SP — map SozialraumAngebote columns
-    traegerSpData = allItems.map(item => {
-      const f = item.fields;
-      return {
-        _spId:        item.id,
-        name:         f.Title        || '',
-        kategorie:    f.Kategorie    || '',
-        landkreis:    f.Landkreis    || '',
-        ort:          f.Ort          || '',
-        zielgruppe:   f.Zielgruppe   || '',
-        kurzbeschreibung: f.Kurzbeschreibung || '',
-        strasse:      f.Stra_x00df_eundHausnummer || f['Straße und Hausnummer'] || '',
-        telefon:      f.Telefonnummer || '',
-        email:        f.eMail        || '',
-        homepage:     f.Homepage     || '',
-        linkAngebot:  f.LinkzumAngebot || f['Link zum Angebot'] || '',
-        kosten:       f.Kosten       || '',
-        kontakt:      f.Kontaktperson || '',
-        hinweis:      f.HinweisIntern || f['Hinweis Intern'] || '',
-      };
-    });
-    renderTraegerSP();
-    setSpStatus(true, `SharePoint verbunden · ${allItems.length} Angebote geladen`);
+    setSpStatus(true, `${allItems.length} Angebote geladen`);
+    buildSidebarFilters();
+    buildLkChips();
+    applyFilters();
   } catch(e) {
-    console.warn('SP load:', e);
-    setSpStatus(false, 'Ladefehler: ' + e.message.substring(0,80));
+    setSpStatus(false, e.message.slice(0,80));
+    document.getElementById('angeboteGrid').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Laden fehlgeschlagen</h3><p>${e.message}</p></div>`;
   }
 }
 
-// ─── DATA ──────────────────────────────────────────────────────────────────
-const gemeindenData = [
-  { name: 'Stadt Dachau',              faelle: 208,  quote: 2.9,  bayernQ: 3.45, status: 'Beobachtung', notiz: '' },
-  { name: 'Karlsfeld',                 faelle: 81,   quote: 2.9,  bayernQ: 3.45, status: 'Beobachtung', notiz: '' },
-  { name: 'Markt Indersdorf',          faelle: 59,   quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
-  { name: 'Altomünster',               faelle: 42,   quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
-  { name: 'Petershausen',              faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
-  { name: 'Hilgertshausen-Tandern',    faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
-  { name: 'Weichs',                    faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
-  { name: 'Vierkirchen',               faelle: null, quote: null, bayernQ: 3.45, status: 'Pilot',        notiz: 'Nordkreis-Pilot' },
-  { name: 'Übrige Gemeinden',          faelle: 220,  quote: 1.7,  bayernQ: 3.45, status: 'Aktiv',        notiz: '' },
-];
-
-// traegerSpData wird aus SharePoint geladen (SozialraumAngebote)
-let traegerSpData = [];
-let traegerFilter = { landkreis: '', kategorie: '', search: '' };
-
-// ─── RENDER ────────────────────────────────────────────────────────────────
-function slug(s) { return s.replace(/[^a-z0-9]/gi,'_').toLowerCase(); }
-
-function renderAll() { renderGemeinden(); renderTraeger(); renderAnalyse(); }
-
-function renderGemeinden() {
-  const tbody = document.getElementById('gemeindenTbody');
-  tbody.innerHTML = '';
-  gemeindenData.forEach((g, i) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${g.name}</strong></td>
-      <td class="r" contenteditable="true" data-i="${i}" data-f="faelle">${g.faelle ?? ''}</td>
-      <td class="r" contenteditable="true" data-i="${i}" data-f="quote">${g.quote  ?? ''}</td>
-      <td class="r" style="color:var(--text-muted)">${g.bayernQ}</td>
-      <td>
-        <select style="font-size:12px; padding:3px 24px 3px 6px;" data-i="${i}" onchange="gemeindenData[this.dataset.i].status=this.value">
-          ${['Aktiv','Pilot','Beobachtung'].map(s=>`<option${g.status===s?' selected':''}>${s}</option>`).join('')}
-        </select>
-      </td>
-      <td contenteditable="true" data-i="${i}" data-f="notiz" style="color:var(--text-muted); font-size:12px;">${g.notiz}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-  tbody.querySelectorAll('[contenteditable]').forEach(td => {
-    td.addEventListener('blur', () => {
-      const i = +td.dataset.i, f = td.dataset.f;
-      const v = td.textContent.trim().replace(',','.');
-      gemeindenData[i][f] = (f === 'notiz') ? v : (v === '' ? null : parseFloat(v) || null);
-      // sync to analyse
-      const ta = document.getElementById('ana-' + slug(gemeindenData[i].name));
-      if (ta && f === 'notiz') ta.value = v;
-    });
-  });
+function mapItem(item) {
+  const f = item.fields;
+  return {
+    _spId:       item.id,
+    name:        f.Title || '',
+    kategorie:   f.Kategorie || '',
+    landkreis:   f.Landkreis || '',
+    ort:         f.Ort || '',
+    zielgruppe:  f.Zielgruppe || '',
+    beschreibung:f.Kurzbeschreibung || '',
+    strasse:     f['Stra_x00df_eundHausnummer'] || f['Straße und Hausnummer'] || '',
+    telefon:     f.Telefonnummer || '',
+    email:       f.eMail || '',
+    homepage:    f.Homepage || '',
+    link:        f['LinkzumAngebot'] || f['Link zum Angebot'] || '',
+    kosten:      f.Kosten != null ? f.Kosten : '',
+    kontakt:     f.Kontaktperson || '',
+    hinweis:     f['HinweisIntern'] || f['Hinweis Intern'] || '',
+  };
 }
 
-function addGemeinde() {
-  const name = prompt('Name der Gemeinde:');
-  if (!name || !name.trim()) return;
-  gemeindenData.push({ name: name.trim(), faelle: null, quote: null, bayernQ: 3.45, status: 'Beobachtung', notiz: '' });
-  renderGemeinden(); renderAnalyse();
+// ── Sidebar filters ───────────────────────────────────────────────────────
+function buildSidebarFilters() {
+  buildChipGroup('katFilter', countBy('kategorie'), activeKat, v => { activeKat = activeKat === v ? '' : v; applyFilters(); buildSidebarFilters(); });
+  buildChipGroup('zgFilter',  countBy('zielgruppe'), activeZg,  v => { activeZg  = activeZg  === v ? '' : v; applyFilters(); buildSidebarFilters(); });
 }
 
-function renderTraeger() { renderTraegerSP(); }
+function countBy(field) {
+  const map = {};
+  allItems.forEach(i => { if (i[field]) map[i[field]] = (map[i[field]]||0)+1; });
+  return Object.entries(map).sort((a,b) => b[1]-a[1]);
+}
 
-function renderTraegerSP() {
-  const grid = document.getElementById('traegerGrid');
-  const countEl = document.getElementById('traegerCount');
-  // collect filter values
-  const lk = document.getElementById('filterLandkreis')?.value || '';
-  const kat = document.getElementById('filterKategorie')?.value || '';
-  const q = (document.getElementById('filterSearch')?.value || '').toLowerCase();
+function buildChipGroup(elId, entries, activeVal, onClick) {
+  const el = document.getElementById(elId);
+  if (!entries.length) { el.innerHTML = '<span style="font-size:12px; color:var(--text-hint); padding:4px 10px;">—</span>'; return; }
+  el.innerHTML = entries.map(([val, cnt]) => `
+    <button class="filter-chip ${activeVal===val?'active':''}" onclick="(${onClick.toString()})('${esc(val)}')">
+      <span>${esc(val)}</span><span class="count">${cnt}</span>
+    </button>`).join('');
+}
 
-  let items = traegerSpData;
-  if (lk)  items = items.filter(t => t.landkreis  === lk);
-  if (kat) items = items.filter(t => t.kategorie  === kat);
-  if (q)   items = items.filter(t =>
-    t.name.toLowerCase().includes(q) ||
-    t.kurzbeschreibung.toLowerCase().includes(q) ||
-    t.ort.toLowerCase().includes(q)
+function buildLkChips() {
+  const lks = [...new Set(allItems.map(i=>i.landkreis).filter(Boolean))].sort();
+  const el = document.getElementById('lkFilter');
+  el.innerHTML = `<button class="lk-chip ${activeLk===''?'active':''}" onclick="setLk('')">Alle</button>`
+    + lks.map(lk => `<button class="lk-chip ${activeLk===lk?'active':''}" onclick="setLk('${esc(lk)}')">${esc(lk)}</button>`).join('');
+}
+
+function setLk(val) { activeLk = val; buildLkChips(); applyFilters(); }
+
+// ── Filter & render ───────────────────────────────────────────────────────
+function applyFilters() {
+  const q = document.getElementById('searchInput')?.value.toLowerCase().trim() || '';
+  let filtered = allItems;
+  if (activeKat)  filtered = filtered.filter(i => i.kategorie  === activeKat);
+  if (activeZg)   filtered = filtered.filter(i => i.zielgruppe === activeZg);
+  if (activeLk)   filtered = filtered.filter(i => i.landkreis  === activeLk);
+  if (q) filtered = filtered.filter(i =>
+    i.name.toLowerCase().includes(q) ||
+    i.beschreibung.toLowerCase().includes(q) ||
+    i.ort.toLowerCase().includes(q) ||
+    i.kontakt.toLowerCase().includes(q)
   );
+  document.getElementById('resultCount').textContent = filtered.length + ' Ergebnis' + (filtered.length===1?'':'se');
+  renderGrid(filtered);
+}
 
-  if (countEl) countEl.textContent = items.length + ' Angebote';
-
-  if (items.length === 0) {
-    grid.innerHTML = '<div style="color:var(--text-muted); font-size:13px; padding:1rem 0;">Keine Einträge gefunden. Entweder Filter anpassen oder Liste ist noch leer.</div>';
+function renderGrid(items) {
+  const grid = document.getElementById('angeboteGrid');
+  if (!items.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="icon">🔍</div>
+      <h3>Keine Angebote gefunden</h3>
+      <p>Filter anpassen oder neues Angebot hinzufügen.</p>
+    </div>`;
     return;
   }
-
-  grid.innerHTML = '';
-  items.forEach(t => {
-    const div = document.createElement('div');
-    div.className = 'traeger-card';
-    div.innerHTML = `
-      <div class="traeger-name">${esc(t.name)}</div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-        ${t.kategorie  ? `<span class="traeger-type type-amb">${esc(t.kategorie)}</span>`  : ''}
-        ${t.landkreis  ? `<span class="traeger-type type-soz">${esc(t.landkreis)}</span>`  : ''}
-        ${t.zielgruppe ? `<span class="traeger-type type-sonder">${esc(t.zielgruppe)}</span>` : ''}
+  grid.innerHTML = items.map(item => `
+    <div class="angebot-card" onclick="openDetail('${item._spId}')">
+      <div class="angebot-name">${esc(item.name)}</div>
+      <div class="angebot-badges">
+        ${item.kategorie  ? `<span class="badge badge-kat">${esc(item.kategorie)}</span>`  : ''}
+        ${item.landkreis  ? `<span class="badge badge-lk">${esc(item.landkreis)}</span>`   : ''}
+        ${item.zielgruppe ? `<span class="badge badge-zg">${esc(item.zielgruppe)}</span>`  : ''}
       </div>
-      ${t.kurzbeschreibung ? `<div class="traeger-note" style="margin-bottom:8px;">${esc(t.kurzbeschreibung)}</div>` : ''}
-      <div style="font-size:11px; color:var(--text-muted); display:flex; flex-direction:column; gap:3px;">
-        ${t.ort      ? `<span>📍 ${esc(t.ort)}</span>` : ''}
-        ${t.telefon  ? `<span>📞 ${esc(t.telefon)}</span>` : ''}
-        ${t.email    ? `<span>✉ <a href="mailto:${esc(t.email)}" style="color:var(--accent)">${esc(t.email)}</a></span>` : ''}
-        ${t.homepage ? `<span>🌐 <a href="${esc(t.homepage)}" target="_blank" style="color:var(--accent)">Website</a></span>` : ''}
-        ${t.kosten !== '' && t.kosten != null ? `<span>💶 ${esc(String(t.kosten))}</span>` : ''}
-        ${t.kontakt  ? `<span>👤 ${esc(t.kontakt)}</span>` : ''}
+      ${item.beschreibung ? `<div class="angebot-desc">${esc(item.beschreibung)}</div>` : ''}
+      <div class="angebot-meta">
+        ${item.ort      ? `<span>📍 ${esc(item.ort)}</span>` : ''}
+        ${item.telefon  ? `<span>📞 ${esc(item.telefon)}</span>` : ''}
+        ${item.email    ? `<span>✉ <a href="mailto:${esc(item.email)}" onclick="event.stopPropagation()">${esc(item.email)}</a></span>` : ''}
+        ${item.homepage ? `<span>🌐 <a href="${esc(item.homepage)}" target="_blank" onclick="event.stopPropagation()">Website</a></span>` : ''}
       </div>
-      ${t.hinweis ? `<div class="traeger-bew" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border);"><div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:4px;">HINWEIS INTERN</div><div style="font-size:12px; color:var(--text-muted);">${esc(t.hinweis)}</div></div>` : ''}
-      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
-        <button onclick="editAngebot('${t._spId}')" style="font-size:11px; padding:3px 10px; background:none; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; color:var(--text-muted);">✏ Bearbeiten</button>
-      </div>`;
-    grid.appendChild(div);
-  });
+      <div class="angebot-actions">
+        <button class="btn-edit" onclick="event.stopPropagation(); openEdit('${item._spId}')">✏ Bearbeiten</button>
+        ${item.hinweis ? `<span class="hinweis-badge">Interner Hinweis</span>` : ''}
+      </div>
+    </div>`).join('');
 }
 
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ── Detail panel ──────────────────────────────────────────────────────────
+function openDetail(spId) {
+  const item = allItems.find(i => i._spId === spId);
+  if (!item) return;
+  document.getElementById('detailName').textContent = item.name;
+  document.getElementById('detailBadges').innerHTML = [
+    item.kategorie  ? `<span class="badge badge-kat">${esc(item.kategorie)}</span>`  : '',
+    item.landkreis  ? `<span class="badge badge-lk">${esc(item.landkreis)}</span>`   : '',
+    item.zielgruppe ? `<span class="badge badge-zg">${esc(item.zielgruppe)}</span>`  : '',
+  ].join('');
+  document.getElementById('detailEditBtn').dataset.spid = spId;
+
+  const rows = [
+    ['Beschreibung',  item.beschreibung],
+    ['Ort / Adresse', [item.ort, item.strasse].filter(Boolean).join(', ')],
+    ['Telefon',       item.telefon  ? `<a href="tel:${esc(item.telefon)}">${esc(item.telefon)}</a>` : ''],
+    ['E-Mail',        item.email    ? `<a href="mailto:${esc(item.email)}">${esc(item.email)}</a>` : ''],
+    ['Homepage',      item.homepage ? `<a href="${esc(item.homepage)}" target="_blank">${esc(item.homepage)}</a>` : ''],
+    ['Link zum Angebot', item.link  ? `<a href="${esc(item.link)}" target="_blank">Direkt zum Angebot →</a>` : ''],
+    ['Kosten',        item.kosten !== '' ? (item.kosten==0?'Kostenlos':item.kosten+' €') : ''],
+    ['Kontaktperson', item.kontakt],
+    ['Hinweis Intern',item.hinweis],
+  ].filter(([,v]) => v);
+
+  document.getElementById('detailBody').innerHTML = rows.map(([label, val]) => `
+    <div class="detail-row">
+      <div class="detail-label">${label}</div>
+      <div class="detail-val">${val}</div>
+    </div>`).join('');
+
+  document.getElementById('detailBackdrop').classList.add('open');
+  document.getElementById('detailPanel').classList.add('open');
 }
 
-function addTraeger() { openAngebotModal(null); }
-
-function editAngebot(spId) {
-  const t = traegerSpData.find(x => x._spId === spId);
-  if (t) openAngebotModal(t);
+function closeDetail() {
+  document.getElementById('detailBackdrop').classList.remove('open');
+  document.getElementById('detailPanel').classList.remove('open');
 }
 
-function openAngebotModal(t) {
-  const isNew = !t;
-  const v = t || {};
-  const modal = document.getElementById('angebotModal');
-  const content = document.getElementById('angebotModalContent');
-  content.innerHTML = `
-    <div style="font-size:15px; font-weight:600; margin-bottom:1rem;">${isNew ? 'Neues Angebot' : 'Angebot bearbeiten'}</div>
-    ${field('Title','Anbieter / Titel',v.name||'')}
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-      ${field('Kategorie','Kategorie',v.kategorie||'')}
-      ${field('Landkreis','Landkreis',v.landkreis||'Dachau')}
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-      ${field('Ort','Ort',v.ort||'')}
-      ${field('Zielgruppe','Zielgruppe',v.zielgruppe||'')}
-    </div>
-    ${field('Kurzbeschreibung','Kurzbeschreibung',v.kurzbeschreibung||'','textarea')}
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-      ${field('Telefonnummer','Telefon',v.telefon||'')}
-      ${field('eMail','E-Mail',v.email||'')}
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-      ${field('Homepage','Homepage',v.homepage||'')}
-      ${field('LinkzumAngebot','Link zum Angebot',v.linkAngebot||'')}
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-      ${field('Kosten','Kosten (€)',v.kosten||'')}
-      ${field('Kontaktperson','Kontaktperson',v.kontakt||'')}
-    </div>
-    ${field('HinweisIntern','Hinweis Intern',v.hinweis||'','textarea')}
-    <div style="display:flex; gap:8px; margin-top:1rem; justify-content:flex-end;">
-      <button onclick="closeModal()" class="btn btn-secondary">Abbrechen</button>
-      <button onclick="saveAngebot('${isNew ? '' : t._spId}')" class="btn btn-primary" id="btnModalSave">Speichern</button>
-    </div>
-    <div id="modalStatus" class="status-bar" style="display:none; margin-top:0.75rem;"></div>`;
-  modal.style.display = 'flex';
+function editFromDetail() {
+  const spId = document.getElementById('detailEditBtn').dataset.spid;
+  closeDetail();
+  openEdit(spId);
 }
 
-function field(id, label, val, type='input') {
-  if (type === 'textarea') return `<div class="field" style="margin-bottom:10px;"><label>${label}</label><textarea id="mf_${id}" style="min-height:70px;">${esc(val)}</textarea></div>`;
-  return `<div class="field" style="margin-bottom:10px;"><label>${label}</label><input type="text" id="mf_${id}" value="${esc(val)}"></div>`;
+// ── Form modal ────────────────────────────────────────────────────────────
+function openNew() {
+  currentEditId = null;
+  clearForm();
+  document.getElementById('formTitle').textContent = 'Neues Angebot';
+  document.getElementById('formModal').classList.add('open');
 }
 
-function closeModal() { document.getElementById('angebotModal').style.display = 'none'; }
+function openEdit(spId) {
+  const item = allItems.find(i => i._spId === spId);
+  if (!item) return;
+  currentEditId = spId;
+  document.getElementById('formTitle').textContent = 'Angebot bearbeiten';
+  document.getElementById('fTitle').value       = item.name;
+  document.getElementById('fKategorie').value   = item.kategorie;
+  document.getElementById('fLandkreis').value   = item.landkreis;
+  document.getElementById('fOrt').value         = item.ort;
+  document.getElementById('fZielgruppe').value  = item.zielgruppe;
+  document.getElementById('fStrasse').value     = item.strasse;
+  document.getElementById('fBeschreibung').value= item.beschreibung;
+  document.getElementById('fTelefon').value     = item.telefon;
+  document.getElementById('fEmail').value       = item.email;
+  document.getElementById('fHomepage').value    = item.homepage;
+  document.getElementById('fLink').value        = item.link;
+  document.getElementById('fKosten').value      = item.kosten;
+  document.getElementById('fKontakt').value     = item.kontakt;
+  document.getElementById('fHinweis').value     = item.hinweis;
+  document.getElementById('formStatus').style.display = 'none';
+  document.getElementById('formModal').classList.add('open');
+}
 
-async function saveAngebot(spId) {
-  const btn = document.getElementById('btnModalSave');
+function closeForm() { document.getElementById('formModal').classList.remove('open'); }
+
+function clearForm() {
+  ['fTitle','fOrt','fStrasse','fBeschreibung','fTelefon','fEmail','fHomepage','fLink','fKosten','fKontakt','fHinweis'].forEach(id => document.getElementById(id).value = '');
+  ['fKategorie','fLandkreis','fZielgruppe'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('formStatus').style.display = 'none';
+}
+
+async function saveAngebot() {
+  const title = document.getElementById('fTitle').value.trim();
+  if (!title) { showFormStatus('error','Bitte einen Titel/Anbieternamen eintragen.'); return; }
+
+  const btn = document.getElementById('formSaveBtn');
   btn.disabled = true; btn.textContent = 'Wird gespeichert…';
-  setStatus('modalStatus','uploading','Wird gespeichert…');
+  showFormStatus('uploading','Wird in SharePoint gespeichert…');
+
   const fields = {
-    Title:                    document.getElementById('mf_Title')?.value || '',
-    Kategorie:                document.getElementById('mf_Kategorie')?.value || '',
-    Landkreis:                document.getElementById('mf_Landkreis')?.value || '',
-    Ort:                      document.getElementById('mf_Ort')?.value || '',
-    Zielgruppe:               document.getElementById('mf_Zielgruppe')?.value || '',
-    Kurzbeschreibung:         document.getElementById('mf_Kurzbeschreibung')?.value || '',
-    Telefonnummer:            document.getElementById('mf_Telefonnummer')?.value || '',
-    eMail:                    document.getElementById('mf_eMail')?.value || '',
-    Homepage:                 document.getElementById('mf_Homepage')?.value || '',
-    LinkzumAngebot:           document.getElementById('mf_LinkzumAngebot')?.value || '',
-    Kontaktperson:            document.getElementById('mf_Kontaktperson')?.value || '',
-    HinweisIntern:            document.getElementById('mf_HinweisIntern')?.value || '',
+    Title:             title,
+    Kategorie:         document.getElementById('fKategorie').value,
+    Landkreis:         document.getElementById('fLandkreis').value,
+    Ort:               document.getElementById('fOrt').value,
+    Zielgruppe:        document.getElementById('fZielgruppe').value,
+    Kurzbeschreibung:  document.getElementById('fBeschreibung').value,
+    Telefonnummer:     document.getElementById('fTelefon').value,
+    eMail:             document.getElementById('fEmail').value,
+    Homepage:          document.getElementById('fHomepage').value,
+    LinkzumAngebot:    document.getElementById('fLink').value,
+    Kontaktperson:     document.getElementById('fKontakt').value,
+    HinweisIntern:     document.getElementById('fHinweis').value,
   };
-  const kostenVal = document.getElementById('mf_Kosten')?.value;
+  const kostenVal = document.getElementById('fKosten').value;
   if (kostenVal !== '') fields.Kosten = parseFloat(kostenVal) || 0;
+  // Straße: try both known internal names
+  fields['Stra_x00df_eundHausnummer'] = document.getElementById('fStrasse').value;
+
   try {
-    const newId = await saveToList(fields, spId || null);
-    // update local cache
-    if (spId) {
-      const idx = traegerSpData.findIndex(x => x._spId === spId);
-      if (idx >= 0) Object.assign(traegerSpData[idx], { name: fields.Title, kategorie: fields.Kategorie, landkreis: fields.Landkreis, ort: fields.Ort, zielgruppe: fields.Zielgruppe, kurzbeschreibung: fields.Kurzbeschreibung, telefon: fields.Telefonnummer, email: fields.eMail, homepage: fields.Homepage, linkAngebot: fields.LinkzumAngebot, kontakt: fields.Kontaktperson, hinweis: fields.HinweisIntern, kosten: fields.Kosten });
-    } else {
-      traegerSpData.push({ _spId: newId, name: fields.Title, kategorie: fields.Kategorie, landkreis: fields.Landkreis, ort: fields.Ort, zielgruppe: fields.Zielgruppe, kurzbeschreibung: fields.Kurzbeschreibung, telefon: fields.Telefonnummer, email: fields.eMail, homepage: fields.Homepage, linkAngebot: fields.LinkzumAngebot, kontakt: fields.Kontaktperson, hinweis: fields.HinweisIntern, kosten: fields.Kosten });
-    }
-    renderTraegerSP();
-    closeModal();
-  } catch(e) {
-    setStatus('modalStatus','error','Fehler: ' + e.message);
-    btn.disabled = false; btn.textContent = 'Speichern';
-  }
-}
-
-function renderAnalyse() {
-  const grid = document.getElementById('analyseGrid');
-  grid.innerHTML = '';
-  gemeindenData.forEach(g => {
-    const div = document.createElement('div');
-    div.className = 'ana-card';
-    div.innerHTML = `
-      <div class="ana-name">${g.name}</div>
-      <div class="ana-meta">
-        ${g.faelle != null ? g.faelle + ' Fälle p.a.' : 'Fallzahl unbekannt'}
-        ${g.quote != null ? ' · Quote: ' + g.quote : ''}
-        · <span style="color:var(--accent)">${g.status}</span>
-      </div>
-      <textarea id="ana-${slug(g.name)}" placeholder="Einschätzung, Potenzial, Besonderheiten…">${g.notiz}</textarea>`;
-    grid.appendChild(div);
-  });
-  document.querySelectorAll('#analyseGrid textarea').forEach(ta => {
-    ta.addEventListener('input', () => {
-      const i = gemeindenData.findIndex(g => 'ana-'+slug(g.name) === ta.id);
-      if (i >= 0) gemeindenData[i].notiz = ta.value;
-    });
-  });
-}
-
-// ─── SAVE FUNCTIONS ────────────────────────────────────────────────────────
-async function saveGemeinden() {
-  const btn = document.getElementById('btnSaveGemeinden');
-  btn.disabled = true; btn.textContent = 'Wird gespeichert…';
-  setStatus('statusGemeinden', 'uploading', 'Wird in SharePoint gespeichert…');
-  let saved = 0;
-  for (const g of gemeindenData) {
-    const fields = {
-      Title: g.name,
-      Landkreis: 'Dachau',
-      Gemeinde: g.name,
-      Faelle_pa: g.faelle || 0,
-      Quote_Gemeinde: g.quote || 0,
-      Quote_Bayern: g.bayernQ || 3.45,
-      Bewertung: g.notiz || '',
-      Status: g.status || 'Aktiv',
-      Letzte_Aktualisierung: new Date().toISOString()
+    const newId = await saveToList(fields, currentEditId);
+    const mapped = {
+      _spId: newId || currentEditId,
+      name: fields.Title, kategorie: fields.Kategorie, landkreis: fields.Landkreis,
+      ort: fields.Ort, zielgruppe: fields.Zielgruppe, beschreibung: fields.Kurzbeschreibung,
+      strasse: document.getElementById('fStrasse').value,
+      telefon: fields.Telefonnummer, email: fields.eMail, homepage: fields.Homepage,
+      link: fields.LinkzumAngebot, kosten: fields.Kosten ?? '',
+      kontakt: fields.Kontaktperson, hinweis: fields.HinweisIntern,
     };
-    try {
-      g._spId = await saveToList(fields, g._spId || null);
-      saved++;
-    } catch(e) { console.warn(g.name, e); }
-  }
-  setStatus('statusGemeinden', 'done', `✓ ${saved} Gemeinden in SharePoint gespeichert`);
-  btn.textContent = '✓ Gespeichert';
-  setTimeout(() => { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg> In SharePoint speichern'; }, 2500);
-}
-
-async function saveTraeger() { /* saving done via modal */ }
-
-async function saveAnalyse() {
-  // sync textarea → gemeindenData
-  gemeindenData.forEach(g => {
-    const ta = document.getElementById('ana-' + slug(g.name));
-    if (ta) g.notiz = ta.value;
-  });
-  await saveGemeinden();
-  setStatus('statusAnalyse', 'done', '✓ Analyse gespeichert');
-}
-
-async function saveEmpfehlungen() {
-  const btn = document.getElementById('btnSaveEmpf');
-  btn.disabled = true; btn.textContent = 'Wird gespeichert…';
-  setStatus('statusEmpf', 'uploading', 'Wird gespeichert…');
-  const entries = [
-    { key: 'Empfehlung_Pilot',       val: document.getElementById('empfPilot').value },
-    { key: 'Empfehlung_Wettbewerb',  val: document.getElementById('empfWettbewerb').value },
-    { key: 'Empfehlung_Timing',      val: document.getElementById('empfTiming').value },
-    { key: 'Empfehlung_Risiken',     val: document.getElementById('empfRisiken').value },
-  ];
-  let saved = 0;
-  for (const e of entries) {
-    try {
-      await saveToList({ Title: e.key, Landkreis: 'Dachau', Gemeinde: e.key, Bewertung: e.val, Status: 'Aktiv', Letzte_Aktualisierung: new Date().toISOString() }, null);
-      saved++;
-    } catch(err) { console.warn(err); }
-  }
-  setStatus('statusEmpf', 'done', `✓ ${saved} Einträge gespeichert`);
-  btn.textContent = '✓ Gespeichert';
-  setTimeout(() => { btn.disabled = false; btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V7l-4-4zm-5 16a3 3 0 110-6 3 3 0 010 6zm3-10H5V5h10v4z"/></svg> In SharePoint speichern'; }, 2500);
-}
-
-// ─── STATUS HELPER (aus Berichtsgenerator-Muster) ─────────────────────────
-function setStatus(id, type, msg) {
-  const bar = document.getElementById(id);
-  if (!bar) return;
-  bar.style.display = 'flex';
-  bar.className = 'status-bar ' + (type === 'done' ? 'done' : 'uploading');
-  if (type === 'error') Object.assign(bar.style, { background:'var(--error-bg)', color:'var(--error)', border:'1px solid #fecaca' });
-  bar.textContent = msg;
-}
-
-// ─── TABS ──────────────────────────────────────────────────────────────────
-function showTab(id, btn) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  btn.classList.add('active');
-}
-
-// ─── CHARTS ───────────────────────────────────────────────────────────────
-function initCharts() {
-  new Chart(document.getElementById('chartHze'), {
-    type: 'bar',
-    data: {
-      labels: ['§30','§31 SPFH','§32/35a TG','§33 VZP','§34/35a HE','HzE ges.'],
-      datasets: [
-        { label: 'LK Dachau', data: [0.22,0.78,0.88,0.23,0.42,2.53], backgroundColor: '#7b3f1e', borderRadius: 4 },
-        { label: 'Bayern Ø',  data: [0.41,1.27,0.81,0.42,0.54,3.45], backgroundColor: 'rgba(0,0,0,.1)', borderRadius: 4 }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: true,
-      plugins: { legend: { labels: { font: { size: 11 }, boxWidth: 12 } } },
-      scales: {
-        y: { grid: { color: 'rgba(0,0,0,.05)' }, ticks: { font: { size: 11 } } },
-        x: { grid: { display: false }, ticks: { font: { size: 10 } } }
-      }
+    if (currentEditId) {
+      const idx = allItems.findIndex(i => i._spId === currentEditId);
+      if (idx >= 0) allItems[idx] = mapped;
+    } else {
+      allItems.unshift(mapped);
     }
-  });
-
-  new Chart(document.getElementById('chartGemeinden'), {
-    type: 'doughnut',
-    data: {
-      labels: ['Stadt Dachau','Karlsfeld','Markt Indersdorf','Altomünster','Übrige'],
-      datasets: [{
-        data: [208,81,59,42,220],
-        backgroundColor: ['#7b3f1e','#a05030','#c47848','#e0a878','#ede3da'],
-        borderWidth: 2, borderColor: '#fff'
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: true, cutout: '60%',
-      plugins: { legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 10, padding: 8 } } }
-    }
-  });
+    buildSidebarFilters();
+    buildLkChips();
+    applyFilters();
+    closeForm();
+    // brief success toast
+    setSpStatus(true, (currentEditId ? 'Angebot aktualisiert' : 'Neues Angebot gespeichert') + ' · ' + allItems.length + ' Angebote');
+  } catch(e) {
+    showFormStatus('error','Fehler: '+e.message);
+  }
+  btn.disabled = false; btn.textContent = 'Speichern';
 }
 
-// ─── BOOT ──────────────────────────────────────────────────────────────────
+function showFormStatus(type, msg) {
+  const el = document.getElementById('formStatus');
+  el.style.display = 'flex';
+  el.className = 'status-bar ' + (type === 'done' || type === 'uploading' ? type : '');
+  if (type === 'error') Object.assign(el.style, { background:'var(--error-bg)', color:'var(--error)', border:'1px solid #fecaca' });
+  else el.style = '';
+  el.className = 'status-bar ' + (type === 'uploading' ? 'uploading' : type === 'done' ? 'done' : '');
+  el.textContent = msg;
+}
+
+// ── SP status ─────────────────────────────────────────────────────────────
+function setSpStatus(ok, msg) {
+  const dot = document.getElementById('spDot');
+  if (ok === true)  dot.className = 'sp-dot ok';
+  else if (ok === false) dot.className = 'sp-dot warn';
+  else dot.className = 'sp-dot';
+  document.getElementById('spStatus').textContent = msg;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   if (window.msal) { initMsal(); }
-  else { setTimeout(() => { if (window.msal) initMsal(); else { document.getElementById('loginError').style.display='block'; document.getElementById('loginError').textContent='MSAL konnte nicht geladen werden. Bitte Seite neu laden.'; }}, 2000); }
+  else { setTimeout(() => { if (window.msal) initMsal(); else { document.getElementById('loginError').style.display='block'; document.getElementById('loginError').textContent='MSAL konnte nicht geladen werden.'; }}, 2000); }
 });
 </script>
 </body>
