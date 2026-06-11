@@ -597,7 +597,7 @@ async function fillTemplate(templateBytes, data) {
   const zip = await JSZip.loadAsync(templateBytes);
   let xml = await zip.file('word/document.xml').async('string');
   for (const [key, value] of Object.entries(data)) {
-    const safe = (value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const safe = String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     xml = xml.split('{{'+key+'}}').join(safe);
   }
   zip.file('word/document.xml', xml);
