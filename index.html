@@ -1512,9 +1512,17 @@ async function loadGroupMembers() {
   
   try {
     // Load Team group and TL-Ambulant group in parallel
+    // Try by name first, fallback to mail
+    async function getGroupByMail(mail) {
+      const r = await fetch(`https://graph.microsoft.com/v1.0/groups?$filter=mail eq '${mail}'&$select=id`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      const d = await r.json();
+      return d.value?.[0]?.id;
+    }
     const [teamId, tlId, manager] = await Promise.all([
-      getGroupByName('Team'),
-      getGroupByName('TL-Ambulant'),
+      getGroupByName('Ambulante Familienhilfe').then(id => id || getGroupByMail('familienhilfe@praxisneuewege.de')),
+      getGroupByName('TL-Ambulant').then(id => id || getGroupByName('TL Ambulant')),
       getMyManager()
     ]);
     
@@ -1553,11 +1561,11 @@ async function loadGroupMembers() {
         }).join('');
     }
     
-    // Pre-fill Fachkraft_Name for signature (change 8)
+    // Pre-fill Fachkraft_Name from Fachkraft 1 selection
+    const fkSelect = document.getElementById('Fachkraft_NeueWege');
     const fkNameInput = document.getElementById('Fachkraft_Name');
-    if (fkNameInput && !fkNameInput.value) {
-      const myName = _teamMembers.find(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
-      if (myName) fkNameInput.value = sortName(myName);
+    if (fkNameInput && fkSelect && !fkNameInput.dataset.manuallySet) {
+      fkNameInput.value = fkSelect.value || '';
     }
     
   } catch(e) {
@@ -1612,8 +1620,9 @@ async function loadGroupMembers() {
 function updateFachkraftName() {
   const fk = document.getElementById('Fachkraft_NeueWege')?.value;
   const fkName = document.getElementById('Fachkraft_Name');
-  // Only update if not manually changed
-  if (fkName && (!fkName.dataset.manuallySet)) fkName.value = fk || '';
+  if (fkName && !fkName.dataset.manuallySet) {
+    fkName.value = fk || '';
+  }
 }
 
 function addFachkraft() {
@@ -1839,16 +1848,14 @@ function buildDynamicSections(force = false) {
   </div>`;
   document.getElementById('s5_content').innerHTML = s5html;
   
-  // Re-populate Fachkraft_Name after rebuilding S5
-  const fkName = document.getElementById('Fachkraft_Name');
-  if (fkName && _teamMembers.length > 0) {
-    const myName = _teamMembers.find(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
-    const sortName = m => {
-      const parts = (m.displayName || '').split(' ');
-      return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
-    };
-    if (myName) fkName.value = sortName(myName);
-  }
+  // Sync Fachkraft_Name from Fachkraft 1 after rebuilding S5
+  setTimeout(() => {
+    const fkSel = document.getElementById('Fachkraft_NeueWege');
+    const fkName = document.getElementById('Fachkraft_Name');
+    if (fkName && fkSel && !fkName.dataset.manuallySet) {
+      fkName.value = fkSel.value || '';
+    }
+  }, 50);
 }
 
 // ─── ÜBERSICHT (S0) ───────────────────────────────────────────────────────────
