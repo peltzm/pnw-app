@@ -722,6 +722,8 @@ function collectData() {
   // Collect extra Kinder and Sorgeberechtigte
   data._extraKinder = collectExtraKinder();
   data._extraSorg = collectExtraSorg();
+  // TL-Kommentare mitpersistieren
+  data._tlKommentare = _tlKommentare;
   // Collect extra Fachkräfte 2-4
   for (let i = 2; i <= 4; i++) {
     const el = document.getElementById('Fachkraft_' + i);
@@ -746,6 +748,10 @@ function buildSummary() {
   if (det && det.style.display !== 'none') updateDebugBlock();
   const d = collectData();
   const kind = (d.Kind_Vorname + ' ' + d.Kind_Familienname).trim() || '—';
+  const _nOffen = openCommentCount();
+  const _cmtHint = _nOffen > 0
+    ? `<div style="margin-top:8px; padding:8px 12px; background:#fdf6dd; border-left:3px solid #c9a227; border-radius:4px; font-size:12px; color:#8a6d1a;">💬 ${_nOffen} offene${_nOffen === 1 ? 'r' : ''} Kommentar${_nOffen === 1 ? '' : 'e'} der Teamleitung auf den Seiten 3–5</div>`
+    : '';
   document.getElementById('summaryContent').innerHTML = `
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px;">
       ${[['Kind/Jugendliche*r',kind],['Jugendamt',d.Jugendamt||'—'],['Fachkraft',d.Fachkraft_NeueWege||'—'],
@@ -753,7 +759,7 @@ function buildSummary() {
         .map(([l,v]) => `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;">
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${l}</div>
           <div style="font-size:13px;">${v}</div></div>`).join('')}
-    </div>`;
+    </div>${_cmtHint}`;
   // Update site display
   const siteDisplay = CONFIG.siteUrl.split('/sites/')[1] || CONFIG.siteUrl;
   document.getElementById('infoSite').textContent = siteDisplay || '— bitte konfigurieren';
@@ -1167,6 +1173,9 @@ async function loadDraft(id) {
     const bzEl = document.getElementById('Betreuungszeitraum');
     if (bzEl && bzEl.value.trim()) bzEl.dataset.manuallySet = '1';
     syncBetreuungszeitraum();
+    // TL-Kommentare wiederherstellen und anzeigen
+    _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
+    renderFieldComments();
     // Check if in review mode (opened via email link)
     const isReview = new URLSearchParams(window.location.search).get('review') === String(id);
     if (isReview) {
@@ -1214,6 +1223,9 @@ function resetForm() {
   // Betreuungszeitraum-Automatik wieder aktivieren
   const bzReset = document.getElementById('Betreuungszeitraum');
   if (bzReset) delete bzReset.dataset.manuallySet;
+  // Kommentare zurücksetzen
+  _tlKommentare = {};
+  _isReviewMode = false;
   resetWeiterePersFound();
   resetExtraKinder();
   resetExtraSorg();
@@ -1548,6 +1560,109 @@ function fillWeitereKinder(value) {
   });
 }
 
+// ─── TL-KOMMENTARE (Seiten 3–5, Word-ähnlich vereinfacht) ────────────────────
+let _tlKommentare = {};   // { fieldId: { text, von, datum, status: 'offen'|'erledigt' } }
+let _isReviewMode = false;
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Alle kommentierbaren Felder in den Seiten 3–5
+function _commentableFields() {
+  const els = [];
+  ['s3_content','s4_content','s5_content'].forEach(cid => {
+    const c = document.getElementById(cid);
+    if (!c) return;
+    c.querySelectorAll('textarea[id], input[type="text"][id]').forEach(el => els.push(el));
+  });
+  return els;
+}
+
+// Sprechende Bezeichnung für ein Feld ermitteln (Card-Titel / Ziel-Nr. / Label)
+function _fieldLabel(el) {
+  if (!el) return '';
+  const parts = [];
+  const card = el.closest('.card');
+  const ziel = card?.querySelector('.ziel-label')?.textContent?.trim();
+  const cardTitle = card?.querySelector('.card-title')?.textContent?.trim();
+  if (ziel) parts.push(ziel);
+  else if (cardTitle) parts.push(cardTitle);
+  const lbl = el.closest('.field')?.querySelector('label')?.textContent?.trim();
+  if (lbl && lbl !== parts[0]) parts.push(lbl);
+  return parts.join(' – ') || el.id;
+}
+
+function _labelForId(fid) {
+  return _fieldLabel(document.getElementById(fid)) || fid;
+}
+
+function renderFieldComments() {
+  _commentableFields().forEach(el => {
+    const fid = el.id;
+    const c = _tlKommentare[fid];
+    let wrap = document.getElementById('cmt_' + fid);
+    if (!c && !_isReviewMode) { if (wrap) wrap.remove(); return; }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'cmt_' + fid;
+      el.insertAdjacentElement('afterend', wrap);
+    }
+    wrap.innerHTML = _commentHtml(fid, c);
+  });
+}
+
+function _commentHtml(fid, c) {
+  // Kein Kommentar: im Prüfmodus dezenter Button, sonst nichts
+  if (!c) {
+    return _isReviewMode
+      ? `<div style="margin-top:4px;"><button onclick="startComment('${fid}')" style="font-size:11px; color:#8a6d1a; background:none; border:1px dashed #c9a227; border-radius:4px; padding:2px 10px; cursor:pointer;">💬 Kommentieren</button></div>`
+      : '';
+  }
+  const meta = `${escHtml(c.von || 'Teamleitung')} · ${escHtml(c.datum || '')}`;
+  if (c.status === 'erledigt') {
+    return `<div style="margin-top:6px; padding:8px 12px; background:#f4f4f0; border-left:3px solid #9aa39a; border-radius:4px; font-size:12px; color:var(--text-muted);">
+      <span style="color:#5a7d5a; font-weight:600;">✓ erledigt</span> — ${escHtml(c.text)}
+      <span style="margin-left:6px; font-size:11px;">(${meta})</span>
+      <button onclick="reopenComment('${fid}')" style="margin-left:8px; font-size:11px; background:none; border:none; color:#8a6d1a; cursor:pointer; text-decoration:underline;">wieder öffnen</button>
+    </div>`;
+  }
+  // Offener Kommentar
+  if (_isReviewMode) {
+    return `<div style="margin-top:6px; padding:8px 12px; background:#fdf6dd; border-left:3px solid #c9a227; border-radius:4px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-size:11px; font-weight:600; color:#8a6d1a;">💬 Kommentar Teamleitung</span>
+        <button onclick="deleteComment('${fid}')" title="Kommentar löschen" style="font-size:12px; background:none; border:none; color:var(--error); cursor:pointer;">🗑</button>
+      </div>
+      <textarea id="cmt_input_${fid}" oninput="updateComment('${fid}', this.value)" placeholder="Hinweis für die Fachkraft..." style="width:100%; min-height:50px; font-size:12px; border:1px solid #e3d49a; border-radius:4px; padding:6px 8px; background:#fffdf5; resize:vertical;">${escHtml(c.text)}</textarea>
+    </div>`;
+  }
+  return `<div style="margin-top:6px; padding:8px 12px; background:#fdf6dd; border-left:3px solid #c9a227; border-radius:4px; font-size:12px;">
+    <div style="font-size:11px; font-weight:600; color:#8a6d1a; margin-bottom:3px;">💬 Kommentar Teamleitung <span style="font-weight:400;">(${meta})</span></div>
+    <div style="white-space:pre-wrap; margin-bottom:6px;">${escHtml(c.text)}</div>
+    <button onclick="resolveComment('${fid}')" style="font-size:11px; background:none; border:1px solid #5a7d5a; color:#5a7d5a; border-radius:4px; padding:2px 10px; cursor:pointer;">✓ Als erledigt markieren</button>
+  </div>`;
+}
+
+function startComment(fid) {
+  _tlKommentare[fid] = {
+    text: '',
+    von: currentAccount?.name || currentAccount?.username || 'Teamleitung',
+    datum: new Date().toLocaleDateString('de-DE'),
+    status: 'offen'
+  };
+  renderFieldComments();
+  document.getElementById('cmt_input_' + fid)?.focus();
+}
+function updateComment(fid, val) { if (_tlKommentare[fid]) _tlKommentare[fid].text = val; }
+function deleteComment(fid) { delete _tlKommentare[fid]; renderFieldComments(); }
+function resolveComment(fid) { if (_tlKommentare[fid]) { _tlKommentare[fid].status = 'erledigt'; renderFieldComments(); } }
+function reopenComment(fid) { if (_tlKommentare[fid]) { _tlKommentare[fid].status = 'offen'; renderFieldComments(); } }
+
+function openCommentCount() {
+  return Object.values(_tlKommentare).filter(c => c.status !== 'erledigt' && (c.text || '').trim()).length;
+}
+
 // ─── E-MAIL FREIGABE ─────────────────────────────────────────────────────────
 
 function getFalleitungMail() {
@@ -1754,7 +1869,10 @@ async function approveReport() {
 }
 
 async function rejectReport() {
-  const reason = prompt('Grund für die Zurückweisung (wird an Fachkraft gesendet):');
+  const nOffen = openCommentCount();
+  const reason = prompt(nOffen > 0
+    ? `Grund für die Zurückweisung (optional — ${nOffen} Kommentar(e) werden mitgesendet):`
+    : 'Grund für die Zurückweisung (wird an Fachkraft gesendet):');
   if (reason === null) return;
   
   try {
@@ -1763,13 +1881,22 @@ async function rejectReport() {
     data._ablehnungsgrund = reason;
     await saveToList(data, currentListId);
     
+    // Offene Kommentare für die E-Mail aufbereiten
+    const offene = Object.entries(_tlKommentare)
+      .filter(([, c]) => c.status !== 'erledigt' && (c.text || '').trim());
+    const kommentarHtml = offene.length
+      ? `<p><strong>Kommentare der Teamleitung:</strong></p><ul>${offene.map(([fid, c]) =>
+          `<li style="margin-bottom:6px;"><em>${escHtml(_labelForId(fid))}:</em><br>${escHtml(c.text)}</li>`).join('')}</ul>
+         <p style="font-size:13px; color:#666;">Die Kommentare werden beim Öffnen des Berichts direkt unter den jeweiligen Feldern angezeigt und können dort als erledigt markiert werden.</p>`
+      : '';
+    
     // Send rejection email via Graph
     const token = await getToken();
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim();
     const mail = {
       message: {
         subject: `[Zurückgewiesen] ${kind} – Bitte korrigieren`,
-        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p><p><strong>Grund:</strong> ${reason}</p><p><a href="https://peltzm.github.io/pnw-app/?review=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und korrigieren →</a></p>` },
+        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="https://peltzm.github.io/pnw-app/?review=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und korrigieren →</a></p>` },
         toRecipients: [{ emailAddress: { address: data._eingereichtVon || currentAccount?.username || 'info@praxisneuewege.de' } }]
       },
       saveToSentItems: false
@@ -1790,6 +1917,9 @@ async function rejectReport() {
 function activateReviewMode() {
   document.getElementById('reviewActions').style.display = 'block';
   document.getElementById('normalActions').style.display = 'none';
+  // Kommentarfunktion für Teamleitung aktivieren (Seiten 3–5)
+  _isReviewMode = true;
+  renderFieldComments();
 }
 
 // ─── M365 GROUP MEMBERS ──────────────────────────────────────────────────────
@@ -2189,6 +2319,8 @@ function buildDynamicSections(force = false) {
       fkName.value = fkSel.value || '';
     }
   }, 50);
+  // Kommentare nach Neuaufbau der Sektionen wieder einblenden
+  renderFieldComments();
 }
 
 // ─── ÜBERSICHT (S0) ───────────────────────────────────────────────────────────
