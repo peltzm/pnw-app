@@ -235,7 +235,7 @@
 
       <!-- S1 -->
       <div class="section active" id="s1">
-        <div class="section-title">Stammdaten</div>
+        <div class="section-title" id="s1_title">Stammdaten</div>
         <div class="section-sub">Verwaltungsinformationen zur Hilfemaßnahme</div>
         <div class="card">
           <div class="card-title">Jugendamt & Fachkräfte</div>
@@ -294,7 +294,7 @@
 
       <!-- S2 -->
       <div class="section" id="s2">
-        <div class="section-title">Kind & Familie</div>
+        <div class="section-title" id="s2_title">Kind & Familie</div>
         <div class="section-sub">Angaben zum Kind/Jugendlichen</div>
         <div class="card">
           <div class="card-title">Kind / Jugendliche*r</div>
@@ -386,7 +386,7 @@
 
       <!-- S6 -->
       <div class="section" id="s6">
-        <div class="section-title">Bericht absenden</div>
+        <div class="section-title" id="s6_title">Bericht absenden</div>
         <div class="section-sub">Zusammenfassung prüfen und Dokument speichern</div>
         <div class="card" id="summaryCard">
           <div class="card-title">Zusammenfassung</div>
@@ -538,7 +538,25 @@ function goTo(n) {
   // Update template info
   const tplEl = document.getElementById('infoTemplate');
   if (tplEl) tplEl.textContent = CONFIG.templatePath || '—';
+  // Update section titles with Berichtstyp
+  updateSectionTitles();
   window.scrollTo(0,0);
+}
+
+function updateSectionTitles() {
+  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'};
+  const typ = labels[currentBerichtstyp] || 'Verlaufsbericht';
+  const staticTitles = {
+    's1_title': 'Stammdaten',
+    's2_title': 'Kind & Familie',
+    's6_title': 'Bericht absenden'
+  };
+  Object.entries(staticTitles).forEach(([id, base]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = base + ' — ' + typ;
+  });
+  // Dynamic titles (s3-s5) are set in buildDynamicSections
+  // but we append the type there too
 }
 
 // ─── ZIELE ────────────────────────────────────────────────────────────────────
@@ -789,6 +807,7 @@ function selectBerichtstyp(typ) {
   const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht'};
   const badge = document.getElementById('berichtstypBadge');
   if (badge) badge.textContent = labels[typ];
+  updateSectionTitles();
   // Force rebuild of dynamic sections on next visit (type changed)
   ['s3_content','s4_content','s5_content'].forEach(id => {
     const el = document.getElementById(id);
@@ -1562,10 +1581,10 @@ async function loadGroupMembers() {
     }
     
     // Pre-fill Fachkraft_Name from Fachkraft 1 selection
-    const fkSelect = document.getElementById('Fachkraft_NeueWege');
+    const fkSelect2 = document.getElementById('Fachkraft_NeueWege');
     const fkNameInput = document.getElementById('Fachkraft_Name');
-    if (fkNameInput && fkSelect && !fkNameInput.dataset.manuallySet) {
-      fkNameInput.value = fkSelect.value || '';
+    if (fkNameInput && fkSelect2 && !fkNameInput.dataset.manuallySet) {
+      fkNameInput.value = fkSelect2.value || '';
     }
     
   } catch(e) {
@@ -1586,17 +1605,17 @@ async function loadGroupMembers() {
         _teamMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
       }
     } catch(e2) {}
-    const fkSelect = document.getElementById('Fachkraft_NeueWege');
-    if (fkSelect && _teamMembers.length > 0) {
+    const fkSelect3 = document.getElementById('Fachkraft_NeueWege');
+    if (fkSelect3 && _teamMembers.length > 0) {
       const sortName = m => { const p = (m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
-      fkSelect.innerHTML = '<option value="">— bitte wählen —</option>' + _teamMembers.map(m => {
+      fkSelect3.innerHTML = '<option value="">— bitte wählen —</option>' + _teamMembers.map(m => {
         const name = sortName(m);
         const isMe = m.mail === currentAccount?.username || m.displayName === currentAccount?.name;
         return `<option value="${name}" ${isMe?'selected':''}>${name}</option>`;
       }).join('');
       updateFachkraftName();
-    } else if (fkSelect) {
-      fkSelect.innerHTML = '<option value="">— bitte wählen —</option>';
+    } else if (fkSelect3) {
+      fkSelect3.innerHTML = '<option value="">— bitte wählen —</option>';
     }
     // TL fallback: static
     _tlMembers = [
@@ -1768,7 +1787,8 @@ function buildDynamicSections(force = false) {
   
   // Build S3
   const s3 = tpl.s3;
-  document.getElementById('s3_title').textContent = s3.title;
+  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[typ] || typ;
+  document.getElementById('s3_title').textContent = s3.title + ' — ' + _typLabel;
   document.getElementById('s3_sub').textContent = s3.sub;
   let s3html = '';
   (s3.fields || []).forEach(f => {
@@ -1781,7 +1801,7 @@ function buildDynamicSections(force = false) {
   
   // Build S4
   const s4 = tpl.s4;
-  document.getElementById('s4_title').textContent = s4.title;
+  document.getElementById('s4_title').textContent = s4.title + ' — ' + _typLabel;
   document.getElementById('s4_sub').textContent = s4.sub;
   let s4html = '';
   if (s4.extraFields) {
@@ -1815,7 +1835,7 @@ function buildDynamicSections(force = false) {
   
   // Build S5
   const s5 = tpl.s5;
-  document.getElementById('s5_title').textContent = s5.title;
+  document.getElementById('s5_title').textContent = s5.title + ' — ' + _typLabel;
   document.getElementById('s5_sub').textContent = s5.sub;
   let s5html = '';
   (s5.fields || []).forEach(f => {
