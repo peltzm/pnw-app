@@ -25,6 +25,7 @@
   .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 56px); }
   .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 1.5rem 0; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto; }
   .main { padding: 2rem; max-width: 760px; }
+  #s8 ~ * .main, .main:has(#s8.active) { max-width: 100%; }
   .nav-section { padding: 0 1rem 0.5rem; font-size: 10px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 1rem; }
   .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 1rem; font-size: 13px; color: var(--text-muted); cursor: pointer; border-left: 2px solid transparent; transition: all 0.12s; }
   .nav-item:hover { background: var(--bg); color: var(--text); }
@@ -82,6 +83,7 @@
   /* Tablet (Samsung Galaxy Tab: 800-1280px) */
   @media (max-width: 1024px) {
     .layout { grid-template-columns: 64px 1fr; }
+    .layout.admin-mode { grid-template-columns: 180px 1fr; }
     .nav-item span { display: none; }
     .sidebar { overflow: visible; }
     .nav-section { display: none; }
@@ -107,6 +109,9 @@
     .btn { min-height: 44px; }
   }
 
+  /* Admin panel full width */
+  #s8 { max-width: 100%; }
+  #s8 .card { overflow-x: auto; }
   /* Touch optimizations */
   input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   input[type="date"] { -webkit-appearance: none; appearance: none; }
@@ -432,7 +437,7 @@
 
     </div>
       <!-- S8: Admin / Debug -->
-      <div class="section" id="s8">
+      <div class="section" id="s8" style="padding-left:0;">
         <div class="section-title">Admin — Gruppen & Debug</div>
         <div class="section-sub">Nur für Administratoren sichtbar</div>
 
@@ -598,7 +603,17 @@ function goTo(n) {
   document.getElementById('nav' + n)?.classList.add('active');
   document.getElementById('progress').style.width = (Math.max(0, Math.min(n,6))/6*100) + '%';
   if (n === 0) buildUebersicht();
-  if (n === 8) refreshDebugInfo();
+  if (n === 8) {
+    refreshDebugInfo();
+    document.querySelector('.layout')?.classList.add('admin-mode');
+  } else {
+    document.querySelector('.layout')?.classList.remove('admin-mode');
+    // Restore normal layout
+    const layout = document.querySelector('.layout');
+    if (layout) layout.style.gridTemplateColumns = '';
+    const main = document.querySelector('.main');
+    if (main) main.style.maxWidth = '';
+  }
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
   if (n === 6) buildSummary();
   // Update template info
@@ -2012,6 +2027,11 @@ function checkAdminVisibility() {
 function showAdminPanel() {
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('mainLayout').style.display = 'block';
+  // Expand sidebar for admin view
+  const layout = document.querySelector('.layout');
+  if (layout) layout.style.gridTemplateColumns = '180px 1fr';
+  const main = document.querySelector('.main');
+  if (main) main.style.maxWidth = '100%';
   goTo(8);
 }
 
