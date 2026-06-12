@@ -211,7 +211,7 @@
         <div id="berichtstypBadge" style="font-size:13px; font-weight:600; color:var(--accent);">Verlaufsbericht</div>
       </div>
       <div class="nav-section">Formular</div>
-      <div class="nav-item" onclick="goTo(0)" id="nav0" title="Übersicht"><div class="nav-num" id="nn0" style="font-size:10px; font-weight:700;">Ü</div> <span>Übersicht</span></div>
+      <div class="nav-item" onclick="goToStart()" id="nav0" title="Startseite"><div class="nav-num" id="nn0" style="font-size:10px; font-weight:700;">S</div> <span>Startseite</span></div>
       <div class="nav-item active" onclick="goTo(1)" id="nav1" title="Stammdaten"><div class="nav-num" id="nn1">1</div> <span>Stammdaten</span></div>
       <div class="nav-item" onclick="goTo(2)" id="nav2"><div class="nav-num" id="nn2">2</div> <span>Kind & Familie</span></div>
       <div class="nav-item" onclick="goTo(3)" id="nav3"><div class="nav-num" id="nn3">3</div> <span>Situation</span></div>
@@ -249,18 +249,16 @@
           </div>
           <div class="field-grid">
             <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Name Sachbearbeiter*in"></div>
-            <div class="field"><label>Fachkraft(kräfte) NeueWege</label><input type="text" id="Fachkraft_NeueWege" placeholder=""></div>
+            <div class="field"><label>Fachkraft 1</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div class="field-grid full" style="margin-bottom:12px;">
             <div class="field"><label>Fallleitung NeueWege</label>
-              <select id="Fallleitung">
-                <option value="">— bitte wählen —</option>
-                <option>Grund, Nadine</option>
-                <option>Meier, Laura</option>
-                <option>Peltz, Sonja</option>
-                <option>Schneider, Jörg</option>
-              </select>
+              <select id="Fallleitung"><option value="">Wird geladen...</option></select>
             </div>
+          </div>
+          <div id="extraFachkraefteContainer" style="margin-bottom:4px;"></div>
+          <div style="margin-bottom:4px;">
+            <button class="btn-add" id="btnAddFachkraft" onclick="addFachkraft()">+ Fachkraft hinzufügen</button>
           </div>
         </div>
         <div class="card">
@@ -483,11 +481,11 @@ function handleReviewLink() {
   const params = new URLSearchParams(window.location.search);
   const reviewId = params.get('review');
   const typ = params.get('typ');
-  if (!reviewId) return false;
-  if (typ && ['verlauf','abschluss','clearing'].includes(typ)) {
+  // Only activate review mode if BOTH review ID AND typ are present
+  if (!reviewId || !typ) return false;
+  if (['verlauf','abschluss','clearing'].includes(typ)) {
     selectBerichtstyp(typ);
   }
-  // Load the draft
   loadDraft(reviewId);
   return true;
 }
@@ -506,6 +504,13 @@ function showApp() {
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
+function goToStart() {
+  document.getElementById('startScreen').style.display = 'flex';
+  document.getElementById('mainLayout').style.display = 'none';
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('nav0')?.classList.add('active');
+}
+
 function goTo(n) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -904,7 +909,7 @@ async function loadDraft(id) {
     }
     showMainLayout();
     // Check if in review mode (opened via email link)
-    const isReview = new URLSearchParams(window.location.search).has('review');
+    const isReview = new URLSearchParams(window.location.search).get('review') === String(id);
     if (isReview) {
       goTo(6);
       activateReviewMode();
