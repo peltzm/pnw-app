@@ -211,6 +211,7 @@
         <div id="berichtstypBadge" style="font-size:13px; font-weight:600; color:var(--accent);">Verlaufsbericht</div>
       </div>
       <div class="nav-section">Formular</div>
+      <div class="nav-item" onclick="goTo(0)" id="nav0" title="Übersicht"><div class="nav-num" id="nn0" style="font-size:10px; font-weight:700;">Ü</div> <span>Übersicht</span></div>
       <div class="nav-item active" onclick="goTo(1)" id="nav1" title="Stammdaten"><div class="nav-num" id="nn1">1</div> <span>Stammdaten</span></div>
       <div class="nav-item" onclick="goTo(2)" id="nav2"><div class="nav-num" id="nn2">2</div> <span>Kind & Familie</span></div>
       <div class="nav-item" onclick="goTo(3)" id="nav3"><div class="nav-num" id="nn3">3</div> <span>Situation</span></div>
@@ -221,6 +222,16 @@
 
     <div class="main">
       <div class="progress-bar"><div class="progress-fill" id="progress" style="width:16%"></div></div>
+
+      <!-- S0: Übersicht -->
+      <div class="section" id="s0">
+        <div class="section-title">Übersicht</div>
+        <div class="section-sub">Alle Berichte — Entwürfe, eingereichte und genehmigte</div>
+        <div id="s0_content"><div style="font-size:13px; color:var(--text-muted);">Wird geladen...</div></div>
+        <div style="margin-top:1rem;">
+          <button class="btn btn-primary" onclick="startNew()">+ Neuen Bericht erstellen</button>
+        </div>
+      </div>
 
       <!-- S1 -->
       <div class="section active" id="s1">
@@ -306,39 +317,19 @@
         <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(1)">← Zurück</button><button class="btn btn-primary" onclick="goTo(3)">Weiter →</button></div>
       </div>
 
-      <!-- S3 -->
+      <!-- S3 dynamic per Berichtstyp -->
       <div class="section" id="s3">
-        <div class="section-title">Verlauf der Hilfe</div>
-        <div class="section-sub">Fachliche Beschreibung gemäß Berichtsstruktur</div>
-        <div class="card">
-          <div class="card-title">1 | Aktuelle Lebenssituation</div>
-          <div class="field-grid full"><div class="field"><textarea id="Aktuelle_Lebenssituation" style="min-height:110px;" placeholder="Grundversorgung, Gesundheitszustand, Wohnsituation, sozioökonomische Situation..."></textarea></div></div>
-        </div>
-        <div class="card">
-          <div class="card-title">2 | Familiensystem</div>
-          <div class="field-grid full"><div class="field"><textarea id="Familiensystem" style="min-height:100px;" placeholder="Eltern-Kind-Beziehung, innerfamiliäre Beziehungen, Erziehungskompetenz..."></textarea></div></div>
-        </div>
-        <div class="card">
-          <div class="card-title">3 | Entwicklung der betroffenen Kinder/Jugendlichen</div>
-          <div class="field-grid full"><div class="field"><textarea id="Entwicklung_Kind" style="min-height:100px;" placeholder="Körperliche, emotionale, soziale, psychische, schulisch-berufliche Entwicklung..."></textarea></div></div>
-        </div>
-        <div class="card">
-          <div class="card-title">4 | Besondere Vorkommnisse im Berichtszeitraum</div>
-          <div class="field-grid full"><div class="field"><textarea id="Besondere_Vorkommnisse" style="min-height:80px;" placeholder="Wohnortwechsel, Ausfallzeiten, Sorgerechtsänderungen, Schulwechsel..."></textarea></div></div>
-        </div>
-        <div class="card">
-          <div class="card-title">5 | Arbeitsbeziehung & Mitwirkungsbereitschaft</div>
-          <div class="field-grid full"><div class="field"><textarea id="Arbeitsbeziehung" style="min-height:100px;" placeholder="Zusammenarbeit mit Fachkraft, Mitwirkung, Herausforderungen..."></textarea></div></div>
-        </div>
+        <div class="section-title" id="s3_title">Verlauf der Hilfe</div>
+        <div class="section-sub" id="s3_sub">Fachliche Beschreibung gemäß Berichtsstruktur</div>
+        <div id="s3_content"></div>
         <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(2)">← Zurück</button><button class="btn btn-primary" onclick="goTo(4)">Weiter →</button></div>
       </div>
 
-      <!-- S4 -->
+      <!-- S4 dynamic -->
       <div class="section" id="s4">
-        <div class="section-title">Hilfeplanziele</div>
-        <div class="section-sub">Ziele mit Methoden und Zielerreichung dokumentieren</div>
-        <div id="zieleContainer"></div>
-        <button class="btn-add" onclick="addZiel()">+ Ziel hinzufügen</button>
+        <div class="section-title" id="s4_title">Hilfeplanziele</div>
+        <div class="section-sub" id="s4_sub">Ziele mit Methoden und Zielerreichung dokumentieren</div>
+        <div id="s4_content"></div>
         <div class="btn-row" style="margin-top:1rem;"><button class="btn btn-secondary" onclick="goTo(3)">← Zurück</button><button class="btn btn-primary" onclick="goTo(5)">Weiter →</button></div>
       </div>
 
@@ -367,10 +358,12 @@
             <div class="field"><label>Fachkraft Name(n)</label><input type="text" id="Fachkraft_Name" placeholder="z.B. Martina Graf / Freddy Pozgaj"></div>
             <div class="field"><label>Qualifikation</label>
               <select id="Fachkraft_Qualifikation">
-                <option>Erzieher:in / Heilerziehungspfleger:in</option>
+                <option value="">— bitte wählen —</option>
+                <option>Erzieher:in</option>
+                <option>Heilerziehungspfleger:in</option>
                 <option>Kindheitspädagoge:in</option>
-                <option>Psycholog:in</option>
                 <option>Sozialpädagoge:in</option>
+                <option>Systemische:r Berater:in</option>
                 <option>Systemische:r Therapeut:in</option>
               </select>
             </div>
@@ -391,7 +384,7 @@
           <div class="card-title" style="margin-bottom:0.5rem;">SharePoint-Ziel</div>
           <div class="info-row"><span class="info-label">Site</span><span class="info-val" id="infoSite">—</span></div>
           <div class="info-row"><span class="info-label">Ordner</span><span class="info-val">/Verlaufsberichte</span></div>
-          <div class="info-row"><span class="info-label">Template</span><span class="info-val">/Templates/Verlaufsbericht_PA_Template_v4.docx</span></div>
+          <div class="info-row"><span class="info-label">Template</span><span class="info-val" id="infoTemplate">—</span></div>
         </div>
         <div id="statusBar" style="display:none"></div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch;">
@@ -465,7 +458,7 @@ async function initMsal() {
 
 async function login() {
   try {
-    await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send'] });
+    await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'] });
   } catch(e) {
     document.getElementById('loginError').style.display = 'block';
     document.getElementById('loginError').textContent = 'Fehler: ' + (e.errorMessage || e.message);
@@ -479,10 +472,10 @@ async function logout() {
 async function getToken() {
   if (!currentAccount) return null;
   try {
-    const r = await msalInstance.acquireTokenSilent({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'Mail.Send'], account: currentAccount });
+    const r = await msalInstance.acquireTokenSilent({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'Mail.Send', 'GroupMember.Read.All'], account: currentAccount });
     accessToken = r.accessToken; return accessToken;
   } catch(e) {
-    await msalInstance.acquireTokenRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'Mail.Send'] });
+    await msalInstance.acquireTokenRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'Mail.Send', 'GroupMember.Read.All'] });
   }
 }
 
@@ -506,6 +499,8 @@ function showApp() {
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   if (zielCount === 0) addZiel();
   document.getElementById('infoSite').textContent = CONFIG.siteUrl;
+  // Load M365 group members
+  loadGroupMembers().catch(e => console.warn('Group load failed:', e));
   // Check if opened via review link
   setTimeout(() => { if (!handleReviewLink()) { /* normal flow */ } }, 500);
 }
@@ -514,10 +509,16 @@ function showApp() {
 function goTo(n) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-  document.getElementById('s' + n).classList.add('active');
+  const section = document.getElementById('s' + n);
+  if (section) section.classList.add('active');
   document.getElementById('nav' + n)?.classList.add('active');
-  document.getElementById('progress').style.width = (Math.min(n,6)/6*100) + '%';
+  document.getElementById('progress').style.width = (Math.max(0, Math.min(n,6))/6*100) + '%';
+  if (n === 0) buildUebersicht();
+  if (n === 3 || n === 4 || n === 5) buildDynamicSections();
   if (n === 6) buildSummary();
+  // Update template info
+  const tplEl = document.getElementById('infoTemplate');
+  if (tplEl) tplEl.textContent = CONFIG.templatePath || '—';
   window.scrollTo(0,0);
 }
 
@@ -563,6 +564,11 @@ function collectData() {
     'Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer'];
   const data = {};
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
+  // Collect extra Fachkräfte 2-4
+  for (let i = 2; i <= 4; i++) {
+    const el = document.getElementById('Fachkraft_' + i);
+    data['Fachkraft_' + i] = el ? el.value : '';
+  }
   // Combine Berichtszeitraum from two date fields
   const bzVon = document.getElementById('BZ_Von')?.value || '';
   const bzBis = document.getElementById('BZ_Bis')?.value || '';
@@ -762,6 +768,12 @@ function selectBerichtstyp(typ) {
   const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht'};
   const badge = document.getElementById('berichtstypBadge');
   if (badge) badge.textContent = labels[typ];
+  // Reset dynamic sections so they rebuild on next visit
+  ['s3_content','s4_content','s5_content'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+  zielCount = 0;
 }
 
 async function showCopyList() {
@@ -797,13 +809,25 @@ async function copyStammdaten(id) {
     currentListId = null; // new report
     resetForm();
     // Copy only Stammdaten fields
-    const stammdatenFields = ['Jugendamt','Hilfeart','Sachbearbeitung_JA','Fachkraft_NeueWege','Fallleitung',
-      'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
-      'Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder'];
-    stammdatenFields.forEach(key => {
+    // Copy ALL fields from existing report
+    Object.entries(data).forEach(([key, value]) => {
+      if (key.startsWith('_')) return;
+      if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
       const el = document.getElementById(key);
-      if (el && data[key]) el.value = data[key];
+      if (el && value) el.value = value;
     });
+    // Restore ziele
+    if (data._ziele && Array.isArray(data._ziele)) {
+      document.getElementById('zieleContainer') && (document.getElementById('zieleContainer').innerHTML = '');
+      zielCount = 0;
+      data._ziele.forEach(z => {
+        addZiel();
+        const n = zielCount;
+        if (document.getElementById('Ziel_'+n+'_Beschreibung')) document.getElementById('Ziel_'+n+'_Beschreibung').value = z.beschreibung || '';
+        if (document.getElementById('Ziel_'+n+'_Methoden')) document.getElementById('Ziel_'+n+'_Methoden').value = z.methoden || '';
+        if (document.getElementById('Ziel_'+n+'_Ergebnis')) document.getElementById('Ziel_'+n+'_Ergebnis').value = z.ergebnis || '';
+      });
+    }
     showMainLayout();
     goTo(1);
   } catch(e) {
@@ -897,10 +921,14 @@ function resetForm() {
     'Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = id === 'Ort' ? 'Wolnzach' : ''; } });
   // Reset ziele
-  document.getElementById('zieleContainer').innerHTML = '';
+  document.getElementById('zieleContainer') && (document.getElementById('zieleContainer').innerHTML = '');
   zielCount = 0;
-  addZiel();
   resetWeitereKinder();
+  // Reset extra Fachkräfte
+  document.getElementById('extraFachkraefteContainer').innerHTML = '';
+  _extraFachkraftCount = 0;
+  const btnFk = document.getElementById('btnAddFachkraft');
+  if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
 }
 
 function loadFromJson(input) {
@@ -1079,7 +1107,11 @@ async function saveToList(data, existingId = null) {
 async function loadMyDrafts() {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
-  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified)&$orderby=fields/Modified desc&$top=50`;
+  // Check if user is TL member
+  const isTL = _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
+  // Filter: TL sees all, others see own + those where they're listed as Fachkraft
+  const filterClause = isTL ? '' : `&$filter=fields/Eingereicht_Von eq '${currentAccount?.username || ''}'`;
+  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified,Eingereicht_Von)&$orderby=fields/Modified desc&$top=50${filterClause}`;
   const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
   if (!resp.ok) throw new Error('Entwürfe konnten nicht geladen werden');
   const result = await resp.json();
@@ -1180,6 +1212,13 @@ function fillWeitereKinder(value) {
 
 // ─── E-MAIL FREIGABE ─────────────────────────────────────────────────────────
 
+function getFalleitungMail() {
+  const fl = document.getElementById('Fallleitung');
+  if (!fl) return '';
+  const selected = fl.options[fl.selectedIndex];
+  return selected?.dataset?.mail || '';
+}
+
 async function sendApprovalEmail(listItemId, data, filename) {
   const token = await getToken();
   const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[currentBerichtstyp] || 'Bericht';
@@ -1204,9 +1243,12 @@ async function sendApprovalEmail(listItemId, data, filename) {
     <tr><td style="padding: 8px 0; color: #666;">Dateiname</td><td style="padding: 8px 0; font-family: monospace; font-size: 13px;">${filename}</td></tr>
   </table>
 
-  <div style="margin-bottom: 24px;">
+  <div style="margin-bottom: 24px; display:flex; gap:12px; flex-wrap:wrap;">
     <a href="${appUrl}" style="display: inline-block; background: #7b3f1e; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
       Bericht prüfen &amp; freigeben →
+    </a>
+    <a href="${CONFIG.siteUrl}/Verlaufsberichte" style="display: inline-block; background: #0078d4; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+      In SharePoint öffnen →
     </a>
   </div>
   
@@ -1220,7 +1262,10 @@ async function sendApprovalEmail(listItemId, data, filename) {
     message: {
       subject: `[Freigabe] ${berichtstyp}: ${kind} – ${jugendamt}`,
       body: { contentType: 'HTML', content: emailBody },
-      toRecipients: [{ emailAddress: { address: 'markus.peltz@praxisneuewege.de' } }],
+      toRecipients: [
+        { emailAddress: { address: getFalleitungMail() || 'markus.peltz@praxisneuewege.de' } },
+        { emailAddress: { address: 'markus.peltz@praxisneuewege.de' } }
+      ],
       ccRecipients: []
     },
     saveToSentItems: false
@@ -1377,6 +1422,370 @@ async function rejectReport() {
 function activateReviewMode() {
   document.getElementById('reviewActions').style.display = 'block';
   document.getElementById('normalActions').style.display = 'none';
+}
+
+// ─── M365 GROUP MEMBERS ──────────────────────────────────────────────────────
+
+let _teamMembers = [];
+let _tlMembers = [];
+let _extraFachkraftCount = 0;
+
+async function loadGroupMembers() {
+  const token = await getToken();
+  
+  async function getGroupByName(name) {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${name}'&$select=id,displayName`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const d = await r.json();
+    return d.value?.[0]?.id;
+  }
+  
+  async function getMembers(groupId) {
+    if (!groupId) return [];
+    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,mail,jobTitle`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const d = await r.json();
+    return (d.value || []).filter(m => m['@odata.type'] === '#microsoft.graph.user');
+  }
+  
+  async function getMyManager() {
+    try {
+      const r = await fetch('https://graph.microsoft.com/v1.0/me/manager?$select=displayName,mail', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (r.ok) return await r.json();
+    } catch(e) {}
+    return null;
+  }
+  
+  try {
+    // Load Team group and TL-Ambulant group in parallel
+    const [teamId, tlId, manager] = await Promise.all([
+      getGroupByName('Team'),
+      getGroupByName('TL-Ambulant'),
+      getMyManager()
+    ]);
+    
+    _teamMembers = await getMembers(teamId);
+    _tlMembers = await getMembers(tlId);
+    
+    // Sort by display name (Lastname, Firstname format)
+    const sortName = m => {
+      const parts = (m.displayName || '').split(' ');
+      return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
+    };
+    _teamMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
+    _tlMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
+    
+    // Populate Fachkraft dropdown
+    const fkSelect = document.getElementById('Fachkraft_NeueWege');
+    if (fkSelect) {
+      fkSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
+        _teamMembers.map(m => {
+          const name = sortName(m);
+          const isMe = m.mail === currentAccount?.username || m.displayName === currentAccount?.name;
+          return `<option value="${name}" ${isMe ? 'selected' : ''}>${name}</option>`;
+        }).join('');
+      updateFachkraftName();
+    }
+    
+    // Populate Fallleitung dropdown
+    const flSelect = document.getElementById('Fallleitung');
+    if (flSelect) {
+      const managerName = manager ? sortName(manager) : '';
+      flSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
+        _tlMembers.map(m => {
+          const name = sortName(m);
+          const isManager = manager && (m.mail === manager.mail || m.displayName === manager.displayName);
+          return `<option value="${name}" data-mail="${m.mail || ''}" ${isManager ? 'selected' : ''}>${name}</option>`;
+        }).join('');
+    }
+    
+    // Pre-fill Fachkraft_Name for signature (change 8)
+    const fkNameInput = document.getElementById('Fachkraft_Name');
+    if (fkNameInput && !fkNameInput.value) {
+      const myName = _teamMembers.find(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
+      if (myName) fkNameInput.value = sortName(myName);
+    }
+    
+  } catch(e) {
+    console.warn('Could not load group members:', e.message);
+    // Fallback: static options
+    const fkSelect = document.getElementById('Fachkraft_NeueWege');
+    if (fkSelect) fkSelect.innerHTML = '<option value="">— Bitte manuell eingeben —</option>';
+    const flSelect = document.getElementById('Fallleitung');
+    if (flSelect) {
+      flSelect.innerHTML = ['Grund, Nadine','Meier, Laura','Peltz, Sonja','Schneider, Jörg']
+        .map(n => `<option>${n}</option>`).join('');
+    }
+  }
+}
+
+function updateFachkraftName() {
+  const fk = document.getElementById('Fachkraft_NeueWege')?.value;
+  const fkName = document.getElementById('Fachkraft_Name');
+  // Only update if not manually changed
+  if (fkName && (!fkName.dataset.manuallySet)) fkName.value = fk || '';
+}
+
+function addFachkraft() {
+  if (_extraFachkraftCount >= 3) return;
+  _extraFachkraftCount++;
+  const n = _extraFachkraftCount + 1; // 2,3,4
+  const div = document.createElement('div');
+  div.id = `extra_fachkraft_${n}`;
+  div.className = 'field-grid';
+  div.style.marginBottom = '12px';
+  const sortName = m => {
+    const parts = (m.displayName || '').split(' ');
+    return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
+  };
+  const options = _teamMembers.map(m => {
+    const name = sortName(m);
+    return `<option value="${name}">${name}</option>`;
+  }).join('');
+  div.innerHTML = `
+    <div class="field" style="grid-column:1/-1; display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;">
+      <div class="field">
+        <label>Fachkraft ${n}</label>
+        <select id="Fachkraft_${n}">
+          <option value="">— bitte wählen —</option>
+          ${options}
+        </select>
+      </div>
+      <button onclick="removeFachkraft(${n})" style="height:38px; padding:0 10px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; margin-bottom:0;">×</button>
+    </div>`;
+  document.getElementById('extraFachkraefteContainer').appendChild(div);
+  if (_extraFachkraftCount >= 3) {
+    document.getElementById('btnAddFachkraft').style.opacity = '0.4';
+    document.getElementById('btnAddFachkraft').disabled = true;
+  }
+}
+
+function removeFachkraft(n) {
+  document.getElementById(`extra_fachkraft_${n}`)?.remove();
+  _extraFachkraftCount = Math.max(0, _extraFachkraftCount - 1);
+  const btn = document.getElementById('btnAddFachkraft');
+  if (btn) { btn.style.opacity = '1'; btn.disabled = false; }
+}
+
+function getFachkraftMail(name) {
+  // Find mail for a Fallleitung name
+  const option = document.querySelector('#Fallleitung option[value="' + name + '"]');
+  return option?.dataset.mail || '';
+}
+
+// ─── DYNAMIC SECTIONS (S3/S4/S5) ─────────────────────────────────────────────
+
+const SECTION_TEMPLATES = {
+  verlauf: {
+    s3: {
+      title: 'Verlauf der Hilfe',
+      sub: 'Fachliche Beschreibung gemäß Berichtsstruktur',
+      fields: [
+        { id: 'Aktuelle_Lebenssituation', label: '1 | Aktuelle Lebenssituation', placeholder: 'Grundversorgung, Gesundheitszustand, Wohnsituation, sozioökonomische Situation...' },
+        { id: 'Familiensystem', label: '2 | Familiensystem', placeholder: 'Eltern-Kind-Beziehung, innerfamiliäre Beziehungen, Erziehungskompetenz...' },
+        { id: 'Entwicklung_Kind', label: '3 | Entwicklung der betroffenen Kinder/Jugendlichen', placeholder: 'Körperliche, emotionale, soziale, psychische, schulisch-berufliche Entwicklung...' },
+        { id: 'Besondere_Vorkommnisse', label: '4 | Besondere Vorkommnisse im Berichtszeitraum', placeholder: 'Wohnortwechsel, Ausfallzeiten, Sorgerechtsänderungen...' },
+        { id: 'Arbeitsbeziehung', label: '5 | Arbeitsbeziehung & Mitwirkungsbereitschaft', placeholder: 'Zusammenarbeit mit Fachkraft, Mitwirkung, Herausforderungen...' },
+      ]
+    },
+    s4: {
+      title: 'Hilfeplanziele',
+      sub: 'Ziele aus dem Hilfeplan mit Methoden und Zielerreichung',
+      hasZiele: true,
+      extraFields: [
+        { id: 'Ziele_Einleitung', label: 'Einleitung / Übersicht Ziele', placeholder: 'Kurze Einleitung zu den Zielen...' }
+      ]
+    },
+    s5: {
+      title: '6 | Perspektive & Empfehlung',
+      sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
+      fields: [
+        { id: 'Ziele_Einleitung', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
+        { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
+      ]
+    }
+  },
+  abschluss: {
+    s3: {
+      title: 'Verlauf der Maßnahme',
+      sub: 'Beschreibung des Hilfeverlaufs',
+      fields: [
+        { id: 'Aktuelle_Situation', label: 'Gründe für die Beendigung der Maßnahme', placeholder: 'Warum wird die Hilfe beendet?' },
+        { id: 'Verlauf_Massnahme', label: 'Verlauf der Maßnahme', placeholder: 'Zusammenarbeit, Entwicklung im Hilfeverlauf, installierte Angebote...' },
+      ]
+    },
+    s4: {
+      title: 'Hilfeplanziele & Zielerreichung',
+      sub: 'Bewertung der vereinbarten Ziele',
+      hasZiele: true
+    },
+    s5: {
+      title: 'Fachliche Einschätzung & Empfehlung',
+      sub: 'Abschließende Bewertung und Empfehlung',
+      fields: [
+        { id: 'Fachliche_Einschaetzung', label: 'Fachliche Einschätzung und Empfehlung', placeholder: 'Abschließende fachliche Bewertung...' },
+      ]
+    }
+  },
+  clearing: {
+    s3: {
+      title: 'Clearing-Inhalte',
+      sub: 'Ergebnisse des Clearing-Prozesses',
+      fields: [
+        { id: 'Ausgangssituation', label: 'Ausgangssituation & Fragestellungen', placeholder: 'Gründe für das Clearing, zu klärende Fragestellungen...' },
+        { id: 'Familienkonstellation', label: 'Familienkonstellation', placeholder: 'Beschreibung der Familienmitglieder, Alter, besondere Bedürfnisse...' },
+        { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
+        { id: 'Ressourcen', label: 'Ressourcen', placeholder: 'Stärken, unterstützende Faktoren...' },
+        { id: 'Risiken', label: 'Risiken', placeholder: 'Belastungen, Gefährdungsaspekte...' },
+        { id: 'Ergebnisse_Clearing', label: 'Ergebnisse des Clearings', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...' },
+      ]
+    },
+    s4: {
+      title: 'Zielsetzung & Empfehlung',
+      sub: 'Clearing-Ziele und weiterführende Empfehlung',
+      fields: [
+        { id: 'Zielsetzung_Clearing', label: 'Zielsetzung des Clearingprozesses', placeholder: 'Welche Ziele wurden verfolgt?' },
+        { id: 'Zusammenfassung_Ausblick', label: 'Zusammenfassung & Ausblick', placeholder: 'Wichtigste Erkenntnisse, Empfehlung für weitere Hilfen...' },
+      ]
+    },
+    s5: {
+      title: 'Abschluss',
+      sub: 'Fachliche Einschätzung',
+      fields: [
+        { id: 'Fachliche_Einschaetzung', label: 'Fachliche Einschätzung', placeholder: 'Abschließende Bewertung...' },
+      ]
+    }
+  }
+};
+
+function buildDynamicSections() {
+  const typ = currentBerichtstyp || 'verlauf';
+  const tpl = SECTION_TEMPLATES[typ];
+  if (!tpl) return;
+  
+  // Build S3
+  const s3 = tpl.s3;
+  document.getElementById('s3_title').textContent = s3.title;
+  document.getElementById('s3_sub').textContent = s3.sub;
+  let s3html = '';
+  (s3.fields || []).forEach(f => {
+    s3html += `<div class="card"><div class="card-title">${f.label}</div>
+      <div class="field-grid full"><div class="field">
+        <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
+      </div></div></div>`;
+  });
+  document.getElementById('s3_content').innerHTML = s3html;
+  
+  // Build S4
+  const s4 = tpl.s4;
+  document.getElementById('s4_title').textContent = s4.title;
+  document.getElementById('s4_sub').textContent = s4.sub;
+  let s4html = '';
+  if (s4.extraFields) {
+    s4.extraFields.forEach(f => {
+      s4html += `<div class="card"><div class="card-title">${f.label}</div>
+        <div class="field-grid full"><div class="field">
+          <textarea id="${f.id}" style="min-height:80px;" placeholder="${f.placeholder}"></textarea>
+        </div></div></div>`;
+    });
+  }
+  if (s4.hasZiele) {
+    s4html += `<div id="zieleContainer"></div>
+      <button class="btn-add" onclick="addZiel()">+ Ziel hinzufügen</button>`;
+    // Re-init ziele
+    setTimeout(() => {
+      if (document.getElementById('zieleContainer') && zielCount === 0) addZiel();
+    }, 50);
+  } else if (s4.fields) {
+    s4.fields.forEach(f => {
+      s4html += `<div class="card"><div class="card-title">${f.label}</div>
+        <div class="field-grid full"><div class="field">
+          <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
+        </div></div></div>`;
+    });
+  }
+  document.getElementById('s4_content').innerHTML = s4html;
+  
+  // Build S5
+  const s5 = tpl.s5;
+  document.getElementById('s5_title').textContent = s5.title;
+  document.getElementById('s5_sub').textContent = s5.sub;
+  let s5html = '';
+  (s5.fields || []).forEach(f => {
+    s5html += `<div class="card"><div class="card-title">${f.label}</div>
+      <div class="field-grid full"><div class="field">
+        <textarea id="${f.id}" style="min-height:${f.id === 'Fachliche_Einschaetzung' ? '140' : '80'}px;" placeholder="${f.placeholder}"></textarea>
+      </div></div></div>`;
+  });
+  // Add signature card (always present)
+  s5html += `<div class="card">
+    <div class="card-title">Unterschrift</div>
+    <div class="field-grid">
+      <div class="field"><label>Ort</label><input type="text" id="Ort" value="Wolnzach"></div>
+      <div class="field"><label>Datum</label><input type="date" id="Datum_Unterschrift"></div>
+    </div>
+    <div class="field-grid">
+      <div class="field"><label>Fachkraft Name(n)</label><input type="text" id="Fachkraft_Name" oninput="this.dataset.manuallySet='1'" placeholder=""></div>
+      <div class="field"><label>Qualifikation</label>
+        <select id="Fachkraft_Qualifikation">
+          <option value="">— bitte wählen —</option>
+          <option>Erzieher:in</option>
+          <option>Heilerziehungspfleger:in</option>
+          <option>Kindheitspädagoge:in</option>
+          <option>Sozialpädagoge:in</option>
+          <option>Systemische:r Berater:in</option>
+          <option>Systemische:r Therapeut:in</option>
+        </select>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('s5_content').innerHTML = s5html;
+  
+  // Re-populate Fachkraft_Name after rebuilding S5
+  const fkName = document.getElementById('Fachkraft_Name');
+  if (fkName && _teamMembers.length > 0) {
+    const myName = _teamMembers.find(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
+    const sortName = m => {
+      const parts = (m.displayName || '').split(' ');
+      return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
+    };
+    if (myName) fkName.value = sortName(myName);
+  }
+}
+
+// ─── ÜBERSICHT (S0) ───────────────────────────────────────────────────────────
+
+async function buildUebersicht() {
+  const container = document.getElementById('s0_content');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">Wird geladen...</div>';
+  try {
+    const items = await loadMyDrafts();
+    if (!items.length) {
+      container.innerHTML = '<div class="card"><div style="font-size:13px; color:var(--text-muted); text-align:center; padding:1rem;">Keine Berichte vorhanden.</div></div>';
+      return;
+    }
+    const statusColor = { 'Entwurf': 'var(--text-muted)', 'Eingereicht': 'var(--info)', 'Genehmigt': 'var(--success)', 'Abgelehnt': 'var(--error)' };
+    const rows = items.map(item => {
+      const geaendert = (item.Modified || item.Geaendert) ? new Date(item.Modified || item.Geaendert).toLocaleDateString('de-DE') : '—';
+      const sc = statusColor[item.Status] || 'var(--text-muted)';
+      return `<div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid var(--border);">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.Kind_Vorname||''} ${item.Kind_Familienname||''}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${item.Jugendamt||'—'} · ${geaendert}</div>
+        </div>
+        <span style="font-size:11px; font-weight:500; color:${sc}; white-space:nowrap;">${item.Status||'Entwurf'}</span>
+        <button onclick="loadDraft('${item._itemId||item.ID}')" style="font-size:12px; padding:5px 14px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer; white-space:nowrap; min-height:36px;">Öffnen</button>
+      </div>`;
+    }).join('');
+    container.innerHTML = `<div class="card" style="padding:0; overflow:hidden;">${rows}</div>`;
+  } catch(e) {
+    container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
 }
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
