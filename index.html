@@ -123,7 +123,7 @@
 <body>
 
 <div class="header">
-  <div class="header-brand">
+  <div class="header-brand" onclick="goToStart()" style="cursor:pointer;" title="Zur Startseite">
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:32px; width:auto;" alt="Praxis NeueWege">
     <span style="font-size:14px; font-weight:600; color:var(--text); margin-left:4px;">Berichtsgenerator</span>
   </div>
@@ -608,11 +608,13 @@ function goTo(n) {
     document.querySelector('.layout')?.classList.add('admin-mode');
   } else {
     document.querySelector('.layout')?.classList.remove('admin-mode');
-    // Restore normal layout
-    const layout = document.querySelector('.layout');
-    if (layout) layout.style.gridTemplateColumns = '';
-    const main = document.querySelector('.main');
-    if (main) main.style.maxWidth = '';
+    // Only restore normal layout if NOT going to admin
+    if (n !== 8) {
+      const layout = document.querySelector('.layout');
+      if (layout) layout.style.gridTemplateColumns = '';
+      const main = document.querySelector('.main');
+      if (main) main.style.maxWidth = '';
+    }
   }
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
   if (n === 6) buildSummary();
@@ -2027,12 +2029,14 @@ function checkAdminVisibility() {
 function showAdminPanel() {
   document.getElementById('startScreen').style.display = 'none';
   document.getElementById('mainLayout').style.display = 'block';
-  // Expand sidebar for admin view
-  const layout = document.querySelector('.layout');
-  if (layout) layout.style.gridTemplateColumns = '180px 1fr';
-  const main = document.querySelector('.main');
-  if (main) main.style.maxWidth = '100%';
   goTo(8);
+  // Expand sidebar for admin view AFTER goTo
+  setTimeout(() => {
+    const layout = document.querySelector('.layout');
+    if (layout) layout.style.gridTemplateColumns = '180px 1fr';
+    const main = document.querySelector('.main');
+    if (main) main.style.maxWidth = '100%';
+  }, 0);
 }
 
 function saveAdminConfig() {
