@@ -607,6 +607,11 @@ function showApp() {
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 function goToStart() {
+  // Restore normal layout before showing start screen
+  const layout = document.querySelector('.layout');
+  if (layout) layout.style.gridTemplateColumns = '';
+  const main = document.querySelector('.main');
+  if (main) main.style.maxWidth = '';
   document.getElementById('startScreen').style.display = 'flex';
   document.getElementById('mainLayout').style.display = 'none';
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -1636,7 +1641,7 @@ async function loadGroupMembers() {
   
   async function getMembers(groupId) {
     if (!groupId) return [];
-    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,mail,jobTitle`, {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,givenName,surname,mail,jobTitle`, {
       headers: { Authorization: 'Bearer ' + token }
     });
     const d = await r.json();
@@ -1674,9 +1679,13 @@ async function loadGroupMembers() {
     
     // Sort by display name (Lastname, Firstname format)
     const sortName = m => {
-      const parts = (m.displayName || '').split(' ');
-      return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
+      const dn = m.displayName || [m.givenName, m.surname].filter(Boolean).join(' ') || m.mail || '?';
+      const parts = dn.trim().split(' ');
+      return parts.length > 1 ? `${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}` : dn;
     };
+    // Filter out null/empty entries
+    _teamMembers = _teamMembers.filter(m => m.displayName || m.mail);
+    _tlMembers = _tlMembers.filter(m => m.displayName || m.mail);
     _teamMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
     _tlMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
     
@@ -1716,7 +1725,7 @@ async function loadGroupMembers() {
     // Fallback: static options
     // Fallback: load all org users
     try {
-      const r2 = await fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail&$top=100&$filter=accountEnabled eq true', {
+      const r2 = await fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,givenName,surname,mail&$top=100&$filter=accountEnabled eq true', {
         headers: { Authorization: 'Bearer ' + token }
       });
       if (r2.ok) {
@@ -1758,6 +1767,12 @@ async function loadGroupMembers() {
         }).join('');
     }
   }
+}
+
+function sortMemberName(m) {
+  const dn = m.displayName || [m.givenName, m.surname].filter(Boolean).join(' ') || m.mail || '?';
+  const parts = dn.trim().split(' ');
+  return parts.length > 1 ? `${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}` : dn;
 }
 
 function updateFachkraftName() {
@@ -2158,7 +2173,7 @@ async function testGroupMembers() {
 }
 
 function refreshDebugInfo() {
-  const sortName = m => { const p=(m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
+  const sortName = sortMemberName;
   const tm = document.getElementById('debugTeamMembers');
   const tl = document.getElementById('debugTlMembers');
   if (tm) tm.innerHTML = _teamMembers.length > 0
@@ -2209,7 +2224,7 @@ function updateDebugBlock() {
     if (_teamMembers.length === 0) {
       dbgTeam.innerHTML = '<span style="color:var(--error);">⚠ Leer — Gruppe nicht gefunden oder keine Berechtigung</span>';
     } else {
-      const sortName = m => { const p=(m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
+      const sortName = sortMemberName;
       dbgTeam.innerHTML = _teamMembers.map(m => `<div>${sortName(m)} <span style="color:var(--text-muted)">${m.mail||''}</span></div>`).join('');
     }
   }
@@ -2219,7 +2234,7 @@ function updateDebugBlock() {
     if (_tlMembers.length === 0) {
       dbgTL.innerHTML = '<span style="color:var(--error);">⚠ Leer — Gruppe nicht gefunden</span>';
     } else {
-      const sortName = m => { const p=(m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
+      const sortName = sortMemberName;
       dbgTL.innerHTML = _tlMembers.map(m => `<div>${sortName(m)} <span style="color:var(--text-muted)">${m.mail||''}</span></div>`).join('');
     }
   }
