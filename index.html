@@ -1818,6 +1818,48 @@ async function sendApprovalEmail(listItemId, data, filename) {
 
 // ─── FREIGABE ────────────────────────────────────────────────────────────────
 
+// Fertigstellungs-Mail an info@ nach finaler Freigabe + PDF-Erstellung
+async function sendCompletionEmail(token, driveId, pdfName, data) {
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[currentBerichtstyp] || 'Bericht';
+  const nachname = data.Kind_Familienname || 'Unbekannt';
+  const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
+  // webUrl des finalen PDFs per Graph ermitteln
+  let pdfUrl = '';
+  try {
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(pdfName)}`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (r.ok) { const f = await r.json(); pdfUrl = f.webUrl || ''; }
+  } catch(e) { /* Link bleibt leer, Dateiname wird trotzdem genannt */ }
+  const mail = {
+    message: {
+      subject: `${berichtstyp} ${nachname} ist fertiggestellt`,
+      body: { contentType: 'HTML', content: `
+<html><body style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
+  <div style="border-left: 4px solid #2e7d32; padding-left: 16px; margin-bottom: 24px;">
+    <h2 style="color: #2e7d32; margin: 0 0 4px;">✓ ${berichtstyp} fertiggestellt</h2>
+    <p style="margin: 0; color: #666;">Praxis NeueWege – Berichtsgenerator</p>
+  </div>
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+    <tr><td style="padding: 8px 0; color: #666; width: 140px;">Kind/Jugendliche*r</td><td style="padding: 8px 0; font-weight: bold;">${escHtml(kind)}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">Jugendamt</td><td style="padding: 8px 0;">${escHtml(data.Jugendamt || '—')}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">Dateiname</td><td style="padding: 8px 0; font-family: monospace; font-size: 13px;">${escHtml(pdfName)}</td></tr>
+  </table>
+  ${pdfUrl ? `<p><a href="${pdfUrl}" style="display: inline-block; background: #2e7d32; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Finales PDF öffnen →</a></p>` : `<p style="color:#888;">Das PDF liegt im SharePoint-Ordner ${escHtml(CONFIG.outputFolder)}.</p>`}
+</body></html>` },
+      toRecipients: [{ emailAddress: { address: 'info@praxisneuewege.de' } }]
+    },
+    saveToSentItems: false
+  };
+  const resp = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(mail)
+  });
+  return resp.ok;
+}
+
 async function approveReport() {
   if (!currentListId) { alert('Kein Bericht geladen.'); return; }
   const btn = document.querySelector('button[onclick="approveReport()"]');
@@ -1889,7 +1931,11 @@ async function approveReport() {
     const pdfResult = await convertToPdf(3, 4000);
     
     if (pdfResult.ok) {
-      setStatus('done', `✓ Freigegeben — PDF gespeichert: ${pdfName}`);
+      // Fertigstellungs-Mail an info@ mit Link zum finalen PDF
+      let infoMailOk = false;
+      try { infoMailOk = await sendCompletionEmail(token, driveId, pdfName, data); }
+      catch(e) { console.warn('Fertigstellungs-Mail fehlgeschlagen:', e.message); }
+      setStatus('done', `✓ Freigegeben — PDF gespeichert: ${pdfName}${infoMailOk ? ' — Fertigstellungs-Mail an info@praxisneuewege.de gesendet.' : ' — Hinweis: Fertigstellungs-Mail konnte nicht gesendet werden.'}`);
     } else {
       // Fallback: try converting via SharePoint convert endpoint
       try {
