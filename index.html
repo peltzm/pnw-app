@@ -288,8 +288,8 @@
         <div class="card">
           <div class="card-title">Zeitraum</div>
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:10px;">
-            <div class="field"><label>Hilfebeginn</label><input type="date" id="Hilfebeginn" style="font-size:12px; padding:6px 8px;"></div>
-            <div class="field"><label>Befristet / Ende</label><input type="date" id="Hilfe_Ende" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Hilfebeginn</label><input type="date" id="Hilfebeginn" onchange="syncBetreuungszeitraum()" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Befristet / Ende</label><input type="date" id="Hilfe_Ende" onchange="syncBetreuungszeitraum()" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>Berichtszeitraum von</label><input type="date" id="BZ_Von" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>bis</label><input type="date" id="BZ_Bis" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>Letztes HPG</label><input type="date" id="Letztes_HPG" style="font-size:12px; padding:6px 8px;"></div>
@@ -299,7 +299,7 @@
             <div class="field"><label>Stunden bisher geleistet</label><input type="number" id="Fachleistungsstunden_Geleistet" placeholder="z.B. 67" style="font-size:12px; padding:6px 8px;"></div>
           </div>
           <div style="display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:10px;">
-            <div class="field"><label>Betreuungszeitraum (Abschlussbericht)</label><input type="text" id="Betreuungszeitraum" placeholder="z.B. 01.01.2025 – 31.12.2025" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Betreuungszeitraum <span style="font-weight:400; color:var(--text-muted);">(automatisch aus Hilfebeginn – Ende, oder manuell eintragen)</span></label><input type="text" id="Betreuungszeitraum" oninput="this.dataset.manuallySet='1'" placeholder="wird automatisch befüllt" style="font-size:12px; padding:6px 8px;"></div>
           </div>
         </div>
         <div class="btn-row"><span></span><button class="btn btn-primary" onclick="goTo(2)">Weiter →</button></div>
@@ -311,12 +311,12 @@
         <div class="section-sub">Angaben zum Kind/Jugendlichen</div>
         <div class="card">
           <div class="card-title">Kind / Jugendliche*r</div>
-          <div class="field-grid">
+          <div class="field-grid triple">
             <div class="field"><label>Vorname <span style="color:var(--error);">*</span></label><input type="text" id="Kind_Vorname" required oninput="this.style.borderColor=this.value.trim()?'':''"></div>
             <div class="field"><label>Familienname <span style="color:var(--error);">*</span></label><input type="text" id="Kind_Familienname" oninput="this.value=this.value.toUpperCase()" required></div>
-          </div>
-          <div class="field-grid triple">
             <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind_Geburtsdatum"></div>
+          </div>
+          <div class="field-grid">
             <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind_Strasse"></div>
             <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind_PLZ_Ort"></div>
           </div>
@@ -881,14 +881,8 @@ function startNew() {
   showMainLayout();
   buildDynamicSections(true);
   resetForm();
-  // Re-apply pre-selections after reset
-  if (currentBerichtstyp === 'clearing') {
-    const hilfeartEl = document.getElementById('Hilfeart');
-    if (hilfeartEl) {
-      const opt = Array.from(hilfeartEl.options).find(o => o.text.includes('Clearing'));
-      if (opt) hilfeartEl.value = opt.value;
-    }
-  }
+  // Re-apply pre-selections after reset (Hilfeart bei Clearing fest vorbelegt + gesperrt)
+  applyHilfeartPreset(currentBerichtstyp);
   // Re-apply Fachkraft and TL pre-selections
   loadGroupMembers();
   goTo(1);
@@ -916,8 +910,45 @@ async function saveEntwurf() {
 
 let currentBerichtstyp = 'verlauf';
 
+// Betreuungszeitraum automatisch aus Hilfebeginn – Befristet/Ende ableiten.
+// Manuelle Eingabe (dataset.manuallySet) hat Vorrang und wird nicht überschrieben.
+function syncBetreuungszeitraum() {
+  const bz = document.getElementById('Betreuungszeitraum');
+  if (!bz) return;
+  if (bz.dataset.manuallySet === '1' && bz.value.trim()) return; // manueller Wert hat Vorrang
+  const fmt = iso => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return (d && m && y) ? `${d}.${m}.${y}` : '';
+  };
+  const von = fmt(document.getElementById('Hilfebeginn')?.value);
+  const bis = fmt(document.getElementById('Hilfe_Ende')?.value);
+  if (von && bis) bz.value = von + ' – ' + bis;
+  else if (von) bz.value = von + ' – ';
+  else if (!bz.dataset.manuallySet) bz.value = '';
+}
+
+// Hilfeart je nach Berichtstyp voreinstellen/sperren:
+// Bei Clearing ist die Hilfeart fest "§ 27 (2) SGB VIII - Clearing" und nicht änderbar
+function applyHilfeartPreset(typ) {
+  const el = document.getElementById('Hilfeart');
+  if (!el) return;
+  if (typ === 'clearing') {
+    const opt = Array.from(el.options).find(o => o.text.includes('Clearing'));
+    if (opt) el.value = opt.value;
+    el.disabled = true;
+    el.style.background = 'var(--bg)';
+    el.style.cursor = 'not-allowed';
+  } else {
+    el.disabled = false;
+    el.style.background = '';
+    el.style.cursor = '';
+  }
+}
+
 function selectBerichtstyp(typ) {
   currentBerichtstyp = typ;
+  applyHilfeartPreset(typ);
   ['verlauf','abschluss','clearing'].forEach(t => {
     const el = document.getElementById('bt_' + t);
     if (!el) return;
@@ -1130,6 +1161,12 @@ async function loadDraft(id) {
         if (e) e.value = z.ergebnis || '';
       });
     }
+    // Hilfeart-Vorbelegung/Sperre nach Befüllen anwenden (überschreibt ggf. abweichende Werte bei Clearing)
+    applyHilfeartPreset(currentBerichtstyp);
+    // Gespeicherten Betreuungszeitraum schützen, sonst aus Hilfebeginn/Ende ableiten
+    const bzEl = document.getElementById('Betreuungszeitraum');
+    if (bzEl && bzEl.value.trim()) bzEl.dataset.manuallySet = '1';
+    syncBetreuungszeitraum();
     // Check if in review mode (opened via email link)
     const isReview = new URLSearchParams(window.location.search).get('review') === String(id);
     if (isReview) {
@@ -1174,6 +1211,9 @@ function resetForm() {
   // Reset ziele
   document.getElementById('zieleContainer') && (document.getElementById('zieleContainer').innerHTML = '');
   zielCount = 0;
+  // Betreuungszeitraum-Automatik wieder aktivieren
+  const bzReset = document.getElementById('Betreuungszeitraum');
+  if (bzReset) delete bzReset.dataset.manuallySet;
   resetWeiterePersFound();
   resetExtraKinder();
   resetExtraSorg();
@@ -1526,6 +1566,32 @@ async function sendApprovalEmail(listItemId, data, filename) {
   
   // Deep link back to app with item ID
   const appUrl = `https://peltzm.github.io/pnw-app/?review=${listItemId}&typ=${currentBerichtstyp}`;
+
+  // Direktlink zum hochgeladenen Dokument + Link zum Ordner per Graph ermitteln.
+  // Fallback jeweils: Site-URL.
+  let docUrl = '';
+  let folderUrl = '';
+  try {
+    const { driveId } = await getSiteAndDrive();
+    const fileResp = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(filename)}`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (fileResp.ok) {
+      const f = await fileResp.json();
+      docUrl = f.webUrl || '';
+    }
+    const folderResp = await fetch(
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (folderResp.ok) {
+      const fo = await folderResp.json();
+      folderUrl = fo.webUrl || '';
+    }
+  } catch(e) { /* Fallbacks unten */ }
+  if (!docUrl) docUrl = folderUrl || CONFIG.siteUrl;
+  if (!folderUrl) folderUrl = CONFIG.siteUrl;
   
   const emailBody = `
 <html><body style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
@@ -1545,10 +1611,14 @@ async function sendApprovalEmail(listItemId, data, filename) {
     <a href="${appUrl}" style="display: inline-block; background: #7b3f1e; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
       Bericht prüfen &amp; freigeben →
     </a>
-    <a href="${CONFIG.siteUrl}/Verlaufsberichte" style="display: inline-block; background: #0078d4; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-      In SharePoint öffnen →
+    <a href="${docUrl}" style="display: inline-block; background: #0078d4; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+      Dokument in SharePoint öffnen →
     </a>
   </div>
+
+  <p style="color: #666; font-size: 13px; margin-bottom: 24px;">
+    Alle Berichte im Überblick: <a href="${folderUrl}" style="color: #0078d4;">Ordner „${CONFIG.outputFolder.replace(/^\//,'')}" in SharePoint öffnen →</a>
+  </p>
   
   <p style="color: #888; font-size: 13px; border-top: 1px solid #eee; padding-top: 16px;">
     Nach der Prüfung im Berichtsgenerator können Sie den Bericht direkt freigeben.<br>
@@ -2402,12 +2472,12 @@ function addExtraKind() {
       <span style="font-size:12px; font-weight:500; color:var(--text-muted);">Kind / Jugendliche*r ${n+1}</span>
       <button onclick="removeExtraKind(${n})" style="background:none; border:1px solid var(--error); color:var(--error); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:11px;">Entfernen</button>
     </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:8px;">
       <div class="field"><label>Vorname</label><input type="text" id="Kind2_Vorname_${n}" style="width:100%;"></div>
       <div class="field"><label>Familienname</label><input type="text" id="Kind2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:6px;">
       <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind2_Geb_${n}" style="width:100%;"></div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:6px;">
       <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind2_Str_${n}" style="width:100%;"></div>
       <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind2_PLZ_${n}" style="width:100%;"></div>
     </div>
