@@ -320,6 +320,10 @@
             <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind_Strasse"></div>
             <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind_PLZ_Ort"></div>
           </div>
+          <div id="extraKinderContainer"></div>
+          <div style="margin-top:6px;">
+            <button onclick="addExtraKind()" id="btnAddExtraKind" style="font-size:11px; color:var(--accent-mid); background:none; border:1px dashed var(--accent-mid); border-radius:4px; padding:4px 12px; cursor:pointer;">+ Kind hinzufügen</button>
+          </div>
         </div>
         <div class="card">
           <div class="card-title">Sorgeberechtigte</div>
@@ -332,13 +336,11 @@
             <div class="field"><label>Straße + Nr.</label><input type="text" id="Sorg_Strasse"></div>
             <div class="field"><label>PLZ + Ort</label><input type="text" id="Sorg_PLZ_Ort"></div>
           </div>
-          <div style="margin-bottom:12px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-              <label style="font-size:12px; font-weight:500; color:var(--text-muted);" id="weitereKinderLabel">Weitere Kinder</label>
-              <button onclick="addWeitereKind()" id="btnAddKind" style="font-size:11px; color:var(--accent-mid); background:none; border:1px dashed var(--accent-mid); border-radius:4px; padding:2px 10px; cursor:pointer;">+ Kind hinzufügen</button>
-            </div>
-            <div id="weitereKinderContainer"></div>
+          <div id="extraSorgContainer"></div>
+          <div style="margin-top:6px;">
+            <button onclick="addExtraSorg()" id="btnAddSorg" style="font-size:11px; color:var(--accent-mid); background:none; border:1px dashed var(--accent-mid); border-radius:4px; padding:4px 12px; cursor:pointer;">+ Sorgeberechtigte/r einfügen</button>
           </div>
+
         </div>
         <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(1)">← Zurück</button><button class="btn btn-primary" onclick="goTo(3)">Weiter →</button></div>
       </div>
@@ -1167,7 +1169,6 @@ function resetForm() {
   // Reset ziele
   document.getElementById('zieleContainer') && (document.getElementById('zieleContainer').innerHTML = '');
   zielCount = 0;
-  resetWeitereKinder();
   resetWeiterePersFound();
   resetExtraKinder();
   resetExtraSorg();
@@ -1463,7 +1464,6 @@ function resetWeitereKinder() {
 
 function fillWeitereKinder(value) {
   // Parse combined string back into individual fields
-  resetWeitereKinder();
   resetWeiterePersFound();
   resetExtraKinder();
   resetExtraSorg();
