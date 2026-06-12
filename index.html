@@ -1063,7 +1063,12 @@ async function showCopyList() {
 
 async function copyStammdaten(id) {
   try {
+    try { await _groupLoadPromise; } catch(e) {}
     const item = await loadItemById(id);
+    // Berechtigung: TL/Admin oder am Bericht beteiligt
+    if (!isTLUser() && !isUserInvolvedInItem(item)) {
+      throw new Error('Keine Berechtigung — dieser Bericht ist Ihnen nicht zugeordnet.');
+    }
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
     currentListId = null; // new report
@@ -1154,7 +1159,13 @@ async function showDraftList() {
 
 async function loadDraft(id) {
   try {
+    // Auf Gruppenladen warten, damit die TL-Prüfung zuverlässig ist
+    try { await _groupLoadPromise; } catch(e) {}
     const item = await loadItemById(id);
+    // Berechtigung: TL/Admin oder am Bericht beteiligt
+    if (!isTLUser() && !isUserInvolvedInItem(item)) {
+      throw new Error('Keine Berechtigung — dieser Bericht ist Ihnen nicht zugeordnet.');
+    }
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
     currentListId = id; // Graph item ID (string)
@@ -1482,6 +1493,34 @@ async function saveToList(data, existingId = null) {
   return existingId;
 }
 
+// Namensvarianten der angemeldeten Person ("Vorname Nachname" und "Nachname, Vorname")
+function _myNameVariants() {
+  const dn = (currentAccount?.name || '').trim();
+  const variants = new Set();
+  if (dn) {
+    variants.add(dn.toLowerCase());
+    const parts = dn.split(/\s+/);
+    if (parts.length > 1) variants.add(`${parts[parts.length - 1]}, ${parts.slice(0, -1).join(' ')}`.toLowerCase());
+  }
+  return variants;
+}
+
+// Ist die angemeldete Person an diesem Bericht beteiligt?
+// (Einreicher/in, als Fachkraft 1–4 hinterlegt, oder Altbestand ohne Besitzer)
+function isUserInvolvedInItem(item) {
+  if (!item) return false;
+  if (!item.Eingereicht_Von) return true; // Altbestand ohne Besitzer (backwards compat)
+  const myEmail = (currentAccount?.username || '').toLowerCase();
+  if ((item.Eingereicht_Von || '').toLowerCase() === myEmail) return true;
+  const variants = _myNameVariants();
+  if (variants.size === 0) return false;
+  let d = {};
+  try { d = JSON.parse(item.FormularDaten || '{}'); } catch(e) {}
+  const namen = [d.Fachkraft_NeueWege, d.Fachkraft_2, d.Fachkraft_3, d.Fachkraft_4, item.Fachkraft]
+    .filter(Boolean).map(s => String(s).trim().toLowerCase());
+  return namen.some(n => variants.has(n));
+}
+
 async function loadMyDrafts() {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
@@ -1493,24 +1532,21 @@ async function loadMyDrafts() {
   if (!resp.ok) throw new Error('Entwürfe konnten nicht geladen werden');
   const result = await resp.json();
   const allItems = (result.value || []).map(item => ({ ...item.fields, ID: item.id, _itemId: item.id }));
-  // Client-side filter: TL sees all, others see own reports
+  // Client-side filter: TL sieht alles, andere sehen Berichte, an denen sie beteiligt sind
+  // (selbst eingereicht ODER als Fachkraft 1–4 hinterlegt)
   if (isTL) return allItems;
-  const myEmail = (currentAccount?.username || '').toLowerCase();
-  return allItems.filter(item => {
-    if (!item.Eingereicht_Von) return true; // no owner = show all (backwards compat)
-    return item.Eingereicht_Von.toLowerCase() === myEmail;
-  });
+  return allItems.filter(item => isUserInvolvedInItem(item));
 }
 
 async function loadItemById(id) {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
-  const resp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}?expand=fields(select=FormularDaten)`, {
+  const resp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}?expand=fields(select=FormularDaten,Eingereicht_Von,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Fachkraft)`, {
     headers: { Authorization: 'Bearer ' + token }
   });
   if (!resp.ok) throw new Error('Eintrag nicht gefunden');
   const result = await resp.json();
-  return { FormularDaten: result.fields?.FormularDaten };
+  return { ...(result.fields || {}) };
 }
 
 // ─── WEITERE KINDER ──────────────────────────────────────────────────────────
@@ -2976,6 +3012,13 @@ function validateRequiredFields() {
 async function deleteDraft(id) {
   if (!confirm('Entwurf wirklich löschen?')) return;
   try {
+    // Berechtigung: TL/Admin oder am Bericht beteiligt
+    try { await _groupLoadPromise; } catch(e) {}
+    const item = await loadItemById(id);
+    if (!isTLUser() && !isUserInvolvedInItem(item)) {
+      alert('Keine Berechtigung — dieser Bericht ist Ihnen nicht zugeordnet.');
+      return;
+    }
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
     const resp = await fetch(
