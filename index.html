@@ -200,6 +200,11 @@
 
       
       <div id="startError" class="alert alert-error" style="display:none; margin-top:1rem;"></div>
+      <div id="adminLinkContainer" style="display:none; text-align:center; margin-top:2rem; padding-top:1rem; border-top:1px solid var(--border);">
+        <button onclick="showAdminPanel()" style="background:none; border:none; font-size:12px; color:var(--text-muted); cursor:pointer; text-decoration:underline;">
+          ⚙ Admin / Debug
+        </button>
+      </div>
     </div>
   </div>
 
@@ -592,38 +597,6 @@ function goTo(n) {
   if (section) section.classList.add('active');
   document.getElementById('nav' + n)?.classList.add('active');
   document.getElementById('progress').style.width = (Math.max(0, Math.min(n,6))/6*100) + '%';
-  // Validate required fields when leaving S2
-  if (n > 2) {
-    const vn = document.getElementById('Kind_Vorname')?.value?.trim();
-    const fn = document.getElementById('Kind_Familienname')?.value?.trim();
-    if (!vn || !fn) {
-      // Show validation error on S2 fields
-      const vnEl = document.getElementById('Kind_Vorname');
-      const fnEl = document.getElementById('Kind_Familienname');
-      if (vnEl && !vn) { vnEl.style.borderColor = 'var(--error)'; vnEl.focus(); }
-      if (fnEl && !fn) fnEl.style.borderColor = 'var(--error)';
-      // Switch to S2 to show the error
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-      document.getElementById('s2')?.classList.add('active');
-      document.getElementById('nav2')?.classList.add('active');
-      // Show error message
-      let errEl = document.getElementById('s2_validation_error');
-      if (!errEl) {
-        errEl = document.createElement('div');
-        errEl.id = 's2_validation_error';
-        errEl.className = 'alert alert-error';
-        errEl.style.marginBottom = '1rem';
-        errEl.textContent = 'Bitte Vorname und Familienname des Kindes/Jugendlichen angeben.';
-        document.getElementById('s2')?.querySelector('.section-title')?.after(errEl);
-      }
-      return;
-    }
-    // Clear validation errors
-    document.getElementById('Kind_Vorname').style.borderColor = '';
-    document.getElementById('Kind_Familienname').style.borderColor = '';
-    document.getElementById('s2_validation_error')?.remove();
-  }
   if (n === 0) buildUebersicht();
   if (n === 8) refreshDebugInfo();
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
@@ -766,6 +739,7 @@ async function fetchTemplate() {
 
 // ─── DOWNLOAD LOKAL ───────────────────────────────────────────────────────────
 async function downloadLocal() {
+  if (!validateRequiredFields()) return;
   setStatus('uploading', 'Dokument wird befüllt...');
   try {
     const data = collectData();
@@ -786,6 +760,7 @@ async function downloadLocal() {
 
 // ─── SHAREPOINT UPLOAD ────────────────────────────────────────────────────────
 async function uploadToSharePoint() {
+  if (!validateRequiredFields()) return;
   setStatus('uploading', 'Dokument wird befüllt und hochgeladen...');
   document.getElementById('btnUpload').disabled = true;
   try {
@@ -855,6 +830,7 @@ function startNew() {
 let currentListId = null; // tracks current list item ID
 
 async function saveEntwurf() {
+  if (!validateRequiredFields()) return;
   const btn = document.getElementById('btnSaveEntwurf');
   btn.disabled = true;
   btn.textContent = '💾 Wird gespeichert...';
@@ -2016,15 +1992,27 @@ async function buildUebersicht() {
 
 // ─── ADMIN / DEBUG ───────────────────────────────────────────────────────────
 
-const ADMIN_EMAILS = ['markus.peltz@praxisneuewege.de'];
+const ADMIN_EMAILS = ['markus.peltz@praxisneuewege.de', 'markus peltz'];
 
 function isAdmin() {
-  return ADMIN_EMAILS.includes((currentAccount?.username || '').toLowerCase());
+  const user = (currentAccount?.username || '').toLowerCase();
+  const name = (currentAccount?.name || '').toLowerCase();
+  return ADMIN_EMAILS.some(e => user.includes(e.toLowerCase()) || name.includes(e.toLowerCase()));
 }
 
 function checkAdminVisibility() {
   const nav8 = document.getElementById('nav8');
-  if (nav8 && isAdmin()) nav8.style.display = 'flex';
+  const adminLink = document.getElementById('adminLinkContainer');
+  if (isAdmin()) {
+    if (nav8) nav8.style.display = 'flex';
+    if (adminLink) adminLink.style.display = 'block';
+  }
+}
+
+function showAdminPanel() {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('mainLayout').style.display = 'block';
+  goTo(8);
 }
 
 function saveAdminConfig() {
@@ -2137,6 +2125,34 @@ function refreshDebugInfo() {
   if (fg) fg.value = cfg.fachkraftGroup;
   if (tg) tg.value = cfg.tlGroup;
   if (fm) fm.value = cfg.fachkraftMail;
+}
+
+// ─── VALIDATION ──────────────────────────────────────────────────────────────
+
+function validateRequiredFields() {
+  const vn = document.getElementById('Kind_Vorname')?.value?.trim();
+  const fn = document.getElementById('Kind_Familienname')?.value?.trim();
+  if (!vn || !fn) {
+    // Highlight fields
+    const vnEl = document.getElementById('Kind_Vorname');
+    const fnEl = document.getElementById('Kind_Familienname');
+    if (vnEl) vnEl.style.borderColor = !vn ? 'var(--error)' : '';
+    if (fnEl) fnEl.style.borderColor = !fn ? 'var(--error)' : '';
+    // Jump to S2 and show error
+    goTo(2);
+    let errEl = document.getElementById('s2_validation_error');
+    if (!errEl) {
+      errEl = document.createElement('div');
+      errEl.id = 's2_validation_error';
+      errEl.className = 'alert alert-error';
+      errEl.style.marginBottom = '1rem';
+      errEl.textContent = 'Pflichtfelder: Bitte Vorname und Familienname angeben.';
+      document.getElementById('s2')?.querySelector('.section-title')?.insertAdjacentElement('afterend', errEl);
+    }
+    return false;
+  }
+  document.getElementById('s2_validation_error')?.remove();
+  return true;
 }
 
 // ─── DELETE DRAFT ────────────────────────────────────────────────────────────
