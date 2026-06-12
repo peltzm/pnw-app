@@ -710,13 +710,15 @@ function setStatus(type, msg) {
 
 // ─── START SCREEN ────────────────────────────────────────────────────────────
 function startNew() {
-  resetForm();
   CONFIG.templatePath = {
     verlauf: '/Templates/Verlaufsbericht_Template.docx',
     abschluss: '/Templates/Abschlussbericht_Template.docx',
     clearing: '/Templates/Clearingbericht_Template.docx'
   }[currentBerichtstyp];
   showMainLayout();
+  // Build all dynamic sections first so fields exist in DOM
+  buildDynamicSections(true);
+  resetForm();
   goTo(1);
 }
 
@@ -872,6 +874,10 @@ async function loadDraft(id) {
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
     currentListId = id; // Graph item ID (string)
+    // Detect berichtstyp from data if available
+    if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
+    // Build dynamic sections FIRST so fields exist in DOM
+    buildDynamicSections(true);
     resetForm();
     // Fill all fields
     Object.entries(data).forEach(([key, value]) => {
@@ -882,14 +888,18 @@ async function loadDraft(id) {
     });
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
-      document.getElementById('zieleContainer').innerHTML = '';
-      zielCount = 0;
+      const zc = document.getElementById('zieleContainer');
+      if (zc) { zc.innerHTML = ''; zielCount = 0; }
+      else zielCount = 0;
       data._ziele.forEach(z => {
         addZiel();
         const n = zielCount;
-        document.getElementById('Ziel_'+n+'_Beschreibung').value = z.beschreibung || '';
-        document.getElementById('Ziel_'+n+'_Methoden').value = z.methoden || '';
-        document.getElementById('Ziel_'+n+'_Ergebnis').value = z.ergebnis || '';
+        const b = document.getElementById('Ziel_'+n+'_Beschreibung');
+        const m = document.getElementById('Ziel_'+n+'_Methoden');
+        const e = document.getElementById('Ziel_'+n+'_Ergebnis');
+        if (b) b.value = z.beschreibung || '';
+        if (m) m.value = z.methoden || '';
+        if (e) e.value = z.ergebnis || '';
       });
     }
     showMainLayout();
@@ -919,7 +929,19 @@ function resetForm() {
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
     'Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer'];
-  ids.forEach(id => { const el = document.getElementById(id); if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = id === 'Ort' ? 'Wolnzach' : ''; } });
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = id === 'Ort' ? 'Wolnzach' : ''; }
+  });
+  // Also reset dynamic section fields safely
+  ['Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse',
+   'Arbeitsbeziehung','Ziele_Einleitung','Fachliche_Einschaetzung',
+   'Aktuelle_Situation','Verlauf_Massnahme','Ausgangssituation','Familienkonstellation',
+   'Rahmenbedingungen','Ressourcen','Risiken','Ergebnisse_Clearing',
+   'Zielsetzung_Clearing','Zusammenfassung_Ausblick'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   // Reset ziele
   document.getElementById('zieleContainer') && (document.getElementById('zieleContainer').innerHTML = '');
   zielCount = 0;
@@ -1064,6 +1086,7 @@ async function saveToList(data, existingId = null) {
     });
   }
   data._ziele = ziele;
+  data._berichtstyp = currentBerichtstyp || 'verlauf';
 
   const fields = {
     Title: `VB ${data.Kind_Vorname||''} ${data.Kind_Familienname||''}`.trim() || 'Entwurf',
@@ -1719,6 +1742,10 @@ function buildDynamicSections(force = false) {
     });
   }
   document.getElementById('s4_content').innerHTML = s4html;
+  // Add first ziel if hasZiele and none exist yet
+  if (s4.hasZiele && document.getElementById('zieleContainer') && zielCount === 0) {
+    addZiel();
+  }
   
   // Build S5
   const s5 = tpl.s5;
