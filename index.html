@@ -1033,11 +1033,12 @@ function selectBerichtstyp(typ) {
 
 async function showCopyList() {
   document.getElementById('draftListPanel').style.display = 'block';
-  document.getElementById('draftListContent').innerHTML = '<div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Bestehenden Bericht als Basis verwenden — alle Daten werden übernommen und können angepasst werden.</div><div id="copyListItems">Wird geladen...</div>';
+  document.getElementById('draftListContent').innerHTML = '<div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Final freigegebenen Bericht als Basis verwenden — alle Daten werden übernommen und können angepasst werden.</div><div id="copyListItems">Wird geladen...</div>';
   try {
-    const items = await loadMyDrafts();
+    // Nur final freigegebene Berichte als Vorlage anbieten
+    const items = (await loadMyDrafts()).filter(item => item.Status === 'Genehmigt');
     if (items.length === 0) {
-      document.getElementById('copyListItems').innerHTML = '<div style="color:var(--text-muted); padding:0.5rem 0;">Keine Berichte gefunden.</div>';
+      document.getElementById('copyListItems').innerHTML = '<div style="color:var(--text-muted); padding:0.5rem 0;">Keine freigegebenen Berichte gefunden.</div>';
       return;
     }
     const rows = items.map(item => {
@@ -1122,7 +1123,8 @@ async function showDraftList() {
   document.getElementById('draftListPanel').style.display = 'block';
   document.getElementById('draftListContent').textContent = 'Wird geladen...';
   try {
-    const items = await loadMyDrafts();
+    // Nur Berichte in Arbeit (Entwurf/Eingereicht/Abgelehnt) — freigegebene sind abgeschlossen
+    const items = (await loadMyDrafts()).filter(item => item.Status !== 'Genehmigt');
     if (items.length === 0) {
       document.getElementById('draftListContent').innerHTML = '<div style="color:var(--text-muted); padding:1rem 0;">Keine Entwürfe gefunden.</div>';
       return;
