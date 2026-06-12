@@ -433,7 +433,7 @@
         <div id="statusBar" style="display:none"></div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch;">
           <button class="btn btn-secondary" onclick="downloadLocal()">↓ Lokal speichern (Word)</button>
-          <button class="btn btn-success" id="btnUpload" onclick="uploadToSharePoint()">↑ In SharePoint hochladen</button>
+          <button class="btn btn-success" id="btnUpload" onclick="uploadToSharePoint()">↑ Freigabe anfordern</button>
         </div>
         <div id="reviewActions" style="display:none; margin-bottom:1rem;">
           <div style="background:var(--accent-light); border:1px solid #e8c4a8; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
@@ -446,7 +446,6 @@
           </div>
         </div>
         <div id="normalActions">
-        <div class="alert alert-info" style="margin-top:1rem;">Nach dem Hochladen wird Power Automate ausgelöst und sendet eine Freigabeanfrage an die Teamleitung.</div>
         </div>
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="goTo(5)">← Zurück</button>
@@ -736,6 +735,8 @@ function collectData() {
   data._extraSorg = collectExtraSorg();
   // TL-Kommentare mitpersistieren
   data._tlKommentare = _tlKommentare;
+  // Dokumentversion mitpersistieren
+  data._version = currentVersion || 0;
   // Collect extra Fachkräfte 2-4
   for (let i = 2; i <= 4; i++) {
     const el = document.getElementById('Fachkraft_' + i);
@@ -849,13 +850,16 @@ async function uploadToSharePoint() {
     const _nach = data.Kind_Familienname || 'Unbekannt';
     const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
     const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
-    const name = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}.docx`;
+    // Version aufsteigend: bei jeder Freigabeanfrage +1 (erst nach erfolgreichem Upload übernommen)
+    const newVersion = (currentVersion || 0) + 1;
+    const name = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${newVersion}.docx`;
     const { token, driveId } = await getSiteAndDrive();
     const uploadResp = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${name}:/content`,
       { method: 'PUT', headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: filled }
     );
     if (!uploadResp.ok) { const err = await uploadResp.json(); throw new Error(err.error?.message || 'Upload fehlgeschlagen'); }
+    currentVersion = newVersion;
     // Update list status to "Eingereicht"
     let savedId = currentListId;
     try {
@@ -867,8 +871,13 @@ async function uploadToSharePoint() {
     // Send approval email
     try {
       const emailOk = await sendApprovalEmail(savedId, collectData(), name);
+      // Empfänger für die Anzeige ermitteln: ausgewählte TL NeueWege
+      const _flSel = document.getElementById('Fallleitung');
+      const _tlName = _flSel?.options[_flSel.selectedIndex]?.text?.trim() || '';
+      const _tlMail = getFalleitungMail();
+      const _empfaenger = _tlMail ? `${_tlName || 'TL NeueWege'} (${_tlMail})` : (_tlName || 'die Teamleitung');
       if (emailOk) {
-        setStatus('done', `✓ Hochgeladen: ${name} — Freigabeanfrage wurde an markus.peltz@praxisneuewege.de gesendet.`);
+        setStatus('done', `✓ Hochgeladen: ${name} — Freigabeanfrage wurde an ${_empfaenger} gesendet.`);
       } else {
         setStatus('done', `✓ Hochgeladen: ${name} — Bitte Freigabeanfrage manuell senden.`);
       }
@@ -909,6 +918,7 @@ function startNew() {
 let currentListId = null; // tracks current list item ID
 let currentItemStatus = null;   // Status des geladenen Berichts (bleibt bei Zwischenspeichern erhalten)
 let currentEingereichtVon = ''; // ursprüngliche/r Einreicher/in (darf durch TL-Speichern nicht überschrieben werden)
+let currentVersion = 0;         // Versionsnummer der hochgeladenen Dokumente (steigt bei jeder Freigabeanfrage)
 let _groupLoadPromise = Promise.resolve(); // damit auf geladene Gruppen gewartet werden kann
 
 // Ist die angemeldete Person Teamleitung (oder Admin)?
@@ -1149,6 +1159,7 @@ async function loadDraft(id) {
     currentListId = id;
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
+    currentVersion = parseInt(data._version, 10) || 0;
     // Fill all fields
     // Restore extra Kinder
     if (data._extraKinder?.length) {
@@ -1257,6 +1268,7 @@ function resetForm() {
   _isReviewMode = false;
   currentItemStatus = null;
   currentEingereichtVon = '';
+  currentVersion = 0;
   document.getElementById('reviewFloatBar')?.remove();
   document.getElementById('reviewBanner')?.remove();
   document.getElementById('reviewFrame')?.remove();
@@ -1829,7 +1841,7 @@ async function approveReport() {
     const _nach = data.Kind_Familienname || 'Unbekannt';
     const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
     const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
-    const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}.docx`;
+    const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
     
     const templateBytes = await fetchTemplate();
     const filled = await fillTemplate(templateBytes, data);
@@ -1844,7 +1856,8 @@ async function approveReport() {
     // 3. Convert to PDF via Graph (Word → PDF)
     // Wait for SharePoint to index the file before converting
     setStatus('uploading', 'PDF wird erstellt...');
-    const pdfName = docxName.replace('.docx', '.pdf');
+    // Finales PDF ohne Versionsnummer (_vN wird entfernt)
+    const pdfName = docxName.replace(/(_v\d+)?\.docx$/, '.pdf');
     
     async function convertToPdf(retries = 3, delayMs = 3000) {
       for (let i = 0; i < retries; i++) {
@@ -1932,7 +1945,7 @@ async function rejectReport() {
     const mail = {
       message: {
         subject: `[Zurückgewiesen] ${kind} – Bitte korrigieren`,
-        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="https://peltzm.github.io/pnw-app/?edit=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und überarbeiten →</a></p><p style="font-size:13px; color:#666;">Nach der Überarbeitung den Bericht bitte auf der Seite „Absenden“ erneut hochladen — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage.</p>` },
+        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="https://peltzm.github.io/pnw-app/?edit=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und überarbeiten →</a></p><p style="font-size:13px; color:#666;">Nach der Überarbeitung bitte auf der Seite „Absenden“ erneut „Freigabe anfordern“ anklicken — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage.</p>` },
         toRecipients: [{ emailAddress: { address: currentEingereichtVon || data._eingereichtVon || currentAccount?.username || 'info@praxisneuewege.de' } }]
       },
       saveToSentItems: false
@@ -1960,7 +1973,7 @@ function showReworkNoticeIfNeeded() {
   notice.style.cssText = 'background:#fdf6dd; border:1px solid #c9a227; border-left:5px solid #c9a227; border-radius:var(--radius-lg); padding:12px 16px; margin-bottom:1rem; font-size:13px; color:#6b5414;';
   notice.innerHTML = `<strong>${abgelehnt ? '✗ Dieser Bericht wurde von der Teamleitung zurückgewiesen.' : '💬 Die Teamleitung hat Anmerkungen hinterlassen.'}</strong><br>
     ${nOffen > 0 ? `Es gibt <strong>${nOffen} Kommentar${nOffen === 1 ? '' : 'e'}</strong> auf den Seiten 3–5 (gelbe Kästen unter den Textfeldern). Bitte prüfen und jeweils „✓ Als erledigt markieren“ anklicken.<br>` : ''}
-    Nach der Überarbeitung den Bericht auf der Seite „Absenden“ <strong>erneut hochladen</strong> — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage. Erst nach deren Freigabe wird das PDF erstellt.`;
+    Nach der Überarbeitung auf der Seite „Absenden“ erneut <strong>„Freigabe anfordern“</strong> anklicken — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage. Erst nach deren Freigabe wird das PDF erstellt.`;
   const main = document.querySelector('#mainLayout .main') || document.getElementById('mainLayout');
   if (main) main.insertAdjacentElement('afterbegin', notice);
 }
