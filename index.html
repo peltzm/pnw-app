@@ -676,6 +676,8 @@ function updateSectionTitles() {
 
 // ─── ZIELE ────────────────────────────────────────────────────────────────────
 function addZiel() {
+  const zc = document.getElementById('zieleContainer');
+  if (!zc) return;
   zielCount++;
   const n = zielCount;
   const div = document.createElement('div');
@@ -701,7 +703,7 @@ function addZiel() {
         <textarea id="Ziel_${n}_Ergebnis" style="min-height:90px;" placeholder="Beschreibung des Ergebnisses..."></textarea>
       </div>
     </div>`;
-  document.getElementById('zieleContainer').appendChild(div);
+  document.getElementById('zieleContainer')?.appendChild(div);
 }
 
 function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
@@ -1080,6 +1082,9 @@ async function loadDraft(id) {
     // Build dynamic sections FIRST so fields exist in DOM
     buildDynamicSections(true);
     resetForm();
+    // resetForm() setzt currentListId auf null — hier wieder auf den geladenen Entwurf setzen,
+    // damit beim Speichern aktualisiert statt dupliziert wird
+    currentListId = id;
     // Fill all fields
     // Restore extra Kinder
     if (data._extraKinder?.length) {
@@ -1399,6 +1404,8 @@ async function loadItemById(id) {
 let kindCount = 0;
 
 function addWeitereKind() {
+  const wkc = document.getElementById('weitereKinderContainer');
+  if (!wkc) return;
   if (kindCount >= 9) {
     document.getElementById('btnAddKind').style.opacity = '0.4';
     document.getElementById('btnAddKind').disabled = true;
@@ -1420,7 +1427,7 @@ function addWeitereKind() {
       <input type="date" id="WK_Geb_${n}" style="font-size:12px; padding:6px 8px;" onchange="updateWeitereKinder()">
     </div>
     <button onclick="removeWeitereKind(${n})" style="height:34px; padding:0 10px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; font-size:13px; margin-bottom:0;">×</button>`;
-  document.getElementById('weitereKinderContainer').appendChild(div);
+  wkc.appendChild(div);
   if (kindCount >= 9) {
     document.getElementById('btnAddKind').style.opacity = '0.4';
     document.getElementById('btnAddKind').disabled = true;
@@ -1455,7 +1462,8 @@ function updateWeitereKinder() {
 }
 
 function resetWeitereKinder() {
-  document.getElementById('weitereKinderContainer').innerHTML = '';
+  const wkc = document.getElementById('weitereKinderContainer');
+  if (wkc) wkc.innerHTML = '';
   kindCount = 0;
   const btn = document.getElementById('btnAddKind');
   if (btn) { btn.style.opacity = '1'; btn.disabled = false; }
@@ -1467,7 +1475,17 @@ function fillWeitereKinder(value) {
   resetWeiterePersFound();
   resetExtraKinder();
   resetExtraSorg();
+  // Wert immer im Hidden-Feld sichern, damit er beim Speichern erhalten bleibt
+  let hidden = document.getElementById('Weitere_Kinder');
+  if (!hidden) {
+    hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.id = 'Weitere_Kinder';
+    document.body.appendChild(hidden);
+  }
+  hidden.value = value || '/';
   if (!value || value === '/') return;
+  if (!document.getElementById('weitereKinderContainer')) return; // alte UI nicht mehr vorhanden
   const parts = value.split(', ');
   parts.forEach(part => {
     const match = part.match(/^(.+?)\s*\(([^)]+)\)$/);
@@ -2437,6 +2455,8 @@ function collectExtraSorg() {
 let personCount = 0;
 
 function addWeiterePerson() {
+  const wpc = document.getElementById('weiterePersonenContainer');
+  if (!wpc) return;
   if (personCount >= 9) return;
   personCount++;
   const n = personCount;
@@ -2451,7 +2471,7 @@ function addWeiterePerson() {
       <input type="text" id="WP_Name_${n}" style="font-size:12px; padding:6px 8px;" onchange="updateWeiterePersFound()">
     </div>
     <button onclick="removeWeiterePerson(${n})" style="height:34px; padding:0 10px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; font-size:13px;">×</button>`;
-  document.getElementById('weiterePersonenContainer').appendChild(div);
+  wpc.appendChild(div);
   if (personCount >= 9) {
     const btn = document.getElementById('btnAddPerson');
     if (btn) { btn.style.opacity = '0.4'; btn.disabled = true; }
@@ -2484,7 +2504,8 @@ function updateWeiterePersFound() {
 }
 
 function resetWeiterePersFound() {
-  document.getElementById('weiterePersonenContainer').innerHTML = '';
+  const wpc = document.getElementById('weiterePersonenContainer');
+  if (wpc) wpc.innerHTML = '';
   personCount = 0;
   const btn = document.getElementById('btnAddPerson');
   if (btn) { btn.style.opacity = '1'; btn.disabled = false; }
@@ -2493,7 +2514,17 @@ function resetWeiterePersFound() {
 
 function fillWeiterePersFound(value) {
   resetWeiterePersFound();
+  // Wert immer im Hidden-Feld sichern, damit er beim Speichern erhalten bleibt
+  let hidden = document.getElementById('Weitere_Personen');
+  if (!hidden) {
+    hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.id = 'Weitere_Personen';
+    document.body.appendChild(hidden);
+  }
+  hidden.value = value || '';
   if (!value) return;
+  if (!document.getElementById('weiterePersonenContainer')) return; // alte UI nicht mehr vorhanden
   const parts = value.split(', ');
   parts.forEach(part => {
     if (!part.trim()) return;
