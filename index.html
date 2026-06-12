@@ -1133,14 +1133,16 @@ async function showDraftList() {
       const datum = item.Berichtsdatum ? new Date(item.Berichtsdatum).toLocaleDateString('de-DE') : '—';
       const geaendert = (item.Modified || item.Geaendert) ? new Date(item.Modified || item.Geaendert).toLocaleDateString('de-DE') : '—';
       const statusColor = item.Status === 'Genehmigt' ? 'var(--success)' : item.Status === 'Eingereicht' ? 'var(--info)' : 'var(--text-muted)';
-      return `<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px;">
+      const itemId = item._itemId || item.ID;
+      return `<div id="draft_row_${itemId}" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px;">
         <div>
           <div style="font-size:13px; font-weight:500; color:var(--text);">${escHtml(item.Kind_Vorname || '')} ${escHtml(item.Kind_Familienname || '')}</div>
           <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt || '—')} · Geändert: ${geaendert}</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:11px; color:${statusColor}; font-weight:500;">${escHtml(item.Status || 'Entwurf')}</span>
-          <button onclick="loadDraft('${item._itemId || item.ID}')" style="font-size:12px; padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Öffnen</button>
+          <button onclick="loadDraft('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Öffnen</button>
+          <button onclick="deleteDraft('${itemId}')" title="Löschen" style="font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">×</button>
         </div>
       </div>`;
     }).join('');
