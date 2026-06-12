@@ -402,11 +402,29 @@
           <div class="card-title">Zusammenfassung</div>
           <div id="summaryContent"></div>
         </div>
-        <div class="info-card">
-          <div class="card-title" style="margin-bottom:0.5rem;">SharePoint-Ziel</div>
+        <div class="info-card" id="debugInfoCard">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+            <div class="card-title" style="margin-bottom:0;">SharePoint & Debug</div>
+            <button onclick="toggleDebugDetails()" id="debugToggleBtn" style="font-size:11px; background:none; border:1px solid #e8c4a8; border-radius:4px; padding:2px 8px; cursor:pointer; color:var(--accent-mid);">Details ▼</button>
+          </div>
+          <!-- Basic info always visible -->
           <div class="info-row"><span class="info-label">Site</span><span class="info-val" id="infoSite">—</span></div>
           <div class="info-row"><span class="info-label">Ordner</span><span class="info-val">/Verlaufsberichte</span></div>
           <div class="info-row"><span class="info-label">Template</span><span class="info-val" id="infoTemplate">—</span></div>
+          <!-- Debug details (admin only, collapsed by default) -->
+          <div id="debugDetails" style="display:none; margin-top:0.75rem; border-top:1px solid #e8c4a8; padding-top:0.75rem;">
+            <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.05em;">Angemeldeter Nutzer</div>
+            <div id="dbgUser" style="font-size:12px; font-family:var(--font-mono); margin-bottom:10px;"></div>
+            <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.05em;">Fachkräfte-Gruppe</div>
+            <div id="dbgGroupConfig" style="font-size:12px; font-family:var(--font-mono); margin-bottom:6px; color:var(--accent);"></div>
+            <div id="dbgTeam" style="font-size:12px; max-height:120px; overflow-y:auto; border:1px solid #e8c4a8; border-radius:4px; padding:6px; background:white; margin-bottom:10px;"></div>
+            <div style="font-size:11px; font-weight:600; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.05em;">TL-Gruppe</div>
+            <div id="dbgTL" style="font-size:12px; max-height:80px; overflow-y:auto; border:1px solid #e8c4a8; border-radius:4px; padding:6px; background:white; margin-bottom:10px;"></div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button onclick="reloadGroups()" style="font-size:12px; padding:5px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Gruppen neu laden</button>
+              <button onclick="goTo(8)" style="font-size:12px; padding:5px 12px; background:none; border:1px solid var(--border-strong); color:var(--text); border-radius:var(--radius); cursor:pointer;">Vollständiges Admin-Panel →</button>
+            </div>
+          </div>
         </div>
         <div id="statusBar" style="display:none"></div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch;">
@@ -617,7 +635,12 @@ function goTo(n) {
     }
   }
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
-  if (n === 6) buildSummary();
+  if (n === 6) {
+    buildSummary();
+    // Show debug toggle only for admins
+    const dbgBtn = document.getElementById('debugToggleBtn');
+    if (dbgBtn) dbgBtn.style.display = isAdmin() ? 'inline-block' : 'none';
+  }
   // Update template info
   const tplEl = document.getElementById('infoTemplate');
   if (tplEl) tplEl.textContent = CONFIG.templatePath || '—';
@@ -703,6 +726,9 @@ function collectData() {
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
 function buildSummary() {
+  // Update debug block if visible
+  const det = document.getElementById('debugDetails');
+  if (det && det.style.display !== 'none') updateDebugBlock();
   const d = collectData();
   const kind = (d.Kind_Vorname + ' ' + d.Kind_Familienname).trim() || '—';
   document.getElementById('summaryContent').innerHTML = `
@@ -2149,6 +2175,65 @@ function refreshDebugInfo() {
   if (fg) fg.value = cfg.fachkraftGroup;
   if (tg) tg.value = cfg.tlGroup;
   if (fm) fm.value = cfg.fachkraftMail;
+}
+
+// ─── DEBUG BLOCK S6 ─────────────────────────────────────────────────────────
+
+function toggleDebugDetails() {
+  const det = document.getElementById('debugDetails');
+  const btn = document.getElementById('debugToggleBtn');
+  if (!det) return;
+  const visible = det.style.display !== 'none';
+  det.style.display = visible ? 'none' : 'block';
+  if (btn) btn.textContent = visible ? 'Details ▼' : 'Details ▲';
+  if (!visible) updateDebugBlock();
+}
+
+function updateDebugBlock() {
+  // User info
+  const dbgUser = document.getElementById('dbgUser');
+  if (dbgUser) {
+    dbgUser.innerHTML = `
+      <div>Name: <strong>${currentAccount?.name || '—'}</strong></div>
+      <div>E-Mail: <strong>${currentAccount?.username || '—'}</strong></div>
+      <div>Admin: <strong>${isAdmin() ? '✓ Ja' : '✗ Nein'}</strong></div>`;
+  }
+  // Group config
+  const cfg = getAdminConfig();
+  const dbgCfg = document.getElementById('dbgGroupConfig');
+  if (dbgCfg) dbgCfg.textContent = `FK: "${cfg.fachkraftGroup}" | Mail: "${cfg.fachkraftMail}" | TL: "${cfg.tlGroup}"`;
+
+  // Team members
+  const dbgTeam = document.getElementById('dbgTeam');
+  if (dbgTeam) {
+    if (_teamMembers.length === 0) {
+      dbgTeam.innerHTML = '<span style="color:var(--error);">⚠ Leer — Gruppe nicht gefunden oder keine Berechtigung</span>';
+    } else {
+      const sortName = m => { const p=(m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
+      dbgTeam.innerHTML = _teamMembers.map(m => `<div>${sortName(m)} <span style="color:var(--text-muted)">${m.mail||''}</span></div>`).join('');
+    }
+  }
+  // TL members
+  const dbgTL = document.getElementById('dbgTL');
+  if (dbgTL) {
+    if (_tlMembers.length === 0) {
+      dbgTL.innerHTML = '<span style="color:var(--error);">⚠ Leer — Gruppe nicht gefunden</span>';
+    } else {
+      const sortName = m => { const p=(m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
+      dbgTL.innerHTML = _tlMembers.map(m => `<div>${sortName(m)} <span style="color:var(--text-muted)">${m.mail||''}</span></div>`).join('');
+    }
+  }
+}
+
+async function reloadGroups() {
+  _teamMembers = [];
+  _tlMembers = [];
+  const fk = document.getElementById('Fachkraft_NeueWege');
+  const fl = document.getElementById('Fallleitung');
+  if (fk) fk.innerHTML = '<option>Wird geladen...</option>';
+  if (fl) fl.innerHTML = '<option>Wird geladen...</option>';
+  await loadGroupMembers();
+  updateDebugBlock();
 }
 
 // ─── VALIDATION ──────────────────────────────────────────────────────────────
