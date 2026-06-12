@@ -771,7 +771,7 @@ function buildSummary() {
          ['Hilfebeginn',d.Hilfebeginn||'—'],['Hilfeart',d.Hilfeart||'—'],['Datum',d.Datum_Unterschrift||'—']]
         .map(([l,v]) => `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;">
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${l}</div>
-          <div style="font-size:13px;">${v}</div></div>`).join('')}
+          <div style="font-size:13px;">${escHtml(v)}</div></div>`).join('')}
     </div>${_cmtHint}`;
   // Update site display
   const siteDisplay = CONFIG.siteUrl.split('/sites/')[1] || CONFIG.siteUrl;
@@ -836,6 +836,15 @@ async function downloadLocal() {
 }
 
 // ─── SHAREPOINT UPLOAD ────────────────────────────────────────────────────────
+// SharePoint-sichere Dateinamen: verbotene/problematische Zeichen entfernen
+function sanitizeFileName(s) {
+  return String(s || '')
+    .replace(/[<>:"/\\|?*#%&{}~+]/g, '')  // in SharePoint verboten bzw. URL-problematisch
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\.+$/, '');                 // keine Punkte am Ende
+}
+
 async function uploadToSharePoint() {
   if (!validateRequiredFields()) return;
   setStatus('uploading', 'Dokument wird befüllt und hochgeladen...');
@@ -847,15 +856,15 @@ async function uploadToSharePoint() {
     const _datum = data.Datum_Unterschrift || '';
     const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
     const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
-    const _nach = data.Kind_Familienname || 'Unbekannt';
-    const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
+    const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
+    const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
     const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
     // Version aufsteigend: bei jeder Freigabeanfrage +1 (erst nach erfolgreichem Upload übernommen)
     const newVersion = (currentVersion || 0) + 1;
     const name = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${newVersion}.docx`;
     const { token, driveId } = await getSiteAndDrive();
     const uploadResp = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${name}:/content`,
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(name)}:/content`,
       { method: 'PUT', headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: filled }
     );
     if (!uploadResp.ok) { const err = await uploadResp.json(); throw new Error(err.error?.message || 'Upload fehlgeschlagen'); }
@@ -1036,8 +1045,8 @@ async function showCopyList() {
       const itemId = item._itemId || item.ID;
       return `<div id="draft_row_${itemId}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:5px;">
         <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:500;">${item.Kind_Vorname || ''} ${item.Kind_Familienname || ''}</div>
-          <div style="font-size:11px; color:var(--text-muted);">${item.Jugendamt || '—'} · ${geaendert}</div>
+          <div style="font-size:13px; font-weight:500;">${escHtml(item.Kind_Vorname || '')} ${escHtml(item.Kind_Familienname || '')}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt || '—')} · ${geaendert}</div>
         </div>
         <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
           <button onclick="copyStammdaten('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent-mid); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Übernehmen</button>
@@ -1124,11 +1133,11 @@ async function showDraftList() {
       const statusColor = item.Status === 'Genehmigt' ? 'var(--success)' : item.Status === 'Eingereicht' ? 'var(--info)' : 'var(--text-muted)';
       return `<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px;">
         <div>
-          <div style="font-size:13px; font-weight:500; color:var(--text);">${item.Kind_Vorname || ''} ${item.Kind_Familienname || ''}</div>
-          <div style="font-size:11px; color:var(--text-muted);">${item.Jugendamt || '—'} · Geändert: ${geaendert}</div>
+          <div style="font-size:13px; font-weight:500; color:var(--text);">${escHtml(item.Kind_Vorname || '')} ${escHtml(item.Kind_Familienname || '')}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt || '—')} · Geändert: ${geaendert}</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:11px; color:${statusColor}; font-weight:500;">${item.Status || 'Entwurf'}</span>
+          <span style="font-size:11px; color:${statusColor}; font-weight:500;">${escHtml(item.Status || 'Entwurf')}</span>
           <button onclick="loadDraft('${item._itemId || item.ID}')" style="font-size:12px; padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Öffnen</button>
         </div>
       </div>`;
@@ -1764,10 +1773,10 @@ async function sendApprovalEmail(listItemId, data, filename) {
   </div>
   
   <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-    <tr><td style="padding: 8px 0; color: #666; width: 140px;">Kind/Jugendliche*r</td><td style="padding: 8px 0; font-weight: bold;">${kind}</td></tr>
-    <tr><td style="padding: 8px 0; color: #666;">Jugendamt</td><td style="padding: 8px 0;">${jugendamt}</td></tr>
-    <tr><td style="padding: 8px 0; color: #666;">Fachkraft</td><td style="padding: 8px 0;">${fachkraft}</td></tr>
-    <tr><td style="padding: 8px 0; color: #666;">Dateiname</td><td style="padding: 8px 0; font-family: monospace; font-size: 13px;">${filename}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666; width: 140px;">Kind/Jugendliche*r</td><td style="padding: 8px 0; font-weight: bold;">${escHtml(kind)}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">Jugendamt</td><td style="padding: 8px 0;">${escHtml(jugendamt)}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">Fachkraft</td><td style="padding: 8px 0;">${escHtml(fachkraft)}</td></tr>
+    <tr><td style="padding: 8px 0; color: #666;">Dateiname</td><td style="padding: 8px 0; font-family: monospace; font-size: 13px;">${escHtml(filename)}</td></tr>
   </table>
 
   <div style="margin-bottom: 24px; display:flex; gap:12px; flex-wrap:wrap;">
@@ -1880,8 +1889,8 @@ async function approveReport() {
     const _datum = data.Datum_Unterschrift || '';
     const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
     const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
-    const _nach = data.Kind_Familienname || 'Unbekannt';
-    const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
+    const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
+    const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
     const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
     const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
     
@@ -1889,7 +1898,7 @@ async function approveReport() {
     const filled = await fillTemplate(templateBytes, data);
     
     const uploadResp = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${docxName}:/content`,
+      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}:/content`,
       { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: filled }
     );
     if (!uploadResp.ok) throw new Error('DOCX Upload fehlgeschlagen');
@@ -1906,13 +1915,13 @@ async function approveReport() {
         if (i > 0) await new Promise(r => setTimeout(r, delayMs));
         try {
           const pdfResp = await fetch(
-            `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${docxName}:/content?format=pdf`,
+            `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}:/content?format=pdf`,
             { headers: { Authorization: 'Bearer ' + token } }
           );
           if (pdfResp.ok) {
             const pdfBytes = await pdfResp.arrayBuffer();
             const pdfUpload = await fetch(
-              `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${pdfName}:/content`,
+              `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(pdfName)}:/content`,
               { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' }, body: pdfBytes }
             );
             if (pdfUpload.ok) return { ok: true, name: pdfName };
@@ -1940,7 +1949,7 @@ async function approveReport() {
       // Fallback: try converting via SharePoint convert endpoint
       try {
         const spConvertResp = await fetch(
-          `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${docxName}:/microsoft.graph.createLink`,
+          `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}:/microsoft.graph.createLink`,
           { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'view', scope: 'organization' }) }
         );
@@ -2498,10 +2507,10 @@ async function buildUebersicht() {
       const sc = statusColor[item.Status] || 'var(--text-muted)';
       return `<div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid var(--border);">
         <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.Kind_Vorname||''} ${item.Kind_Familienname||''}</div>
-          <div style="font-size:11px; color:var(--text-muted);">${item.Jugendamt||'—'} · ${geaendert}</div>
+          <div style="font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(item.Kind_Vorname||'')} ${escHtml(item.Kind_Familienname||'')}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt||'—')} · ${geaendert}</div>
         </div>
-        <span style="font-size:11px; font-weight:500; color:${sc}; white-space:nowrap;">${item.Status||'Entwurf'}</span>
+        <span style="font-size:11px; font-weight:500; color:${sc}; white-space:nowrap;">${escHtml(item.Status||'Entwurf')}</span>
         <button onclick="loadDraft('${item._itemId||item.ID}')" style="font-size:12px; padding:5px 14px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer; white-space:nowrap; min-height:36px;">Öffnen</button>
       </div>`;
     }).join('');
