@@ -514,7 +514,7 @@ function goTo(n) {
   document.getElementById('nav' + n)?.classList.add('active');
   document.getElementById('progress').style.width = (Math.max(0, Math.min(n,6))/6*100) + '%';
   if (n === 0) buildUebersicht();
-  if (n === 3 || n === 4 || n === 5) buildDynamicSections();
+  if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
   if (n === 6) buildSummary();
   // Update template info
   const tplEl = document.getElementById('infoTemplate');
@@ -768,10 +768,10 @@ function selectBerichtstyp(typ) {
   const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht'};
   const badge = document.getElementById('berichtstypBadge');
   if (badge) badge.textContent = labels[typ];
-  // Reset dynamic sections so they rebuild on next visit
+  // Force rebuild of dynamic sections on next visit (type changed)
   ['s3_content','s4_content','s5_content'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = '';
+    if (el) { el.innerHTML = ''; el.dataset.builtFor = ''; }
   });
   zielCount = 0;
 }
@@ -1107,15 +1107,21 @@ async function saveToList(data, existingId = null) {
 async function loadMyDrafts() {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
-  // Check if user is TL member
-  const isTL = _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
-  // Filter: TL sees all, others see own + those where they're listed as Fachkraft
-  const filterClause = isTL ? '' : `&$filter=fields/Eingereicht_Von eq '${currentAccount?.username || ''}'`;
-  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified,Eingereicht_Von)&$orderby=fields/Modified desc&$top=50${filterClause}`;
+  // Check if user is TL member (safe even if not loaded yet)
+  const isTL = _tlMembers.length > 0 && _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
+  // Load all items, filter client-side (avoids OData filter issues with missing columns)
+  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified,Eingereicht_Von,FormularDaten)&$orderby=fields/Modified desc&$top=100`;
   const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
   if (!resp.ok) throw new Error('Entwürfe konnten nicht geladen werden');
   const result = await resp.json();
-  return (result.value || []).map(item => ({ ...item.fields, ID: item.id, _itemId: item.id }));
+  const allItems = (result.value || []).map(item => ({ ...item.fields, ID: item.id, _itemId: item.id }));
+  // Client-side filter: TL sees all, others see own reports
+  if (isTL) return allItems;
+  const myEmail = (currentAccount?.username || '').toLowerCase();
+  return allItems.filter(item => {
+    if (!item.Eingereicht_Von) return true; // no owner = show all (backwards compat)
+    return item.Eingereicht_Von.toLowerCase() === myEmail;
+  });
 }
 
 async function loadItemById(id) {
@@ -1662,10 +1668,14 @@ const SECTION_TEMPLATES = {
   }
 };
 
-function buildDynamicSections() {
+function buildDynamicSections(force = false) {
   const typ = currentBerichtstyp || 'verlauf';
   const tpl = SECTION_TEMPLATES[typ];
   if (!tpl) return;
+  // Don't rebuild if already built for this type (preserves user input)
+  const s3c = document.getElementById('s3_content');
+  if (!force && s3c && s3c.dataset.builtFor === typ && s3c.innerHTML.trim()) return;
+  if (s3c) s3c.dataset.builtFor = typ;
   
   // Build S3
   const s3 = tpl.s3;
