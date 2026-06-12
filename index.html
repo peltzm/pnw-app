@@ -299,8 +299,8 @@
         <div class="card">
           <div class="card-title">Kind / Jugendliche*r</div>
           <div class="field-grid">
-            <div class="field"><label>Vorname</label><input type="text" id="Kind_Vorname"></div>
-            <div class="field"><label>Familienname</label><input type="text" id="Kind_Familienname" oninput="this.value=this.value.toUpperCase()"></div>
+            <div class="field"><label>Vorname <span style="color:var(--error);">*</span></label><input type="text" id="Kind_Vorname" required oninput="this.style.borderColor=this.value.trim()?'':''"></div>
+            <div class="field"><label>Familienname <span style="color:var(--error);">*</span></label><input type="text" id="Kind_Familienname" oninput="this.value=this.value.toUpperCase()" required></div>
           </div>
           <div class="field-grid triple">
             <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind_Geburtsdatum"></div>
@@ -426,6 +426,65 @@
       </div>
 
     </div>
+      <!-- S8: Admin / Debug -->
+      <div class="section" id="s8">
+        <div class="section-title">Admin — Gruppen & Debug</div>
+        <div class="section-sub">Nur für Administratoren sichtbar</div>
+
+        <div class="card">
+          <div class="card-title">Gruppen-Konfiguration</div>
+          <div class="field-grid" style="margin-bottom:12px;">
+            <div class="field">
+              <label>Gruppe Fachkräfte</label>
+              <input type="text" id="cfg_fachkraft_group" placeholder="z.B. Ambulante Familienhilfe">
+            </div>
+            <div class="field">
+              <label>Gruppe TL</label>
+              <input type="text" id="cfg_tl_group" placeholder="z.B. TL-Ambulant">
+            </div>
+          </div>
+          <div class="field-grid full" style="margin-bottom:12px;">
+            <div class="field">
+              <label>Fachkraft-Gruppe E-Mail (Fallback)</label>
+              <input type="text" id="cfg_fachkraft_mail" placeholder="z.B. familienhilfe@praxisneuewege.de">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="saveAdminConfig()">Speichern & neu laden</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Alle M365-Gruppen</div>
+          <button class="btn btn-secondary" onclick="loadAllGroups()" style="margin-bottom:1rem;">Gruppen laden</button>
+          <div id="adminGroupList" style="font-size:12px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Gruppen-Mitglieder testen</div>
+          <div class="field-grid" style="margin-bottom:8px; align-items:end;">
+            <div class="field">
+              <label>Gruppen-ID oder Name</label>
+              <input type="text" id="adminGroupInput" placeholder="ID oder Anzeigename">
+            </div>
+            <button class="btn btn-secondary" onclick="testGroupMembers()" style="min-height:38px;">Mitglieder laden</button>
+          </div>
+          <div id="adminMemberList" style="font-size:12px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Aktuell geladene Mitglieder</div>
+          <div style="margin-bottom:8px;">
+            <strong style="font-size:12px; color:var(--text-muted);">_teamMembers (Fachkräfte):</strong>
+            <div id="debugTeamMembers" style="font-size:11px; font-family:var(--font-mono); margin-top:4px; color:var(--text-secondary);"></div>
+          </div>
+          <div>
+            <strong style="font-size:12px; color:var(--text-muted);">_tlMembers (TL):</strong>
+            <div id="debugTlMembers" style="font-size:11px; font-family:var(--font-mono); margin-top:4px; color:var(--text-secondary);"></div>
+          </div>
+          <button class="btn btn-secondary" onclick="refreshDebugInfo()" style="margin-top:12px;">Aktualisieren</button>
+        </div>
+
+      </div>
+
   </div>
   </div> <!-- mainLayout -->
 </div>
@@ -512,7 +571,8 @@ function showApp() {
   if (zielCount === 0) addZiel();
   document.getElementById('infoSite').textContent = CONFIG.siteUrl;
   // Load M365 group members
-  loadGroupMembers().catch(e => console.warn('Group load failed:', e));
+  loadGroupMembers().then(() => { refreshDebugInfo(); }).catch(e => { console.warn('Group load failed:', e); refreshDebugInfo(); });
+  checkAdminVisibility();
   // Check if opened via review link
   setTimeout(() => { if (!handleReviewLink()) { /* normal flow */ } }, 500);
 }
@@ -532,7 +592,40 @@ function goTo(n) {
   if (section) section.classList.add('active');
   document.getElementById('nav' + n)?.classList.add('active');
   document.getElementById('progress').style.width = (Math.max(0, Math.min(n,6))/6*100) + '%';
+  // Validate required fields when leaving S2
+  if (n > 2) {
+    const vn = document.getElementById('Kind_Vorname')?.value?.trim();
+    const fn = document.getElementById('Kind_Familienname')?.value?.trim();
+    if (!vn || !fn) {
+      // Show validation error on S2 fields
+      const vnEl = document.getElementById('Kind_Vorname');
+      const fnEl = document.getElementById('Kind_Familienname');
+      if (vnEl && !vn) { vnEl.style.borderColor = 'var(--error)'; vnEl.focus(); }
+      if (fnEl && !fn) fnEl.style.borderColor = 'var(--error)';
+      // Switch to S2 to show the error
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.getElementById('s2')?.classList.add('active');
+      document.getElementById('nav2')?.classList.add('active');
+      // Show error message
+      let errEl = document.getElementById('s2_validation_error');
+      if (!errEl) {
+        errEl = document.createElement('div');
+        errEl.id = 's2_validation_error';
+        errEl.className = 'alert alert-error';
+        errEl.style.marginBottom = '1rem';
+        errEl.textContent = 'Bitte Vorname und Familienname des Kindes/Jugendlichen angeben.';
+        document.getElementById('s2')?.querySelector('.section-title')?.after(errEl);
+      }
+      return;
+    }
+    // Clear validation errors
+    document.getElementById('Kind_Vorname').style.borderColor = '';
+    document.getElementById('Kind_Familienname').style.borderColor = '';
+    document.getElementById('s2_validation_error')?.remove();
+  }
   if (n === 0) buildUebersicht();
+  if (n === 8) refreshDebugInfo();
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
   if (n === 6) buildSummary();
   // Update template info
@@ -827,12 +920,16 @@ async function showCopyList() {
     }
     const rows = items.map(item => {
       const geaendert = (item.Modified || item.Geaendert) ? new Date(item.Modified || item.Geaendert).toLocaleDateString('de-DE') : '—';
-      return `<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:5px;">
-        <div>
+      const itemId = item._itemId || item.ID;
+      return `<div id="draft_row_${itemId}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:5px;">
+        <div style="flex:1; min-width:0;">
           <div style="font-size:13px; font-weight:500;">${item.Kind_Vorname || ''} ${item.Kind_Familienname || ''}</div>
           <div style="font-size:11px; color:var(--text-muted);">${item.Jugendamt || '—'} · ${geaendert}</div>
         </div>
-        <button onclick="copyStammdaten('${item._itemId || item.ID}')" style="font-size:12px; padding:4px 12px; background:var(--accent-mid); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Übernehmen</button>
+        <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+          <button onclick="copyStammdaten('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent-mid); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Übernehmen</button>
+          <button onclick="deleteDraft('${itemId}')" title="Löschen" style="font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">×</button>
+        </div>
       </div>`;
     }).join('');
     document.getElementById('copyListItems').innerHTML = rows;
@@ -1129,7 +1226,15 @@ async function saveToList(data, existingId = null) {
   data._berichtstyp = currentBerichtstyp || 'verlauf';
 
   const fields = {
-    Title: `VB ${data.Kind_Vorname||''} ${data.Kind_Familienname||''}`.trim() || 'Entwurf',
+    Title: (() => {
+      const _d = data.Datum_Unterschrift || '';
+      const _jj = _d.length >= 4 ? _d.substring(2,4) : '00';
+      const _mm = _d.length >= 7 ? _d.substring(5,7) : '00';
+      const _nach = data.Kind_Familienname || 'Unbekannt';
+      const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
+      const _pre = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[data._berichtstyp || currentBerichtstyp] || 'VB';
+      return `${_pre}_${_nach}_${_vor2}_${_jj}${_mm}`;
+    })(),
     Eingereicht_Von: currentAccount?.username || '',
     Status: data._status || 'Entwurf',
     Kind_Vorname: data.Kind_Vorname || '',
@@ -1540,8 +1645,8 @@ async function loadGroupMembers() {
       return d.value?.[0]?.id;
     }
     const [teamId, tlId, manager] = await Promise.all([
-      getGroupByName('Ambulante Familienhilfe').then(id => id || getGroupByMail('familienhilfe@praxisneuewege.de')),
-      getGroupByName('TL-Ambulant').then(id => id || getGroupByName('TL Ambulant')),
+      (() => { const cfg = getAdminConfig(); return getGroupByName(cfg.fachkraftGroup).then(id => id || getGroupByMail(cfg.fachkraftMail)); })(),
+      (() => { const cfg = getAdminConfig(); return getGroupByName(cfg.tlGroup).then(id => id || getGroupByName('TL Ambulant')); })(),
       getMyManager()
     ]);
     
@@ -1906,6 +2011,153 @@ async function buildUebersicht() {
     container.innerHTML = `<div class="card" style="padding:0; overflow:hidden;">${rows}</div>`;
   } catch(e) {
     container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+// ─── ADMIN / DEBUG ───────────────────────────────────────────────────────────
+
+const ADMIN_EMAILS = ['markus.peltz@praxisneuewege.de'];
+
+function isAdmin() {
+  return ADMIN_EMAILS.includes((currentAccount?.username || '').toLowerCase());
+}
+
+function checkAdminVisibility() {
+  const nav8 = document.getElementById('nav8');
+  if (nav8 && isAdmin()) nav8.style.display = 'flex';
+}
+
+function saveAdminConfig() {
+  const fg = document.getElementById('cfg_fachkraft_group')?.value.trim();
+  const tg = document.getElementById('cfg_tl_group')?.value.trim();
+  const fm = document.getElementById('cfg_fachkraft_mail')?.value.trim();
+  if (fg) localStorage.setItem('pnw_fachkraft_group', fg);
+  if (tg) localStorage.setItem('pnw_tl_group', tg);
+  if (fm) localStorage.setItem('pnw_fachkraft_mail', fm);
+  // Reload group members with new config
+  _teamMembers = [];
+  _tlMembers = [];
+  document.getElementById('Fachkraft_NeueWege').innerHTML = '<option>Wird geladen...</option>';
+  document.getElementById('Fallleitung').innerHTML = '<option>Wird geladen...</option>';
+  loadGroupMembers().then(() => {
+    refreshDebugInfo();
+    alert('Gespeichert. Fachkraft-Dropdown wurde neu geladen.');
+  });
+}
+
+function getAdminConfig() {
+  return {
+    fachkraftGroup: localStorage.getItem('pnw_fachkraft_group') || 'Ambulante Familienhilfe',
+    tlGroup: localStorage.getItem('pnw_tl_group') || 'TL-Ambulant',
+    fachkraftMail: localStorage.getItem('pnw_fachkraft_mail') || 'familienhilfe@praxisneuewege.de'
+  };
+}
+
+async function loadAllGroups() {
+  const token = await getToken();
+  const container = document.getElementById('adminGroupList');
+  container.innerHTML = 'Wird geladen...';
+  try {
+    const resp = await fetch('https://graph.microsoft.com/v1.0/groups?$select=id,displayName,mail,groupTypes&$top=100&$orderby=displayName', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await resp.json();
+    const groups = data.value || [];
+    const rows = groups.map(g => `
+      <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+        <div style="flex:1; min-width:200px;">
+          <div style="font-weight:500;">${g.displayName}</div>
+          <div style="color:var(--text-muted); font-size:11px;">${g.mail || '—'}</div>
+        </div>
+        <div style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted); max-width:280px; overflow:hidden; text-overflow:ellipsis;">${g.id}</div>
+        <button onclick="document.getElementById('adminGroupInput').value='${g.id}'; testGroupMembers();" 
+          style="font-size:11px; padding:3px 10px; background:var(--accent-light); color:var(--accent); border:1px solid #e8c4a8; border-radius:4px; cursor:pointer; white-space:nowrap;">
+          Mitglieder →
+        </button>
+        <button onclick="document.getElementById('cfg_fachkraft_group').value='${g.displayName}'; document.getElementById('cfg_fachkraft_mail').value='${g.mail||''}';"
+          style="font-size:11px; padding:3px 10px; background:var(--success-bg); color:var(--success); border:1px solid #a7f3d0; border-radius:4px; cursor:pointer; white-space:nowrap;">
+          Als FK-Gruppe
+        </button>
+      </div>`).join('');
+    container.innerHTML = `<div style="margin-bottom:8px; color:var(--text-muted);">${groups.length} Gruppen gefunden</div>${rows}`;
+  } catch(e) {
+    container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+async function testGroupMembers() {
+  const token = await getToken();
+  const input = document.getElementById('adminGroupInput')?.value.trim();
+  if (!input) return;
+  const container = document.getElementById('adminMemberList');
+  container.innerHTML = 'Wird geladen...';
+  try {
+    // Try as ID first, then as name
+    let groupId = input;
+    if (!input.match(/^[0-9a-f-]{36}$/i)) {
+      const r = await fetch(`https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${input}'&$select=id`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      const d = await r.json();
+      groupId = d.value?.[0]?.id;
+      if (!groupId) { container.innerHTML = '<div class="alert alert-error">Gruppe nicht gefunden</div>'; return; }
+    }
+    const resp = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=displayName,mail,jobTitle`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await resp.json();
+    const members = (data.value || []).filter(m => m['@odata.type'] === '#microsoft.graph.user');
+    const rows = members.map(m => `
+      <div style="display:flex; gap:12px; padding:5px 0; border-bottom:1px solid var(--border);">
+        <div style="flex:1;">${m.displayName}</div>
+        <div style="color:var(--text-muted);">${m.mail || '—'}</div>
+        <div style="color:var(--text-muted); font-size:11px;">${m.jobTitle || ''}</div>
+      </div>`).join('');
+    container.innerHTML = `<div style="margin-bottom:6px; color:var(--text-muted);">${members.length} Mitglieder</div>${rows || '<div style="color:var(--text-muted)">Keine Mitglieder</div>'}`;
+  } catch(e) {
+    container.innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+function refreshDebugInfo() {
+  const sortName = m => { const p=(m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
+  const tm = document.getElementById('debugTeamMembers');
+  const tl = document.getElementById('debugTlMembers');
+  if (tm) tm.innerHTML = _teamMembers.length > 0
+    ? _teamMembers.map(m => `<div>${sortName(m)} — ${m.mail||'?'}</div>`).join('')
+    : '<div style="color:var(--error)">Leer — Gruppe nicht gefunden</div>';
+  if (tl) tl.innerHTML = _tlMembers.length > 0
+    ? _tlMembers.map(m => `<div>${sortName(m)} — ${m.mail||'?'}</div>`).join('')
+    : '<div style="color:var(--error)">Leer — Gruppe nicht gefunden</div>';
+  // Pre-fill config fields
+  const cfg = getAdminConfig();
+  const fg = document.getElementById('cfg_fachkraft_group');
+  const tg = document.getElementById('cfg_tl_group');
+  const fm = document.getElementById('cfg_fachkraft_mail');
+  if (fg) fg.value = cfg.fachkraftGroup;
+  if (tg) tg.value = cfg.tlGroup;
+  if (fm) fm.value = cfg.fachkraftMail;
+}
+
+// ─── DELETE DRAFT ────────────────────────────────────────────────────────────
+
+async function deleteDraft(id) {
+  if (!confirm('Entwurf wirklich löschen?')) return;
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}`,
+      { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (resp.ok || resp.status === 204) {
+      // Remove row from DOM
+      document.getElementById('draft_row_' + id)?.remove();
+    } else {
+      alert('Löschen fehlgeschlagen: ' + resp.status);
+    }
+  } catch(e) {
+    alert('Fehler: ' + e.message);
   }
 }
 
