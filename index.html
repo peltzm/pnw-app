@@ -585,13 +585,19 @@ async function getToken() {
 function handleReviewLink() {
   const params = new URLSearchParams(window.location.search);
   const reviewId = params.get('review');
+  const editId = params.get('edit'); // Korrektur-Link für die Fachkraft (kein Prüfmodus)
+  const id = reviewId || editId;
   const typ = params.get('typ');
-  // Only activate review mode if BOTH review ID AND typ are present
-  if (!reviewId || !typ) return false;
+  if (!id || !typ) return false;
   if (['verlauf','abschluss','clearing'].includes(typ)) {
     selectBerichtstyp(typ);
   }
-  loadDraft(reviewId);
+  if (reviewId) {
+    // Erst Gruppen laden, damit die TL-Prüfung in loadDraft korrekt entscheiden kann
+    _groupLoadPromise.catch(() => {}).then(() => loadDraft(id));
+  } else {
+    loadDraft(id);
+  }
   return true;
 }
 
@@ -602,8 +608,9 @@ function showApp() {
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   if (zielCount === 0) addZiel();
   document.getElementById('infoSite').textContent = CONFIG.siteUrl;
-  // Load M365 group members
-  loadGroupMembers().then(() => { refreshDebugInfo(); }).catch(e => { console.warn('Group load failed:', e); refreshDebugInfo(); });
+  // Load M365 group members (Promise merken, damit Review-Link darauf warten kann)
+  _groupLoadPromise = loadGroupMembers();
+  _groupLoadPromise.then(() => { refreshDebugInfo(); }).catch(e => { console.warn('Group load failed:', e); refreshDebugInfo(); });
   checkAdminVisibility();
   // Check if opened via review link
   setTimeout(() => { if (!handleReviewLink()) { /* normal flow */ } }, 500);
@@ -617,6 +624,10 @@ function goToStart() {
   const main = document.querySelector('.main');
   if (main) main.style.maxWidth = '';
   document.getElementById('reviewFloatBar')?.remove();
+  document.getElementById('reviewBanner')?.remove();
+  document.getElementById('reviewFrame')?.remove();
+  document.getElementById('reworkNotice')?.remove();
+  document.body.style.paddingTop = '';
   document.getElementById('startScreen').style.display = 'flex';
   document.getElementById('mainLayout').style.display = 'none';
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -898,6 +909,15 @@ function startNew() {
 let currentListId = null; // tracks current list item ID
 let currentItemStatus = null;   // Status des geladenen Berichts (bleibt bei Zwischenspeichern erhalten)
 let currentEingereichtVon = ''; // ursprüngliche/r Einreicher/in (darf durch TL-Speichern nicht überschrieben werden)
+let _groupLoadPromise = Promise.resolve(); // damit auf geladene Gruppen gewartet werden kann
+
+// Ist die angemeldete Person Teamleitung (oder Admin)?
+function isTLUser() {
+  if (isAdmin()) return true;
+  const mail = (currentAccount?.username || '').toLowerCase();
+  const name = currentAccount?.name || '';
+  return _tlMembers.some(m => (m.mail || '').toLowerCase() === mail || m.displayName === name);
+}
 
 async function saveEntwurf() {
   if (!validateRequiredFields()) return;
@@ -1183,13 +1203,15 @@ async function loadDraft(id) {
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
     renderFieldComments();
-    // Check if in review mode (opened via email link)
-    const isReview = new URLSearchParams(window.location.search).get('review') === String(id);
+    // Check if in review mode (opened via email link) — Prüfmodus NUR für Teamleitung/Admin
+    const isReview = new URLSearchParams(window.location.search).get('review') === String(id) && isTLUser();
     if (isReview) {
       goTo(6);
       activateReviewMode();
     } else {
       goTo(1);
+      // Fachkraft-Hinweis: zurückgewiesen oder offene Kommentare → überarbeiten + neu einreichen
+      showReworkNoticeIfNeeded();
       window.scrollTo(0,0);
     }
   } catch(e) {
@@ -1236,6 +1258,10 @@ function resetForm() {
   currentItemStatus = null;
   currentEingereichtVon = '';
   document.getElementById('reviewFloatBar')?.remove();
+  document.getElementById('reviewBanner')?.remove();
+  document.getElementById('reviewFrame')?.remove();
+  document.getElementById('reworkNotice')?.remove();
+  document.body.style.paddingTop = '';
   resetWeiterePersFound();
   resetExtraKinder();
   resetExtraSorg();
@@ -1906,7 +1932,7 @@ async function rejectReport() {
     const mail = {
       message: {
         subject: `[Zurückgewiesen] ${kind} – Bitte korrigieren`,
-        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="https://peltzm.github.io/pnw-app/?review=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und korrigieren →</a></p>` },
+        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="https://peltzm.github.io/pnw-app/?edit=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und überarbeiten →</a></p><p style="font-size:13px; color:#666;">Nach der Überarbeitung den Bericht bitte auf der Seite „Absenden“ erneut hochladen — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage.</p>` },
         toRecipients: [{ emailAddress: { address: currentEingereichtVon || data._eingereichtVon || currentAccount?.username || 'info@praxisneuewege.de' } }]
       },
       saveToSentItems: false
@@ -1923,6 +1949,22 @@ async function rejectReport() {
   }
 }
 
+// Hinweis für die Fachkraft, wenn der Bericht zurückgewiesen wurde oder offene Kommentare hat
+function showReworkNoticeIfNeeded() {
+  document.getElementById('reworkNotice')?.remove();
+  const nOffen = openCommentCount();
+  const abgelehnt = currentItemStatus === 'Abgelehnt';
+  if (!abgelehnt && nOffen === 0) return;
+  const notice = document.createElement('div');
+  notice.id = 'reworkNotice';
+  notice.style.cssText = 'background:#fdf6dd; border:1px solid #c9a227; border-left:5px solid #c9a227; border-radius:var(--radius-lg); padding:12px 16px; margin-bottom:1rem; font-size:13px; color:#6b5414;';
+  notice.innerHTML = `<strong>${abgelehnt ? '✗ Dieser Bericht wurde von der Teamleitung zurückgewiesen.' : '💬 Die Teamleitung hat Anmerkungen hinterlassen.'}</strong><br>
+    ${nOffen > 0 ? `Es gibt <strong>${nOffen} Kommentar${nOffen === 1 ? '' : 'e'}</strong> auf den Seiten 3–5 (gelbe Kästen unter den Textfeldern). Bitte prüfen und jeweils „✓ Als erledigt markieren“ anklicken.<br>` : ''}
+    Nach der Überarbeitung den Bericht auf der Seite „Absenden“ <strong>erneut hochladen</strong> — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage. Erst nach deren Freigabe wird das PDF erstellt.`;
+  const main = document.querySelector('#mainLayout .main') || document.getElementById('mainLayout');
+  if (main) main.insertAdjacentElement('afterbegin', notice);
+}
+
 // Show review mode if opened via link
 function activateReviewMode() {
   document.getElementById('reviewActions').style.display = 'block';
@@ -1930,6 +1972,25 @@ function activateReviewMode() {
   // Kommentarfunktion für Teamleitung aktivieren (Seiten 3–5)
   _isReviewMode = true;
   renderFieldComments();
+  // ── Deutliche optische Kennzeichnung des Prüfmodus ──
+  // 1. Gelber Rahmen um den gesamten Bildschirm
+  if (!document.getElementById('reviewFrame')) {
+    const frame = document.createElement('div');
+    frame.id = 'reviewFrame';
+    frame.style.cssText = 'position:fixed; inset:0; border:4px solid #c9a227; pointer-events:none; z-index:998;';
+    document.body.appendChild(frame);
+  }
+  // 2. Banner oben mit Erklärung in einfacher Sprache
+  if (!document.getElementById('reviewBanner')) {
+    const banner = document.createElement('div');
+    banner.id = 'reviewBanner';
+    banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#c9a227; color:#fff; z-index:999; padding:10px 16px; text-align:center; font-size:13px; box-shadow:0 2px 6px rgba(0,0,0,0.25);';
+    const von = currentEingereichtVon ? ` von <strong>${escHtml(currentEingereichtVon)}</strong>` : '';
+    banner.innerHTML = `<strong>🔍 PRÜFMODUS — Sie prüfen diesen Bericht${von} als Teamleitung.</strong><br>
+      <span style="font-size:12px; opacity:0.95;">Auf den Seiten 3–5 können Sie zu jedem Text einen 💬 Kommentar schreiben. Danach auf der Seite „Absenden“: ✓ Freigeben (erstellt das PDF) oder ✗ Zurückweisen (Fachkraft überarbeitet).</span>`;
+    document.body.appendChild(banner);
+    document.body.style.paddingTop = banner.offsetHeight + 'px';
+  }
   // Schwebender Zwischenspeichern-Button, auf allen Seiten sichtbar
   if (!document.getElementById('reviewFloatBar')) {
     const bar = document.createElement('div');
