@@ -298,6 +298,9 @@
             <div class="field"><label>Stunden bewilligt</label><input type="number" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>Stunden bisher geleistet</label><input type="number" id="Fachleistungsstunden_Geleistet" placeholder="z.B. 67" style="font-size:12px; padding:6px 8px;"></div>
           </div>
+          <div style="display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:10px;">
+            <div class="field"><label>Betreuungszeitraum (Abschlussbericht)</label><input type="text" id="Betreuungszeitraum" placeholder="z.B. 01.01.2025 – 31.12.2025" style="font-size:12px; padding:6px 8px;"></div>
+          </div>
         </div>
         <div class="btn-row"><span></span><button class="btn btn-primary" onclick="goTo(2)">Weiter →</button></div>
       </div>
@@ -704,13 +707,17 @@ function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
 // ─── DATEN ────────────────────────────────────────────────────────────────────
 function collectData() {
   const ids = ['Hilfeart','Jugendamt','Sachbearbeitung_JA','Fachkraft_NeueWege',
-    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Fachleistungsstunden_Geleistet','Letztes_HPG','Fallleitung',
+    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Fachleistungsstunden_Geleistet','Letztes_HPG','Fallleitung','Betreuungszeitraum',
     'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
-    'Sorg_Vorname','Sorg_Vorname','Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer'];
+    'Sorg_Vorname','Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
+    'Betreuungszeitraum','Sachbearbeitung_JA'];
   const data = {};
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
+  // Collect extra Kinder and Sorgeberechtigte
+  data._extraKinder = collectExtraKinder();
+  data._extraSorg = collectExtraSorg();
   // Collect extra Fachkräfte 2-4
   for (let i = 2; i <= 4; i++) {
     const el = document.getElementById('Fachkraft_' + i);
@@ -868,9 +875,18 @@ function startNew() {
     clearing: '/Templates/Clearingbericht_Template.docx'
   }[currentBerichtstyp];
   showMainLayout();
-  // Build all dynamic sections first so fields exist in DOM
   buildDynamicSections(true);
   resetForm();
+  // Re-apply pre-selections after reset
+  if (currentBerichtstyp === 'clearing') {
+    const hilfeartEl = document.getElementById('Hilfeart');
+    if (hilfeartEl) {
+      const opt = Array.from(hilfeartEl.options).find(o => o.text.includes('Clearing'));
+      if (opt) hilfeartEl.value = opt.value;
+    }
+  }
+  // Re-apply Fachkraft and TL pre-selections
+  loadGroupMembers();
   goTo(1);
 }
 
@@ -970,6 +986,27 @@ async function copyStammdaten(id) {
     resetForm();
     // Copy only Stammdaten fields
     // Copy ALL fields from existing report
+    // Restore extra Kinder
+    if (data._extraKinder?.length) {
+      data._extraKinder.forEach(k => {
+        addExtraKind();
+        const n = extraKindCount;
+        if (document.getElementById('Kind2_Vorname_'+n)) document.getElementById('Kind2_Vorname_'+n).value = k.vorname||'';
+        if (document.getElementById('Kind2_Name_'+n)) document.getElementById('Kind2_Name_'+n).value = k.name||'';
+        if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
+        if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
+        if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
+      });
+    }
+    // Restore extra Sorg
+    if (data._extraSorg?.length) {
+      data._extraSorg.forEach(s => {
+        addExtraSorg();
+        const n = extraSorgCount;
+        if (document.getElementById('Sorg2_Vorname_'+n)) document.getElementById('Sorg2_Vorname_'+n).value = s.vorname||'';
+        if (document.getElementById('Sorg2_Name_'+n)) document.getElementById('Sorg2_Name_'+n).value = s.name||'';
+      });
+    }
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
@@ -1036,10 +1073,33 @@ async function loadDraft(id) {
     currentListId = id; // Graph item ID (string)
     // Detect berichtstyp from data if available
     if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
+    // Show mainLayout first so DOM elements exist
+    showMainLayout();
     // Build dynamic sections FIRST so fields exist in DOM
     buildDynamicSections(true);
     resetForm();
     // Fill all fields
+    // Restore extra Kinder
+    if (data._extraKinder?.length) {
+      data._extraKinder.forEach(k => {
+        addExtraKind();
+        const n = extraKindCount;
+        if (document.getElementById('Kind2_Vorname_'+n)) document.getElementById('Kind2_Vorname_'+n).value = k.vorname||'';
+        if (document.getElementById('Kind2_Name_'+n)) document.getElementById('Kind2_Name_'+n).value = k.name||'';
+        if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
+        if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
+        if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
+      });
+    }
+    // Restore extra Sorg
+    if (data._extraSorg?.length) {
+      data._extraSorg.forEach(s => {
+        addExtraSorg();
+        const n = extraSorgCount;
+        if (document.getElementById('Sorg2_Vorname_'+n)) document.getElementById('Sorg2_Vorname_'+n).value = s.vorname||'';
+        if (document.getElementById('Sorg2_Name_'+n)) document.getElementById('Sorg2_Name_'+n).value = s.name||'';
+      });
+    }
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
@@ -1063,7 +1123,6 @@ async function loadDraft(id) {
         if (e) e.value = z.ergebnis || '';
       });
     }
-    showMainLayout();
     // Check if in review mode (opened via email link)
     const isReview = new URLSearchParams(window.location.search).get('review') === String(id);
     if (isReview) {
@@ -1090,7 +1149,8 @@ function resetForm() {
     'BZ_Von','BZ_Bis','Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
-    'Sorg_Vorname','Sorg_Vorname','Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer'];
+    'Sorg_Vorname','Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
+    'Betreuungszeitraum','Sachbearbeitung_JA'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = id === 'Ort' ? 'Wolnzach' : ''; }
@@ -1109,11 +1169,16 @@ function resetForm() {
   zielCount = 0;
   resetWeitereKinder();
   resetWeiterePersFound();
+  resetExtraKinder();
+  resetExtraSorg();
   // Reset extra Fachkräfte
-  document.getElementById('extraFachkraefteContainer').innerHTML = '';
+  const ekc = document.getElementById('extraFachkraefteContainer');
+  if (ekc) { ekc.innerHTML = ''; }
   _extraFachkraftCount = 0;
   const btnFk = document.getElementById('btnAddFachkraft');
   if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
+  // Reset list ID for new bericht
+  currentListId = null;
 }
 
 function loadFromJson(input) {
@@ -1400,6 +1465,8 @@ function fillWeitereKinder(value) {
   // Parse combined string back into individual fields
   resetWeitereKinder();
   resetWeiterePersFound();
+  resetExtraKinder();
+  resetExtraSorg();
   if (!value || value === '/') return;
   const parts = value.split(', ');
   parts.forEach(part => {
@@ -1934,16 +2001,20 @@ function buildDynamicSections(force = false) {
   const typ = currentBerichtstyp || 'verlauf';
   const tpl = SECTION_TEMPLATES[typ];
   if (!tpl) return;
-  // Don't rebuild if already built for this type (preserves user input)
+  // Check if sections exist in DOM at all
   const s3c = document.getElementById('s3_content');
-  if (!force && s3c && s3c.dataset.builtFor === typ && s3c.innerHTML.trim()) return;
-  if (s3c) s3c.dataset.builtFor = typ;
+  const s4c = document.getElementById('s4_content');
+  const s5c = document.getElementById('s5_content');
+  if (!s3c || !s4c || !s5c) return; // sections not in DOM yet, skip
+  // Don't rebuild if already built for this type (preserves user input)
+  if (!force && s3c.dataset.builtFor === typ && s3c.innerHTML.trim()) return;
+  s3c.dataset.builtFor = typ;
   
   // Build S3
   const s3 = tpl.s3;
   const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[typ] || typ;
-  document.getElementById('s3_title').textContent = s3.title + ' — ' + _typLabel;
-  document.getElementById('s3_sub').textContent = s3.sub;
+  const _s3t = document.getElementById('s3_title'); if(_s3t) _s3t.textContent = s3.title + ' — ' + _typLabel;
+  const _s3s = document.getElementById('s3_sub'); if(_s3s) _s3s.textContent = s3.sub;
   let s3html = '';
   (s3.fields || []).forEach(f => {
     s3html += `<div class="card"><div class="card-title">${f.label}</div>
@@ -1951,12 +2022,12 @@ function buildDynamicSections(force = false) {
         <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
   });
-  document.getElementById('s3_content').innerHTML = s3html;
+  if(s3c) s3c.innerHTML = s3html;
   
   // Build S4
   const s4 = tpl.s4;
-  document.getElementById('s4_title').textContent = s4.title + ' — ' + _typLabel;
-  document.getElementById('s4_sub').textContent = s4.sub;
+  const _s4t = document.getElementById('s4_title'); if(_s4t) _s4t.textContent = s4.title + ' — ' + _typLabel;
+  const _s4s = document.getElementById('s4_sub'); if(_s4s) _s4s.textContent = s4.sub;
   let s4html = '';
   if (s4.extraFields) {
     s4.extraFields.forEach(f => {
@@ -1981,7 +2052,7 @@ function buildDynamicSections(force = false) {
         </div></div></div>`;
     });
   }
-  document.getElementById('s4_content').innerHTML = s4html;
+  if(s4c) s4c.innerHTML = s4html;
   // Add first ziel if hasZiele and none exist yet
   if (s4.hasZiele && document.getElementById('zieleContainer') && zielCount === 0) {
     addZiel();
@@ -1989,8 +2060,8 @@ function buildDynamicSections(force = false) {
   
   // Build S5
   const s5 = tpl.s5;
-  document.getElementById('s5_title').textContent = s5.title + ' — ' + _typLabel;
-  document.getElementById('s5_sub').textContent = s5.sub;
+  const _s5t = document.getElementById('s5_title'); if(_s5t) _s5t.textContent = s5.title + ' — ' + _typLabel;
+  const _s5s = document.getElementById('s5_sub'); if(_s5s) _s5s.textContent = s5.sub;
   let s5html = '';
   (s5.fields || []).forEach(f => {
     s5html += `<div class="card"><div class="card-title">${f.label}</div>
@@ -2020,7 +2091,7 @@ function buildDynamicSections(force = false) {
       </div>
     </div>
   </div>`;
-  document.getElementById('s5_content').innerHTML = s5html;
+  if(s5c) s5c.innerHTML = s5html;
   
   // Sync Fachkraft_Name from Fachkraft 1 after rebuilding S5
   setTimeout(() => {
@@ -2264,6 +2335,98 @@ async function reloadGroups() {
   if (fl) fl.innerHTML = '<option>Wird geladen...</option>';
   await loadGroupMembers();
   updateDebugBlock();
+}
+
+// ─── EXTRA SORGEBERECHTIGTE ──────────────────────────────────────────────────
+let extraSorgCount = 0;
+
+function addExtraSorg() {
+  if (extraSorgCount >= 4) return;
+  extraSorgCount++;
+  const n = extraSorgCount;
+  const div = document.createElement('div');
+  div.id = 'extra_sorg_' + n;
+  div.style.cssText = 'border-top:1px solid var(--border); padding-top:10px; margin-top:10px;';
+  div.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <span style="font-size:12px; font-weight:500; color:var(--text-muted);">Sorgeberechtigte/r ${n+1}</span>
+      <button onclick="removeExtraSorg(${n})" style="background:none; border:1px solid var(--error); color:var(--error); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:11px;">Entfernen</button>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div class="field"><label>Vorname</label><input type="text" id="Sorg2_Vorname_${n}" style="width:100%;"></div>
+      <div class="field"><label>Familienname</label><input type="text" id="Sorg2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
+    </div>`;
+  document.getElementById('extraSorgContainer').appendChild(div);
+}
+
+function removeExtraSorg(n) {
+  document.getElementById('extra_sorg_' + n)?.remove();
+  extraSorgCount = Math.max(0, extraSorgCount - 1);
+}
+
+function resetExtraSorg() {
+  document.getElementById('extraSorgContainer').innerHTML = '';
+  extraSorgCount = 0;
+}
+
+// ─── EXTRA KINDER ────────────────────────────────────────────────────────────
+let extraKindCount = 0;
+
+function addExtraKind() {
+  if (extraKindCount >= 8) return;
+  extraKindCount++;
+  const n = extraKindCount;
+  const div = document.createElement('div');
+  div.id = 'extra_kind_' + n;
+  div.style.cssText = 'border-top:1px solid var(--border); padding-top:10px; margin-top:10px;';
+  div.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <span style="font-size:12px; font-weight:500; color:var(--text-muted);">Kind / Jugendliche*r ${n+1}</span>
+      <button onclick="removeExtraKind(${n})" style="background:none; border:1px solid var(--error); color:var(--error); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:11px;">Entfernen</button>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+      <div class="field"><label>Vorname</label><input type="text" id="Kind2_Vorname_${n}" style="width:100%;"></div>
+      <div class="field"><label>Familienname</label><input type="text" id="Kind2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+      <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind2_Geb_${n}" style="width:100%;"></div>
+      <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind2_Str_${n}" style="width:100%;"></div>
+      <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind2_PLZ_${n}" style="width:100%;"></div>
+    </div>`;
+  document.getElementById('extraKinderContainer').appendChild(div);
+}
+
+function removeExtraKind(n) {
+  document.getElementById('extra_kind_' + n)?.remove();
+  extraKindCount = Math.max(0, extraKindCount - 1);
+}
+
+function resetExtraKinder() {
+  document.getElementById('extraKinderContainer').innerHTML = '';
+  extraKindCount = 0;
+}
+
+function collectExtraKinder() {
+  const kids = [];
+  for (let i = 1; i <= extraKindCount; i++) {
+    const v = document.getElementById('Kind2_Vorname_' + i)?.value || '';
+    const n = document.getElementById('Kind2_Name_' + i)?.value || '';
+    const g = document.getElementById('Kind2_Geb_' + i)?.value || '';
+    const s = document.getElementById('Kind2_Str_' + i)?.value || '';
+    const p = document.getElementById('Kind2_PLZ_' + i)?.value || '';
+    if (v || n) kids.push({vorname:v, name:n, geburtsdatum:g, strasse:s, plzOrt:p});
+  }
+  return kids;
+}
+
+function collectExtraSorg() {
+  const sorgs = [];
+  for (let i = 1; i <= extraSorgCount; i++) {
+    const v = document.getElementById('Sorg2_Vorname_' + i)?.value || '';
+    const n = document.getElementById('Sorg2_Name_' + i)?.value || '';
+    if (v || n) sorgs.push({vorname:v, name:n});
+  }
+  return sorgs;
 }
 
 // ─── WEITERE PERSONEN (Sorgeberechtigte) ─────────────────────────────────────
