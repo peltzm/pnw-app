@@ -295,7 +295,7 @@
             <div class="field"><label>Letztes HPG</label><input type="date" id="Letztes_HPG" style="font-size:12px; padding:6px 8px;"></div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-            <div class="field"><label>Stunden bewilligt (Woche/Monat)</label><input type="number" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Stunden bewilligt (Woche/Monat/Pool)</label><input type="number" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>Typ der Stunden (Auswahlliste)</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Woche</option><option>Monat</option><option>Pool</option></select></div>
           </div>
 
@@ -723,11 +723,11 @@ function addZiel() {
         <textarea id="Ziel_${n}_Beschreibung" placeholder="z.B. Die Kindsmutter erhält einen neutralen Ansprechpartner..."></textarea>
       </div>
     </div>
-    <div class="field-grid full" style="margin-bottom:8px;">
+    ${currentBerichtstyp === 'abschluss' ? '' : `<div class="field-grid full" style="margin-bottom:8px;">
       <div class="field"><label>Methoden & Maßnahmen</label>
         <input type="text" id="Ziel_${n}_Methoden" placeholder="z.B. Reflexionsgespräche, Netzwerkarbeit">
       </div>
-    </div>
+    </div>`}
     <div class="field-grid full">
       <div class="field"><label>Zielerreichung — Ergebnis</label>
         <textarea id="Ziel_${n}_Ergebnis" style="min-height:90px;" placeholder="Beschreibung des Ergebnisses..."></textarea>
@@ -742,6 +742,7 @@ function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
 function collectData() {
   const ids = ['Hilfeart','Jugendamt','Sachbearbeitung_JA','Fachkraft_NeueWege',
     'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Fallleitung','Betreuungszeitraum',
+    'BZ_Von','BZ_Bis',
     'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
@@ -1223,6 +1224,12 @@ async function loadDraft(id) {
     currentEingereichtVon = item.Eingereicht_Von || '';
     currentVersion = parseInt(data._version, 10) || 0;
     // Fill all fields
+    // Alt-Entwürfe: BZ_Von/BZ_Bis fehlten früher — aus kombiniertem Berichtszeitraum rekonstruieren
+    if (!data.BZ_Von && !data.BZ_Bis && data.Berichtszeitraum) {
+      const parts = String(data.Berichtszeitraum).split('–').map(s => s.trim());
+      if (parts[0]) data.BZ_Von = parts[0];
+      if (parts[1]) data.BZ_Bis = parts[1];
+    }
     // Restore extra Kinder
     if (data._extraKinder?.length) {
       data._extraKinder.forEach(k => {
@@ -2419,8 +2426,8 @@ const SECTION_TEMPLATES = {
       title: 'Verlauf der Maßnahme',
       sub: 'Beschreibung des Hilfeverlaufs',
       fields: [
-        { id: 'Aktuelle_Situation', label: 'Gründe für die Beendigung der Maßnahme', placeholder: 'Warum wird die Hilfe beendet?' },
-        { id: 'Verlauf_Massnahme', label: 'Verlauf der Maßnahme', placeholder: 'Zusammenarbeit, Entwicklung im Hilfeverlauf, installierte Angebote...' },
+        { id: 'Aktuelle_Situation', label: 'Aktuelle Situation', placeholder: 'Gründe für die Beendigung der Maßnahme' },
+        { id: 'Verlauf_Massnahme', label: 'Verlauf der Maßnahme', placeholder: 'Zusammenarbeit, Qualität der Beziehungen, Entwicklung im Hilfeverlauf, Installierung ergänzender Angebote...' },
       ]
     },
     s4: {
@@ -2550,8 +2557,10 @@ function buildDynamicSections(force = false) {
       <div class="field-grid full"><div class="field">
         <textarea id="${f.id}" style="min-height:${f.id === 'Fachliche_Einschaetzung' ? '140' : '80'}px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
-    // Verlaufsbericht: Besprochen-Abfrage direkt unter der Stellungnahme-Box
-    if (typ === 'verlauf' && f.id === 'Ziele_Einleitung') {
+    // Besprochen-Abfrage: beim Verlaufsbericht unter der Stellungnahme-Box,
+    // beim Abschlussbericht unter "Fachliche Einschätzung und Empfehlung"
+    if ((typ === 'verlauf' && f.id === 'Ziele_Einleitung') ||
+        (typ === 'abschluss' && f.id === 'Fachliche_Einschaetzung')) {
       s5html += `<div class="card"><div class="card-title">Bericht wurde mit Hilfeempfänger besprochen</div>
       <div class="field-grid">
         <div class="field"><label>Besprochen? (Auswahlliste)</label>
