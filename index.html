@@ -273,36 +273,34 @@
           </div>
           <div class="field-grid">
             <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Name Sachbearbeiter*in"></div>
-            <div class="field"><label>Fachkraft 1</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
-          </div>
-          <div class="field-grid full" style="margin-bottom:12px;">
-            <div class="field"><label>TL NeueWege</label>
-              <select id="Fallleitung"><option value="">Wird geladen...</option></select>
-            </div>
+            <div class="field"><label>Fachkraft 1 (Auswahlliste)</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div id="extraFachkraefteContainer" style="margin-bottom:4px;"></div>
-          <div style="margin-bottom:4px;">
+          <div style="margin-bottom:12px;">
             <button class="btn-add" id="btnAddFachkraft" onclick="addFachkraft()">+ Fachkraft hinzufügen</button>
+          </div>
+          <div class="field-grid full" style="margin-bottom:4px;">
+            <div class="field"><label>Teamleiter NeueWege (Auswahlliste)</label>
+              <select id="Fallleitung"><option value="">Wird geladen...</option></select>
+            </div>
           </div>
         </div>
         <div class="card">
           <div class="card-title">Zeitraum</div>
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; margin-bottom:10px;">
-            <div class="field"><label>Hilfebeginn</label><input type="date" id="Hilfebeginn" onchange="syncBetreuungszeitraum()" style="font-size:12px; padding:6px 8px;"></div>
-            <div class="field"><label>Befristet / Ende</label><input type="date" id="Hilfe_Ende" onchange="syncBetreuungszeitraum()" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Hilfebeginn</label><input type="date" id="Hilfebeginn" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Befristet / Ende</label><input type="date" id="Hilfe_Ende" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>Berichtszeitraum von</label><input type="date" id="BZ_Von" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>bis</label><input type="date" id="BZ_Bis" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>Letztes HPG</label><input type="date" id="Letztes_HPG" style="font-size:12px; padding:6px 8px;"></div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-            <div class="field"><label>Stunden bewilligt</label><input type="number" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
-            <div class="field"><label>Stunden bisher geleistet</label><input type="number" id="Fachleistungsstunden_Geleistet" placeholder="z.B. 67" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Stunden bewilligt (Woche/Monat)</label><input type="number" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Typ der Stunden (Auswahlliste)</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Woche</option><option>Monat</option><option>Pool</option></select></div>
           </div>
-          <div style="display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:10px;">
-            <div class="field"><label>Betreuungszeitraum <span style="font-weight:400; color:var(--text-muted);">(automatisch aus Hilfebeginn – Ende, oder manuell eintragen)</span></label><input type="text" id="Betreuungszeitraum" oninput="this.dataset.manuallySet='1'" placeholder="wird automatisch befüllt" style="font-size:12px; padding:6px 8px;"></div>
-          </div>
+
         </div>
-        <div class="btn-row"><span></span><button class="btn btn-primary" onclick="goTo(2)">Weiter →</button></div>
+        <div class="btn-row"><span></span><button class="btn btn-primary" onclick="goToNext(2)">Weiter →</button></div>
       </div>
 
       <!-- S2 -->
@@ -316,10 +314,7 @@
             <div class="field"><label>Familienname <span style="color:var(--error);">*</span></label><input type="text" id="Kind_Familienname" oninput="this.value=this.value.toUpperCase()" required></div>
             <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind_Geburtsdatum"></div>
           </div>
-          <div class="field-grid">
-            <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind_Strasse"></div>
-            <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind_PLZ_Ort"></div>
-          </div>
+
           <div id="extraKinderContainer"></div>
           <div style="margin-top:6px;">
             <button onclick="addExtraKind()" id="btnAddExtraKind" style="font-size:11px; color:var(--accent-mid); background:none; border:1px dashed var(--accent-mid); border-radius:4px; padding:4px 12px; cursor:pointer;">+ Kind hinzufügen</button>
@@ -330,11 +325,7 @@
           <div class="field-grid triple">
             <div class="field"><label>Vorname</label><input type="text" id="Sorg_Vorname"></div>
             <div class="field"><label>Familienname</label><input type="text" id="Sorg_Familienname" oninput="this.value=this.value.toUpperCase()"></div>
-            <div class="field"><label>Geburtsdatum</label><input type="date" id="Sorg_Geburtsdatum"></div>
-          </div>
-          <div class="field-grid">
-            <div class="field"><label>Straße + Nr.</label><input type="text" id="Sorg_Strasse"></div>
-            <div class="field"><label>PLZ + Ort</label><input type="text" id="Sorg_PLZ_Ort"></div>
+            <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg_Beziehung"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
           </div>
           <div id="extraSorgContainer"></div>
           <div style="margin-top:6px;">
@@ -342,7 +333,7 @@
           </div>
 
         </div>
-        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(1)">← Zurück</button><button class="btn btn-primary" onclick="goTo(3)">Weiter →</button></div>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(1)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(3)">Weiter →</button></div>
       </div>
 
       <!-- S3 dynamic per Berichtstyp -->
@@ -350,7 +341,7 @@
         <div class="section-title" id="s3_title">Verlauf der Hilfe</div>
         <div class="section-sub" id="s3_sub">Fachliche Beschreibung gemäß Berichtsstruktur</div>
         <div id="s3_content"></div>
-        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(2)">← Zurück</button><button class="btn btn-primary" onclick="goTo(4)">Weiter →</button></div>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(2)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(4)">Weiter →</button></div>
       </div>
 
       <!-- S4 dynamic -->
@@ -358,13 +349,14 @@
         <div class="section-title" id="s4_title">Hilfeplanziele</div>
         <div class="section-sub" id="s4_sub">Ziele mit Methoden und Zielerreichung dokumentieren</div>
         <div id="s4_content"></div>
-        <div class="btn-row" style="margin-top:1rem;"><button class="btn btn-secondary" onclick="goTo(3)">← Zurück</button><button class="btn btn-primary" onclick="goTo(5)">Weiter →</button></div>
+        <div class="btn-row" style="margin-top:1rem;"><button class="btn btn-secondary" onclick="goTo(3)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(5)">Weiter →</button></div>
       </div>
 
       <!-- S5 -->
       <div class="section" id="s5">
-        <div class="section-title">6 | Perspektive & Empfehlung</div>
-        <div class="section-sub">Fachliche Einschätzung und Empfehlung</div>
+        <div class="section-title" id="s5_title">6 | Perspektive & Empfehlung</div>
+        <div class="section-sub" id="s5_sub">Fachliche Einschätzung und Empfehlung</div>
+        <div id="s5_content">
         <div class="card">
           <div class="card-title">Stellungnahme & Sichtweise Hilfeempfänger</div>
           <div class="field-grid full"><div class="field"><textarea id="Ziele_Einleitung" style="min-height:80px;" placeholder="Stellungnahme und Sichtweise des Hilfeempfängers..."></textarea></div></div>
@@ -395,7 +387,8 @@
             </div>
           </div>
         </div>
-        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(4)">← Zurück</button><button class="btn btn-primary" onclick="goTo(6)">Zur Übersicht →</button></div>
+        </div>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(4)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(6)">Zur Übersicht →</button></div>
       </div>
 
       <!-- S6 -->
@@ -432,7 +425,7 @@
         </div>
         <div id="statusBar" style="display:none"></div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch;">
-          <button class="btn btn-secondary" onclick="downloadLocal()">↓ Lokal speichern (Word)</button>
+          <button class="btn btn-secondary" onclick="downloadLocal()">↓ Exportieren</button>
           <button class="btn btn-success" id="btnUpload" onclick="uploadToSharePoint()">↑ Freigabe anfordern</button>
         </div>
         <div id="reviewActions" style="display:none; margin-bottom:1rem;">
@@ -616,6 +609,32 @@ function showApp() {
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
+// "Weiter"-Navigation: Seite wechseln und Stand still als Entwurf sichern
+function goToNext(n) {
+  goTo(n);
+  autoSaveDraft();
+}
+
+let _autoSaving = false;
+async function autoSaveDraft() {
+  if (_isReviewMode) return;             // TL nutzt den Zwischenspeichern-Button
+  if (_autoSaving) return;               // keine parallelen Speicherläufe
+  const vn = document.getElementById('Kind_Vorname')?.value?.trim();
+  const fn = document.getElementById('Kind_Familienname')?.value?.trim();
+  if (!vn && !fn) return;                // ohne Kind-Name kein sinnvoller Entwurf
+  _autoSaving = true;
+  try {
+    const data = collectData();
+    data._status = currentItemStatus || 'Entwurf';  // Status nie verändern
+    currentListId = await saveToList(data, currentListId);
+    if (!currentItemStatus) currentItemStatus = 'Entwurf';
+  } catch(e) {
+    console.warn('Automatisches Speichern fehlgeschlagen:', e.message);
+  } finally {
+    _autoSaving = false;
+  }
+}
+
 function goToStart() {
   // Restore normal layout before showing start screen
   const layout = document.querySelector('.layout');
@@ -722,21 +741,41 @@ function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
 // ─── DATEN ────────────────────────────────────────────────────────────────────
 function collectData() {
   const ids = ['Hilfeart','Jugendamt','Sachbearbeitung_JA','Fachkraft_NeueWege',
-    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Fachleistungsstunden_Geleistet','Letztes_HPG','Fallleitung','Betreuungszeitraum',
+    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Fallleitung','Betreuungszeitraum',
     'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
-    'Sorg_Vorname','Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
-    'Betreuungszeitraum','Sachbearbeitung_JA'];
+    'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Weitere_Kinder','Leistungserbringer',
+    'Bericht_Besprochen','Bericht_Besprochen_Datum'];
   const data = {};
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
   // Collect extra Kinder and Sorgeberechtigte
   data._extraKinder = collectExtraKinder();
   data._extraSorg = collectExtraSorg();
+  // Extras zusätzlich als flache Tokens für die Templates bereitstellen
+  // (z.B. {{Kind2_Vorname_1}}, {{Sorg2_Beziehung_1}})
+  data._extraKinder.forEach((k, i) => {
+    data[`Kind2_Vorname_${i+1}`] = k.vorname || '';
+    data[`Kind2_Name_${i+1}`] = k.name || '';
+    data[`Kind2_Geb_${i+1}`] = k.geburtsdatum || '';
+  });
+  data._extraSorg.forEach((s, i) => {
+    data[`Sorg2_Vorname_${i+1}`] = s.vorname || '';
+    data[`Sorg2_Name_${i+1}`] = s.name || '';
+    data[`Sorg2_Beziehung_${i+1}`] = s.beziehung || '';
+  });
   // TL-Kommentare mitpersistieren
   data._tlKommentare = _tlKommentare;
   // Dokumentversion mitpersistieren
   data._version = currentVersion || 0;
+  // Dynamische Inhaltsfelder der Seiten 3–5 generisch einsammeln
+  // (deckt alle Berichtstypen ab — Clearing/Abschluss wurden zuvor NICHT gespeichert)
+  ['s3_content','s4_content','s5_content'].forEach(cid => {
+    document.getElementById(cid)?.querySelectorAll('textarea[id], input[id], select[id]').forEach(el => {
+      if (el.id.startsWith('Ziel_') || el.id.startsWith('cmt_')) return; // Ziele separat, Kommentare nie
+      data[el.id] = el.value;
+    });
+  });
   // Collect extra Fachkräfte 2-4
   for (let i = 2; i <= 4; i++) {
     const el = document.getElementById('Fachkraft_' + i);
@@ -884,7 +923,7 @@ async function uploadToSharePoint() {
       const _flSel = document.getElementById('Fallleitung');
       const _tlName = _flSel?.options[_flSel.selectedIndex]?.text?.trim() || '';
       const _tlMail = getFalleitungMail();
-      const _empfaenger = _tlMail ? `${_tlName || 'TL NeueWege'} (${_tlMail})` : (_tlName || 'die Teamleitung');
+      const _empfaenger = _tlMail ? `${_tlName || 'Teamleiter NeueWege'} (${_tlMail})` : (_tlName || 'die Teamleitung');
       if (emailOk) {
         setStatus('done', `✓ Hochgeladen: ${name} — Freigabeanfrage wurde an ${_empfaenger} gesendet.`);
       } else {
@@ -1083,8 +1122,6 @@ async function copyStammdaten(id) {
         if (document.getElementById('Kind2_Vorname_'+n)) document.getElementById('Kind2_Vorname_'+n).value = k.vorname||'';
         if (document.getElementById('Kind2_Name_'+n)) document.getElementById('Kind2_Name_'+n).value = k.name||'';
         if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
-        if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
-        if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
       });
     }
     // Restore extra Sorg
@@ -1094,6 +1131,7 @@ async function copyStammdaten(id) {
         const n = extraSorgCount;
         if (document.getElementById('Sorg2_Vorname_'+n)) document.getElementById('Sorg2_Vorname_'+n).value = s.vorname||'';
         if (document.getElementById('Sorg2_Name_'+n)) document.getElementById('Sorg2_Name_'+n).value = s.name||'';
+        if (document.getElementById('Sorg2_Beziehung_'+n)) document.getElementById('Sorg2_Beziehung_'+n).value = s.beziehung||'';
       });
     }
     Object.entries(data).forEach(([key, value]) => {
@@ -1193,8 +1231,6 @@ async function loadDraft(id) {
         if (document.getElementById('Kind2_Vorname_'+n)) document.getElementById('Kind2_Vorname_'+n).value = k.vorname||'';
         if (document.getElementById('Kind2_Name_'+n)) document.getElementById('Kind2_Name_'+n).value = k.name||'';
         if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
-        if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
-        if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
       });
     }
     // Restore extra Sorg
@@ -1204,6 +1240,7 @@ async function loadDraft(id) {
         const n = extraSorgCount;
         if (document.getElementById('Sorg2_Vorname_'+n)) document.getElementById('Sorg2_Vorname_'+n).value = s.vorname||'';
         if (document.getElementById('Sorg2_Name_'+n)) document.getElementById('Sorg2_Name_'+n).value = s.name||'';
+        if (document.getElementById('Sorg2_Beziehung_'+n)) document.getElementById('Sorg2_Beziehung_'+n).value = s.beziehung||'';
       });
     }
     Object.entries(data).forEach(([key, value]) => {
@@ -1235,6 +1272,7 @@ async function loadDraft(id) {
     const bzEl = document.getElementById('Betreuungszeitraum');
     if (bzEl && bzEl.value.trim()) bzEl.dataset.manuallySet = '1';
     syncBetreuungszeitraum();
+    toggleBesprochenDatum();
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
     renderFieldComments();
@@ -1262,12 +1300,12 @@ function showMainLayout() {
 
 function resetForm() {
   const ids = ['Jugendamt','Hilfeart','Sachbearbeitung_JA','Fachkraft_NeueWege','Fallleitung',
-    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Fachleistungsstunden_Geleistet','Letztes_HPG',
+    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG',
     'BZ_Von','BZ_Bis','Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
-    'Sorg_Vorname','Sorg_Familienname','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
-    'Betreuungszeitraum','Sachbearbeitung_JA'];
+    'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Weitere_Kinder','Leistungserbringer',
+    'Bericht_Besprochen','Bericht_Besprochen_Datum'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = id === 'Ort' ? 'Wolnzach' : ''; }
@@ -1277,7 +1315,7 @@ function resetForm() {
    'Arbeitsbeziehung','Ziele_Einleitung','Fachliche_Einschaetzung',
    'Aktuelle_Situation','Verlauf_Massnahme','Ausgangssituation','Familienkonstellation',
    'Rahmenbedingungen','Ressourcen','Risiken','Ergebnisse_Clearing',
-   'Zielsetzung_Clearing','Zusammenfassung_Ausblick'].forEach(id => {
+   'Zielsetzung_Clearing','Zusammenfassung_Ausblick','Anhang_Methodik'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -2094,24 +2132,22 @@ function activateReviewMode() {
     frame.style.cssText = 'position:fixed; inset:0; border:4px solid #c9a227; pointer-events:none; z-index:998;';
     document.body.appendChild(frame);
   }
-  // 2. Banner oben mit Erklärung in einfacher Sprache
+  // 2. Banner oben mit Erklärung und Zwischenspeichern-Button
+  //    (Button bewusst im Banner statt schwebend, damit er auf Tablets nicht die Weiter-Buttons verdeckt)
   if (!document.getElementById('reviewBanner')) {
     const banner = document.createElement('div');
     banner.id = 'reviewBanner';
-    banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#c9a227; color:#fff; z-index:999; padding:10px 16px; text-align:center; font-size:13px; box-shadow:0 2px 6px rgba(0,0,0,0.25);';
+    banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#c9a227; color:#fff; z-index:999; padding:10px 16px; box-shadow:0 2px 6px rgba(0,0,0,0.25);';
     const von = currentEingereichtVon ? ` von <strong>${escHtml(currentEingereichtVon)}</strong>` : '';
-    banner.innerHTML = `<strong>🔍 PRÜFMODUS — Sie prüfen diesen Bericht${von} als Teamleitung.</strong><br>
-      <span style="font-size:12px; opacity:0.95;">Auf den Seiten 3–5 können Sie zu jedem Text einen 💬 Kommentar schreiben. Danach auf der Seite „Absenden“: ✓ Freigeben (erstellt das PDF) oder ✗ Zurückweisen (Fachkraft überarbeitet).</span>`;
+    banner.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap;">
+      <div style="text-align:center; font-size:13px; min-width:0;">
+        <strong>🔍 PRÜFMODUS — Sie prüfen diesen Bericht${von} als Teamleitung.</strong><br>
+        <span style="font-size:12px; opacity:0.95;">Auf den Seiten 3–5 können Sie zu jedem Text einen 💬 Kommentar schreiben. Danach auf der Seite „Absenden“: ✓ Freigeben (erstellt das PDF) oder ✗ Zurückweisen (Fachkraft überarbeitet).</span>
+      </div>
+      <button id="btnSaveComments" onclick="saveCommentsDraft()" style="background:#fff; color:#8a6d1a; border:none; border-radius:20px; padding:8px 18px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,0.2); white-space:nowrap; min-height:40px;">💬 Kommentare zwischenspeichern</button>
+    </div>`;
     document.body.appendChild(banner);
     document.body.style.paddingTop = banner.offsetHeight + 'px';
-  }
-  // Schwebender Zwischenspeichern-Button, auf allen Seiten sichtbar
-  if (!document.getElementById('reviewFloatBar')) {
-    const bar = document.createElement('div');
-    bar.id = 'reviewFloatBar';
-    bar.style.cssText = 'position:fixed; bottom:16px; right:16px; z-index:1000;';
-    bar.innerHTML = `<button id="btnSaveComments" onclick="saveCommentsDraft()" style="background:#c9a227; color:white; border:none; border-radius:24px; padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.25); min-height:44px;">💬 Kommentare zwischenspeichern</button>`;
-    document.body.appendChild(bar);
   }
 }
 
@@ -2206,7 +2242,7 @@ async function loadGroupMembers() {
     if (fkSelect) {
       fkSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
         _teamMembers.map(m => {
-          const name = sortName(m);
+          const name = m.displayName || '';
           const isMe = m.mail === currentAccount?.username || m.displayName === currentAccount?.name;
           return `<option value="${name}" ${isMe ? 'selected' : ''}>${name}</option>`;
         }).join('');
@@ -2219,7 +2255,7 @@ async function loadGroupMembers() {
       const managerName = manager ? sortName(manager) : '';
       flSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
         _tlMembers.map(m => {
-          const name = sortName(m);
+          const name = m.displayName || '';
           const isManager = manager && (m.mail === manager.mail || m.displayName === manager.displayName);
           return `<option value="${name}" data-mail="${m.mail || ''}" ${isManager ? 'selected' : ''}>${name}</option>`;
         }).join('');
@@ -2254,7 +2290,7 @@ async function loadGroupMembers() {
     if (fkSelect3 && _teamMembers.length > 0) {
       const sortName = m => { const p = (m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
       fkSelect3.innerHTML = '<option value="">— bitte wählen —</option>' + _teamMembers.map(m => {
-        const name = sortName(m);
+        const name = m.displayName || '';
         const isMe = m.mail === currentAccount?.username || m.displayName === currentAccount?.name;
         return `<option value="${name}" ${isMe?'selected':''}>${name}</option>`;
       }).join('');
@@ -2287,6 +2323,13 @@ function sortMemberName(m) {
   return parts.length > 1 ? `${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}` : dn;
 }
 
+function toggleBesprochenDatum() {
+  const v = document.getElementById('Bericht_Besprochen')?.value;
+  const w = document.getElementById('besprochenDatumWrap');
+  if (w) w.style.display = (v === 'Ja') ? '' : 'none';
+  if (v !== 'Ja') { const d = document.getElementById('Bericht_Besprochen_Datum'); if (d) d.value = ''; }
+}
+
 function updateFachkraftName() {
   const fk = document.getElementById('Fachkraft_NeueWege')?.value;
   const fkName = document.getElementById('Fachkraft_Name');
@@ -2308,13 +2351,13 @@ function addFachkraft() {
     return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
   };
   const options = _teamMembers.length > 0 ? _teamMembers.map(m => {
-    const name = sortName(m);
+    const name = m.displayName || '';
     return `<option value="${name}">${name}</option>`;
   }).join('') : '<option value="">— bitte wählen —</option>';
   div.innerHTML = `
     <div class="field" style="grid-column:1/-1; display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;">
       <div class="field">
-        <label>Fachkraft ${n}</label>
+        <label>Fachkraft ${n} (Auswahlliste)</label>
         <select id="Fachkraft_${n}">
           <option value="">— bitte wählen —</option>
           ${options}
@@ -2359,11 +2402,8 @@ const SECTION_TEMPLATES = {
     },
     s4: {
       title: 'Hilfeplanziele',
-      sub: 'Ziele aus dem Hilfeplan mit Methoden und Zielerreichung',
-      hasZiele: true,
-      extraFields: [
-        { id: 'Ziele_Einleitung', label: 'Einleitung / Übersicht Ziele', placeholder: 'Kurze Einleitung zu den Zielen...' }
-      ]
+      sub: 'Einschätzung zur Zielerreichung und des weiteren Hilfebedarfs anhand der in der Hilfeplanung festgelegten Teilziele',
+      hasZiele: true
     },
     s5: {
       title: '6 | Perspektive & Empfehlung',
@@ -2401,19 +2441,22 @@ const SECTION_TEMPLATES = {
       title: 'Clearing-Inhalte',
       sub: 'Ergebnisse des Clearing-Prozesses',
       fields: [
-        { id: 'Ausgangssituation', label: 'Ausgangssituation & Fragestellungen', placeholder: 'Gründe für das Clearing, zu klärende Fragestellungen...' },
-        { id: 'Familienkonstellation', label: 'Familienkonstellation', placeholder: 'Beschreibung der Familienmitglieder, Alter, besondere Bedürfnisse...' },
-        { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
-        { id: 'Ressourcen', label: 'Ressourcen', placeholder: 'Stärken, unterstützende Faktoren...' },
-        { id: 'Risiken', label: 'Risiken', placeholder: 'Belastungen, Gefährdungsaspekte...' },
+        { id: 'Ausgangssituation', label: 'Clearingprozess – Ausgangssituation und Beteiligte Personen', placeholder: 'Gründe für das ambulante Clearing und zu klärende Fragestellungen, sowie die beteiligten Personen, Familiensysteme, ...' },
+        { id: 'Familienkonstellation', label: 'Familienkonstellation – aktuelle Lebenssituation', placeholder: '' },
+        { id: 'Zielsetzung_Clearing', label: 'Zielsetzung des Clearingprozesses', placeholder: '' },
+        { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen – Vorgehen - Methoden', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
+        { id: 'Anhang_Methodik', label: 'Anhang - Methodik', placeholder: 'z.B. Bei Erstellung eines Genogramms, Soziogramms, etc. hier als Anhang/Bild einzufügen' },
         { id: 'Ergebnisse_Clearing', label: 'Ergebnisse des Clearings', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...' },
+        { cols: [
+          { id: 'Ressourcen', label: 'Ressourcen', placeholder: 'Stärken, unterstützende Faktoren...' },
+          { id: 'Risiken', label: 'Risiken', placeholder: 'Belastungen, Gefährdungsaspekte...' }
+        ] },
       ]
     },
     s4: {
       title: 'Zielsetzung & Empfehlung',
       sub: 'Clearing-Ziele und weiterführende Empfehlung',
       fields: [
-        { id: 'Zielsetzung_Clearing', label: 'Zielsetzung des Clearingprozesses', placeholder: 'Welche Ziele wurden verfolgt?' },
         { id: 'Zusammenfassung_Ausblick', label: 'Zusammenfassung & Ausblick', placeholder: 'Wichtigste Erkenntnisse, Empfehlung für weitere Hilfen...' },
       ]
     },
@@ -2447,6 +2490,15 @@ function buildDynamicSections(force = false) {
   const _s3s = document.getElementById('s3_sub'); if(_s3s) _s3s.textContent = s3.sub;
   let s3html = '';
   (s3.fields || []).forEach(f => {
+    // Zweispaltiges Box-Paar (z.B. Ressourcen | Risiken)
+    if (f.cols) {
+      s3html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">` +
+        f.cols.map(c => `<div class="card" style="margin-bottom:1rem;"><div class="card-title">${c.label}</div>
+          <div class="field-grid full"><div class="field">
+            <textarea id="${c.id}" style="min-height:100px;" placeholder="${c.placeholder || ''}"></textarea>
+          </div></div></div>`).join('') + `</div>`;
+      return;
+    }
     s3html += `<div class="card"><div class="card-title">${f.label}</div>
       <div class="field-grid full"><div class="field">
         <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
@@ -2498,6 +2550,16 @@ function buildDynamicSections(force = false) {
       <div class="field-grid full"><div class="field">
         <textarea id="${f.id}" style="min-height:${f.id === 'Fachliche_Einschaetzung' ? '140' : '80'}px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
+    // Verlaufsbericht: Besprochen-Abfrage direkt unter der Stellungnahme-Box
+    if (typ === 'verlauf' && f.id === 'Ziele_Einleitung') {
+      s5html += `<div class="card"><div class="card-title">Bericht wurde mit Hilfeempfänger besprochen</div>
+      <div class="field-grid">
+        <div class="field"><label>Besprochen? (Auswahlliste)</label>
+          <select id="Bericht_Besprochen" onchange="toggleBesprochenDatum()"><option value="">— bitte wählen —</option><option>Ja</option><option>Nein</option></select>
+        </div>
+        <div class="field" id="besprochenDatumWrap" style="display:none;"><label>Datum des Gesprächs</label><input type="date" id="Bericht_Besprochen_Datum"></div>
+      </div></div>`;
+    }
   });
   // Add signature card (always present)
   s5html += `<div class="card">
@@ -2784,9 +2846,10 @@ function addExtraSorg() {
       <span style="font-size:12px; font-weight:500; color:var(--text-muted);">Sorgeberechtigte/r ${n+1}</span>
       <button onclick="removeExtraSorg(${n})" style="background:none; border:1px solid var(--error); color:var(--error); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:11px;">Entfernen</button>
     </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
       <div class="field"><label>Vorname</label><input type="text" id="Sorg2_Vorname_${n}" style="width:100%;"></div>
       <div class="field"><label>Familienname</label><input type="text" id="Sorg2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
+      <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg2_Beziehung_${n}" style="width:100%;"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
     </div>`;
   document.getElementById('extraSorgContainer').appendChild(div);
 }
@@ -2821,14 +2884,7 @@ function addExtraKind() {
       <div class="field"><label>Familienname</label><input type="text" id="Kind2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
       <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind2_Geb_${n}" style="width:100%;"></div>
     </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:6px;">
-      <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind2_Str_${n}" style="width:100%;"></div>
-      <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind2_PLZ_${n}" style="width:100%;"></div>
-    </div>
-    <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer;">
-      <input type="checkbox" id="Kind2_SameAddr_${n}" onchange="toggleSameAddr(${n})" style="width:14px; height:14px; cursor:pointer;">
-      Adresse wie Kind 1
-    </label>`;
+`;
   document.getElementById('extraKinderContainer').appendChild(div);
 }
 
@@ -2848,9 +2904,7 @@ function collectExtraKinder() {
     const v = document.getElementById('Kind2_Vorname_' + i)?.value || '';
     const n = document.getElementById('Kind2_Name_' + i)?.value || '';
     const g = document.getElementById('Kind2_Geb_' + i)?.value || '';
-    const s = document.getElementById('Kind2_Str_' + i)?.value || '';
-    const p = document.getElementById('Kind2_PLZ_' + i)?.value || '';
-    if (v || n) kids.push({vorname:v, name:n, geburtsdatum:g, strasse:s, plzOrt:p});
+    if (v || n) kids.push({vorname:v, name:n, geburtsdatum:g});
   }
   return kids;
 }
@@ -2860,7 +2914,8 @@ function collectExtraSorg() {
   for (let i = 1; i <= extraSorgCount; i++) {
     const v = document.getElementById('Sorg2_Vorname_' + i)?.value || '';
     const n = document.getElementById('Sorg2_Name_' + i)?.value || '';
-    if (v || n) sorgs.push({vorname:v, name:n});
+    const b = document.getElementById('Sorg2_Beziehung_' + i)?.value || '';
+    if (v || n) sorgs.push({vorname:v, name:n, beziehung:b});
   }
   return sorgs;
 }
@@ -2958,26 +3013,6 @@ function fillWeiterePersFound(value) {
 }
 
 // ─── SAME ADDRESS ────────────────────────────────────────────────────────────
-function toggleSameAddr(n) {
-  const cb = document.getElementById('Kind2_SameAddr_' + n);
-  const str = document.getElementById('Kind2_Str_' + n);
-  const plz = document.getElementById('Kind2_PLZ_' + n);
-  if (!cb || !str || !plz) return;
-  if (cb.checked) {
-    // Copy from Kind 1
-    str.value = document.getElementById('Kind_Strasse')?.value || '';
-    plz.value = document.getElementById('Kind_PLZ_Ort')?.value || '';
-    str.disabled = true;
-    plz.disabled = true;
-    str.style.background = 'var(--bg)';
-    plz.style.background = 'var(--bg)';
-  } else {
-    str.disabled = false;
-    plz.disabled = false;
-    str.style.background = '';
-    plz.style.background = '';
-  }
-}
 
 // ─── VALIDATION ──────────────────────────────────────────────────────────────
 
