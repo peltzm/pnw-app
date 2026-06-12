@@ -244,7 +244,21 @@
               <select id="Jugendamt"><option>Dachau</option><option>Dahme-Spreewald</option><option>Eichstätt</option><option>Freising</option><option>Ingolstadt</option><option>Kelheim</option><option>Landshut</option><option>Neuburg-Schrobenhausen</option><option>Pfaffenhofen</option><option>Regensburg</option><option>Starnberg</option></select>
             </div>
             <div class="field"><label>Hilfeart</label>
-              <select id="Hilfeart"><option>Aufsuchende Familientherapie</option><option>Begleiteter Umgang</option><option>Clearing</option><option>Erziehungsbeistand §30 SGB VIII</option><option>Heimerziehung §34 SGB VIII</option><option>Hilfe für junge Volljährige §41 SGB VIII</option><option>Intensive Sozialpädagogische Einzelbetreuung §35 SGB VIII</option><option>Jugendsozialarbeit §13 SGB VIII</option><option>Sozialpädagogische Familienhilfe §31 SGB VIII</option></select>
+              <select id="Hilfeart">
+                <option>§ 13 Abs. 3 SGB VIII - Jugendsozialarbeit</option>
+                <option>§ 18 SGB VIII - Begleiteter Umgang</option>
+                <option>§ 27 (2) SGB VIII - Clearing</option>
+                <option>§ 27 (3) SGB VIII - Aufsuchende Familientherapie (AFT)</option>
+                <option>§ 27 SGB VIII - Heimerziehung als sonstige betreute Wohnform</option>
+                <option>§ 27 SGB VIII - Schnelle Hilfe</option>
+                <option>§ 30 SGB VIII - Erziehungsbeistandschaft</option>
+                <option>§ 31 SGB VIII - Sozialpädagogische Familienhilfe</option>
+                <option>§ 35a (2) SGB VIII - Intensive sozialpädagogische Einzelbetreuung</option>
+                <option>§ 35a SGB VIII - Ambulante Eingliederungshilfe</option>
+                <option>§ 37a SGB VIII - Beratung und Unterstützung der Pflegeperson</option>
+                <option>§ 3 KKG - Bundeskinderschutzgesetz</option>
+                <option>§ 41 SGB VIII - Hilfe für junge Volljährige</option>
+              </select>
             </div>
           </div>
           <div class="field-grid">
@@ -252,7 +266,7 @@
             <div class="field"><label>Fachkraft 1</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div class="field-grid full" style="margin-bottom:12px;">
-            <div class="field"><label>Fallleitung NeueWege</label>
+            <div class="field"><label>TL NeueWege</label>
               <select id="Fallleitung"><option value="">Wird geladen...</option></select>
             </div>
           </div>
@@ -297,7 +311,7 @@
         <div class="card">
           <div class="card-title">Sorgeberechtigte</div>
           <div class="field-grid">
-            <div class="field"><label>Familienname (GROSSBUCHSTABEN)</label><input type="text" id="Sorg_Familienname" oninput="this.value=this.value.toUpperCase()"></div>
+            <div class="field"><label>Familienname</label><input type="text" id="Sorg_Familienname" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Geburtsdatum</label><input type="date" id="Sorg_Geburtsdatum"></div>
           </div>
           <div class="field-grid">
@@ -1547,12 +1561,48 @@ async function loadGroupMembers() {
   } catch(e) {
     console.warn('Could not load group members:', e.message);
     // Fallback: static options
+    // Fallback: load all org users
+    try {
+      const r2 = await fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail&$top=100&$filter=accountEnabled eq true', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (r2.ok) {
+        const d2 = await r2.json();
+        _teamMembers = (d2.value || []).filter(u => u.mail);
+        const sortName = m => {
+          const parts = (m.displayName || '').split(' ');
+          return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
+        };
+        _teamMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
+      }
+    } catch(e2) {}
     const fkSelect = document.getElementById('Fachkraft_NeueWege');
-    if (fkSelect) fkSelect.innerHTML = '<option value="">— Bitte manuell eingeben —</option>';
+    if (fkSelect && _teamMembers.length > 0) {
+      const sortName = m => { const p = (m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
+      fkSelect.innerHTML = '<option value="">— bitte wählen —</option>' + _teamMembers.map(m => {
+        const name = sortName(m);
+        const isMe = m.mail === currentAccount?.username || m.displayName === currentAccount?.name;
+        return `<option value="${name}" ${isMe?'selected':''}>${name}</option>`;
+      }).join('');
+      updateFachkraftName();
+    } else if (fkSelect) {
+      fkSelect.innerHTML = '<option value="">— bitte wählen —</option>';
+    }
+    // TL fallback: static
+    _tlMembers = [
+      {displayName:'Grund Nadine', mail:'nadine.grund@praxisneuewege.de'},
+      {displayName:'Meier Laura', mail:'laura.meier@praxisneuewege.de'},
+      {displayName:'Peltz Sonja', mail:'sonja.peltz@praxisneuewege.de'},
+      {displayName:'Schneider Jörg', mail:'joerg.schneider@praxisneuewege.de'}
+    ];
     const flSelect = document.getElementById('Fallleitung');
     if (flSelect) {
-      flSelect.innerHTML = ['Grund, Nadine','Meier, Laura','Peltz, Sonja','Schneider, Jörg']
-        .map(n => `<option>${n}</option>`).join('');
+      flSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
+        _tlMembers.map(m => {
+          const p = (m.displayName||'').split(' ');
+          const name = p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName;
+          return `<option value="${name}" data-mail="${m.mail}">${name}</option>`;
+        }).join('');
     }
   }
 }
@@ -1576,10 +1626,10 @@ function addFachkraft() {
     const parts = (m.displayName || '').split(' ');
     return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
   };
-  const options = _teamMembers.map(m => {
+  const options = _teamMembers.length > 0 ? _teamMembers.map(m => {
     const name = sortName(m);
     return `<option value="${name}">${name}</option>`;
-  }).join('');
+  }).join('') : '<option value="">— bitte wählen —</option>';
   div.innerHTML = `
     <div class="field" style="grid-column:1/-1; display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;">
       <div class="field">
