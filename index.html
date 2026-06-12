@@ -1857,7 +1857,13 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
   </table>
   ${pdfUrl ? `<p><a href="${pdfUrl}" style="display: inline-block; background: #2e7d32; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Finales PDF öffnen →</a></p>` : `<p style="color:#888;">Das PDF liegt im SharePoint-Ordner ${escHtml(CONFIG.outputFolder)}.</p>`}
 </body></html>` },
-      toRecipients: [{ emailAddress: { address: 'info@praxisneuewege.de' } }]
+      toRecipients: [{ emailAddress: { address: 'info@praxisneuewege.de' } }],
+      // CC: zuständige TL NeueWege (aus dem Formular) + einreichende Fachkraft
+      ccRecipients: [...new Set(
+        [getFalleitungMail(), currentEingereichtVon]
+          .filter(Boolean)
+          .map(m => m.toLowerCase())
+      )].map(address => ({ emailAddress: { address } }))
     },
     saveToSentItems: false
   };
