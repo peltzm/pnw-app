@@ -762,6 +762,18 @@ function addZiel() {
 function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
 
 // ─── DATEN ────────────────────────────────────────────────────────────────────
+// Kontaktdaten (E-Mail + Telefon) einer Fachkraft anhand des Anzeigenamens aus M365.
+// Telefon: bevorzugt Mobilnummer, sonst erste Geschäftsnummer.
+function fachkraftKontakt(name) {
+  const n = (name || '').trim().toLowerCase();
+  if (!n) return { email: '', telefon: '' };
+  const pool = [..._teamMembers, ..._tlMembers];
+  const m = pool.find(x => (x.displayName || '').trim().toLowerCase() === n);
+  if (!m) return { email: '', telefon: '' };
+  const telefon = m.mobilePhone || (Array.isArray(m.businessPhones) ? m.businessPhones[0] : '') || '';
+  return { email: m.mail || '', telefon };
+}
+
 function collectData() {
   const ids = ['Hilfeart','Jugendamt','Sachbearbeitung_JA','Fachkraft_NeueWege',
     'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Fallleitung','Betreuungszeitraum',
@@ -809,6 +821,10 @@ function collectData() {
     data[`Fachkraft${i}_Name`] = nm.value || '';
     data[`Fachkraft${i}_Quali1`] = document.getElementById(`FK${i}_Quali1`)?.value || '';
     data[`Fachkraft${i}_Quali2`] = q2;
+    // Kontaktdaten aus M365 anhand des Namens nachschlagen
+    const kontakt = fachkraftKontakt(nm.value);
+    data[`Fachkraft${i}_Email`] = kontakt.email;
+    data[`Fachkraft${i}_Telefon`] = kontakt.telefon;
   }
   // Dynamische Inhaltsfelder der Seiten 3–5 generisch einsammeln
   // (deckt alle Berichtstypen ab — Clearing/Abschluss wurden zuvor NICHT gespeichert)
@@ -882,6 +898,11 @@ async function fillTemplate(templateBytes, data) {
     const safe = String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     xml = xml.split('{{'+key+'}}').join(safe);
   }
+  // Im Datensatz nicht belegte Tokens entfernen (z.B. ungenutzte Kind2-/Sorg2-Slots),
+  // damit keine {{...}}-Platzhalter im fertigen Dokument sichtbar bleiben.
+  // Bewusst eng gefasst auf token-artige Namen (Wortzeichen/Punkt/Bindestrich),
+  // um echten Fließtext mit geschweiften Klammern nicht zu beschädigen.
+  xml = xml.replace(/\{\{\s*[\w.\-]+\s*\}\}/g, '');
   zip.file('word/document.xml', xml);
   return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
 }
@@ -2325,7 +2346,7 @@ async function loadGroupMembers() {
   
   async function getMembers(groupId) {
     if (!groupId) return [];
-    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,givenName,surname,mail,jobTitle`, {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,givenName,surname,mail,jobTitle,mobilePhone,businessPhones`, {
       headers: { Authorization: 'Bearer ' + token }
     });
     const d = await r.json();
