@@ -680,7 +680,9 @@ const CFG = {
   listName:    'Spesenbelege_Entwuerfe',
   spesen_mail: 'spesen@praxisneuewege.de',
   tlGroupName: 'PNW-Teamleitung',
-  teamGroupName:'PNW-Team'
+  teamGroupName:'PNW-Team',
+  azureDIEndpoint: 'https://dispesen.cognitiveservices.azure.com/',
+  azureDIKey: '1ljrnEyoPNmUlowPnUOTV9IR7cHCeHukyhseTkmYo88OwuUPbNhAJQQJ99CFACPV0roXJ3w3AAALACOGn4Cg'
 };
 const SCOPES = ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','User.Read','Mail.Send','GroupMember.Read.All'];
 
@@ -1100,43 +1102,73 @@ async function handleFileSelect(input) {
   try {
     const b64 = await fileToBase64(file);
     const mime = file.type || 'image/jpeg';
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
-            { type: 'text', text: 'Analysiere diesen Kassenbon/Beleg. Antworte NUR mit JSON (kein Markdown): {"haendler":"","datum":"TT.MM.JJJJ","betrag_brutto":"0,00","mwst":"","hauptkategorie":"","unterkategorie":""}. Hauptkategorie ist EINE von: freizeit, gastro, einkauf, fahrzeug, parken. Unterkategorie: für freizeit=schwimmbad/freizeitpark/klettern/bowling/museum/kino/freizeit-sonst; gastro=restaurant/baeckerei/eisdiele/lebensmittel/gastro-sonst; einkauf=basteln/buero/spiele/bekleidung/digital/einkauf-sonst; fahrzeug=tanken/waschen/oepnv/post; parken=parkhaus/parkschein/handyparken.' }
-          ]
-        }]
-      })
-    });
-    const data = await resp.json();
-    const text = data.content?.[0]?.text || '{}';
-    let parsed = {};
-    try { parsed = JSON.parse(text.replace(/```json|```/g,'')); } catch(e) {}
-    document.getElementById('srHaendler').textContent = parsed.haendler || '—';
-    document.getElementById('srDatum').textContent    = parsed.datum || '—';
-    document.getElementById('srBetrag').textContent   = parsed.betrag_brutto ? parsed.betrag_brutto + ' €' : '—';
-    document.getElementById('srMwst').textContent     = parsed.mwst || '—';
-    document.getElementById('srKat').textContent      = parsed.hauptkategorie && parsed.unterkategorie
-      ? `${KATEGORIEN[parsed.hauptkategorie]?.label||parsed.hauptkategorie} › ${KATEGORIEN[parsed.hauptkategorie]?.unter?.find(u=>u.id===parsed.unterkategorie)?.label||parsed.unterkategorie}`
-      : (parsed.hauptkategorie || '—');
-    // Auto-fill form
-    if (parsed.haendler) document.getElementById('fHaendler').value = parsed.haendler;
-    if (parsed.betrag_brutto) document.getElementById('fBetrag').value = parsed.betrag_brutto.replace(',','.');
-    if (parsed.datum && parsed.datum.match(/\d{2}\.\d{2}\.\d{4}/)) {
-      const [d,m,y] = parsed.datum.split('.');
-      document.getElementById('fDatum').value = `${y}-${m}-${d}`;
+
+    // ── Azure Document Intelligence — Receipt Model ──
+    // 1. Analyse starten (async)
+    const analyzeResp = await fetch(
+      `${CFG.azureDIEndpoint}formrecognizer/documentModels/prebuilt-receipt:analyze?api-version=2023-07-31`,
+      {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': CFG.azureDIKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ base64Source: b64 })
+      }
+    );
+    if (!analyzeResp.ok) throw new Error('Azure DI: ' + analyzeResp.status);
+    const operationUrl = analyzeResp.headers.get('Operation-Location');
+    if (!operationUrl) throw new Error('Keine Operation-URL von Azure erhalten');
+
+    // 2. Auf Ergebnis warten (polling, max 15s)
+    let result = null;
+    for (let i = 0; i < 15; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const pollResp = await fetch(operationUrl, {
+        headers: { 'Ocp-Apim-Subscription-Key': CFG.azureDIKey }
+      });
+      const pollData = await pollResp.json();
+      if (pollData.status === 'succeeded') { result = pollData; break; }
+      if (pollData.status === 'failed') throw new Error('Azure DI Analyse fehlgeschlagen');
     }
-    // Auto-select category
-    if (parsed.hauptkategorie && KATEGORIEN[parsed.hauptkategorie]) {
-      selectHkat(parsed.hauptkategorie);
-      if (parsed.unterkategorie) setTimeout(() => selectUkat(parsed.unterkategorie), 100);
+    if (!result) throw new Error('Timeout — Analyse dauerte zu lang');
+
+    // 3. Felder extrahieren
+    const doc = result.analyzeResult?.documents?.[0];
+    const fields = doc?.fields || {};
+    const haendler  = fields.MerchantName?.valueString || fields.MerchantName?.content || '';
+    const datum     = fields.TransactionDate?.valueDate || '';  // YYYY-MM-DD
+    const betrag    = fields.Total?.valueCurrency?.amount || fields.Total?.valueNumber || '';
+    const mwst      = fields.TotalTax?.valueCurrency?.amount || fields.TotalTax?.valueNumber || '';
+
+    // Datum formatieren für Anzeige (DD.MM.YYYY)
+    const datumDE = datum ? datum.split('-').reverse().join('.') : '—';
+    const betragStr = betrag ? betrag.toFixed(2).replace('.',',') : '—';
+    const mwstStr   = mwst  ? mwst.toFixed(2).replace('.',',') + ' €' : '—';
+
+    document.getElementById('srHaendler').textContent = haendler || '—';
+    document.getElementById('srDatum').textContent    = datumDE;
+    document.getElementById('srBetrag').textContent   = betrag ? betragStr + ' €' : '—';
+    document.getElementById('srMwst').textContent     = mwstStr;
+    document.getElementById('srKat').textContent      = '— bitte wählen';
+
+    // Formular auto-befüllen
+    if (haendler) document.getElementById('fHaendler').value = haendler;
+    if (betrag)   document.getElementById('fBetrag').value   = betrag.toFixed(2);
+    if (datum)    document.getElementById('fDatum').value    = datum; // YYYY-MM-DD passt direkt
+
+    // Kategorie-Vorschlag anhand Händlername
+    const hn = haendler.toLowerCase();
+    if (/rewe|aldi|lidl|edeka|penny|netto|kaufland|supermarkt|bäcker|bakery|café|cafe|restaurant|imbiss|mcdonald|burger|pizza|döner|eisdiele/.test(hn)) {
+      selectHkat('gastro');
+    } else if (/tank|shell|aral|esso|bp|total|star|jet|agip/.test(hn)) {
+      selectHkat('fahrzeug'); setTimeout(() => selectUkat('tanken'), 100);
+    } else if (/kino|cinema|cinestar|cineplex/.test(hn)) {
+      selectHkat('freizeit'); setTimeout(() => selectUkat('kino'), 100);
+    } else if (/parkhaus|parking|park|tiefgarage/.test(hn)) {
+      selectHkat('parken');
+    } else if (/saturn|mediamarkt|amazon|dm|rossmann|müller|basteln|schreibwaren/.test(hn)) {
+      selectHkat('einkauf');
     }
     document.getElementById('scanResult').style.display = 'block';
     document.getElementById('scanIcon').className = 'si'; document.getElementById('scanIcon').textContent = '✅';
