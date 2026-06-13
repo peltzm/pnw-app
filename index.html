@@ -42,6 +42,7 @@
   .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
   .field-grid.full { grid-template-columns: 1fr; }
   .field-grid.triple { grid-template-columns: 1fr 1fr 1fr; }
+  .field-grid.sig-triple { grid-template-columns: 1fr 1fr 1fr; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
   .field input, .field select, .field textarea { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; color: var(--text); background: white; outline: none; font-family: inherit; transition: border-color 0.12s; width: 100%; }
@@ -103,7 +104,7 @@
   @media (max-width: 640px) {
     .layout { grid-template-columns: 1fr; }
     .sidebar { display: none; }
-    .field-grid, .field-grid.triple { grid-template-columns: 1fr; }
+    .field-grid, .field-grid.triple, .field-grid.sig-triple { grid-template-columns: 1fr; }
     .main { padding: 1rem; }
     .field input, .field select, .field textarea { font-size: 16px !important; padding: 10px 12px; }
     .btn { min-height: 44px; }
@@ -836,12 +837,48 @@ function buildSummary() {
 async function fillTemplate(templateBytes, data) {
   const zip = await JSZip.loadAsync(templateBytes);
   let xml = await zip.file('word/document.xml').async('string');
+
+  // Word zerlegt Tokens oft in mehrere <w:r>/<w:t>-Fragmente (z.B. durch Bearbeitung
+  // oder Rechtschreibprüfung), sodass "{{Kind_Familienname}}" im XML nicht am Stück steht.
+  // Vorbehandlung: Innerhalb jedes Absatzes (<w:p>) die Token-Klammern wieder zusammenführen,
+  // indem die dazwischenliegenden XML-Tags entfernt werden – aber NUR zwischen {{ und }}.
+  xml = repairSplitTokens(xml);
+
   for (const [key, value] of Object.entries(data)) {
     const safe = String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     xml = xml.split('{{'+key+'}}').join(safe);
   }
   zip.file('word/document.xml', xml);
   return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+}
+
+// Fügt Tokens zusammen, die Word über mehrere Text-Runs verteilt hat.
+// Sucht "{{ ... }}"-Bereiche, in denen XML-Tags zwischen den Zeichen stehen,
+// und entfernt diese Tags, sodass der reine Token-Text übrig bleibt.
+function repairSplitTokens(xml) {
+  // Schritt 1: Alle <w:t>-Textsegmente eines möglichen Tokens zusammenziehen.
+  // Wir scannen nach "{{" und führen bis zum passenden "}}" alle <w:t>-Inhalte zusammen,
+  // wobei sämtliche dazwischenliegenden XML-Tags (Run-Wechsel, proofErr, etc.) entfernt werden.
+  // Vorgehen: zeichenweiser Parser, der außerhalb von Tags den sichtbaren Text verfolgt.
+  // Einfacher und robust: ersetze Sequenzen "{" + (Tags)* + "{" zu "{{" und analog für "}}"
+  // sowie Buchstaben/Unterstriche, die durch Tags getrennt sind, innerhalb eines Tokens.
+
+  // Wir arbeiten nur an Stellen, wo "{" vorkommt, um den Rest des Dokuments nicht anzutasten.
+  // Strategie: Finde "{{" (ggf. fragmentiert) ... "}}" (ggf. fragmentiert) und säubere den Bereich.
+
+  // 1) Fragmentierte öffnende/schließende Klammern normalisieren: "{" <tags> "{" -> "{{"
+  const tagsBetween = '(?:<[^>]*>)*';
+  xml = xml.replace(new RegExp('\\{' + tagsBetween + '\\{', 'g'), '{{');
+  xml = xml.replace(new RegExp('\\}' + tagsBetween + '\\}', 'g'), '}}');
+
+  // 2) Innerhalb von {{ ... }} alle XML-Tags entfernen, sodass der Tokenname zusammenhängend wird.
+  //    Begrenzung: nur bis zum nächsten "}}", keine gierige Übernahme über Tokengrenzen hinweg.
+  xml = xml.replace(/\{\{([\s\S]*?)\}\}/g, (m, inner) => {
+    const clean = inner.replace(/<[^>]*>/g, '');           // XML-Tags raus
+    return '{{' + clean + '}}';
+  });
+
+  return xml;
 }
 
 // ─── GRAPH API HELPERS ────────────────────────────────────────────────────────
@@ -2633,14 +2670,15 @@ function renderUnterschriftFachkraefte() {
     const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere…</option>`;
     html += `
       <div class="divider" style="font-size:12px; font-weight:600; color:var(--accent); margin:6px 0 10px;">Fachkraft ${i}</div>
-      <div class="field-grid triple">
+      <div class="field-grid sig-triple">
         <div class="field"><label>Name</label><input type="text" id="FK${i}_Name" oninput="this.dataset.manuallySet='1'"></div>
         <div class="field"><label>Qualifikation 1 (Auswahlliste)</label><select id="FK${i}_Quali1">${q1}</select></div>
         <div class="field"><label>Qualifikation 2 (Auswahlliste)</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
       </div>
-      <div class="field-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="field-grid sig-triple" id="FK${i}_Quali2CustomWrap" style="display:none;">
         <div></div>
-        <div class="field" id="FK${i}_Quali2CustomWrap" style="display:none;"><label>Eigene Qualifikation 2</label><input type="text" id="FK${i}_Quali2Custom" placeholder="z.B. Traumafachberater:in"></div>
+        <div></div>
+        <div class="field"><label>Eigene Qualifikation 2</label><input type="text" id="FK${i}_Quali2Custom" placeholder="z.B. Traumafachberater:in"></div>
       </div>`;
   }
   wrap.innerHTML = html;
