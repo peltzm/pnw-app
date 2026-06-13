@@ -1527,7 +1527,7 @@ async function einreichen() {
 // TEAMLEITER
 // ══════════════════════════════════════════════════════════════════
 async function ladeTLAbrechnungen() {
-  if (!_isTL) return;
+  // Immer laden — TL-Check passiert beim Anzeigen der Aktionen
   document.getElementById('tlPending').innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-hint);font-size:13px">Wird geladen…</div>';
   try {
     const token = await getToken();
@@ -2182,7 +2182,7 @@ let _belegKommentare = {}; // { belegId: { text, von, datum, status:'offen'|'erl
 let _isReviewMode  = false;
 
 async function aktiviereReviewModus(fkMail) {
-  _isReviewMode = true;  // ZUERST setzen, bevor irgendwas geladen wird
+  _isReviewMode = true;
   _reviewFkMail = fkMail;
 
   // Gelber Streifen oben
@@ -2193,11 +2193,17 @@ async function aktiviereReviewModus(fkMail) {
     document.body.appendChild(frame);
   }
 
-  // Gelber Banner im scroll-flow
+  // Gelber Banner — in app-body einfügen NACH showScreen
+  // Erst Screen wechseln, dann Banner einfügen
+  showScreen('home');
+
+  // Kurz warten damit DOM updated ist
+  await new Promise(r => setTimeout(r, 50));
+
   if (!document.getElementById('reviewBanner')) {
     const banner = document.createElement('div');
     banner.id = 'reviewBanner';
-    banner.style.cssText = 'background:#c9a227;color:#fff;padding:10px 14px 12px;border-bottom:2px solid #a37e1a;';
+    banner.style.cssText = 'background:#c9a227;color:#fff;padding:10px 14px 12px;margin-bottom:4px;';
     banner.innerHTML = `
       <div style="font-size:12px;font-weight:700;margin-bottom:2px">🔍 PRÜFMODUS — ${esc(fkMail)}</div>
       <div style="font-size:11px;opacity:.9;margin-bottom:10px">Jeden Beleg kommentieren · dann Freigeben oder Zurückweisen</div>
@@ -2206,13 +2212,12 @@ async function aktiviereReviewModus(fkMail) {
         <button onclick="openModal('rejectModal')" style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✕ Zurückweisen</button>
         <button onclick="freigebenUndPDF()" style="flex:1;background:#166534;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✓ Freigeben</button>
       </div>`;
-    const appBody = document.getElementById('appBody');
-    appBody.insertBefore(banner, appBody.firstChild);
+    // In screen-home einfügen, ganz oben
+    const screenHome = document.getElementById('screen-home');
+    screenHome.insertBefore(banner, screenHome.firstChild);
   }
 
-  // Screen wechseln dann laden — _isReviewMode ist bereits true
-  showScreen('home');
-  // Direkt mit Review-Render laden
+  // Belege laden
   await ladeReviewBelege();
 }
 
