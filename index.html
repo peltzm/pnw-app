@@ -315,6 +315,10 @@
             <div class="field"><label>Familienname <span style="color:var(--error);">*</span></label><input type="text" id="Kind_Familienname" oninput="this.value=this.value.toUpperCase()" required></div>
             <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind_Geburtsdatum"></div>
           </div>
+          <div class="field-grid">
+            <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind_Strasse" oninput="toggleSorgSameAddr()"></div>
+            <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind_PLZ_Ort" oninput="toggleSorgSameAddr()"></div>
+          </div>
 
           <div id="extraKinderContainer"></div>
           <div style="margin-top:6px;">
@@ -327,6 +331,15 @@
             <div class="field"><label>Vorname</label><input type="text" id="Sorg_Vorname"></div>
             <div class="field"><label>Familienname</label><input type="text" id="Sorg_Familienname" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg_Beziehung"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
+          </div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:8px;">
+            <input type="checkbox" id="Sorg_SameAddr" checked onchange="toggleSorgSameAddr()" style="width:14px; height:14px; cursor:pointer;">
+            Anschrift wie Kind 1
+          </label>
+          <div class="field-grid triple">
+            <div class="field"><label>Geburtsdatum</label><input type="date" id="Sorg_Geburtsdatum"></div>
+            <div class="field"><label>Straße + Nr.</label><input type="text" id="Sorg_Strasse"></div>
+            <div class="field"><label>PLZ + Ort</label><input type="text" id="Sorg_PLZ_Ort"></div>
           </div>
           <div id="extraSorgContainer"></div>
           <div style="margin-top:6px;">
@@ -750,7 +763,7 @@ function collectData() {
     'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift',
-    'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Weitere_Kinder','Leistungserbringer',
+    'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
     'Bericht_Besprochen','Bericht_Besprochen_Datum'];
   const data = {};
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
@@ -763,12 +776,19 @@ function collectData() {
     data[`Kind2_Vorname_${i+1}`] = k.vorname || '';
     data[`Kind2_Name_${i+1}`] = k.name || '';
     data[`Kind2_Geb_${i+1}`] = k.geburtsdatum || '';
+    data[`Kind2_Str_${i+1}`] = k.strasse || '';
+    data[`Kind2_PLZ_${i+1}`] = k.plzOrt || '';
   });
   data._extraSorg.forEach((s, i) => {
     data[`Sorg2_Vorname_${i+1}`] = s.vorname || '';
     data[`Sorg2_Name_${i+1}`] = s.name || '';
     data[`Sorg2_Beziehung_${i+1}`] = s.beziehung || '';
+    data[`Sorg2_Geb_${i+1}`] = s.geburtsdatum || '';
+    data[`Sorg2_Str_${i+1}`] = s.strasse || '';
+    data[`Sorg2_PLZ_${i+1}`] = s.plzOrt || '';
   });
+  // "Anschrift wie Kind 1"-Status des Sorgeberechtigten mitspeichern
+  data._sorgSameAddr = document.getElementById('Sorg_SameAddr')?.checked ? '1' : '0';
   // TL-Kommentare mitpersistieren
   data._tlKommentare = _tlKommentare;
   // Dokumentversion mitpersistieren
@@ -1174,6 +1194,8 @@ async function copyStammdaten(id) {
         if (document.getElementById('Kind2_Vorname_'+n)) document.getElementById('Kind2_Vorname_'+n).value = k.vorname||'';
         if (document.getElementById('Kind2_Name_'+n)) document.getElementById('Kind2_Name_'+n).value = k.name||'';
         if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
+        if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
+        if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
       });
     }
     // Restore extra Sorg
@@ -1184,6 +1206,9 @@ async function copyStammdaten(id) {
         if (document.getElementById('Sorg2_Vorname_'+n)) document.getElementById('Sorg2_Vorname_'+n).value = s.vorname||'';
         if (document.getElementById('Sorg2_Name_'+n)) document.getElementById('Sorg2_Name_'+n).value = s.name||'';
         if (document.getElementById('Sorg2_Beziehung_'+n)) document.getElementById('Sorg2_Beziehung_'+n).value = s.beziehung||'';
+        if (document.getElementById('Sorg2_Geb_'+n)) document.getElementById('Sorg2_Geb_'+n).value = s.geburtsdatum||'';
+        if (document.getElementById('Sorg2_Str_'+n)) document.getElementById('Sorg2_Str_'+n).value = s.strasse||'';
+        if (document.getElementById('Sorg2_PLZ_'+n)) document.getElementById('Sorg2_PLZ_'+n).value = s.plzOrt||'';
       });
     }
     Object.entries(data).forEach(([key, value]) => {
@@ -1289,6 +1314,8 @@ async function loadDraft(id) {
         if (document.getElementById('Kind2_Vorname_'+n)) document.getElementById('Kind2_Vorname_'+n).value = k.vorname||'';
         if (document.getElementById('Kind2_Name_'+n)) document.getElementById('Kind2_Name_'+n).value = k.name||'';
         if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
+        if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
+        if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
       });
     }
     // Restore extra Sorg
@@ -1299,6 +1326,9 @@ async function loadDraft(id) {
         if (document.getElementById('Sorg2_Vorname_'+n)) document.getElementById('Sorg2_Vorname_'+n).value = s.vorname||'';
         if (document.getElementById('Sorg2_Name_'+n)) document.getElementById('Sorg2_Name_'+n).value = s.name||'';
         if (document.getElementById('Sorg2_Beziehung_'+n)) document.getElementById('Sorg2_Beziehung_'+n).value = s.beziehung||'';
+        if (document.getElementById('Sorg2_Geb_'+n)) document.getElementById('Sorg2_Geb_'+n).value = s.geburtsdatum||'';
+        if (document.getElementById('Sorg2_Str_'+n)) document.getElementById('Sorg2_Str_'+n).value = s.strasse||'';
+        if (document.getElementById('Sorg2_PLZ_'+n)) document.getElementById('Sorg2_PLZ_'+n).value = s.plzOrt||'';
       });
     }
     Object.entries(data).forEach(([key, value]) => {
@@ -1330,6 +1360,10 @@ async function loadDraft(id) {
     const bzEl = document.getElementById('Betreuungszeitraum');
     if (bzEl && bzEl.value.trim()) bzEl.dataset.manuallySet = '1';
     syncBetreuungszeitraum();
+    // "Anschrift wie Kind 1" wiederherstellen (Default: aktiv)
+    const _sameCb = document.getElementById('Sorg_SameAddr');
+    if (_sameCb) _sameCb.checked = (data._sorgSameAddr !== '0');
+    toggleSorgSameAddr();
     toggleBesprochenDatum();
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
@@ -1362,7 +1396,7 @@ function resetForm() {
     'BZ_Von','BZ_Bis','Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift',
-    'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Weitere_Kinder','Leistungserbringer',
+    'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
     'Bericht_Besprochen','Bericht_Besprochen_Datum'];
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -2381,6 +2415,29 @@ function sortMemberName(m) {
   return parts.length > 1 ? `${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}` : dn;
 }
 
+// Sorgeberechtigte/r 1: Adresse von Kind 1 übernehmen, wenn "Anschrift wie Kind 1" aktiv
+function toggleSorgSameAddr() {
+  const cb = document.getElementById('Sorg_SameAddr');
+  const str = document.getElementById('Sorg_Strasse');
+  const plz = document.getElementById('Sorg_PLZ_Ort');
+  if (!cb || !str || !plz) return;
+  if (cb.checked) {
+    str.value = document.getElementById('Kind_Strasse')?.value || '';
+    plz.value = document.getElementById('Kind_PLZ_Ort')?.value || '';
+    [str, plz].forEach(el => {
+      el.readOnly = true;
+      el.style.background = 'var(--bg)';
+      el.style.cursor = 'not-allowed';
+    });
+  } else {
+    [str, plz].forEach(el => {
+      el.readOnly = false;
+      el.style.background = '';
+      el.style.cursor = '';
+    });
+  }
+}
+
 function toggleBesprochenDatum() {
   const v = document.getElementById('Bericht_Besprochen')?.value;
   const w = document.getElementById('besprochenDatumWrap');
@@ -2956,10 +3013,15 @@ function addExtraSorg() {
       <span style="font-size:12px; font-weight:500; color:var(--text-muted);">Sorgeberechtigte/r ${n+1}</span>
       <button onclick="removeExtraSorg(${n})" style="background:none; border:1px solid var(--error); color:var(--error); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:11px;">Entfernen</button>
     </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:8px;">
       <div class="field"><label>Vorname</label><input type="text" id="Sorg2_Vorname_${n}" style="width:100%;"></div>
       <div class="field"><label>Familienname</label><input type="text" id="Sorg2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
       <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg2_Beziehung_${n}" style="width:100%;"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+      <div class="field"><label>Geburtsdatum</label><input type="date" id="Sorg2_Geb_${n}" style="width:100%;"></div>
+      <div class="field"><label>Straße + Nr.</label><input type="text" id="Sorg2_Str_${n}" style="width:100%;"></div>
+      <div class="field"><label>PLZ + Ort</label><input type="text" id="Sorg2_PLZ_${n}" style="width:100%;"></div>
     </div>`;
   document.getElementById('extraSorgContainer').appendChild(div);
   enableSpellcheck();
@@ -2995,6 +3057,10 @@ function addExtraKind() {
       <div class="field"><label>Familienname</label><input type="text" id="Kind2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
       <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind2_Geb_${n}" style="width:100%;"></div>
     </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind2_Str_${n}" style="width:100%;"></div>
+      <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind2_PLZ_${n}" style="width:100%;"></div>
+    </div>
 `;
   document.getElementById('extraKinderContainer').appendChild(div);
   enableSpellcheck();
@@ -3016,7 +3082,9 @@ function collectExtraKinder() {
     const v = document.getElementById('Kind2_Vorname_' + i)?.value || '';
     const n = document.getElementById('Kind2_Name_' + i)?.value || '';
     const g = document.getElementById('Kind2_Geb_' + i)?.value || '';
-    if (v || n) kids.push({vorname:v, name:n, geburtsdatum:g});
+    const str = document.getElementById('Kind2_Str_' + i)?.value || '';
+    const plz = document.getElementById('Kind2_PLZ_' + i)?.value || '';
+    if (v || n) kids.push({vorname:v, name:n, geburtsdatum:g, strasse:str, plzOrt:plz});
   }
   return kids;
 }
@@ -3027,7 +3095,10 @@ function collectExtraSorg() {
     const v = document.getElementById('Sorg2_Vorname_' + i)?.value || '';
     const n = document.getElementById('Sorg2_Name_' + i)?.value || '';
     const b = document.getElementById('Sorg2_Beziehung_' + i)?.value || '';
-    if (v || n) sorgs.push({vorname:v, name:n, beziehung:b});
+    const g = document.getElementById('Sorg2_Geb_' + i)?.value || '';
+    const str = document.getElementById('Sorg2_Str_' + i)?.value || '';
+    const plz = document.getElementById('Sorg2_PLZ_' + i)?.value || '';
+    if (v || n) sorgs.push({vorname:v, name:n, beziehung:b, geburtsdatum:g, strasse:str, plzOrt:plz});
   }
   return sorgs;
 }
