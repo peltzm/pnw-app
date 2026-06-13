@@ -952,14 +952,15 @@ async function ladeBelege(monat) {
 }
 
 async function ladeMonatsdaten() {
+  if (_isReviewMode) {
+    // Im Prüfmodus immer den dedizierten Review-Loader verwenden
+    await ladeReviewBelege();
+    return;
+  }
   setHomeStatus('uploading', 'Wird geladen…');
   try {
     const belege = await ladeBelege(_currentMonat);
-    if (_isReviewMode) {
-      renderHomeReview(belege);
-    } else {
-      renderHome(belege);
-    }
+    renderHome(belege);
     clearHomeStatus();
   } catch(e) {
     setHomeStatus('error', 'Fehler: ' + e.message);
@@ -1583,7 +1584,6 @@ function oeffneReviewModus(g) {
   _reviewFkMail = g.mail;
   _reviewMonat  = g.monat;
   _currentMonat = g.monat;
-  showScreen('home');
   aktiviereReviewModus(g.mail);
 }
 
@@ -2163,14 +2163,10 @@ function handleReviewLink() {
   const fkMail = mailParts.join(':');
   if (monat) _currentMonat = monat;
   if (reviewParam) {
-    // TL öffnet Prüfmodus
-    _groupLoadPromise.then(() => {
-      if (_isTL) {
-        _reviewFkMail = fkMail;
-        _reviewMonat  = monat;
-        aktiviereReviewModus(fkMail);
-      }
-    });
+    // TL öffnet Prüfmodus via Link — kein _isTL Check nötig, URL ist vertrauenswürdig
+    _reviewFkMail = fkMail;
+    _reviewMonat  = monat;
+    aktiviereReviewModus(fkMail);
   } else {
     // Fachkraft öffnet Korrekturmodus
     zeigeKorrekturHinweis();
