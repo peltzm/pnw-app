@@ -44,7 +44,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .nav-badge{position:absolute;top:5px;right:calc(50% - 18px);background:var(--accent);color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px}
 
 /* FAB */
-.fab{position:fixed;bottom:calc(var(--nav-h)+14px);right:14px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(123,63,30,.35);cursor:pointer;z-index:40;transition:transform .12s}
+.fab{position:fixed;bottom:calc(var(--nav-h)+16px);right:16px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(123,63,30,.35);cursor:pointer;z-index:40;transition:transform .12s}
 .fab:active{transform:scale(.91)}
 
 /* Screens */
@@ -365,7 +365,10 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
   </div>
 
-  <div class="slabel">Belege</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px">
+    <div class="slabel" style="padding:0">Belege</div>
+    <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;gap:5px;background:var(--accent);color:#fff;border:none;border-radius:20px;padding:5px 12px 5px 8px;font-size:12px;font-weight:600;cursor:pointer;min-height:32px"><span style="font-size:16px;line-height:1">+</span> Neuer Beleg</button>
+  </div>
   <div id="belegList">
     <div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
   </div>
@@ -564,8 +567,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 
 </div><!-- /app-body -->
 
-<!-- FAB -->
-<button class="fab" id="fab" onclick="showScreen('erfassen')" title="Neuer Beleg">+</button>
+<!-- FAB entfernt — Beleg erfassen via Erfassen-Tab in der Bottom Nav -->
 
 <!-- Bottom Nav -->
 <div class="bottom-nav">
@@ -906,6 +908,7 @@ async function saveBelegToList(data, existingId = null) {
     Fachkraft: fachkraft,
     Fachkraft_Mail: currentAccount?.username || '',
     Status: data.status || 'Entwurf',
+    TLKommentar: '',
     FotoUrls: JSON.stringify(data.fotoUrls || []),
     FahrtDaten: data.fahrtDaten ? JSON.stringify(data.fahrtDaten) : '',
     FormularDaten: JSON.stringify(data)
@@ -1476,11 +1479,12 @@ async function einreichen() {
         body: JSON.stringify({ Status: 'Eingereicht', Teamleiter: tl })
       })
     ));
-    // Compute totals for email
     const total = belege.reduce((s,b)=>s+parseFloat(b.Betrag||0),0);
     const fachkraft = currentAccount?.name || '';
+    const fachkraftMail = currentAccount?.username || '';
     const anmerkung = document.getElementById('txtAnmerkung').value;
-    const appUrl = CFG.redirectUri;
+    // Direkter Review-Link für Teamleiter
+    const reviewUrl = `${CFG.redirectUri}?review=${_currentMonat}:${fachkraftMail}`;
     const html = `<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
       <div style="border-left:4px solid #7b3f1e;padding-left:16px;margin-bottom:24px">
         <h2 style="color:#7b3f1e;margin:0 0 4px">Spesenabrechnung zur Prüfung</h2>
@@ -1493,8 +1497,11 @@ async function einreichen() {
         <tr><td style="padding:8px 0;color:#666;font-weight:700">Gesamtbetrag</td><td style="padding:8px 0;font-size:18px;font-weight:700;color:#7b3f1e">${fmt(total)}</td></tr>
         ${anmerkung ? `<tr><td style="padding:8px 0;color:#666">Anmerkung</td><td style="padding:8px 0">${esc(anmerkung)}</td></tr>` : ''}
       </table>
-      <a href="${appUrl}" style="display:inline-block;background:#7b3f1e;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Abrechnung prüfen &amp; freigeben →</a>
-      <p style="color:#888;font-size:12px;margin-top:24px;border-top:1px solid #eee;padding-top:16px">Nach Freigabe wird automatisch ein PDF erstellt und an ${CFG.spesen_mail} gesendet.</p>
+      <div style="background:#fffbeb;border:1px solid #c9a227;border-radius:8px;padding:14px 16px;margin-bottom:20px">
+        <p style="margin:0 0 12px;font-size:13px;color:#6b5414"><strong>🔍 Prüfmodus</strong> — Klicken Sie auf den Button um direkt in den Prüfmodus zu wechseln. Sie können dort jeden Beleg kommentieren, die Abrechnung zurückweisen oder freigeben.</p>
+        <a href="${reviewUrl}" style="display:inline-block;background:#c9a227;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">🔍 Abrechnung jetzt prüfen →</a>
+      </div>
+      <p style="color:#888;font-size:12px;border-top:1px solid #eee;padding-top:16px">Nach Freigabe wird automatisch ein PDF erstellt und an ${CFG.spesen_mail} gesendet.</p>
     </body></html>`;
     const sent = await sendMail(tl, [currentAccount?.username||''], `[Spesen] ${fachkraft} · ${fmtMonat(_currentMonat)} · ${fmt(total)}`, html);
     setStatus('abschlussStatus', 'done', `✓ Eingereicht${sent ? ` — E-Mail an ${tl} gesendet` : ''}`);
@@ -1549,8 +1556,9 @@ async function ladeTLAbrechnungen() {
         </div>
         <div class="tl-meta">Eingereicht · Wartet auf Prüfung</div>
         <div class="tl-foot">
-          <button class="btn btn-secondary" style="flex:1;font-size:13px" onclick='openReviewSheet(${JSON.stringify(g)})'>🔍 Prüfen</button>
-          <button class="btn btn-success" style="flex:1;font-size:13px" onclick='genehmigen(${JSON.stringify(g)})'>✓ Freigeben</button>
+          <button class="btn btn-secondary" style="flex:1;font-size:13px" onclick='openReviewSheet(${JSON.stringify(g)})'>📋 Details</button>
+          <button class="btn btn-primary" style="flex:1;font-size:13px;background:#c9a227" onclick='oeffneReviewModus(${JSON.stringify(g)})'>🔍 Prüfen</button>
+          <button class="btn btn-success" style="flex:1;font-size:13px" onclick='genehmigen(${JSON.stringify(g)})'>✓ OK</button>
         </div>
       </div>`;
     }).join('');
@@ -1564,7 +1572,13 @@ async function ladeTLAbrechnungen() {
   }
 }
 
-function openReviewSheet(g) {
+function oeffneReviewModus(g) {
+  _reviewFkMail = g.mail;
+  _reviewMonat  = g.monat;
+  _currentMonat = g.monat;
+  showScreen('home');
+  aktiviereReviewModus(g.mail);
+}
   _currentReviewId = g;
   document.getElementById('reviewTitle').textContent = `${g.fachkraft} — ${fmtMonat(g.monat)}`;
   const catLabel = { fahrt:'🚗', verpf:'🍽️', mat:'🎨', sonst:'📋', fahrtenbuch:'🚗 Fahrtenbuch' };
@@ -2111,23 +2125,324 @@ async function fileToBase64(file) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// SHOW APP
+// SHOW APP + URL-basierter Review-Link
 // ══════════════════════════════════════════════════════════════════
 async function showApp() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userBadge').style.display = 'flex';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
-  // Set today as default date
   document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
-  // Update SharePoint path displays
   const sn = shortName();
   document.getElementById('spName').textContent = sn;
   document.getElementById('spMonat').textContent = _currentMonat;
-  // Load groups and initial data
   _groupLoadPromise = loadGroupMembers();
   _groupLoadPromise.catch(e => console.warn('Group load failed:', e));
+  // URL-Parameter prüfen: ?review=MONAT:MAIL oder ?edit=MONAT:MAIL
+  setTimeout(() => handleReviewLink(), 600);
   ladeMonatsdaten();
+}
+
+// ── URL-Handler ──────────────────────────────────────────────────
+function handleReviewLink() {
+  const params = new URLSearchParams(window.location.search);
+  const reviewParam = params.get('review'); // YYYY-MM:fachkraft@mail
+  const editParam   = params.get('edit');   // zurückgewiesen — Fachkraft bearbeitet
+  if (!reviewParam && !editParam) return;
+  const val = reviewParam || editParam;
+  const [monat, ...mailParts] = val.split(':');
+  const fkMail = mailParts.join(':');
+  if (monat) _currentMonat = monat;
+  if (reviewParam) {
+    // TL öffnet Prüfmodus
+    _groupLoadPromise.then(() => {
+      if (_isTL) {
+        _reviewFkMail = fkMail;
+        _reviewMonat  = monat;
+        aktiviereReviewModus(fkMail);
+      }
+    });
+  } else {
+    // Fachkraft öffnet Korrekturmodus
+    zeigeKorrekturHinweis();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// REVIEW-MODUS — Teamleiter-Prüfung
+// ══════════════════════════════════════════════════════════════════
+let _reviewFkMail  = '';
+let _reviewMonat   = '';
+let _belegKommentare = {}; // { belegId: { text, von, datum, status:'offen'|'erledigt' } }
+let _isReviewMode  = false;
+
+async function aktiviereReviewModus(fkMail) {
+  _isReviewMode = true;
+  _reviewFkMail = fkMail;
+
+  // Gelber Rahmen
+  if (!document.getElementById('reviewFrame')) {
+    const frame = document.createElement('div');
+    frame.id = 'reviewFrame';
+    frame.style.cssText = 'position:fixed;inset:0;border:4px solid #c9a227;pointer-events:none;z-index:998;';
+    document.body.appendChild(frame);
+  }
+
+  // Gelber Banner
+  if (!document.getElementById('reviewBanner')) {
+    const banner = document.createElement('div');
+    banner.id = 'reviewBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c9a227;color:#fff;z-index:999;padding:10px 16px;box-shadow:0 2px 6px rgba(0,0,0,.25);';
+    banner.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:700px;margin:0 auto">
+        <div>
+          <div style="font-size:13px;font-weight:700">🔍 PRÜFMODUS — Spesenabrechnung von ${esc(fkMail)}</div>
+          <div style="font-size:11px;opacity:.9;margin-top:2px">Jeden Beleg kommentieren · dann Freigeben oder Zurückweisen</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button onclick="speichereKommentare()" style="background:#fff;color:#8a6d1a;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px" id="btnSaveKomm">💬 Speichern</button>
+          <button onclick="openModal('rejectModal')" style="background:#dc2626;color:#fff;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px">✕ Zurückweisen</button>
+          <button onclick="freigebenUndPDF()" style="background:#166534;color:#fff;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px">✓ Freigeben</button>
+        </div>
+      </div>`;
+    document.body.appendChild(banner);
+    // App-Body nach unten verschieben
+    document.getElementById('appScreen').style.paddingTop = (banner.offsetHeight + 56) + 'px';
+  }
+
+  // Belege laden und mit Kommentarfeldern rendern
+  showScreen('home');
+  await ladeMonatsdatenMitKommentaren();
+}
+
+async function ladeMonatsdatenMitKommentaren() {
+  setHomeStatus('uploading', 'Belege werden geladen…');
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
+    const res = await r.json();
+    const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
+    const belege = alle.filter(b =>
+      (b.Monat || '').startsWith(_reviewMonat) &&
+      ((b.Fachkraft_Mail || '').toLowerCase() === _reviewFkMail.toLowerCase())
+    );
+    // Vorhandene Kommentare laden
+    belege.forEach(b => {
+      if (b.TLKommentar) {
+        try { _belegKommentare[b.id] = JSON.parse(b.TLKommentar); } catch(e) {}
+      }
+    });
+    renderHomeReview(belege);
+    clearHomeStatus();
+  } catch(e) {
+    setHomeStatus('error', 'Fehler: ' + e.message);
+  }
+}
+
+function renderHomeReview(belege) {
+  const fahrt   = belege.find(b => b.Kategorie === 'fahrtenbuch');
+  const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
+  const total   = belege.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
+
+  // Stats
+  document.getElementById('homeTotal').textContent = fmt(total);
+  document.getElementById('homeSub').textContent   = `${belege.length} Positionen · Eingereicht`;
+  document.getElementById('statFahrt').textContent  = fahrt ? fmt(fahrt.Betrag) : '—';
+  document.getElementById('statSonst').textContent  = fmt(regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0));
+  document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
+
+  // Fahrtenbuch
+  if (fahrt) {
+    const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
+    document.getElementById('fbAmt').textContent   = fmt(fahrt.Betrag);
+    document.getElementById('fbBadge').className   = 'badge badge-approved';
+    document.getElementById('fbBadge').innerHTML   = '<span class="bdot"></span> Excel ✓';
+    document.getElementById('fbFoot').textContent  = `${fd.dateiname||'Fahrtenbuch.xlsx'} · ${fd.gesamtKm||'—'} km`;
+  }
+
+  // Beleg-Liste mit Kommentarfeldern
+  const list = document.getElementById('belegList');
+  if (regular.length === 0) { list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-hint)">Keine Belege</div>'; return; }
+
+  list.innerHTML = regular.map(b => {
+    const fotos = JSON.parse(b.FotoUrls || '[]');
+    const komm  = _belegKommentare[b.id];
+    const katShort = (b.KategorieLabel||b.Kategorie||'—').includes(' › ')
+      ? (b.KategorieLabel||'').split(' › ')[1]
+      : (b.KategorieLabel||b.Kategorie||'—');
+    return `
+    <div class="beleg-card" style="flex-direction:column;cursor:default;display:block;padding:0">
+      <div style="display:flex;align-items:stretch">
+        <div class="beleg-side ${fotos.length ? '' : 'fw'}" onclick="${fotos.length ? `window.open('${fotos[0]}','_blank')` : ''}">
+          ${fotos.length ? '🧾' : '⚠️'}
+        </div>
+        <div class="beleg-body">
+          <div class="beleg-top">
+            <div class="beleg-desc">${esc(b.Beschreibung||b.Haendler||'—')}</div>
+            <div class="beleg-amt">${fmt(b.Betrag)}</div>
+          </div>
+          <div class="beleg-meta">
+            <span class="beleg-date">${fmtDate(b.Datum)}</span>
+            <span class="cpill" style="background:var(--accent-light);color:var(--accent)">${esc(katShort)}</span>
+            ${b.Klient && b.Klient !== 'kein Klient' ? `<span class="ktag">${esc(b.Klient)}</span>` : ''}
+            ${!fotos.length ? '<span class="wtag">⚠ Kein Foto</span>' : ''}
+          </div>
+        </div>
+      </div>
+      <!-- Kommentarbereich -->
+      <div style="padding:10px 12px 12px;border-top:1px solid var(--border);background:${komm?.status==='erledigt'?'#f4f4f0':'#fffdf5'}">
+        ${komm && komm.status === 'erledigt'
+          ? `<div style="font-size:12px;color:var(--success);margin-bottom:6px">✓ Kommentar erledigt — ${esc(komm.text)}</div>
+             <button onclick="reopenKommentar('${b.id}')" style="font-size:11px;background:none;border:1px solid var(--border-strong);border-radius:4px;padding:3px 10px;cursor:pointer;color:var(--text-muted)">Wieder öffnen</button>`
+          : komm
+            ? `<div style="font-size:11px;font-weight:600;color:#8a6d1a;margin-bottom:4px">💬 Kommentar Teamleitung · ${esc(komm.datum||'')}</div>
+               <textarea oninput="updateKommentar('${b.id}',this.value)" style="width:100%;border:1px solid #e3d49a;border-radius:6px;padding:7px 10px;font-size:13px;min-height:52px;background:#fffdf5;resize:vertical;font-family:inherit">${esc(komm.text)}</textarea>
+               <button onclick="deleteKommentar('${b.id}')" style="font-size:11px;background:none;border:none;color:var(--error);cursor:pointer;margin-top:4px">🗑 Kommentar löschen</button>`
+            : `<button onclick="startKommentar('${b.id}')" style="font-size:12px;color:#8a6d1a;background:none;border:1px dashed #c9a227;border-radius:6px;padding:6px 14px;cursor:pointer;width:100%">💬 Kommentar hinzufügen</button>`
+        }
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Kommentar-Funktionen
+function startKommentar(belegId) {
+  _belegKommentare[belegId] = {
+    text: '',
+    von: currentAccount?.name || 'Teamleitung',
+    datum: new Date().toLocaleDateString('de-DE'),
+    status: 'offen'
+  };
+  ladeMonatsdatenMitKommentaren();
+}
+function updateKommentar(belegId, val) {
+  if (_belegKommentare[belegId]) _belegKommentare[belegId].text = val;
+}
+function deleteKommentar(belegId) {
+  delete _belegKommentare[belegId];
+  ladeMonatsdatenMitKommentaren();
+}
+function reopenKommentar(belegId) {
+  if (_belegKommentare[belegId]) { _belegKommentare[belegId].status = 'offen'; ladeMonatsdatenMitKommentaren(); }
+}
+
+async function speichereKommentare() {
+  const btn = document.getElementById('btnSaveKomm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Speichert…'; }
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    await Promise.all(Object.entries(_belegKommentare).map(([id, komm]) =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}/fields`, {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ TLKommentar: JSON.stringify(komm) })
+      })
+    ));
+    const n = Object.values(_belegKommentare).filter(k => k.status !== 'erledigt' && k.text).length;
+    if (btn) { btn.textContent = `✓ ${n} Kommentar${n!==1?'e':''}`;  setTimeout(()=>{btn.disabled=false;btn.textContent='💬 Speichern';},2000); }
+    showToast('Kommentare gespeichert', true);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '💬 Speichern'; }
+    showToast('Fehler: ' + e.message);
+  }
+}
+
+async function freigebenUndPDF() {
+  if (!confirm('Abrechnung freigeben und PDF erstellen?')) return;
+  setHomeStatus('uploading', 'Freigabe wird verarbeitet…');
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    // Alle Kommentare speichern
+    await speichereKommentare();
+    // Status aller Belege auf Genehmigt setzen
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
+    const res = await r.json();
+    const belege = (res.value||[]).map(i=>({id:i.id,...i.fields}))
+      .filter(b => (b.Monat||'').startsWith(_reviewMonat) && (b.Fachkraft_Mail||'').toLowerCase()===_reviewFkMail.toLowerCase());
+    await Promise.all(belege.map(b =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
+        method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Status: 'Genehmigt', Teamleiter: currentAccount?.username||'' })
+      })
+    ));
+    // PDF generieren und per Mail senden
+    const total = belege.reduce((s,b)=>s+parseFloat(b.Betrag||0),0);
+    const fachkraft = belege[0]?.Fachkraft || _reviewFkMail;
+    const g = { fachkraft, mail: _reviewFkMail, monat: _reviewMonat, belege, total };
+    await genehmigen(g);
+    // Banner entfernen
+    document.getElementById('reviewBanner')?.remove();
+    document.getElementById('reviewFrame')?.remove();
+    document.getElementById('appScreen').style.paddingTop = '';
+    _isReviewMode = false;
+    setHomeStatus('done', '✓ Freigegeben — PDF an spesen@ gesendet');
+  } catch(e) {
+    setHomeStatus('error', 'Fehler: ' + e.message);
+  }
+}
+
+// Zurückweisen — nutzt bestehenden rejectModal, überschreibt ablehnen()
+async function ablehnen() {
+  const grund = document.getElementById('rejectGrund').value;
+  await speichereKommentare();
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
+    const res = await r.json();
+    const belege = (res.value||[]).map(i=>({id:i.id,...i.fields}))
+      .filter(b => (b.Monat||'').startsWith(_reviewMonat||_currentMonat) && (b.Fachkraft_Mail||'').toLowerCase()===(_reviewFkMail||'').toLowerCase());
+    await Promise.all(belege.map(b =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
+        method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Status: 'Abgelehnt' })
+      })
+    ));
+    // Kommentare für Mail aufbereiten
+    const offeneKomm = Object.entries(_belegKommentare)
+      .filter(([,k]) => k.status !== 'erledigt' && k.text)
+      .map(([,k]) => `<li>${esc(k.text)} <span style="color:#999">(${esc(k.datum||'')})</span></li>`)
+      .join('');
+    // Korrektur-Link für Fachkraft
+    const editUrl = `${CFG.redirectUri}?edit=${_reviewMonat}:${_reviewFkMail}`;
+    const html = `<p>Ihre Spesenabrechnung für <strong>${fmtMonat(_reviewMonat||_currentMonat)}</strong> wurde zurückgewiesen.</p>
+      ${grund ? `<p><strong>Grund:</strong> ${esc(grund)}</p>` : ''}
+      ${offeneKomm ? `<p><strong>Kommentare zur Abrechnung:</strong></p><ul>${offeneKomm}</ul>` : ''}
+      <p><a href="${editUrl}" style="background:#7b3f1e;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">Abrechnung überarbeiten →</a></p>
+      <p style="font-size:12px;color:#888">Nach der Überarbeitung bitte erneut einreichen — die Teamleitung erhält automatisch eine neue Benachrichtigung.</p>`;
+    await sendMail(_reviewFkMail, [], `[Zurückgewiesen] Spesenabr. ${fmtMonat(_reviewMonat||_currentMonat)}`, html);
+    showToast('Zurückgewiesen — E-Mail gesendet');
+    if (_isReviewMode) {
+      document.getElementById('reviewBanner')?.remove();
+      document.getElementById('reviewFrame')?.remove();
+      document.getElementById('appScreen').style.paddingTop = '';
+      _isReviewMode = false;
+    }
+    ladeTLAbrechnungen();
+  } catch(e) { showToast('Fehler: ' + e.message); }
+}
+
+// Korrekturhinweis für Fachkraft (nach Zurückweisung)
+function zeigeKorrekturHinweis() {
+  const notice = document.createElement('div');
+  notice.style.cssText = 'background:#fdf6dd;border:1px solid #c9a227;border-left:4px solid #c9a227;border-radius:var(--radius-lg);padding:12px 14px;margin:10px 12px;font-size:13px;color:#6b5414;';
+  notice.innerHTML = `<strong>✗ Ihre Abrechnung wurde zurückgewiesen.</strong><br>
+    Bitte prüfen Sie die Kommentare bei den einzelnen Belegen (gelbe Felder), korrigieren Sie und reichen Sie erneut ein.`;
+  document.getElementById('appBody').insertBefore(notice, document.getElementById('appBody').firstChild);
+  // Kommentare bei Belegen anzeigen
+  ladeMonatsdaten();
+}
+
+// ── TL sendet Prüflink per Mail ──────────────────────────────────
+async function sendeReviewLink(g) {
+  const reviewUrl = `${CFG.redirectUri}?review=${g.monat}:${g.mail}`;
+  const html = `<p>Bitte prüfen Sie die Spesenabrechnung von <strong>${esc(g.fachkraft)}</strong> für <strong>${fmtMonat(g.monat)}</strong>.</p>
+    <p><strong>Gesamtbetrag:</strong> ${fmt(g.total)} · ${g.belege.length} Positionen</p>
+    <a href="${reviewUrl}" style="display:inline-block;background:#c9a227;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:12px">Abrechnung prüfen →</a>`;
+  await sendMail(currentAccount?.username||'', [], `[Prüfung] Spesenabr. ${g.fachkraft} · ${fmtMonat(g.monat)}`, html);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2140,6 +2455,5 @@ window.addEventListener('DOMContentLoaded', () => {
     else showLoginError('MSAL konnte nicht geladen werden. Bitte Seite neu laden.');
   }, 2000); }
 });
-</script>
 </body>
 </html>
