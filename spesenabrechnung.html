@@ -2186,10 +2186,10 @@ let _belegKommentare = {}; // { belegId: { text, von, datum, status:'offen'|'erl
 let _isReviewMode  = false;
 
 async function aktiviereReviewModus(fkMail) {
-  _isReviewMode = true;
+  _isReviewMode = true;  // ZUERST setzen, bevor irgendwas geladen wird
   _reviewFkMail = fkMail;
 
-  // Gelber Rahmen — nur links/rechts/oben, nicht unten (stört nicht beim Scrollen)
+  // Gelber Streifen oben
   if (!document.getElementById('reviewFrame')) {
     const frame = document.createElement('div');
     frame.id = 'reviewFrame';
@@ -2197,27 +2197,73 @@ async function aktiviereReviewModus(fkMail) {
     document.body.appendChild(frame);
   }
 
-  // Gelber Banner — in den Header-Bereich einfügen, kein fixed mehr
+  // Gelber Banner im scroll-flow
   if (!document.getElementById('reviewBanner')) {
     const banner = document.createElement('div');
     banner.id = 'reviewBanner';
-    banner.style.cssText = 'background:#c9a227;color:#fff;padding:10px 14px;border-bottom:2px solid #a37e1a;';
+    banner.style.cssText = 'background:#c9a227;color:#fff;padding:10px 14px 12px;border-bottom:2px solid #a37e1a;';
     banner.innerHTML = `
-      <div style="font-size:12px;font-weight:700;margin-bottom:4px">🔍 PRÜFMODUS — ${esc(fkMail)}</div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:2px">🔍 PRÜFMODUS — ${esc(fkMail)}</div>
       <div style="font-size:11px;opacity:.9;margin-bottom:10px">Jeden Beleg kommentieren · dann Freigeben oder Zurückweisen</div>
       <div style="display:flex;gap:8px">
         <button onclick="speichereKommentare()" style="flex:1;background:#fff;color:#8a6d1a;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer" id="btnSaveKomm">💬 Speichern</button>
         <button onclick="openModal('rejectModal')" style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✕ Zurückweisen</button>
         <button onclick="freigebenUndPDF()" style="flex:1;background:#166534;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✓ Freigeben</button>
       </div>`;
-    // Banner direkt in den scrollbaren app-body einfügen, ganz oben
     const appBody = document.getElementById('appBody');
     appBody.insertBefore(banner, appBody.firstChild);
-    // Kein paddingTop nötig — Banner ist im Flow
   }
 
+  // Screen wechseln dann laden — _isReviewMode ist bereits true
   showScreen('home');
-  await ladeMonatsdaten();
+  // Direkt mit Review-Render laden
+  await ladeReviewBelege();
+}
+
+async function ladeReviewBelege() {
+  setHomeStatus('uploading', 'Belege werden geladen…');
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const res = await r.json();
+    const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
+    // Nach FK-Mail und Monat filtern
+    const belege = alle.filter(b =>
+      (b.Monat || '').startsWith(_reviewMonat || _currentMonat) &&
+      (b.Fachkraft_Mail || '').toLowerCase() === _reviewFkMail.toLowerCase()
+    );
+    // Vorhandene TL-Kommentare einlesen
+    belege.forEach(b => {
+      if (b.TLKommentar && !_belegKommentare[b.id]) {
+        try { _belegKommentare[b.id] = JSON.parse(b.TLKommentar); } catch(e) {}
+      }
+    });
+    // Stats updaten
+    const fahrt   = belege.find(b => b.Kategorie === 'fahrtenbuch');
+    const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
+    const total   = belege.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
+    document.getElementById('homeTotal').textContent = fmt(total);
+    document.getElementById('homeSub').textContent   = `${belege.length} Positionen · Eingereicht`;
+    document.getElementById('statFahrt').textContent  = fahrt ? fmt(fahrt.Betrag) : '—';
+    document.getElementById('statSonst').textContent  = fmt(regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0));
+    document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
+    if (fahrt) {
+      const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
+      document.getElementById('fbAmt').textContent  = fmt(fahrt.Betrag);
+      document.getElementById('fbBadge').className  = 'badge badge-approved';
+      document.getElementById('fbBadge').innerHTML  = '<span class="bdot"></span> Excel ✓';
+      document.getElementById('fbFoot').textContent = `${fd.dateiname||'Fahrtenbuch.xlsx'} · ${fd.gesamtKm||'—'} km`;
+    }
+    // Mit Kommentarfeldern rendern
+    renderHomeReview(regular);
+    clearHomeStatus();
+  } catch(e) {
+    setHomeStatus('error', 'Fehler: ' + e.message);
+  }
 }
 
 async function ladeMonatsdatenMitKommentaren() {
