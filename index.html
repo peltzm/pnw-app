@@ -1768,6 +1768,27 @@ function _btBadge(item) {
   return pre ? `<span style="display:inline-block; font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-light); border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:middle;">${pre}</span>` : '';
 }
 
+// ─── AUSWAHLFELDER ALPHABETISCH SORTIEREN ────────────────────────────────────
+// Sortiert die Optionen eines <select> alphabetisch (de, natürliche Zahlensortierung).
+// Platzhalter (leerer Wert, z.B. "— bitte wählen —") bleiben oben; Auswahl bleibt erhalten.
+function sortSelectOptions(sel) {
+  if (!sel || sel.tagName !== 'SELECT' || sel.dataset.noSort === '1') return;
+  const saved = sel.value;
+  const opts = Array.from(sel.options);
+  const pinned = opts.filter(o => o.value === '');
+  const rest = opts.filter(o => o.value !== '');
+  rest.sort((a, b) => a.text.localeCompare(b.text, 'de', { numeric: true, sensitivity: 'base' }));
+  [...pinned, ...rest].forEach(o => sel.appendChild(o)); // bestehende Knoten umsortieren
+  sel.value = saved;
+}
+function sortAllSelects(root) {
+  (root || document).querySelectorAll('select').forEach(sortSelectOptions);
+}
+// Beim Öffnen jedes Auswahlfeldes automatisch sortieren – erfasst auch dynamisch befüllte
+document.addEventListener('focusin', e => {
+  if (e.target && e.target.tagName === 'SELECT') sortSelectOptions(e.target);
+});
+
 async function loadMyDrafts() {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
