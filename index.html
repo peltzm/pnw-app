@@ -621,7 +621,12 @@ async function autoSaveDraft() {
   if (_autoSaving) return;               // keine parallelen Speicherläufe
   const vn = document.getElementById('Kind_Vorname')?.value?.trim();
   const fn = document.getElementById('Kind_Familienname')?.value?.trim();
-  if (!vn && !fn) return;                // ohne Kind-Name kein sinnvoller Entwurf
+  // Auch Stammdaten von Seite 1 rechtfertigen einen Entwurf — sonst geht z.B. eine
+  // hinzugefügte Fachkraft verloren, weil der Kind-Name (Seite 2) noch fehlt.
+  const ja = document.getElementById('Jugendamt')?.value?.trim();
+  const fk1 = document.getElementById('Fachkraft_NeueWege')?.value?.trim();
+  const hasExtraFk = (typeof _extraFachkraftCount === 'number' && _extraFachkraftCount > 0);
+  if (!vn && !fn && !ja && !fk1 && !hasExtraFk) return;  // wirklich leeres Formular: nicht speichern
   _autoSaving = true;
   try {
     const data = collectData();
@@ -1223,6 +1228,15 @@ async function copyStammdaten(id) {
         if (_scb) { _scb.checked = (s.sameAddr !== '0'); toggleSorg2SameAddr(n); }
       });
     }
+    // Restore extra Fachkräfte 2–4 (Selects müssen erst per addFachkraft() erzeugt werden)
+    [data.Fachkraft_2, data.Fachkraft_3, data.Fachkraft_4].filter(Boolean).forEach(name => {
+      addFachkraft();
+      const sel = document.getElementById('Fachkraft_' + (_extraFachkraftCount + 1));
+      if (sel) {
+        if (!Array.from(sel.options).some(o => o.value === name)) sel.add(new Option(name, name));
+        sel.value = name;
+      }
+    });
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
@@ -1349,6 +1363,15 @@ async function loadDraft(id) {
         if (_scb) { _scb.checked = (s.sameAddr !== '0'); toggleSorg2SameAddr(n); }
       });
     }
+    // Restore extra Fachkräfte 2–4 (Selects müssen erst per addFachkraft() erzeugt werden)
+    [data.Fachkraft_2, data.Fachkraft_3, data.Fachkraft_4].filter(Boolean).forEach(name => {
+      addFachkraft();
+      const sel = document.getElementById('Fachkraft_' + (_extraFachkraftCount + 1));
+      if (sel) {
+        if (!Array.from(sel.options).some(o => o.value === name)) sel.add(new Option(name, name));
+        sel.value = name;
+      }
+    });
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
