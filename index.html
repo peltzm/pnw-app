@@ -296,8 +296,8 @@
             <div class="field"><label>Letztes HPG</label><input type="date" id="Letztes_HPG" style="font-size:12px; padding:6px 8px;"></div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-            <div class="field"><label>Stunden bewilligt (Woche/Monat/Pool)</label><input type="number" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
-            <div class="field"><label>Typ der Stunden (Auswahlliste)</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Woche</option><option>Monat</option><option>Pool</option></select></div>
+            <div class="field"><label>Stunden bewilligt</label><input type="number" inputmode="decimal" step="any" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Kontingenttyp</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Woche</option><option>Monat</option><option>Pool</option></select></div>
           </div>
 
         </div>
@@ -1351,7 +1351,7 @@ async function showDraftList() {
       const itemId = item._itemId || item.ID;
       return `<div id="draft_row_${itemId}" style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px;">
         <div>
-          <div style="font-size:13px; font-weight:500; color:var(--text);">${escHtml(item.Kind_Vorname || '')} ${escHtml(item.Kind_Familienname || '')}</div>
+          <div style="font-size:13px; font-weight:500; color:var(--text);">${_btBadge(item)}${escHtml(item.Kind_Vorname || '')} ${escHtml(item.Kind_Familienname || '')}</div>
           <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt || '—')} · Geändert: ${geaendert}</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -1758,6 +1758,14 @@ function isUserInvolvedInItem(item) {
   const namen = [d.Fachkraft_NeueWege, d.Fachkraft_2, d.Fachkraft_3, d.Fachkraft_4, item.Fachkraft]
     .filter(Boolean).map(s => String(s).trim().toLowerCase());
   return namen.some(n => variants.has(n));
+}
+
+// Berichtstyp-Kürzel (VB/CL/AB) aus den Formulardaten eines Entwurfs als Badge
+function _btBadge(item) {
+  let bt = '';
+  try { bt = (JSON.parse(item.FormularDaten || '{}')._berichtstyp) || ''; } catch(e) {}
+  const pre = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[bt] || '';
+  return pre ? `<span style="display:inline-block; font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-light); border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:middle;">${pre}</span>` : '';
 }
 
 async function loadMyDrafts() {
@@ -2673,12 +2681,11 @@ const SECTION_TEMPLATES = {
       sub: 'Ergebnisse des Clearing-Prozesses',
       fields: [
         { id: 'Ausgangssituation', label: 'Clearingprozess – Ausgangssituation und Beteiligte Personen', placeholder: 'Gründe für das ambulante Clearing und zu klärende Fragestellungen, sowie die beteiligten Personen, Familiensysteme, ...' },
-        { id: 'Familienkonstellation', label: 'Familienkonstellation – aktuelle Lebenssituation', placeholder: '' },
         { id: 'Zielsetzung_Clearing', label: 'Zielsetzung des Clearingprozesses', placeholder: '' },
+        { id: 'Familienkonstellation', label: 'Familienkonstellation – aktuelle Lebenssituation', placeholder: '' },
         { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen – Vorgehen - Methoden', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
         { id: 'Anhang_Methodik', label: 'Anhang - Methodik', placeholder: 'z.B. Bei Erstellung eines Genogramms, Soziogramms, etc. hier als Anhang/Bild einzufügen' },
-        { id: 'Ergebnisse_Clearing', label: 'Ergebnisse des Clearings', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...' },
-        { cols: [
+        { id: 'Ergebnisse_Clearing', label: 'Ergebnisse des Clearings', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...', subCols: [
           { id: 'Ressourcen', label: 'Ressourcen', placeholder: 'Stärken, unterstützende Faktoren...' },
           { id: 'Risiken', label: 'Risiken', placeholder: 'Belastungen, Gefährdungsaspekte...' }
         ] },
@@ -2728,6 +2735,18 @@ function buildDynamicSections(force = false) {
           <div class="field-grid full"><div class="field">
             <textarea id="${c.id}" style="min-height:100px;" placeholder="${c.placeholder || ''}"></textarea>
           </div></div></div>`).join('') + `</div>`;
+      return;
+    }
+    // Hauptfeld mit eingebetteten Spalten (z.B. Ergebnisse mit Ressourcen | Risiken)
+    if (f.subCols) {
+      s3html += `<div class="card"><div class="card-title">${f.label}</div>
+        <div class="field-grid full"><div class="field">
+          <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder || ''}"></textarea>
+        </div></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">` +
+        f.subCols.map(c => `<div class="field"><label>${c.label}</label>
+          <textarea id="${c.id}" style="min-height:90px;" placeholder="${c.placeholder || ''}"></textarea>
+        </div>`).join('') + `</div></div>`;
       return;
     }
     s3html += `<div class="card"><div class="card-title">${f.label}</div>
@@ -2898,7 +2917,7 @@ async function buildUebersicht() {
       const sc = statusColor[item.Status] || 'var(--text-muted)';
       return `<div style="display:flex; align-items:center; gap:12px; padding:10px 12px; border-bottom:1px solid var(--border);">
         <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(item.Kind_Vorname||'')} ${escHtml(item.Kind_Familienname||'')}</div>
+          <div style="font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${_btBadge(item)}${escHtml(item.Kind_Vorname||'')} ${escHtml(item.Kind_Familienname||'')}</div>
           <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt||'—')} · ${geaendert}</div>
         </div>
         <span style="font-size:11px; font-weight:500; color:${sc}; white-space:nowrap;">${escHtml(item.Status||'Entwurf')}</span>
