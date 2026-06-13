@@ -239,12 +239,13 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     align-items: center;
     gap: 8px;
     padding: 0 0 12px 0;
+    min-width: 0;
   }
   .mobile-filter-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 9px 16px;
+    gap: 7px;
+    padding: 8px 14px;
     background: var(--surface);
     border: 1px solid var(--border-strong);
     border-radius: 20px;
@@ -255,6 +256,7 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     font-family: inherit;
     min-height: 42px;
     white-space: nowrap;
+    flex-shrink: 0;
   }
   .mobile-filter-btn.has-filter {
     background: var(--accent-light);
@@ -262,8 +264,30 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     color: var(--accent);
     font-weight: 600;
   }
+  /* Dots für aktive Filter */
+  .filter-dots {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .filter-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .filter-dot.kat  { background: var(--accent); }
+  .filter-dot.zg   { background: #6b21a8; }
+  .filter-dot.lk   { background: var(--info); }
+  .filter-dot-label {
+    display: none; /* nur Dots, kein Text */
+  }
   .mobile-add-btn {
     margin-left: auto;
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -278,6 +302,8 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     font-family: inherit;
     min-height: 42px;
     white-space: nowrap;
+  }
+}
   }
 }
 
@@ -342,9 +368,14 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
 }
 .bs-footer {
   padding: 1rem 1.25rem 0;
-  display: flex; gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.bs-footer .btn { flex: 1; justify-content: center; }
+.bs-footer-btns {
+  display: flex;
+  gap: 10px;
+}
 </style>
 </head>
 <body>
@@ -411,8 +442,9 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
       <div class="mobile-filter-bar">
         <button class="mobile-filter-btn" id="mobileFilterBtn" onclick="openBottomSheet()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-          <span id="mobileFilterLabel">Filter</span>
+          Filter
         </button>
+        <div class="filter-dots" id="filterDots"></div>
         <button class="mobile-add-btn" onclick="openNew()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
           Hinzufügen
@@ -458,8 +490,11 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     <div class="bs-chips" id="bsLkChips"></div>
   </div>
   <div class="bs-footer">
-    <button class="btn btn-secondary" onclick="clearAllFilters()">Zurücksetzen</button>
-    <button class="btn btn-primary" onclick="closeBottomSheet()">Anzeigen</button>
+    <div id="bsFilterLimit" style="display:none; width:100%; text-align:center; font-size:13px; color:var(--accent); background:var(--accent-light); border-radius:var(--radius); padding:8px;">Maximal 4 Filter gleichzeitig</div>
+    <div class="bs-footer-btns">
+      <button class="btn btn-secondary" style="flex:1;justify-content:center;" onclick="clearAllFilters()">Zurücksetzen</button>
+      <button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="closeBottomSheet()">Anzeigen</button>
+    </div>
   </div>
 </div>
 <div class="detail-backdrop" id="detailBackdrop" onclick="closeDetail()"></div>
@@ -753,13 +788,27 @@ document.addEventListener('click', function(e) {
   if (!chip) return;
   const type = chip.dataset.type;
   const val  = chip.dataset.val;
-  if (type === 'kat') { activeKat.has(val) ? activeKat.delete(val) : activeKat.add(val); }
-  if (type === 'zg')  { activeZg.has(val)  ? activeZg.delete(val)  : activeZg.add(val);  }
-  if (type === 'lk')  { activeLk = val; buildLkChips(); }
+
+  if (type === 'kat') {
+    if (activeKat.has(val)) { activeKat.delete(val); }
+    else { if (totalActiveFilters() >= 4) { showFilterLimit(); return; } activeKat.add(val); }
+  }
+  if (type === 'zg') {
+    if (activeZg.has(val)) { activeZg.delete(val); }
+    else { if (totalActiveFilters() >= 4) { showFilterLimit(); return; } activeZg.add(val); }
+  }
+  if (type === 'lk') { activeLk = val; buildLkChips(); }
   buildBottomSheetChips();
   buildSidebarFilters();
   applyFilters();
 });
+
+function showFilterLimit() {
+  const el = document.getElementById('bsFilterLimit');
+  if (!el) return;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 2200);
+}
 
 function clearAllFilters() {
   activeKat.clear(); activeZg.clear(); activeLk = '';
@@ -767,17 +816,29 @@ function clearAllFilters() {
   updateMobileFilterLabel();
 }
 
+function totalActiveFilters() {
+  return activeKat.size + activeZg.size + (activeLk ? 1 : 0);
+}
+
 function updateMobileFilterLabel() {
-  const btn = document.getElementById('mobileFilterBtn');
-  const label = document.getElementById('mobileFilterLabel');
-  if (!btn || !label) return;
-  const parts = [...activeKat, ...activeZg, ...(activeLk ? [activeLk] : [])];
-  if (parts.length) {
-    label.textContent = parts.length <= 2 ? parts.join(', ') : parts.slice(0,2).join(', ') + ` +${parts.length-2}`;
+  const btn  = document.getElementById('mobileFilterBtn');
+  const dots = document.getElementById('filterDots');
+  if (!btn || !dots) return;
+
+  const allActive = [
+    ...[...activeKat].map(v => ({ type: 'kat', val: v })),
+    ...[...activeZg].map(v  => ({ type: 'zg',  val: v })),
+    ...(activeLk ? [{ type: 'lk', val: activeLk }] : []),
+  ];
+
+  if (allActive.length) {
     btn.classList.add('has-filter');
+    dots.innerHTML = allActive.map(f =>
+      `<div class="filter-dot ${f.type}" title="${esc(f.val)}"></div>`
+    ).join('');
   } else {
-    label.textContent = 'Filter';
     btn.classList.remove('has-filter');
+    dots.innerHTML = '';
   }
 }
 
