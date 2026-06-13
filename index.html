@@ -255,7 +255,7 @@
               <select id="Jugendamt"><option>Dachau</option><option>Dahme-Spreewald</option><option>Eichstätt</option><option>Freising</option><option>Ingolstadt</option><option>Kelheim</option><option>Landshut</option><option>Neuburg-Schrobenhausen</option><option>Pfaffenhofen</option><option>Regensburg</option><option>Starnberg</option></select>
             </div>
             <div class="field"><label>Hilfeart</label>
-              <select id="Hilfeart">
+              <select id="Hilfeart" data-sortby="bezeichnung">
                 <option>§ 13 Abs. 3 SGB VIII - Jugendsozialarbeit</option>
                 <option>§ 18 SGB VIII - Begleiteter Umgang</option>
                 <option>§ 27 (2) SGB VIII - Clearing</option>
@@ -1773,11 +1773,18 @@ function _btBadge(item) {
 // Platzhalter (leerer Wert, z.B. "— bitte wählen —") bleiben oben; Auswahl bleibt erhalten.
 function sortSelectOptions(sel) {
   if (!sel || sel.tagName !== 'SELECT' || sel.dataset.noSort === '1') return;
+  const mode = sel.dataset.sortby || '';
+  const keyOf = (o) => {
+    const t = o.text;
+    // Hilfeart: nach Bezeichnung (Text nach "§ … - ") statt nach Paragraph sortieren
+    if (mode === 'bezeichnung') { const i = t.indexOf(' - '); return i >= 0 ? t.slice(i + 3) : t; }
+    return t;
+  };
   const saved = sel.value;
   const opts = Array.from(sel.options);
   const pinned = opts.filter(o => o.value === '');
   const rest = opts.filter(o => o.value !== '');
-  rest.sort((a, b) => a.text.localeCompare(b.text, 'de', { numeric: true, sensitivity: 'base' }));
+  rest.sort((a, b) => keyOf(a).localeCompare(keyOf(b), 'de', { numeric: true, sensitivity: 'base' }));
   [...pinned, ...rest].forEach(o => sel.appendChild(o)); // bestehende Knoten umsortieren
   sel.value = saved;
 }
@@ -2465,8 +2472,9 @@ async function loadGroupMembers() {
     // Filter out null/empty entries
     _teamMembers = _teamMembers.filter(m => m.displayName || m.mail);
     _tlMembers = _tlMembers.filter(m => m.displayName || m.mail);
-    _teamMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
-    _tlMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
+    // Nach Vorname sortieren (Anzeigename hat das Format "Vorname Nachname")
+    _teamMembers.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
+    _tlMembers.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
     
     // Populate Fachkraft dropdown
     const fkSelect = document.getElementById('Fachkraft_NeueWege');
@@ -2509,11 +2517,7 @@ async function loadGroupMembers() {
       if (r2.ok) {
         const d2 = await r2.json();
         _teamMembers = (d2.value || []).filter(u => u.mail);
-        const sortName = m => {
-          const parts = (m.displayName || '').split(' ');
-          return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
-        };
-        _teamMembers.sort((a,b) => sortName(a).localeCompare(sortName(b), 'de'));
+        _teamMembers.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
       }
     } catch(e2) {}
     const fkSelect3 = document.getElementById('Fachkraft_NeueWege');
