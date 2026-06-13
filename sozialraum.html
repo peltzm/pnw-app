@@ -569,11 +569,11 @@ const CONFIG = {
 
 let msalInstance = null, currentAccount = null, accessToken = null;
 let _graphSiteId = null, _graphListId = null;
-let allItems = [];       // all loaded SP items
-let activeKat = '';      // sidebar category filter
-let activeZg  = '';      // sidebar zielgruppe filter
-let activeLk  = '';      // landkreis chip filter
-let currentEditId = null; // SP item id being edited
+let allItems = [];
+let activeKat = new Set(); // Mehrfachauswahl Kategorie
+let activeZg  = new Set(); // Mehrfachauswahl Zielgruppe
+let activeLk  = '';        // Landkreis (Einfachauswahl)
+let currentEditId = null;
 
 // ── MSAL (1:1 Berichtsgenerator) ─────────────────────────────────────────
 async function initMsal() {
@@ -684,8 +684,8 @@ function mapItem(item) {
 
 // ── Sidebar filters ───────────────────────────────────────────────────────
 function buildSidebarFilters() {
-  buildChipGroup('katFilter', countBy('kategorie'), activeKat, v => { activeKat = activeKat === v ? '' : v; applyFilters(); buildSidebarFilters(); });
-  buildChipGroup('zgFilter',  countBy('zielgruppe'), activeZg,  v => { activeZg  = activeZg  === v ? '' : v; applyFilters(); buildSidebarFilters(); });
+  buildChipGroup('katFilter', countBy('kategorie'), activeKat, v => { activeKat.has(v) ? activeKat.delete(v) : activeKat.add(v); applyFilters(); buildSidebarFilters(); });
+  buildChipGroup('zgFilter',  countBy('zielgruppe'), activeZg,  v => { activeZg.has(v)  ? activeZg.delete(v)  : activeZg.add(v);  applyFilters(); buildSidebarFilters(); });
 }
 
 function countBy(field) {
@@ -694,11 +694,11 @@ function countBy(field) {
   return Object.entries(map).sort((a,b) => b[1]-a[1]);
 }
 
-function buildChipGroup(elId, entries, activeVal, onClick) {
+function buildChipGroup(elId, entries, activeSet, onClick) {
   const el = document.getElementById(elId);
   if (!entries.length) { el.innerHTML = '<span style="font-size:12px; color:var(--text-hint); padding:4px 10px;">—</span>'; return; }
   el.innerHTML = entries.map(([val, cnt]) => `
-    <button class="filter-chip ${activeVal===val?'active':''}" onclick="(${onClick.toString()})('${esc(val)}')">
+    <button class="filter-chip ${activeSet.has(val)?'active':''}" onclick="(${onClick.toString()})('${esc(val)}')">
       <span>${esc(val)}</span><span class="count">${cnt}</span>
     </button>`).join('');
 }
@@ -726,26 +726,43 @@ function closeBottomSheet() {
 }
 
 function buildBottomSheetChips() {
-  buildBsChips('bsKatChips', countBy('kategorie'), activeKat, v => { activeKat = activeKat===v?'':v; buildBottomSheetChips(); applyFilters(); buildSidebarFilters(); });
-  buildBsChips('bsZgChips',  countBy('zielgruppe'), activeZg,  v => { activeZg  = activeZg ===v?'':v; buildBottomSheetChips(); applyFilters(); buildSidebarFilters(); });
-  // LK chips in bottom sheet
+  // Kategorie
+  const kats = countBy('kategorie');
+  const katEl = document.getElementById('bsKatChips');
+  katEl.innerHTML = kats.length
+    ? kats.map(([val, cnt]) => `<button class="bs-chip ${activeKat.has(val)?'active':''}" data-type="kat" data-val="${esc(val)}">${esc(val)} <span style="font-size:12px;opacity:.7">${cnt}</span></button>`).join('')
+    : '<span style="font-size:13px;color:var(--text-hint);">—</span>';
+
+  // Zielgruppe
+  const zgs = countBy('zielgruppe');
+  const zgEl = document.getElementById('bsZgChips');
+  zgEl.innerHTML = zgs.length
+    ? zgs.map(([val, cnt]) => `<button class="bs-chip ${activeZg.has(val)?'active':''}" data-type="zg" data-val="${esc(val)}">${esc(val)} <span style="font-size:12px;opacity:.7">${cnt}</span></button>`).join('')
+    : '<span style="font-size:13px;color:var(--text-hint);">—</span>';
+
+  // Landkreis
   const lks = [...new Set(allItems.map(i=>i.landkreis).filter(Boolean))].sort();
-  const el = document.getElementById('bsLkChips');
-  el.innerHTML = [['', 'Alle'],...lks.map(l=>[l,l])].map(([val,label]) =>
-    `<button class="bs-chip ${activeLk===val?'active':''}" onclick="(function(){activeLk='${esc(val)}';buildBottomSheetChips();buildLkChips();applyFilters();})()">${esc(label)}</button>`
-  ).join('');
+  const lkEl = document.getElementById('bsLkChips');
+  lkEl.innerHTML = `<button class="bs-chip ${activeLk===''?'active':''}" data-type="lk" data-val="">Alle</button>`
+    + lks.map(val => `<button class="bs-chip ${activeLk===val?'active':''}" data-type="lk" data-val="${esc(val)}">${esc(val)}</button>`).join('');
 }
 
-function buildBsChips(elId, entries, activeVal, onClick) {
-  const el = document.getElementById(elId);
-  if (!entries.length) { el.innerHTML = '<span style="font-size:13px;color:var(--text-hint);">—</span>'; return; }
-  el.innerHTML = entries.map(([val, cnt]) =>
-    `<button class="bs-chip ${activeVal===val?'active':''}" onclick='(${onClick.toString().replace(/'/g,"\\'")})(${JSON.stringify(val)})'>${esc(val)} <span style="font-size:12px;opacity:.7">${cnt}</span></button>`
-  ).join('');
-}
+// Single delegated click handler for all bottom sheet chips
+document.addEventListener('click', function(e) {
+  const chip = e.target.closest('.bs-chip');
+  if (!chip) return;
+  const type = chip.dataset.type;
+  const val  = chip.dataset.val;
+  if (type === 'kat') { activeKat.has(val) ? activeKat.delete(val) : activeKat.add(val); }
+  if (type === 'zg')  { activeZg.has(val)  ? activeZg.delete(val)  : activeZg.add(val);  }
+  if (type === 'lk')  { activeLk = val; buildLkChips(); }
+  buildBottomSheetChips();
+  buildSidebarFilters();
+  applyFilters();
+});
 
 function clearAllFilters() {
-  activeKat = ''; activeZg = ''; activeLk = '';
+  activeKat.clear(); activeZg.clear(); activeLk = '';
   buildSidebarFilters(); buildLkChips(); buildBottomSheetChips(); applyFilters();
   updateMobileFilterLabel();
 }
@@ -754,9 +771,9 @@ function updateMobileFilterLabel() {
   const btn = document.getElementById('mobileFilterBtn');
   const label = document.getElementById('mobileFilterLabel');
   if (!btn || !label) return;
-  const active = [activeKat, activeZg, activeLk].filter(Boolean);
-  if (active.length) {
-    label.textContent = active.join(', ');
+  const parts = [...activeKat, ...activeZg, ...(activeLk ? [activeLk] : [])];
+  if (parts.length) {
+    label.textContent = parts.length <= 2 ? parts.join(', ') : parts.slice(0,2).join(', ') + ` +${parts.length-2}`;
     btn.classList.add('has-filter');
   } else {
     label.textContent = 'Filter';
@@ -768,9 +785,9 @@ function updateMobileFilterLabel() {
 function applyFilters() {
   const q = document.getElementById('searchInput')?.value.toLowerCase().trim() || '';
   let filtered = allItems;
-  if (activeKat)  filtered = filtered.filter(i => i.kategorie  === activeKat);
-  if (activeZg)   filtered = filtered.filter(i => i.zielgruppe === activeZg);
-  if (activeLk)   filtered = filtered.filter(i => i.landkreis  === activeLk);
+  if (activeKat.size) filtered = filtered.filter(i => activeKat.has(i.kategorie));
+  if (activeZg.size)  filtered = filtered.filter(i => activeZg.has(i.zielgruppe));
+  if (activeLk)       filtered = filtered.filter(i => i.landkreis === activeLk);
   if (q) filtered = filtered.filter(i =>
     i.name.toLowerCase().includes(q) ||
     i.beschreibung.toLowerCase().includes(q) ||
