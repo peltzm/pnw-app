@@ -316,8 +316,8 @@
             <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind_Geburtsdatum"></div>
           </div>
           <div class="field-grid">
-            <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind_Strasse" oninput="toggleSorgSameAddr()"></div>
-            <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind_PLZ_Ort" oninput="toggleSorgSameAddr()"></div>
+            <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind_Strasse" oninput="syncKind1Addr()"></div>
+            <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind_PLZ_Ort" oninput="syncKind1Addr()"></div>
           </div>
 
           <div id="extraKinderContainer"></div>
@@ -817,10 +817,11 @@ function collectData() {
     const el = document.getElementById('Fachkraft_' + i);
     data['Fachkraft_' + i] = el ? el.value : '';
   }
-  // Combine Berichtszeitraum from two date fields
+  // Combine Berichtszeitraum from two date fields (im deutschen Kurzformat dd.mm.yy)
+  const _de = iso => { const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : iso; };
   const bzVon = document.getElementById('BZ_Von')?.value || '';
   const bzBis = document.getElementById('BZ_Bis')?.value || '';
-  data['Berichtszeitraum'] = bzVon && bzBis ? bzVon + ' – ' + bzBis : bzVon || bzBis || '';
+  data['Berichtszeitraum'] = bzVon && bzBis ? _de(bzVon) + ' – ' + _de(bzBis) : (bzVon ? _de(bzVon) : (bzBis ? _de(bzBis) : ''));
   for (let i = 1; i <= 4; i++) {
     data['Ziel_' + i + '_Beschreibung'] = document.getElementById('Ziel_' + i + '_Beschreibung')?.value || '';
     data['Ziel_' + i + '_Methoden'] = document.getElementById('Ziel_' + i + '_Methoden')?.value || '';
@@ -865,7 +866,14 @@ async function fillTemplate(templateBytes, data) {
   xml = repairSplitTokens(xml);
 
   for (const [key, value] of Object.entries(data)) {
-    const safe = String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // ISO-Datum (yyyy-mm-dd) ins deutsche Kurzformat dd.mm.yy umwandeln.
+    // Datumsfelder kommen aus <input type="date"> immer als "2026-04-01".
+    let v = value;
+    if (typeof v === 'string') {
+      const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) v = `${m[3]}.${m[2]}.${m[1].slice(2)}`;
+    }
+    const safe = String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     xml = xml.split('{{'+key+'}}').join(safe);
   }
   zip.file('word/document.xml', xml);
@@ -1196,6 +1204,8 @@ async function copyStammdaten(id) {
         if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
         if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
         if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
+        const _kcb = document.getElementById('Kind2_SameAddr_'+n);
+        if (_kcb) { _kcb.checked = (k.sameAddr !== '0'); toggleKind2SameAddr(n); }
       });
     }
     // Restore extra Sorg
@@ -1209,6 +1219,8 @@ async function copyStammdaten(id) {
         if (document.getElementById('Sorg2_Geb_'+n)) document.getElementById('Sorg2_Geb_'+n).value = s.geburtsdatum||'';
         if (document.getElementById('Sorg2_Str_'+n)) document.getElementById('Sorg2_Str_'+n).value = s.strasse||'';
         if (document.getElementById('Sorg2_PLZ_'+n)) document.getElementById('Sorg2_PLZ_'+n).value = s.plzOrt||'';
+        const _scb = document.getElementById('Sorg2_SameAddr_'+n);
+        if (_scb) { _scb.checked = (s.sameAddr !== '0'); toggleSorg2SameAddr(n); }
       });
     }
     Object.entries(data).forEach(([key, value]) => {
@@ -1230,6 +1242,8 @@ async function copyStammdaten(id) {
         if (document.getElementById('Ziel_'+n+'_Ergebnis')) document.getElementById('Ziel_'+n+'_Ergebnis').value = z.ergebnis || '';
       });
     }
+    // Kind 1 befüllt -> abhängige "wie Kind 1"-Blöcke synchronisieren
+    syncKind1Addr();
     showMainLayout();
     goTo(1);
     window.scrollTo(0,0);
@@ -1316,6 +1330,8 @@ async function loadDraft(id) {
         if (document.getElementById('Kind2_Geb_'+n)) document.getElementById('Kind2_Geb_'+n).value = k.geburtsdatum||'';
         if (document.getElementById('Kind2_Str_'+n)) document.getElementById('Kind2_Str_'+n).value = k.strasse||'';
         if (document.getElementById('Kind2_PLZ_'+n)) document.getElementById('Kind2_PLZ_'+n).value = k.plzOrt||'';
+        const _kcb = document.getElementById('Kind2_SameAddr_'+n);
+        if (_kcb) { _kcb.checked = (k.sameAddr !== '0'); toggleKind2SameAddr(n); }
       });
     }
     // Restore extra Sorg
@@ -1329,6 +1345,8 @@ async function loadDraft(id) {
         if (document.getElementById('Sorg2_Geb_'+n)) document.getElementById('Sorg2_Geb_'+n).value = s.geburtsdatum||'';
         if (document.getElementById('Sorg2_Str_'+n)) document.getElementById('Sorg2_Str_'+n).value = s.strasse||'';
         if (document.getElementById('Sorg2_PLZ_'+n)) document.getElementById('Sorg2_PLZ_'+n).value = s.plzOrt||'';
+        const _scb = document.getElementById('Sorg2_SameAddr_'+n);
+        if (_scb) { _scb.checked = (s.sameAddr !== '0'); toggleSorg2SameAddr(n); }
       });
     }
     Object.entries(data).forEach(([key, value]) => {
@@ -1363,7 +1381,8 @@ async function loadDraft(id) {
     // "Anschrift wie Kind 1" wiederherstellen (Default: aktiv)
     const _sameCb = document.getElementById('Sorg_SameAddr');
     if (_sameCb) _sameCb.checked = (data._sorgSameAddr !== '0');
-    toggleSorgSameAddr();
+    // Kind 1 ist jetzt befüllt -> alle abhängigen "wie Kind 1"-Blöcke final synchronisieren
+    syncKind1Addr();
     toggleBesprochenDatum();
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
@@ -2415,6 +2434,13 @@ function sortMemberName(m) {
   return parts.length > 1 ? `${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}` : dn;
 }
 
+// Adresse von Kind 1 hat sich geändert -> alle abhängigen "wie Kind 1"-Blöcke aktualisieren
+function syncKind1Addr() {
+  toggleSorgSameAddr();
+  for (let i = 1; i <= extraKindCount; i++) toggleKind2SameAddr(i);
+  for (let i = 1; i <= extraSorgCount; i++) toggleSorg2SameAddr(i);
+}
+
 // Sorgeberechtigte/r 1: Adresse von Kind 1 übernehmen, wenn "Anschrift wie Kind 1" aktiv
 function toggleSorgSameAddr() {
   const cb = document.getElementById('Sorg_SameAddr');
@@ -3018,13 +3044,33 @@ function addExtraSorg() {
       <div class="field"><label>Familienname</label><input type="text" id="Sorg2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
       <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg2_Beziehung_${n}" style="width:100%;"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
     </div>
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:8px;">
+      <input type="checkbox" id="Sorg2_SameAddr_${n}" checked onchange="toggleSorg2SameAddr(${n})" style="width:14px; height:14px; cursor:pointer;">
+      Anschrift wie Kind 1
+    </label>
     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
       <div class="field"><label>Geburtsdatum</label><input type="date" id="Sorg2_Geb_${n}" style="width:100%;"></div>
       <div class="field"><label>Straße + Nr.</label><input type="text" id="Sorg2_Str_${n}" style="width:100%;"></div>
       <div class="field"><label>PLZ + Ort</label><input type="text" id="Sorg2_PLZ_${n}" style="width:100%;"></div>
     </div>`;
   document.getElementById('extraSorgContainer').appendChild(div);
+  toggleSorg2SameAddr(n);
   enableSpellcheck();
+}
+
+// Weiterer Sorgeberechtigter n: Adresse von Kind 1 übernehmen/sperren
+function toggleSorg2SameAddr(n) {
+  const cb = document.getElementById('Sorg2_SameAddr_' + n);
+  const str = document.getElementById('Sorg2_Str_' + n);
+  const plz = document.getElementById('Sorg2_PLZ_' + n);
+  if (!cb || !str || !plz) return;
+  if (cb.checked) {
+    str.value = document.getElementById('Kind_Strasse')?.value || '';
+    plz.value = document.getElementById('Kind_PLZ_Ort')?.value || '';
+    [str, plz].forEach(el => { el.readOnly = true; el.style.background = 'var(--bg)'; el.style.cursor = 'not-allowed'; });
+  } else {
+    [str, plz].forEach(el => { el.readOnly = false; el.style.background = ''; el.style.cursor = ''; });
+  }
 }
 
 function removeExtraSorg(n) {
@@ -3057,13 +3103,33 @@ function addExtraKind() {
       <div class="field"><label>Familienname</label><input type="text" id="Kind2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
       <div class="field"><label>Geburtsdatum</label><input type="date" id="Kind2_Geb_${n}" style="width:100%;"></div>
     </div>
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:8px;">
+      <input type="checkbox" id="Kind2_SameAddr_${n}" checked onchange="toggleKind2SameAddr(${n})" style="width:14px; height:14px; cursor:pointer;">
+      Anschrift wie Kind 1
+    </label>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
       <div class="field"><label>Straße + Nr.</label><input type="text" id="Kind2_Str_${n}" style="width:100%;"></div>
       <div class="field"><label>PLZ + Ort</label><input type="text" id="Kind2_PLZ_${n}" style="width:100%;"></div>
     </div>
 `;
   document.getElementById('extraKinderContainer').appendChild(div);
+  toggleKind2SameAddr(n);
   enableSpellcheck();
+}
+
+// Weiteres Kind n: Adresse von Kind 1 übernehmen/sperren
+function toggleKind2SameAddr(n) {
+  const cb = document.getElementById('Kind2_SameAddr_' + n);
+  const str = document.getElementById('Kind2_Str_' + n);
+  const plz = document.getElementById('Kind2_PLZ_' + n);
+  if (!cb || !str || !plz) return;
+  if (cb.checked) {
+    str.value = document.getElementById('Kind_Strasse')?.value || '';
+    plz.value = document.getElementById('Kind_PLZ_Ort')?.value || '';
+    [str, plz].forEach(el => { el.readOnly = true; el.style.background = 'var(--bg)'; el.style.cursor = 'not-allowed'; });
+  } else {
+    [str, plz].forEach(el => { el.readOnly = false; el.style.background = ''; el.style.cursor = ''; });
+  }
 }
 
 function removeExtraKind(n) {
@@ -3084,7 +3150,8 @@ function collectExtraKinder() {
     const g = document.getElementById('Kind2_Geb_' + i)?.value || '';
     const str = document.getElementById('Kind2_Str_' + i)?.value || '';
     const plz = document.getElementById('Kind2_PLZ_' + i)?.value || '';
-    if (v || n) kids.push({vorname:v, name:n, geburtsdatum:g, strasse:str, plzOrt:plz});
+    const same = document.getElementById('Kind2_SameAddr_' + i)?.checked ? '1' : '0';
+    if (v || n) kids.push({vorname:v, name:n, geburtsdatum:g, strasse:str, plzOrt:plz, sameAddr:same});
   }
   return kids;
 }
@@ -3098,7 +3165,8 @@ function collectExtraSorg() {
     const g = document.getElementById('Sorg2_Geb_' + i)?.value || '';
     const str = document.getElementById('Sorg2_Str_' + i)?.value || '';
     const plz = document.getElementById('Sorg2_PLZ_' + i)?.value || '';
-    if (v || n) sorgs.push({vorname:v, name:n, beziehung:b, geburtsdatum:g, strasse:str, plzOrt:plz});
+    const same = document.getElementById('Sorg2_SameAddr_' + i)?.checked ? '1' : '0';
+    if (v || n) sorgs.push({vorname:v, name:n, beziehung:b, geburtsdatum:g, strasse:str, plzOrt:plz, sameAddr:same});
   }
   return sorgs;
 }
