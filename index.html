@@ -797,6 +797,12 @@ function collectData() {
     data[`Kind2_Str_${i+1}`] = k.strasse || '';
     data[`Kind2_PLZ_${i+1}`] = k.plzOrt || '';
   });
+  // Kompakte Liste der weiteren Kinder (eine Zeile je Kind) — für ein einzelnes
+  // {{Kind2_Liste}}-Token, damit die Zelle nicht durch 8 feste Slots aufgebläht wird.
+  data['Kind2_Liste'] = data._extraKinder
+    .map(k => [k.vorname, k.name].filter(Boolean).join(' ').trim())
+    .filter(Boolean)
+    .join('\n');
   data._extraSorg.forEach((s, i) => {
     data[`Sorg2_Vorname_${i+1}`] = s.vorname || '';
     data[`Sorg2_Name_${i+1}`] = s.name || '';
@@ -895,7 +901,13 @@ async function fillTemplate(templateBytes, data) {
       const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (m) v = `${m[3]}.${m[2]}.${m[1].slice(2)}`;
     }
-    const safe = String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Sonderzeichen maskieren, dann Zeilenumbrüche aus den Textfeldern in echte
+    // Word-Umbrüche (<w:br/>) umsetzen — ein literales "\n" im <w:t> erzeugt sonst
+    // keinen Umbruch und der Text läuft im Dokument zu einem Block zusammen.
+    const safe = String(v == null ? '' : v)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\r\n?/g,'\n')
+      .split('\n').join('</w:t><w:br/><w:t xml:space="preserve">');
     xml = xml.split('{{'+key+'}}').join(safe);
   }
   // Im Datensatz nicht belegte Tokens entfernen (z.B. ungenutzte Kind2-/Sorg2-Slots),
