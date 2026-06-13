@@ -2186,39 +2186,37 @@ async function aktiviereReviewModus(fkMail) {
   _isReviewMode = true;
   _reviewFkMail = fkMail;
 
-  // Gelber Streifen oben
+  // Screen direkt umschalten ohne ladeMonatsdaten
+  ['home','erfassen','abschluss','teamleiter'].forEach(s => {
+    document.getElementById('screen-'+s).classList.toggle('active', s==='home');
+    document.getElementById('nav-'+s)?.classList.toggle('active', s==='home');
+  });
+  document.getElementById('appBody').scrollTo(0,0);
+
+  // Gelber Streifen
   if (!document.getElementById('reviewFrame')) {
     const frame = document.createElement('div');
     frame.id = 'reviewFrame';
-    frame.style.cssText = 'position:fixed;top:0;left:0;right:0;height:4px;background:#c9a227;z-index:998;pointer-events:none;';
+    frame.style.cssText = 'position:fixed;top:0;left:0;right:0;height:4px;background:#c9a227;z-index:999;pointer-events:none;';
     document.body.appendChild(frame);
   }
 
-  // Gelber Banner — in app-body einfügen NACH showScreen
-  // Erst Screen wechseln, dann Banner einfügen
-  showScreen('home');
-
-  // Kurz warten damit DOM updated ist
-  await new Promise(r => setTimeout(r, 50));
-
+  // Banner in appBody (scrollt mit)
   if (!document.getElementById('reviewBanner')) {
     const banner = document.createElement('div');
     banner.id = 'reviewBanner';
-    banner.style.cssText = 'background:#c9a227;color:#fff;padding:10px 14px 12px;margin-bottom:4px;';
+    banner.style.cssText = 'background:#c9a227;color:#fff;padding:12px 14px;';
     banner.innerHTML = `
-      <div style="font-size:12px;font-weight:700;margin-bottom:2px">🔍 PRÜFMODUS — ${esc(fkMail)}</div>
-      <div style="font-size:11px;opacity:.9;margin-bottom:10px">Jeden Beleg kommentieren · dann Freigeben oder Zurückweisen</div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:2px">🔍 PRÜFMODUS — ${fkMail}</div>
+      <div style="font-size:11px;opacity:.9;margin-bottom:10px">Unter jedem Beleg Kommentar hinzufügen · dann Freigeben oder Zurückweisen</div>
       <div style="display:flex;gap:8px">
-        <button onclick="speichereKommentare()" style="flex:1;background:#fff;color:#8a6d1a;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer" id="btnSaveKomm">💬 Speichern</button>
-        <button onclick="openModal('rejectModal')" style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✕ Zurückweisen</button>
-        <button onclick="freigebenUndPDF()" style="flex:1;background:#166534;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✓ Freigeben</button>
+        <button onclick="speichereKommentare()" style="flex:1;background:#fff;color:#8a6d1a;border:none;border-radius:20px;padding:9px 10px;font-size:12px;font-weight:600;cursor:pointer" id="btnSaveKomm">💬 Speichern</button>
+        <button onclick="openModal('rejectModal')" style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:20px;padding:9px 10px;font-size:12px;font-weight:600;cursor:pointer">✕ Zurückweisen</button>
+        <button onclick="freigebenUndPDF()" style="flex:1;background:#166534;color:#fff;border:none;border-radius:20px;padding:9px 10px;font-size:12px;font-weight:600;cursor:pointer">✓ Freigeben</button>
       </div>`;
-    // In screen-home einfügen, ganz oben
-    const screenHome = document.getElementById('screen-home');
-    screenHome.insertBefore(banner, screenHome.firstChild);
+    document.getElementById('appBody').insertBefore(banner, document.getElementById('appBody').firstChild);
   }
 
-  // Belege laden
   await ladeReviewBelege();
 }
 
@@ -2482,15 +2480,86 @@ async function ablehnen() {
   } catch(e) { showToast('Fehler: ' + e.message); }
 }
 
-// Korrekturhinweis für Fachkraft (nach Zurückweisung)
-function zeigeKorrekturHinweis() {
-  const notice = document.createElement('div');
-  notice.style.cssText = 'background:#fdf6dd;border:1px solid #c9a227;border-left:4px solid #c9a227;border-radius:var(--radius-lg);padding:12px 14px;margin:10px 12px;font-size:13px;color:#6b5414;';
-  notice.innerHTML = `<strong>✗ Ihre Abrechnung wurde zurückgewiesen.</strong><br>
-    Bitte prüfen Sie die Kommentare bei den einzelnen Belegen (gelbe Felder), korrigieren Sie und reichen Sie erneut ein.`;
-  document.getElementById('appBody').insertBefore(notice, document.getElementById('appBody').firstChild);
-  // Kommentare bei Belegen anzeigen
-  ladeMonatsdaten();
+// Korrekturhinweis für Fachkraft (nach Zurückweisung via ?edit= Link)
+async function zeigeKorrekturHinweis() {
+  // Screen auf home
+  ['home','erfassen','abschluss','teamleiter'].forEach(s => {
+    document.getElementById('screen-'+s).classList.toggle('active', s==='home');
+    document.getElementById('nav-'+s)?.classList.toggle('active', s==='home');
+  });
+
+  // Gelber Hinweisbalken
+  const appBody = document.getElementById('appBody');
+  if (!document.getElementById('korrekturHinweis')) {
+    const notice = document.createElement('div');
+    notice.id = 'korrekturHinweis';
+    notice.style.cssText = 'background:#fdf6dd;border-left:4px solid #c9a227;padding:12px 14px;font-size:13px;color:#6b5414;';
+    notice.innerHTML = `<strong>✗ Ihre Abrechnung wurde zurückgewiesen.</strong><br>
+      Bitte prüfen Sie die gelben Kommentarfelder bei den Belegen, korrigieren Sie und reichen Sie erneut ein.`;
+    appBody.insertBefore(notice, appBody.firstChild);
+  }
+
+  // TL-Kommentare aus SharePoint laden
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const res = await r.json();
+    const myMail = (currentAccount?.username || '').toLowerCase();
+    const belege = (res.value || []).map(i => ({ id: i.id, ...i.fields }))
+      .filter(b => (b.Fachkraft_Mail||'').toLowerCase() === myMail &&
+                   (b.Monat||'').startsWith(_currentMonat));
+    // Kommentare einlesen
+    belege.forEach(b => {
+      if (b.TLKommentar) {
+        try { _belegKommentare[b.id] = JSON.parse(b.TLKommentar); } catch(e) {}
+      }
+    });
+    // Stats updaten
+    const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
+    const total = belege.reduce((s,b)=>s+parseFloat(b.Betrag||0),0);
+    document.getElementById('homeTotal').textContent = fmt(total);
+    document.getElementById('homeSub').textContent = `${belege.length} Positionen · Zurückgewiesen`;
+    document.getElementById('statSonst').textContent = fmt(regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0));
+    // Belege mit Kommentarfeldern (readonly für Fachkraft) rendern
+    const list = document.getElementById('belegList');
+    list.innerHTML = regular.map(b => {
+      const fotos = JSON.parse(b.FotoUrls||'[]');
+      const katShort = (b.KategorieLabel||b.Kategorie||'—').includes(' › ')
+        ? (b.KategorieLabel||'').split(' › ')[1]
+        : (b.KategorieLabel||b.Kategorie||'—');
+      const komm = _belegKommentare[b.id];
+      return `
+      <div class="beleg-card" style="flex-direction:column;cursor:default;display:block;padding:0" onclick="openBelegSheet('${b.id}')">
+        <div style="display:flex;align-items:stretch">
+          <div class="beleg-side ${fotos.length?'':'fw'}">${fotos.length?'🧾':'⚠️'}</div>
+          <div class="beleg-body">
+            <div class="beleg-top">
+              <div class="beleg-desc">${esc(b.Beschreibung||b.Haendler||'—')}</div>
+              <div class="beleg-amt">${fmt(b.Betrag)}</div>
+            </div>
+            <div class="beleg-meta">
+              <span class="beleg-date">${fmtDate(b.Datum)}</span>
+              <span class="cpill" style="background:var(--accent-light);color:var(--accent)">${esc(katShort)}</span>
+              ${b.Klient&&b.Klient!=='kein Klient'?`<span class="ktag">${esc(b.Klient)}</span>`:''}
+            </div>
+          </div>
+        </div>
+        ${komm&&komm.text?`
+        <div style="background:#fdf6dd;border-top:2px solid #c9a227;padding:10px 12px;font-size:13px;color:#6b5414">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;color:#8a6d1a">
+            💬 Kommentar Teamleitung${komm.datum?' · '+esc(komm.datum):''}
+          </div>
+          ${esc(komm.text)}
+        </div>`:''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    ladeMonatsdaten();
+  }
 }
 
 // ── TL sendet Prüflink per Mail ──────────────────────────────────
