@@ -269,7 +269,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .add-photo{width:72px;height:72px;border-radius:var(--radius);border:2px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--text-hint);cursor:pointer;flex-shrink:0;background:var(--bg)}
 
 /* Toast */
-.toast{position:fixed;bottom:calc(var(--nav-h)+14px);left:50%;transform:translateX(-50%) translateY(8px);background:var(--text);color:var(--surface);padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;transition:all .22s;z-index:300;box-shadow:0 4px 16px rgba(26,25,22,.2)}
+.toast{position:fixed;top:calc(var(--hdr-h) + 10px);left:50%;transform:translateX(-50%) translateY(-8px);background:var(--text);color:var(--surface);padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;transition:all .22s;z-index:300;box-shadow:0 4px 16px rgba(26,25,22,.2)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.ok{background:var(--success)}
 
@@ -391,7 +391,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div class="scan-row"><span class="sl">Datum</span><span class="sv" id="srDatum">—</span></div>
       <div class="scan-row"><span class="sl">Betrag brutto</span><span class="sv" id="srBetrag">—</span></div>
       <div class="scan-row"><span class="sl">MwSt.</span><span class="sv" id="srMwst">—</span></div>
-      <div class="scan-row"><span class="sl">Kategorie (Vorschlag)</span><span class="sv" id="srKat">—</span></div>
     </div>
   </div>
 
@@ -400,12 +399,15 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <!-- ── Hauptkategorie ── -->
   <div class="card">
     <div class="card-title">Hauptkategorie *</div>
+    <div id="katHinweis" class="alert alert-warn" style="margin:0 0 10px;padding:8px 12px;font-size:12px;display:none">
+      ⬇ Bitte Kategorie wählen
+    </div>
     <div class="hkat-grid">
-      <button class="hkat-btn" id="hkat-freizeit"   onclick="selectHkat('freizeit')">  🎡<span>Freizeit</span></button>
-      <button class="hkat-btn" id="hkat-gastro"     onclick="selectHkat('gastro')">    🍽️<span>Gastronomie</span></button>
-      <button class="hkat-btn" id="hkat-einkauf"    onclick="selectHkat('einkauf')">   🛍️<span>Einkäufe</span></button>
-      <button class="hkat-btn" id="hkat-fahrzeug"   onclick="selectHkat('fahrzeug')">  🚗<span>Fahrzeug</span></button>
-      <button class="hkat-btn" id="hkat-parken"     onclick="selectHkat('parken')">    🅿️<span>Parken</span></button>
+      <button class="hkat-btn" id="hkat-freizeit"    onclick="selectHkat('freizeit')">🎡<span>Freizeit</span></button>
+      <button class="hkat-btn" id="hkat-gastro"      onclick="selectHkat('gastro')">🍽️<span>Gastronomie</span></button>
+      <button class="hkat-btn" id="hkat-einkauf"     onclick="selectHkat('einkauf')">🛍️<span>Einkäufe</span></button>
+      <button class="hkat-btn" id="hkat-fahrzeug"    onclick="selectHkat('fahrzeug')">🚗<span>Fahrzeug</span></button>
+      <button class="hkat-btn" id="hkat-parken"      onclick="selectHkat('parken')">🅿️<span>Parken</span></button>
       <button class="hkat-btn" id="hkat-fahrtenbuch" onclick="selectHkat('fahrtenbuch')">📊<span>Fahrtenbuch</span></button>
     </div>
   </div>
@@ -1159,16 +1161,44 @@ async function handleFileSelect(input) {
 
     // Kategorie-Vorschlag anhand Händlername
     const hn = haendler.toLowerCase();
-    if (/rewe|aldi|lidl|edeka|penny|netto|kaufland|supermarkt|bäcker|bakery|café|cafe|restaurant|imbiss|mcdonald|burger|pizza|döner|eisdiele/.test(hn)) {
-      selectHkat('gastro');
-    } else if (/tank|shell|aral|esso|bp|total|star|jet|agip/.test(hn)) {
-      selectHkat('fahrzeug'); setTimeout(() => selectUkat('tanken'), 100);
+    let hkatVorschlag = null;
+    let ukatVorschlag = null;
+    if (/rewe|aldi|lidl|edeka|penny|netto|kaufland|supermarkt/.test(hn)) {
+      hkatVorschlag = 'gastro'; ukatVorschlag = 'lebensmittel';
+    } else if (/bäcker|bakery|café|cafe|kaffee/.test(hn)) {
+      hkatVorschlag = 'gastro'; ukatVorschlag = 'baeckerei';
+    } else if (/restaurant|imbiss|mcdonald|burger|pizza|döner|kebap|kebab|subway/.test(hn)) {
+      hkatVorschlag = 'gastro'; ukatVorschlag = 'restaurant';
+    } else if (/eis|eisdiele|gelato/.test(hn)) {
+      hkatVorschlag = 'gastro'; ukatVorschlag = 'eisdiele';
+    } else if (/tank|shell|aral|esso|bp|total|star|jet|agip|avanti/.test(hn)) {
+      hkatVorschlag = 'fahrzeug'; ukatVorschlag = 'tanken';
+    } else if (/wasch|wash|carwash/.test(hn)) {
+      hkatVorschlag = 'fahrzeug'; ukatVorschlag = 'waschen';
     } else if (/kino|cinema|cinestar|cineplex/.test(hn)) {
-      selectHkat('freizeit'); setTimeout(() => selectUkat('kino'), 100);
-    } else if (/parkhaus|parking|park|tiefgarage/.test(hn)) {
-      selectHkat('parken');
-    } else if (/saturn|mediamarkt|amazon|dm|rossmann|müller|basteln|schreibwaren/.test(hn)) {
-      selectHkat('einkauf');
+      hkatVorschlag = 'freizeit'; ukatVorschlag = 'kino';
+    } else if (/schwimm|bad|therme|aqua/.test(hn)) {
+      hkatVorschlag = 'freizeit'; ukatVorschlag = 'schwimmbad';
+    } else if (/bowling|minigolf/.test(hn)) {
+      hkatVorschlag = 'freizeit'; ukatVorschlag = 'bowling';
+    } else if (/museum|ausstellung|galerie/.test(hn)) {
+      hkatVorschlag = 'freizeit'; ukatVorschlag = 'museum';
+    } else if (/zoo|freizeitpark|legoland/.test(hn)) {
+      hkatVorschlag = 'freizeit'; ukatVorschlag = 'freizeitpark';
+    } else if (/parkhaus|tiefgarage|parking/.test(hn)) {
+      hkatVorschlag = 'parken'; ukatVorschlag = 'parkhaus';
+    } else if (/parkster|handyparken/.test(hn)) {
+      hkatVorschlag = 'parken'; ukatVorschlag = 'handyparken';
+    } else if (/saturn|mediamarkt|dm|rossmann|müller|basteln|schreibwaren|büro|staples/.test(hn)) {
+      hkatVorschlag = 'einkauf'; ukatVorschlag = 'basteln';
+    }
+
+    if (hkatVorschlag) {
+      selectHkat(hkatVorschlag);
+      if (ukatVorschlag) setTimeout(() => selectUkat(ukatVorschlag), 150);
+    } else {
+      // Kein Vorschlag — Hinweis anzeigen
+      showKatHinweis();
     }
     document.getElementById('scanResult').style.display = 'block';
     document.getElementById('scanIcon').className = 'si'; document.getElementById('scanIcon').textContent = '✅';
@@ -1194,8 +1224,9 @@ async function speicherBeleg() {
   const datum   = document.getElementById('fDatum').value;
   const isFahrt = _selectedHkat === 'fahrtenbuch';
 
-  if (!_selectedHkat) { showToast('Bitte Hauptkategorie wählen'); return; }
-  if (!isFahrt && !_selectedUkat) { showToast('Bitte Unterkategorie wählen'); return; }
+  if (!_selectedHkat) { showKatHinweis(); showToast('Bitte Kategorie wählen'); return; }
+  const hatUnter = KATEGORIEN[_selectedHkat]?.unter?.length > 0;
+  if (!isFahrt && hatUnter && !_selectedUkat) { showToast('Bitte Unterkategorie wählen'); document.getElementById('ukatCard').scrollIntoView({behavior:'smooth'}); return; }
   if (!isFahrt && !klient) { showToast('Bitte Klient wählen'); return; }
   if (!isFahrt && !datum)  { showToast('Bitte Datum eingeben'); return; }
   if (!isFahrt && !betrag) { showToast('Bitte Betrag eingeben'); return; }
@@ -1742,13 +1773,16 @@ function selectHkat(hkat) {
   _selectedUkat = null;
   // Buttons highlighten
   Object.keys(KATEGORIEN).forEach(k => document.getElementById('hkat-' + k)?.classList.toggle('active', k === hkat));
+  // Hinweis ausblenden
+  const hinweis = document.getElementById('katHinweis');
+  if (hinweis) hinweis.style.display = 'none';
   const kat = KATEGORIEN[hkat];
   // Fahrtenbuch: direkt Upload zeigen
   const isFahrt = hkat === 'fahrtenbuch';
   document.getElementById('fahrtForm').style.display     = isFahrt ? 'block' : 'none';
   document.getElementById('ukatCard').style.display      = (!isFahrt && kat.unter.length) ? 'block' : 'none';
   document.getElementById('belegFormCard').style.display = (!isFahrt && kat.unter.length) ? 'none' : (!isFahrt ? 'block' : 'none');
-  document.getElementById('fotoCard').style.display      = isFahrt ? 'none' : 'none'; // shown after ukat selection
+  document.getElementById('fotoCard').style.display      = isFahrt ? 'none' : 'none';
   // Render Unterkategorien
   if (!isFahrt && kat.unter.length) {
     document.getElementById('ukatList').innerHTML = kat.unter.map(u =>
@@ -1756,6 +1790,14 @@ function selectHkat(hkat) {
     ).join('');
   }
   document.getElementById('appBody').scrollTo({ top: document.getElementById('ukatCard').offsetTop - 10, behavior: 'smooth' });
+}
+
+function showKatHinweis() {
+  const hinweis = document.getElementById('katHinweis');
+  if (hinweis) {
+    hinweis.style.display = 'block';
+    hinweis.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 function selectUkat(ukatId) {
@@ -1812,7 +1854,9 @@ function showToast(msg, ok) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'toast show' + (ok?' ok':'');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(()=>t.classList.remove('show'), 3000);
+  _toastTimer = setTimeout(()=>t.classList.remove('show'), 3500);
+  // Auch als Alert wenn Toast nicht sichtbar
+  if (!ok) console.warn('Validierung:', msg);
 }
 
 function setStatus(elId, type, msg) {
@@ -1828,6 +1872,8 @@ function resetErfassenForm() {
   document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
   // Reset Hauptkategorien
   Object.keys(KATEGORIEN).forEach(k => document.getElementById('hkat-'+k)?.classList.remove('active'));
+  const hinweis = document.getElementById('katHinweis');
+  if (hinweis) hinweis.style.display = 'none';
   _selectedHkat = null; _selectedUkat = null;
   document.getElementById('ukatCard').style.display      = 'none';
   document.getElementById('fahrtForm').style.display     = 'none';
