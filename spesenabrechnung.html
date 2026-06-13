@@ -448,16 +448,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         Klientenbezug
       </label>
       <div id="klientFeldWrap" style="display:none;margin-top:10px">
-        <select id="fKlient">
-          <option value="">— Klient wählen —</option>
-          <optgroup label="Aktive Fälle" id="fKlientFaelle"></optgroup>
-          <optgroup label="Intern">
-            <option value="intern:Nordstern WG">Nordstern WG allgemein</option>
-            <option value="intern:Dienstbesprechung">Dienstbesprechung / Team</option>
-            <option value="intern:Fortbildung">Fortbildung</option>
-            <option value="intern:Büro">Bürobedarf / intern</option>
-          </optgroup>
-        </select>
+        <input type="text" id="fKlient" list="klientVorschlaege" placeholder="Nachname, Vorname — oder neu eingeben" autocomplete="off">
+        <datalist id="klientVorschlaege"></datalist>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:4px">Bereits verwendete Namen werden vorgeschlagen</div>
       </div>
     </div>
 
@@ -847,27 +840,33 @@ async function loadGroupMembers() {
     sel.appendChild(opt);
   });
   // Populate Klient Fälle — load from SharePoint list or use static
-  populateKlientOptionen();
+  ladeKlientVorschlaege();
   // Show TL tab badge
   if (_isTL) { document.getElementById('tlBadge').style.display = 'flex'; ladeTLAbrechnungen(); }
 }
 
-function populateKlientOptionen() {
-  // Static list — in production, load from a SharePoint list of active cases
-  const faelle = [
-    { az: '2024-0187', name: 'Familie Hoffmann' },
-    { az: '2025-0043', name: 'Familie Bauer' },
-    { az: '2025-0089', name: 'Familie Gruber' },
-    { az: '2025-0112', name: 'Familie Weber' },
-  ];
-  const grp = document.getElementById('fKlientFaelle');
-  grp.innerHTML = '';
-  faelle.forEach(f => {
-    const opt = document.createElement('option');
-    opt.value = `fall:${f.az}:${f.name}`;
-    opt.textContent = `${f.name} (Az. ${f.az})`;
-    grp.appendChild(opt);
-  });
+async function ladeKlientVorschlaege() {
+  await ladeKlientVorschlaegeInto('klientVorschlaege');
+}
+
+async function ladeKlientVorschlaegeInto(datalistId) {
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=Klient)&$top=500`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!r.ok) return;
+    const res = await r.json();
+    const namen = new Set();
+    (res.value || []).forEach(i => {
+      const k = (i.fields?.Klient || '').trim();
+      if (k && k !== 'kein Klient') namen.add(k);
+    });
+    const dl = document.getElementById(datalistId);
+    if (dl) dl.innerHTML = [...namen].sort().map(n => `<option value="${n}">`).join('');
+  } catch(e) { console.warn('Klient-Vorschläge:', e); }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1022,7 +1021,9 @@ async function openBelegSheet(id) {
         ? `<div class="photo-strip" style="margin-bottom:12px">${fotos.map((u,i) => `<div class="photo-thumb" onclick="window.open('${u}','_blank')">🧾<button class="photo-del" onclick="event.stopPropagation();removeFotoFromBeleg(${i},'${id}')">✕</button></div>`).join('')}<div class="add-photo" onclick="addPhotoToExisting('${id}')">+</div></div>`
         : `<div style="background:var(--accent-light);border-radius:var(--radius);height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:12px;color:var(--accent);cursor:pointer;flex-direction:column;gap:6px" onclick="addPhotoToExisting('${id}')"><span style="font-size:28px">📷</span>Foto hinzufügen</div>`}
       <div class="field"><label>Klient / Zuordnung *</label>
-        <select id="edKlient"><option value="">—</option>${buildKlientOptions(b.Klient)}</select></div>
+        <input type="text" id="edKlient" list="edKlientVorschlaege" value="${esc(b.Klient||'')}" placeholder="Nachname, Vorname" autocomplete="off">
+        <datalist id="edKlientVorschlaege"></datalist></div>
+      <script>ladeKlientVorschlaegeInto('edKlientVorschlaege');</script>
       <div class="field-row">
         <div class="field"><label>Datum</label><input type="date" id="edDatum" value="${isoDate(b.Datum)}"></div>
         <div class="field"><label>Betrag (€)</label><input type="number" id="edBetrag" value="${b.Betrag || ''}" step="0.01"></div>
@@ -1848,7 +1849,12 @@ function getKatIcon() {
 function toggleKlientfeld() {
   const checked = document.getElementById('chkKlient').checked;
   document.getElementById('klientFeldWrap').style.display = checked ? 'block' : 'none';
-  if (!checked) document.getElementById('fKlient').value = '';
+  if (!checked) {
+    document.getElementById('fKlient').value = '';
+  } else {
+    ladeKlientVorschlaege(); // Aktuellste Einträge laden
+    setTimeout(() => document.getElementById('fKlient').focus(), 100);
+  }
 }
 
 // Legacy compat
