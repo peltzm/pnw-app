@@ -359,7 +359,7 @@
         <div id="s5_content">
         <div class="card">
           <div class="card-title">Stellungnahme & Sichtweise Hilfeempfänger</div>
-          <div class="field-grid full"><div class="field"><textarea id="Ziele_Einleitung" style="min-height:80px;" placeholder="Stellungnahme und Sichtweise des Hilfeempfängers..."></textarea></div></div>
+          <div class="field-grid full"><div class="field"><textarea id="Stellungnahme" style="min-height:80px;" placeholder="Stellungnahme und Sichtweise des Hilfeempfängers..."></textarea></div></div>
         </div>
         <div class="card">
           <div class="card-title">6 | Perspektive & Empfehlung der Fachkraft</div>
@@ -370,22 +370,8 @@
           <div class="field-grid triple">
             <div class="field"><label>Ort</label><input type="text" id="Ort" value="Wolnzach"></div>
             <div class="field"><label>Datum</label><input type="date" id="Datum_Unterschrift"></div>
-            
           </div>
-          <div class="field-grid">
-            <div class="field"><label>Fachkraft Name(n)</label><input type="text" id="Fachkraft_Name" placeholder="z.B. Martina Graf / Freddy Pozgaj"></div>
-            <div class="field"><label>Qualifikation</label>
-              <select id="Fachkraft_Qualifikation"><option value="">— bitte wählen —</option>
-                <option>Erzieher:in</option>
-                <option>Heilerziehungspfleger:in</option>
-                <option>Kindheitspädagoge:in</option>
-                <option>Pädagoge:in</option>
-                <option>Psycholog:in</option>
-                <option>Sozialpädagoge:in</option>
-                <option>Systemische:r Berater:in</option>
-                <option>Systemische:r Therapeut:in</option></select>
-            </div>
-          </div>
+          <div id="unterschriftFachkraefte"></div>
         </div>
         </div>
         <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(4)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(6)">Zur Übersicht →</button></div>
@@ -652,6 +638,16 @@ function goToStart() {
   document.getElementById('nav0')?.classList.add('active');
 }
 
+// Stufe 1: Browser-Rechtschreibprüfung (Deutsch) auf allen Texteingaben aktivieren.
+// Greift auch für dynamisch erzeugte Felder (weitere Ziele/Kinder, TL-Kommentare),
+// da nach jedem Seitenaufbau erneut aufgerufen.
+function enableSpellcheck() {
+  document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+    el.setAttribute('spellcheck', 'true');
+    el.setAttribute('lang', 'de-DE');
+  });
+}
+
 function goTo(n) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -674,6 +670,12 @@ function goTo(n) {
     }
   }
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
+  // Seite 5: Unterschrift-Block an die aktuelle Fachkraft-Anzahl anpassen + Namen übernehmen
+  if (n === 5 && document.getElementById('unterschriftFachkraefte')) {
+    renderUnterschriftFachkraefte();
+    syncUnterschriftNamen();
+  }
+  enableSpellcheck();
   if (n === 6) {
     buildSummary();
     // Show debug toggle only for admins
@@ -734,6 +736,7 @@ function addZiel() {
       </div>
     </div>`;
   document.getElementById('zieleContainer')?.appendChild(div);
+  enableSpellcheck();
 }
 
 function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
@@ -744,8 +747,8 @@ function collectData() {
     'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Fallleitung','Betreuungszeitraum',
     'BZ_Von','BZ_Bis',
     'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
-    'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
-    'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
+    'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
+    'Fachliche_Einschaetzung','Ort','Datum_Unterschrift',
     'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Weitere_Kinder','Leistungserbringer',
     'Bericht_Besprochen','Bericht_Besprochen_Datum'];
   const data = {};
@@ -769,6 +772,17 @@ function collectData() {
   data._tlKommentare = _tlKommentare;
   // Dokumentversion mitpersistieren
   data._version = currentVersion || 0;
+  // Unterschrift-Fachkräfte: Name + Qualifikationen als flache Tokens
+  // (Quali2 = Freitext, falls "Andere…" gewählt)
+  for (let i = 1; i <= 4; i++) {
+    const nm = document.getElementById(`FK${i}_Name`);
+    if (!nm) continue;
+    const q2sel = document.getElementById(`FK${i}_Quali2`)?.value || '';
+    const q2 = q2sel === '__custom__' ? (document.getElementById(`FK${i}_Quali2Custom`)?.value || '') : q2sel;
+    data[`Fachkraft${i}_Name`] = nm.value || '';
+    data[`Fachkraft${i}_Quali1`] = document.getElementById(`FK${i}_Quali1`)?.value || '';
+    data[`Fachkraft${i}_Quali2`] = q2;
+  }
   // Dynamische Inhaltsfelder der Seiten 3–5 generisch einsammeln
   // (deckt alle Berichtstypen ab — Clearing/Abschluss wurden zuvor NICHT gespeichert)
   ['s3_content','s4_content','s5_content'].forEach(cid => {
@@ -1309,8 +1323,8 @@ function resetForm() {
   const ids = ['Jugendamt','Hilfeart','Sachbearbeitung_JA','Fachkraft_NeueWege','Fallleitung',
     'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG',
     'BZ_Von','BZ_Bis','Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
-    'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Ziele_Einleitung',
-    'Fachliche_Einschaetzung','Ort','Datum_Unterschrift','Fachkraft_Name','Fachkraft_Qualifikation',
+    'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
+    'Fachliche_Einschaetzung','Ort','Datum_Unterschrift',
     'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Weitere_Kinder','Leistungserbringer',
     'Bericht_Besprochen','Bericht_Besprochen_Datum'];
   ids.forEach(id => {
@@ -1319,7 +1333,7 @@ function resetForm() {
   });
   // Also reset dynamic section fields safely
   ['Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse',
-   'Arbeitsbeziehung','Ziele_Einleitung','Fachliche_Einschaetzung',
+   'Arbeitsbeziehung','Stellungnahme','Fachliche_Einschaetzung',
    'Aktuelle_Situation','Verlauf_Massnahme','Ausgangssituation','Familienkonstellation',
    'Rahmenbedingungen','Ressourcen','Risiken','Ergebnisse_Clearing',
    'Zielsetzung_Clearing','Zusammenfassung_Ausblick','Anhang_Methodik'].forEach(id => {
@@ -1752,6 +1766,7 @@ function renderFieldComments() {
     }
     wrap.innerHTML = _commentHtml(fid, c);
   });
+  enableSpellcheck();
 }
 
 function _commentHtml(fid, c) {
@@ -2268,11 +2283,10 @@ async function loadGroupMembers() {
         }).join('');
     }
     
-    // Pre-fill Fachkraft_Name from Fachkraft 1 selection
-    const fkSelect2 = document.getElementById('Fachkraft_NeueWege');
-    const fkNameInput = document.getElementById('Fachkraft_Name');
-    if (fkNameInput && fkSelect2 && !fkNameInput.dataset.manuallySet) {
-      fkNameInput.value = fkSelect2.value || '';
+    // Unterschrift-Namen aus den Fachkraft-Auswahlen übernehmen
+    if (document.getElementById('unterschriftFachkraefte')) {
+      renderUnterschriftFachkraefte();
+      syncUnterschriftNamen();
     }
     
   } catch(e) {
@@ -2338,10 +2352,10 @@ function toggleBesprochenDatum() {
 }
 
 function updateFachkraftName() {
-  const fk = document.getElementById('Fachkraft_NeueWege')?.value;
-  const fkName = document.getElementById('Fachkraft_Name');
-  if (fkName && !fkName.dataset.manuallySet) {
-    fkName.value = fk || '';
+  // Unterschrift-Block neu aufbauen (Anzahl Fachkräfte kann sich geändert haben) und Namen übernehmen
+  if (document.getElementById('unterschriftFachkraefte')) {
+    renderUnterschriftFachkraefte();
+    syncUnterschriftNamen();
   }
 }
 
@@ -2416,7 +2430,7 @@ const SECTION_TEMPLATES = {
       title: '6 | Perspektive & Empfehlung',
       sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
       fields: [
-        { id: 'Ziele_Einleitung', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
+        { id: 'Stellungnahme', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
         { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
       ]
     }
@@ -2559,7 +2573,7 @@ function buildDynamicSections(force = false) {
       </div></div></div>`;
     // Besprochen-Abfrage: beim Verlaufsbericht unter der Stellungnahme-Box,
     // beim Abschlussbericht unter "Fachliche Einschätzung und Empfehlung"
-    if ((typ === 'verlauf' && f.id === 'Ziele_Einleitung') ||
+    if ((typ === 'verlauf' && f.id === 'Stellungnahme') ||
         (typ === 'abschluss' && f.id === 'Fachliche_Einschaetzung')) {
       s5html += `<div class="card"><div class="card-title">Bericht wurde mit Hilfeempfänger besprochen</div>
       <div class="field-grid">
@@ -2573,37 +2587,86 @@ function buildDynamicSections(force = false) {
   // Add signature card (always present)
   s5html += `<div class="card">
     <div class="card-title">Unterschrift</div>
-    <div class="field-grid">
+    <div class="field-grid triple">
       <div class="field"><label>Ort</label><input type="text" id="Ort" value="Wolnzach"></div>
       <div class="field"><label>Datum</label><input type="date" id="Datum_Unterschrift"></div>
     </div>
-    <div class="field-grid">
-      <div class="field"><label>Fachkraft Name(n)</label><input type="text" id="Fachkraft_Name" oninput="this.dataset.manuallySet='1'" placeholder=""></div>
-      <div class="field"><label>Qualifikation</label>
-        <select id="Fachkraft_Qualifikation"><option value="">— bitte wählen —</option>
-                <option>Erzieher:in</option>
-                <option>Heilerziehungspfleger:in</option>
-                <option>Kindheitspädagoge:in</option>
-                <option>Pädagoge:in</option>
-                <option>Psycholog:in</option>
-                <option>Sozialpädagoge:in</option>
-                <option>Systemische:r Berater:in</option>
-                <option>Systemische:r Therapeut:in</option></select>
-      </div>
-    </div>
+    <div id="unterschriftFachkraefte"></div>
   </div>`;
   const s5c2 = document.getElementById('s5_content'); if(s5c2) s5c2.innerHTML = s5html;
-  
+
+  // Unterschrift-Fachkräfte (Name + 2 Qualifikationen) aufbauen
+  renderUnterschriftFachkraefte();
+
   // Sync Fachkraft_Name from Fachkraft 1 after rebuilding S5
   setTimeout(() => {
-    const fkSel = document.getElementById('Fachkraft_NeueWege');
-    const fkName = document.getElementById('Fachkraft_Name');
-    if (fkName && fkSel && !fkName.dataset.manuallySet) {
-      fkName.value = fkSel.value || '';
-    }
+    syncUnterschriftNamen();
   }, 50);
   // Kommentare nach Neuaufbau der Sektionen wieder einblenden
   renderFieldComments();
+}
+
+const QUALI1_OPTS = ['Erzieher:in','Heilerziehungspfleger:in','Kindheitspädagoge:in','Pädagoge:in','Psycholog:in','Sozialpädagoge:in'];
+const QUALI2_OPTS = ['Systemische:r Berater:in','Systemische:r Therapeut:in','Fachcoach Gewaltprävention'];
+
+// Wie viele Fachkräfte auf Seite 1 gewählt sind (1 + befüllte Zusatzfelder)
+function _anzahlFachkraefte() {
+  let count = 1;
+  for (let i = 2; i <= 4; i++) {
+    if ((document.getElementById('Fachkraft_' + i)?.value || '').trim()) count = i;
+  }
+  return count;
+}
+
+// Unterschrift-Block je Fachkraft erzeugen: Name + Qualifikation 1 + Qualifikation 2 (+ Freitext bei „Andere…“)
+function renderUnterschriftFachkraefte() {
+  const wrap = document.getElementById('unterschriftFachkraefte');
+  if (!wrap) return;
+  // Bestehende Werte sichern (bei Neuaufbau)
+  const prev = {};
+  wrap.querySelectorAll('input[id], select[id]').forEach(el => prev[el.id] = el.value);
+
+  const anzahl = _anzahlFachkraefte();
+  let html = '';
+  for (let i = 1; i <= anzahl; i++) {
+    const q1 = `<option value="">— bitte wählen —</option>` + QUALI1_OPTS.map(o => `<option>${o}</option>`).join('');
+    const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere…</option>`;
+    html += `
+      <div class="divider" style="font-size:12px; font-weight:600; color:var(--accent); margin:6px 0 10px;">Fachkraft ${i}</div>
+      <div class="field-grid triple">
+        <div class="field"><label>Name</label><input type="text" id="FK${i}_Name" oninput="this.dataset.manuallySet='1'"></div>
+        <div class="field"><label>Qualifikation 1 (Auswahlliste)</label><select id="FK${i}_Quali1">${q1}</select></div>
+        <div class="field"><label>Qualifikation 2 (Auswahlliste)</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
+      </div>
+      <div class="field-grid" style="grid-template-columns:1fr 1fr;">
+        <div></div>
+        <div class="field" id="FK${i}_Quali2CustomWrap" style="display:none;"><label>Eigene Qualifikation 2</label><input type="text" id="FK${i}_Quali2Custom" placeholder="z.B. Traumafachberater:in"></div>
+      </div>`;
+  }
+  wrap.innerHTML = html;
+  // Werte zurückschreiben
+  Object.keys(prev).forEach(id => { const el = document.getElementById(id); if (el) el.value = prev[id]; });
+  for (let i = 1; i <= anzahl; i++) toggleQuali2Custom(i);
+  enableSpellcheck();
+}
+
+// "Andere…" bei Qualifikation 2 -> Freitextfeld einblenden
+function toggleQuali2Custom(i) {
+  const sel = document.getElementById(`FK${i}_Quali2`);
+  const wrap = document.getElementById(`FK${i}_Quali2CustomWrap`);
+  if (!sel || !wrap) return;
+  wrap.style.display = (sel.value === '__custom__') ? '' : 'none';
+  if (sel.value !== '__custom__') { const c = document.getElementById(`FK${i}_Quali2Custom`); if (c) c.value = ''; }
+}
+
+// Namen aus Seite 1 in die Unterschrift übernehmen (sofern nicht manuell überschrieben)
+function syncUnterschriftNamen() {
+  const namen = [document.getElementById('Fachkraft_NeueWege')?.value || ''];
+  for (let i = 2; i <= 4; i++) namen.push(document.getElementById('Fachkraft_' + i)?.value || '');
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById(`FK${i}_Name`);
+    if (el && !el.dataset.manuallySet) el.value = namen[i-1] || '';
+  }
 }
 
 // ─── ÜBERSICHT (S0) ───────────────────────────────────────────────────────────
@@ -2861,6 +2924,7 @@ function addExtraSorg() {
       <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg2_Beziehung_${n}" style="width:100%;"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
     </div>`;
   document.getElementById('extraSorgContainer').appendChild(div);
+  enableSpellcheck();
 }
 
 function removeExtraSorg(n) {
@@ -2895,6 +2959,7 @@ function addExtraKind() {
     </div>
 `;
   document.getElementById('extraKinderContainer').appendChild(div);
+  enableSpellcheck();
 }
 
 function removeExtraKind(n) {
