@@ -238,27 +238,22 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 52px;
-    z-index: 90;
+    padding: 0 0 12px 0;
   }
   .mobile-filter-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 14px;
-    background: var(--bg);
-    border: 1px solid var(--border);
+    padding: 9px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
     border-radius: 20px;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
     color: var(--text-muted);
     cursor: pointer;
     font-family: inherit;
-    min-height: 38px;
+    min-height: 42px;
     white-space: nowrap;
   }
   .mobile-filter-btn.has-filter {
@@ -272,16 +267,16 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 16px;
+    padding: 9px 18px;
     background: var(--accent);
     border: none;
     border-radius: 20px;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     color: #fff;
     cursor: pointer;
     font-family: inherit;
-    min-height: 38px;
+    min-height: 42px;
     white-space: nowrap;
   }
 }
@@ -412,6 +407,18 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
 
     <!-- ── CONTENT ── -->
     <div class="content">
+      <!-- Mobile Filter Bar (sticky, nur Mobile) -->
+      <div class="mobile-filter-bar">
+        <button class="mobile-filter-btn" id="mobileFilterBtn" onclick="openBottomSheet()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          <span id="mobileFilterLabel">Filter</span>
+        </button>
+        <button class="mobile-add-btn" onclick="openNew()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          Hinzufügen
+        </button>
+      </div>
+
       <!-- Search + LK filter -->
       <div class="search-row">
         <div class="search-wrap">
@@ -426,18 +433,6 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
       <!-- Grid -->
       <div id="angeboteGrid" class="angebote-grid"></div>
     </div>
-  </div>
-
-  <!-- ── MOBILE FILTER BAR (nur Mobile) ── -->
-  <div class="mobile-filter-bar">
-    <button class="mobile-filter-btn" id="mobileFilterBtn" onclick="openBottomSheet()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-      <span id="mobileFilterLabel">Filter</span>
-    </button>
-    <button class="mobile-add-btn" onclick="openNew()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-      Hinzufügen
-    </button>
   </div>
 
 </div><!-- #appScreen -->
