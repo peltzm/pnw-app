@@ -2189,39 +2189,35 @@ async function aktiviereReviewModus(fkMail) {
   _isReviewMode = true;
   _reviewFkMail = fkMail;
 
-  // Gelber Rahmen
+  // Gelber Rahmen — nur links/rechts/oben, nicht unten (stört nicht beim Scrollen)
   if (!document.getElementById('reviewFrame')) {
     const frame = document.createElement('div');
     frame.id = 'reviewFrame';
-    frame.style.cssText = 'position:fixed;inset:0;border:4px solid #c9a227;pointer-events:none;z-index:998;';
+    frame.style.cssText = 'position:fixed;top:0;left:0;right:0;height:4px;background:#c9a227;z-index:998;pointer-events:none;';
     document.body.appendChild(frame);
   }
 
-  // Gelber Banner
+  // Gelber Banner — in den Header-Bereich einfügen, kein fixed mehr
   if (!document.getElementById('reviewBanner')) {
     const banner = document.createElement('div');
     banner.id = 'reviewBanner';
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c9a227;color:#fff;z-index:999;padding:10px 16px;box-shadow:0 2px 6px rgba(0,0,0,.25);';
+    banner.style.cssText = 'background:#c9a227;color:#fff;padding:10px 14px;border-bottom:2px solid #a37e1a;';
     banner.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;max-width:700px;margin:0 auto">
-        <div>
-          <div style="font-size:13px;font-weight:700">🔍 PRÜFMODUS — Spesenabrechnung von ${esc(fkMail)}</div>
-          <div style="font-size:11px;opacity:.9;margin-top:2px">Jeden Beleg kommentieren · dann Freigeben oder Zurückweisen</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0">
-          <button onclick="speichereKommentare()" style="background:#fff;color:#8a6d1a;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px" id="btnSaveKomm">💬 Speichern</button>
-          <button onclick="openModal('rejectModal')" style="background:#dc2626;color:#fff;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px">✕ Zurückweisen</button>
-          <button onclick="freigebenUndPDF()" style="background:#166534;color:#fff;border:none;border-radius:20px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px">✓ Freigeben</button>
-        </div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px">🔍 PRÜFMODUS — ${esc(fkMail)}</div>
+      <div style="font-size:11px;opacity:.9;margin-bottom:10px">Jeden Beleg kommentieren · dann Freigeben oder Zurückweisen</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="speichereKommentare()" style="flex:1;background:#fff;color:#8a6d1a;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer" id="btnSaveKomm">💬 Speichern</button>
+        <button onclick="openModal('rejectModal')" style="flex:1;background:#dc2626;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✕ Zurückweisen</button>
+        <button onclick="freigebenUndPDF()" style="flex:1;background:#166534;color:#fff;border:none;border-radius:20px;padding:8px 10px;font-size:12px;font-weight:600;cursor:pointer">✓ Freigeben</button>
       </div>`;
-    document.body.appendChild(banner);
-    // App-Body nach unten verschieben
-    document.getElementById('appScreen').style.paddingTop = (banner.offsetHeight + 56) + 'px';
+    // Banner direkt in den scrollbaren app-body einfügen, ganz oben
+    const appBody = document.getElementById('appBody');
+    appBody.insertBefore(banner, appBody.firstChild);
+    // Kein paddingTop nötig — Banner ist im Flow
   }
 
-  // Belege laden und mit Kommentarfeldern rendern
   showScreen('home');
-  await ladeMonatsdatenMitKommentaren();
+  await ladeMonatsdaten();
 }
 
 async function ladeMonatsdatenMitKommentaren() {
@@ -2387,6 +2383,8 @@ async function freigebenUndPDF() {
     document.getElementById('reviewFrame')?.remove();
     document.getElementById('appScreen').style.paddingTop = '';
     _isReviewMode = false;
+    _reviewFkMail = '';
+    _reviewMonat  = '';
     setHomeStatus('done', '✓ Freigegeben — PDF an spesen@ gesendet');
   } catch(e) {
     setHomeStatus('error', 'Fehler: ' + e.message);
@@ -2429,6 +2427,8 @@ async function ablehnen() {
       document.getElementById('reviewFrame')?.remove();
       document.getElementById('appScreen').style.paddingTop = '';
       _isReviewMode = false;
+      _reviewFkMail = '';
+      _reviewMonat  = '';
     }
     ladeTLAbrechnungen();
   } catch(e) { showToast('Fehler: ' + e.message); }
