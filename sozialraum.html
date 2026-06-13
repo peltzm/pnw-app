@@ -145,25 +145,211 @@ select { -webkit-appearance: none; appearance: none; background-image: url("data
 .detail-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 8px; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
-@media (max-width: 860px) {
+@media (max-width: 768px) {
+
+  /* Layout: sidebar verschwindet, wird zu Bottom-Sheet */
   .app-layout { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; padding: 0.75rem; gap: 0.25rem; }
-  .sidebar-section { padding: 0 0.5rem 0.5rem; border: none; margin: 0; min-width: 100%; }
-  .sidebar-label { display: block; }
-  .filter-group { flex-direction: row; flex-wrap: wrap; gap: 4px; }
-  .filter-chip { padding: 5px 11px; font-size: 12px; }
-  .sp-indicator { display: none; }
-  .sidebar > div:last-child { min-width: 100%; }
-  .content { padding: 1rem; }
-}
-@media (max-width: 480px) {
-  .angebote-grid { grid-template-columns: 1fr; }
-  .field-row.two { grid-template-columns: 1fr; }
-  .modal-backdrop { padding: 0; align-items: flex-end; }
-  .modal { border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 94vh; }
+  .sidebar { display: none; } /* ersetzt durch mobile-filter-bar + bottom-sheet */
+  .content { padding: 12px; }
+
+  /* Größere Basis-Schrift */
+  body { font-size: 16px; }
+
+  /* Header */
+  .header { padding: 0 14px; height: 52px; }
+  .header-brand span { font-size: 15px; }
+  #userName { display: none; }
+
+  /* Suchfeld größer */
+  .search-wrap input { font-size: 16px; padding: 11px 14px 11px 40px; }
+
+  /* LK-Chips auf Mobile ausblenden — sind im Bottom Sheet */
+  #lkFilter { display: none; }
+
+  /* LK-Chips: horizontal scrollbar, keine Umbrüche */
+  .lk-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    margin-bottom: 10px;
+  }
+  .lk-chips::-webkit-scrollbar { display: none; }
+  .lk-chip {
+    flex-shrink: 0;
+    font-size: 14px;
+    padding: 7px 15px;
+    min-height: 36px;
+  }
+
+  /* Suchezeile */
+  .search-row { gap: 8px; margin-bottom: 10px; }
+  .result-count { font-size: 13px; }
+
+  /* Karten: eine Spalte, größere Schriften */
+  .angebote-grid { grid-template-columns: 1fr; gap: 10px; }
+  .angebot-card { padding: 14px 16px; gap: 10px; }
+  .angebot-name { font-size: 17px; font-weight: 700; }
+  .badge { font-size: 12px; padding: 3px 10px; }
+  .angebot-desc { font-size: 14px; -webkit-line-clamp: 2; }
+  .angebot-meta { font-size: 13px; gap: 5px; }
+  .btn-edit { font-size: 13px; padding: 7px 14px; min-height: 36px; }
+
+  /* Detail-Panel: volle Breite */
   .detail-panel { width: 100vw; }
+  .detail-header { padding: 1rem; }
+  #detailName { font-size: 18px; }
+  .detail-body { padding: 1rem; }
+  .detail-label { font-size: 12px; }
+  .detail-val { font-size: 15px; }
+  .detail-footer { padding: 12px 1rem; }
+
+  /* Modal als Bottom-Sheet */
+  .modal-backdrop { padding: 0; align-items: flex-end; }
+  .modal {
+    border-radius: 16px 16px 0 0;
+    max-height: 94vh;
+    padding: 1.25rem 1rem 2rem;
+  }
+  .modal-title { font-size: 18px; }
+  .field-row.two { grid-template-columns: 1fr; }
+  .field label { font-size: 14px; }
+  .field input, .field select, .field textarea { font-size: 16px; padding: 11px 12px; }
+  .field textarea { min-height: 88px; }
+  .btn { font-size: 15px; padding: 12px 20px; min-height: 48px; }
+  .modal-footer { gap: 10px; }
+  .modal-footer .btn { flex: 1; justify-content: center; }
+
+  /* Empty state */
+  .empty-state { padding: 3rem 1rem; }
+  .empty-state h3 { font-size: 17px; }
+  .empty-state p { font-size: 14px; }
 }
+
 input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
+/* ── Mobile Filter Bar (nur Mobile sichtbar) ─────────────────────────────── */
+.mobile-filter-bar {
+  display: none;
+}
+@media (max-width: 768px) {
+  .mobile-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 52px;
+    z-index: 90;
+  }
+  .mobile-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 38px;
+    white-space: nowrap;
+  }
+  .mobile-filter-btn.has-filter {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .mobile-add-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--accent);
+    border: none;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 38px;
+    white-space: nowrap;
+  }
+}
+
+/* ── Bottom Sheet (Filter) ───────────────────────────────────────────────── */
+.bottom-sheet-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.4);
+  z-index: 300;
+}
+.bottom-sheet-backdrop.open { display: block; }
+.bottom-sheet {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  z-index: 301;
+  padding: 0 0 2rem;
+  max-height: 80vh;
+  overflow-y: auto;
+  transform: translateY(100%);
+  transition: transform .25s ease;
+}
+.bottom-sheet.open { transform: translateY(0); }
+.bottom-sheet-handle {
+  width: 40px; height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+  margin: 12px auto 16px;
+}
+.bottom-sheet-title {
+  font-size: 16px; font-weight: 700;
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.bs-section { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+.bs-label {
+  font-size: 12px; font-weight: 700;
+  color: var(--text-hint);
+  text-transform: uppercase; letter-spacing: .07em;
+  margin-bottom: 10px;
+}
+.bs-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.bs-chip {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px; font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 40px;
+  transition: all .1s;
+}
+.bs-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.bs-footer {
+  padding: 1rem 1.25rem 0;
+  display: flex; gap: 10px;
+}
+.bs-footer .btn { flex: 1; justify-content: center; }
 </style>
 </head>
 <body>
@@ -241,9 +427,46 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
       <div id="angeboteGrid" class="angebote-grid"></div>
     </div>
   </div>
-</div>
 
-<!-- ══ DETAIL PANEL ══ -->
+  <!-- ── MOBILE FILTER BAR (nur Mobile) ── -->
+  <div class="mobile-filter-bar">
+    <button class="mobile-filter-btn" id="mobileFilterBtn" onclick="openBottomSheet()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+      <span id="mobileFilterLabel">Filter</span>
+    </button>
+    <button class="mobile-add-btn" onclick="openNew()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      Hinzufügen
+    </button>
+  </div>
+
+</div><!-- #appScreen -->
+
+<!-- ── BOTTOM SHEET ── -->
+<div class="bottom-sheet-backdrop" id="bsBackdrop" onclick="closeBottomSheet()"></div>
+<div class="bottom-sheet" id="bottomSheet">
+  <div class="bottom-sheet-handle"></div>
+  <div class="bottom-sheet-title">
+    Filter
+    <button onclick="closeBottomSheet()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-muted);line-height:1;">×</button>
+  </div>
+  <div class="bs-section">
+    <div class="bs-label">Kategorie</div>
+    <div class="bs-chips" id="bsKatChips"></div>
+  </div>
+  <div class="bs-section">
+    <div class="bs-label">Zielgruppe</div>
+    <div class="bs-chips" id="bsZgChips"></div>
+  </div>
+  <div class="bs-section">
+    <div class="bs-label">Landkreis</div>
+    <div class="bs-chips" id="bsLkChips"></div>
+  </div>
+  <div class="bs-footer">
+    <button class="btn btn-secondary" onclick="clearAllFilters()">Zurücksetzen</button>
+    <button class="btn btn-primary" onclick="closeBottomSheet()">Anzeigen</button>
+  </div>
+</div>
 <div class="detail-backdrop" id="detailBackdrop" onclick="closeDetail()"></div>
 <div class="detail-panel" id="detailPanel">
   <div class="detail-header">
@@ -492,7 +715,59 @@ function buildLkChips() {
     + lks.map(lk => `<button class="lk-chip ${activeLk===lk?'active':''}" onclick="setLk('${esc(lk)}')">${esc(lk)}</button>`).join('');
 }
 
-function setLk(val) { activeLk = val; buildLkChips(); applyFilters(); }
+function setLk(val) { activeLk = val; buildLkChips(); applyFilters(); updateMobileFilterLabel(); }
+
+// ── Bottom Sheet ──────────────────────────────────────────────────────────
+function openBottomSheet() {
+  buildBottomSheetChips();
+  document.getElementById('bsBackdrop').classList.add('open');
+  document.getElementById('bottomSheet').classList.add('open');
+}
+
+function closeBottomSheet() {
+  document.getElementById('bsBackdrop').classList.remove('open');
+  document.getElementById('bottomSheet').classList.remove('open');
+  updateMobileFilterLabel();
+}
+
+function buildBottomSheetChips() {
+  buildBsChips('bsKatChips', countBy('kategorie'), activeKat, v => { activeKat = activeKat===v?'':v; buildBottomSheetChips(); applyFilters(); buildSidebarFilters(); });
+  buildBsChips('bsZgChips',  countBy('zielgruppe'), activeZg,  v => { activeZg  = activeZg ===v?'':v; buildBottomSheetChips(); applyFilters(); buildSidebarFilters(); });
+  // LK chips in bottom sheet
+  const lks = [...new Set(allItems.map(i=>i.landkreis).filter(Boolean))].sort();
+  const el = document.getElementById('bsLkChips');
+  el.innerHTML = [['', 'Alle'],...lks.map(l=>[l,l])].map(([val,label]) =>
+    `<button class="bs-chip ${activeLk===val?'active':''}" onclick="(function(){activeLk='${esc(val)}';buildBottomSheetChips();buildLkChips();applyFilters();})()">${esc(label)}</button>`
+  ).join('');
+}
+
+function buildBsChips(elId, entries, activeVal, onClick) {
+  const el = document.getElementById(elId);
+  if (!entries.length) { el.innerHTML = '<span style="font-size:13px;color:var(--text-hint);">—</span>'; return; }
+  el.innerHTML = entries.map(([val, cnt]) =>
+    `<button class="bs-chip ${activeVal===val?'active':''}" onclick='(${onClick.toString().replace(/'/g,"\\'")})(${JSON.stringify(val)})'>${esc(val)} <span style="font-size:12px;opacity:.7">${cnt}</span></button>`
+  ).join('');
+}
+
+function clearAllFilters() {
+  activeKat = ''; activeZg = ''; activeLk = '';
+  buildSidebarFilters(); buildLkChips(); buildBottomSheetChips(); applyFilters();
+  updateMobileFilterLabel();
+}
+
+function updateMobileFilterLabel() {
+  const btn = document.getElementById('mobileFilterBtn');
+  const label = document.getElementById('mobileFilterLabel');
+  if (!btn || !label) return;
+  const active = [activeKat, activeZg, activeLk].filter(Boolean);
+  if (active.length) {
+    label.textContent = active.join(', ');
+    btn.classList.add('has-filter');
+  } else {
+    label.textContent = 'Filter';
+    btn.classList.remove('has-filter');
+  }
+}
 
 // ── Filter & render ───────────────────────────────────────────────────────
 function applyFilters() {
