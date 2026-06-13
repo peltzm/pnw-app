@@ -1,0 +1,1861 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Spesenabrechnung — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+/* ══ TOKENS — 1:1 aus index.html ══ */
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --success:#2d6a4f; --success-bg:#eaf4ee;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --info-bg:#eff6ff; --info:#1d4ed8;
+  --radius:8px; --radius-lg:12px;
+  --nav-h:60px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6}
+
+/* Header */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100;flex-shrink:0}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.user-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.btn-logout{margin-left:6px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted)}
+
+/* App shell */
+.app-shell{display:flex;flex-direction:column;height:calc(100vh - var(--hdr-h))}
+.app-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(var(--nav-h)+4px);background:var(--bg)}
+
+/* Bottom nav */
+.bottom-nav{height:var(--nav-h);background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:none;background:none;cursor:pointer;color:var(--text-hint);font-size:10px;font-weight:500;padding:6px 4px;position:relative;transition:color .12s;min-height:44px}
+.nav-btn .ni{font-size:20px;line-height:1}
+.nav-btn.active{color:var(--accent)}
+.nav-badge{position:absolute;top:5px;right:calc(50% - 18px);background:var(--accent);color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+
+/* FAB */
+.fab{position:fixed;bottom:calc(var(--nav-h)+14px);right:14px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(123,63,30,.35);cursor:pointer;z-index:40;transition:transform .12s}
+.fab:active{transform:scale(.91)}
+
+/* Screens */
+.screen{display:none}.screen.active{display:block}
+
+/* Typography */
+.section-title{font-size:18px;font-weight:600;color:var(--text);margin-bottom:4px}
+.section-sub{font-size:13px;color:var(--text-muted);margin-bottom:1rem}
+.card-title{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem}
+.slabel{font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.08em;padding:14px 16px 6px}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem;margin:0 12px 10px}
+.info-card{background:var(--accent-light);border:1px solid #e8c4a8;border-radius:var(--radius-lg);padding:1rem;margin:0 12px 10px}
+.info-row{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid #e8c4a8}
+.info-row:last-child{border:none}
+.info-label{color:var(--text-muted)}
+.info-val{color:var(--accent);font-weight:500}
+
+/* Fields */
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.field:last-child{margin-bottom:0}
+.field label{font-size:12px;font-weight:500;color:var(--text-muted)}
+.field input,.field select,.field textarea{border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:16px;color:var(--text);background:var(--surface);outline:none;font-family:inherit;transition:border-color .12s;width:100%;-webkit-appearance:none;appearance:none;min-height:44px}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent-mid)}
+.field textarea{min-height:80px;resize:vertical;font-size:15px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:44px}
+.btn-primary{background:var(--accent);color:white}.btn-primary:active{background:#6a3418}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}.btn-secondary:active{background:var(--bg)}
+.btn-success{background:var(--success);color:white}.btn-success:active{background:#245a41}
+.btn-danger{background:var(--error);color:white}
+.btn-full{width:100%}
+.btn-add{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-mid);background:none;border:1px dashed var(--accent-mid);border-radius:var(--radius);padding:6px 14px;cursor:pointer;font-family:inherit;min-height:36px}
+.btn-row{display:flex;gap:10px;padding:4px 12px 12px}
+
+/* Alerts */
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;line-height:1.5;margin:0 12px 10px}
+.alert-info{background:var(--info-bg);color:var(--info);border:1px solid #bfdbfe}
+.alert-success{background:var(--success-bg);color:var(--success);border:1px solid #a7f3d0}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+.alert-warn{background:#fffbeb;color:#92400e;border:1px solid #fcd34d}
+
+/* Status badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-draft{background:var(--bg);color:var(--text-muted);border:1px solid var(--border)}
+.badge-pending{background:#fffbeb;color:#92400e;border:1px solid #fcd34d}
+.badge-approved{background:var(--success-bg);color:var(--success);border:1px solid #a7f3d0}
+.badge-rejected{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+.bdot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* Status bar (like index.html) */
+.status-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--radius);font-size:12px;margin:0 12px 10px}
+.status-bar.uploading{background:var(--info-bg);color:var(--info);border:1px solid #bfdbfe}
+.status-bar.done{background:var(--success-bg);color:var(--success);border:1px solid #a7f3d0}
+.status-bar.error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* Month strip */
+.month-strip{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+.month-strip select{border:none;background:none;font-size:15px;font-weight:600;color:var(--text);padding:0;-webkit-appearance:none}
+.mt-amt{font-size:17px;font-weight:700;color:var(--accent)}
+.mt-sub{font-size:11px;color:var(--text-hint);text-align:right}
+
+/* Stat row */
+.stat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px}
+.stat-box .sl{font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.stat-box .sv{font-size:20px;font-weight:700;color:var(--text);line-height:1}
+.stat-box .sv.a{color:var(--accent)}
+.stat-box .ss{font-size:11px;color:var(--text-hint);margin-top:3px}
+
+/* Submit CTA */
+.submit-cta{margin:2px 12px 10px;background:var(--accent);color:#fff;border-radius:var(--radius-lg);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border:none;width:calc(100% - 24px);text-align:left;font-family:inherit}
+.submit-cta:active{background:#6a3418}
+.submit-cta .cl{font-size:11px;opacity:.8}
+.submit-cta .ca{font-size:14px;font-weight:600;margin-top:2px}
+
+/* Beleg cards */
+.beleg-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin:0 12px 8px;display:flex;align-items:stretch;cursor:pointer;overflow:hidden;transition:border-color .12s}
+.beleg-card:active{border-color:var(--accent-mid);background:var(--accent-light)}
+.beleg-side{width:56px;flex-shrink:0;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:24px}
+.beleg-side.fb{background:#eff6ff}
+.beleg-side.fw{background:#fffbeb}
+.beleg-body{flex:1;padding:11px 12px 9px;min-width:0}
+.beleg-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+.beleg-desc{font-size:13px;font-weight:500;color:var(--text);line-height:1.3}
+.beleg-amt{font-size:14px;font-weight:600;color:var(--accent);flex-shrink:0}
+.beleg-meta{display:flex;align-items:center;gap:5px;margin-top:5px;flex-wrap:wrap}
+.beleg-date{font-size:11px;color:var(--text-hint)}
+.cpill{font-size:10px;font-weight:600;padding:1px 7px;border-radius:8px}
+.c-fahrt{background:#dbeafe;color:#1e40af}
+.c-verpf{background:#fef3c7;color:#92400e}
+.c-mat{background:#ede9fe;color:#5b21b6}
+.c-sonst{background:var(--bg);color:var(--text-muted);border:1px solid var(--border)}
+.ktag{font-size:10px;font-weight:500;padding:1px 7px;border-radius:8px;background:var(--accent-light);color:var(--accent);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wtag{font-size:10px;color:#92400e}
+
+/* Fahrtenbuch block */
+.fahrt-block{background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-lg);overflow:hidden;margin:0 12px 10px;cursor:pointer}
+.fahrt-block:active{background:#dbeafe}
+.fb-head{padding:12px 14px 10px;display:flex;align-items:center;justify-content:space-between}
+.fb-lbl{font-size:11px;font-weight:600;color:#1e40af;text-transform:uppercase;letter-spacing:.05em}
+.fb-amt{font-size:19px;font-weight:700;color:#1d4ed8}
+.fb-foot{padding:8px 14px 10px;font-size:12px;color:#3b82f6;border-top:1px solid #bfdbfe}
+
+/* Upload zone */
+.upload-zone{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:28px 16px;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s}
+.upload-zone:active{border-color:var(--accent-mid);background:var(--accent-light)}
+.uz-icon{font-size:36px;margin-bottom:8px}
+.uz-title{font-size:14px;font-weight:600;color:var(--text)}
+.uz-sub{font-size:12px;color:var(--text-muted);margin-top:4px}
+
+/* Scan result */
+.scan-result{background:var(--accent-light);border:1px solid #e8c4a8;border-radius:var(--radius-lg);padding:14px;margin:0 12px 10px}
+.sr-head{font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:5px}
+.scan-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #e8c4a8;font-size:14px}
+.scan-row:last-child{border:none}
+.scan-row .sl{color:var(--text-muted)}
+.scan-row .sv{font-weight:600}
+
+/* Checklist */
+.checklist{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin:0 12px 10px}
+.check-item{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.check-item:last-child{border:none}
+.check-box{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--border-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .12s}
+.check-box.on{background:var(--accent);border-color:var(--accent);color:white}
+.check-label{font-size:14px;color:var(--text);line-height:1.35}
+
+/* Summary table */
+.sum-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin:0 12px 10px}
+.sum-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);font-size:14px}
+.sum-row:last-child{border:none;background:var(--accent-light);font-weight:700}
+.sr-cat{display:flex;align-items:center;gap:8px}
+.sr-r{text-align:right}
+.sr-amt{font-weight:600}
+.sr-cnt{font-size:11px;color:var(--text-hint)}
+
+/* TL cards */
+.tl-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin:0 12px 10px;overflow:hidden}
+.tl-head{padding:12px 14px 8px;display:flex;align-items:center;gap:10px}
+.tl-avatar{width:40px;height:40px;border-radius:50%;background:var(--accent-light);color:var(--accent);font-weight:700;font-size:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.tl-info strong{display:block;font-size:14px;color:var(--text)}
+.tl-info span{font-size:12px;color:var(--text-muted)}
+.tl-amt{font-size:18px;font-weight:700;color:var(--accent);text-align:right;flex-shrink:0;margin-left:auto}
+.tl-meta{padding:0 14px 8px;font-size:12px;color:var(--text-hint)}
+.tl-foot{padding:10px 14px 12px;border-top:1px solid var(--border);display:flex;gap:8px}
+
+/* Archiv */
+.archiv-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin:0 12px 8px;padding:13px 14px;display:flex;align-items:center;gap:10px}
+.archiv-row .am{font-size:14px;font-weight:500;flex:1}
+.archiv-row .ar{text-align:right}
+.archiv-row .aa{font-size:14px;font-weight:600}
+
+/* Category grid */
+.cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cat-btn{display:flex;align-items:center;gap:8px;padding:12px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:14px;font-weight:500;color:var(--text);font-family:inherit;transition:all .12s;min-height:44px}
+.cat-btn.active{background:var(--accent-light);border-color:var(--accent);color:var(--accent)}
+.cat-btn:active{background:var(--accent-light)}
+
+/* Hauptkategorie grid — 3 cols, icon above label */
+.hkat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.hkat-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px 6px;border:1.5px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);cursor:pointer;font-family:inherit;transition:all .12s;min-height:66px;-webkit-tap-highlight-color:transparent}
+.hkat-btn:first-child{font-size:22px}
+.hkat-btn span{font-size:11px;font-weight:600;color:var(--text-muted);text-align:center;line-height:1.2}
+.hkat-btn.active{background:var(--accent-light);border-color:var(--accent)}
+.hkat-btn.active span{color:var(--accent)}
+.hkat-btn:active{background:var(--accent-light)}
+
+/* Unterkategorie list — tap targets */
+.ukat-list{display:flex;flex-direction:column;gap:6px}
+.ukat-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:14px;color:var(--text);font-family:inherit;transition:all .12s;min-height:44px;text-align:left;width:100%}
+.ukat-item.active{background:var(--accent-light);border-color:var(--accent);color:var(--accent);font-weight:600}
+.ukat-item:active{background:var(--accent-light)}
+
+/* Scan hero */
+.scan-hero{background:var(--surface);border-bottom:1px solid var(--border);padding:16px}
+.scan-hero h2{font-size:17px;font-weight:600;color:var(--text);margin-bottom:3px}
+.scan-hero p{font-size:13px;color:var(--text-muted);margin-bottom:12px}
+.scan-big{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:28px 16px;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s}
+.scan-big:active{border-color:var(--accent-mid);background:var(--accent-light)}
+.scan-big .si{font-size:40px;margin-bottom:8px}
+.scan-big .st{font-size:15px;font-weight:600;color:var(--text)}
+.scan-big .ss{font-size:12px;color:var(--text-muted);margin-top:4px}
+
+/* Login */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+
+/* Bottom sheet */
+.sheet-overlay{position:fixed;inset:0;background:rgba(26,25,22,.4);z-index:200;display:flex;flex-direction:column;justify-content:flex-end;opacity:0;pointer-events:none;transition:opacity .2s}
+.sheet-overlay.open{opacity:1;pointer-events:all}
+.sheet{background:var(--surface);border-radius:16px 16px 0 0;max-height:92vh;overflow-y:auto;transform:translateY(100%);transition:transform .28s cubic-bezier(.32,0,.67,0)}
+.sheet-overlay.open .sheet{transform:translateY(0)}
+.sheet-handle{width:32px;height:4px;border-radius:2px;background:var(--border-strong);margin:10px auto 0}
+.sheet-head{padding:12px 16px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1}
+.sheet-title{font-size:15px;font-weight:600;color:var(--text)}
+.sheet-close{background:var(--bg);border:1px solid var(--border);border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+.sheet-body{padding:16px}
+.sheet-footer{padding:12px 16px 20px;border-top:1px solid var(--border);display:flex;gap:8px}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(26,25,22,.5);z-index:210;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .18s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal-box{background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:340px;padding:24px 20px 20px;text-align:center;transform:scale(.93);transition:transform .18s}
+.modal-overlay.open .modal-box{transform:scale(1)}
+.modal-icon{font-size:44px;margin-bottom:12px}
+.modal-title{font-size:17px;font-weight:600;margin-bottom:8px;color:var(--text)}
+.modal-text{font-size:13px;color:var(--text-muted);line-height:1.55;margin-bottom:20px}
+.modal-btns{display:flex;gap:8px}
+
+/* Photo strip */
+.photo-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.photo-strip::-webkit-scrollbar{display:none}
+.photo-thumb{width:72px;height:72px;border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--accent-light);font-size:26px;cursor:pointer;position:relative}
+.photo-del{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(26,25,22,.6);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:none}
+.add-photo{width:72px;height:72px;border-radius:var(--radius);border:2px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--text-hint);cursor:pointer;flex-shrink:0;background:var(--bg)}
+
+/* Toast */
+.toast{position:fixed;bottom:calc(var(--nav-h)+14px);left:50%;transform:translateX(-50%) translateY(8px);background:var(--text);color:var(--surface);padding:10px 18px;border-radius:20px;font-size:13px;font-weight:500;white-space:nowrap;opacity:0;pointer-events:none;transition:all .22s;z-index:300;box-shadow:0 4px 16px rgba(26,25,22,.2)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.ok{background:var(--success)}
+
+/* Or row */
+.or-row{display:flex;align-items:center;gap:10px;padding:8px 16px;color:var(--text-hint);font-size:12px}
+.or-row::before,.or-row::after{content:'';flex:1;height:1px;background:var(--border)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin .7s linear infinite;display:inline-block}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-brand">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <span>Spesenabrechnung</span>
+  </div>
+  <div class="user-badge" id="userBadge" style="display:none">
+    <div class="user-dot"></div>
+    <span id="userName"></span>
+    <button class="btn-logout" onclick="logout()">Abmelden</button>
+  </div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-screen">
+    <div class="login-card">
+      <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
+      <div class="login-title">Spesenabrechnung</div>
+      <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
+      <button class="btn btn-primary btn-full" onclick="login()">
+        <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
+        Mit Microsoft anmelden
+      </button>
+      <div id="loginError" class="alert alert-error" style="display:none;margin-top:1rem;text-align:left"></div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen" style="display:none">
+<div class="app-shell">
+<div class="app-body" id="appBody">
+
+<!-- ══ SCREEN: ÜBERSICHT ══ -->
+<div id="screen-home" class="screen active">
+  <div class="month-strip">
+    <select id="monatSelect" onchange="ladeMonat(this.value)">
+      <option value="2026-04">April 2026</option>
+      <option value="2026-05">Mai 2026</option>
+      <option value="2026-06" selected>Juni 2026</option>
+    </select>
+    <div>
+      <div class="mt-amt" id="homeTotal">—</div>
+      <div class="mt-sub" id="homeSub">Wird geladen…</div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-box">
+      <div class="sl">Fahrtkosten</div>
+      <div class="sv a" id="statFahrt">—</div>
+      <div class="ss" id="statFahrtSub">Fahrtenbuch</div>
+    </div>
+    <div class="stat-box">
+      <div class="sl">Sonstige Belege</div>
+      <div class="sv" id="statSonst">—</div>
+      <div class="ss" id="statSonstSub">Belege</div>
+    </div>
+  </div>
+
+  <div id="homeStatus"></div>
+
+  <button class="submit-cta" onclick="showScreen('abschluss')">
+    <div><div class="cl">Abrechnung bereit?</div><div class="ca">Jetzt einreichen →</div></div>
+    <div style="font-size:20px;opacity:.7">📨</div>
+  </button>
+
+  <div class="slabel">Fahrtkosten — Monatssumme</div>
+  <div id="fahrtBlock">
+    <div class="fahrt-block" onclick="openSheet('fahrtSheet')">
+      <div class="fb-head">
+        <div>
+          <div class="fb-lbl">🚗 Fahrtenbuch</div>
+          <div class="fb-amt" id="fbAmt">— €</div>
+        </div>
+        <span class="badge badge-draft" id="fbBadge"><span class="bdot"></span> Nicht hochgeladen</span>
+      </div>
+      <div class="fb-foot" id="fbFoot">Tippen um Fahrtenbuch hochzuladen</div>
+    </div>
+  </div>
+
+  <div class="slabel">Belege</div>
+  <div id="belegList">
+    <div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: ERFASSEN ══ -->
+<div id="screen-erfassen" class="screen">
+  <div class="scan-hero">
+    <h2>Neuer Beleg</h2>
+    <p>Foto aufnehmen — KI liest den Beleg automatisch aus</p>
+    <div class="scan-big" onclick="triggerScan()">
+      <div class="si" id="scanIcon">📸</div>
+      <div class="st" id="scanText">Beleg fotografieren</div>
+      <div class="ss" id="scanSub">KI erkennt Betrag, Datum, Händler</div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="handleFileSelect(this)">
+  </div>
+
+  <div id="scanResult" style="display:none;margin-top:10px">
+    <div class="scan-result">
+      <div class="sr-head"><span>✨</span> KI-Analyse — bitte prüfen</div>
+      <div class="scan-row"><span class="sl">Händler</span><span class="sv" id="srHaendler">—</span></div>
+      <div class="scan-row"><span class="sl">Datum</span><span class="sv" id="srDatum">—</span></div>
+      <div class="scan-row"><span class="sl">Betrag brutto</span><span class="sv" id="srBetrag">—</span></div>
+      <div class="scan-row"><span class="sl">MwSt.</span><span class="sv" id="srMwst">—</span></div>
+      <div class="scan-row"><span class="sl">Kategorie (Vorschlag)</span><span class="sv" id="srKat">—</span></div>
+    </div>
+  </div>
+
+  <div class="or-row">oder manuell eingeben</div>
+
+  <!-- ── Hauptkategorie ── -->
+  <div class="card">
+    <div class="card-title">Hauptkategorie *</div>
+    <div class="hkat-grid">
+      <button class="hkat-btn" id="hkat-freizeit"   onclick="selectHkat('freizeit')">  🎡<span>Freizeit</span></button>
+      <button class="hkat-btn" id="hkat-gastro"     onclick="selectHkat('gastro')">    🍽️<span>Gastronomie</span></button>
+      <button class="hkat-btn" id="hkat-einkauf"    onclick="selectHkat('einkauf')">   🛍️<span>Einkäufe</span></button>
+      <button class="hkat-btn" id="hkat-fahrzeug"   onclick="selectHkat('fahrzeug')">  🚗<span>Fahrzeug</span></button>
+      <button class="hkat-btn" id="hkat-parken"     onclick="selectHkat('parken')">    🅿️<span>Parken</span></button>
+      <button class="hkat-btn" id="hkat-fahrtenbuch" onclick="selectHkat('fahrtenbuch')">📊<span>Fahrtenbuch</span></button>
+    </div>
+  </div>
+
+  <!-- ── Unterkategorie (dynamisch) ── -->
+  <div id="ukatCard" class="card" style="display:none">
+    <div class="card-title">Unterkategorie *</div>
+    <div id="ukatList" class="ukat-list"></div>
+  </div>
+
+  <!-- ── Fahrtenbuch Upload ── -->
+  <div id="fahrtForm" class="card" style="display:none">
+    <div class="card-title">Fahrtenbuch — Monatsnachweis</div>
+    <div class="alert alert-info" style="margin:0 0 12px;padding:9px 12px;font-size:12px">
+      Fahrtkosten werden <strong>einmal pro Monat</strong> als Gesamtsumme abgerechnet. Excel-Fahrtenbuch hochladen.
+    </div>
+    <div id="fahrtUploadZone" class="upload-zone" onclick="triggerFahrtUpload()">
+      <div class="uz-icon">📊</div>
+      <div class="uz-title">Fahrtenbuch hochladen</div>
+      <div class="uz-sub">Excel (.xlsx) auswählen</div>
+    </div>
+    <input type="file" id="fahrtFileInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="handleFahrtUpload(this)">
+    <div id="fahrtUploadResult" style="display:none;margin-top:12px">
+      <div class="alert alert-success" style="margin:0 0 10px">✓ Fahrtenbuch eingelesen und in SharePoint gespeichert</div>
+      <div class="info-card" style="margin:0" id="fahrtInfoCard"></div>
+      <button class="btn-add" style="margin-top:10px;width:100%;justify-content:center" onclick="resetFahrtUpload()">↺ Andere Datei</button>
+    </div>
+  </div>
+
+  <!-- ── Pflichtfelder Beleg ── -->
+  <div id="belegFormCard" class="card" style="display:none">
+    <div class="card-title">Belegdaten — Pflichtfelder</div>
+
+    <!-- Klient -->
+    <div class="field">
+      <label>Klient (Nachname, V.) *</label>
+      <select id="fKlient">
+        <option value="">— bitte wählen —</option>
+        <optgroup label="Aktive Fälle" id="fKlientFaelle"></optgroup>
+        <optgroup label="Kein Klient">
+          <option value="kein:kein Klient">kein Klient</option>
+        </optgroup>
+        <optgroup label="Intern">
+          <option value="intern:Nordstern WG">Nordstern WG allgemein</option>
+          <option value="intern:Dienstbesprechung">Dienstbesprechung / Team</option>
+          <option value="intern:Fortbildung">Fortbildung</option>
+          <option value="intern:Büro">Bürobedarf / intern</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- Datum + Betrag -->
+    <div class="field-row">
+      <div class="field">
+        <label>Datum *</label>
+        <input type="date" id="fDatum">
+      </div>
+      <div class="field">
+        <label>Betrag (€) *</label>
+        <input type="number" id="fBetrag" placeholder="0,00" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+
+    <!-- Händler -->
+    <div class="field">
+      <label>Händler / Anbieter</label>
+      <input type="text" id="fHaendler" placeholder="z.B. REWE, Stadtpark, Kino…">
+    </div>
+
+    <!-- Notiz -->
+    <div class="field">
+      <label>Notiz / Anlass</label>
+      <textarea rows="2" id="fBeschreibung" placeholder="Optional: kurze Beschreibung des Anlasses"></textarea>
+    </div>
+  </div>
+
+  <!-- ── Originalbeleg (Pflicht) ── -->
+  <div id="fotoCard" class="card" style="display:none">
+    <div class="card-title">Originalbeleg * — Pflicht</div>
+    <div class="alert alert-warn" style="margin:0 0 10px;padding:8px 12px;font-size:12px">
+      ⚠ Nur Original-Kassenbon oder Quittung. <strong>Keine Eigenbelege.</strong>
+    </div>
+    <div class="photo-strip" id="photoStrip">
+      <div class="add-photo" onclick="addPhoto()">+</div>
+    </div>
+    <div style="font-size:11px;color:var(--text-hint);margin-top:8px">Beleg flach hinlegen · gute Beleuchtung · Fotos gehen direkt in SharePoint</div>
+  </div>
+
+  <div id="erfassenStatus"></div>
+  <div class="btn-row">
+    <button class="btn btn-primary btn-full" onclick="speicherBeleg()" id="btnSpeichern">💾 Speichern &amp; in SharePoint ablegen</button>
+  </div>
+  <div style="text-align:center;font-size:11px;color:var(--text-hint);padding:0 16px 12px" id="spInfoText">Foto + Daten → SharePoint / Spesenbelege / <span id="spMonat">2026-06</span> / <span id="spName">—</span></div>
+</div>
+
+<!-- ══ SCREEN: MONATSABSCHLUSS ══ -->
+<div id="screen-abschluss" class="screen">
+  <div style="padding:16px 16px 4px">
+    <div class="section-title">Monatsabschluss</div>
+    <div class="section-sub" id="abschlussSubtitle">Zusammenfassung prüfen und einreichen</div>
+  </div>
+
+  <div id="fahrtStatusBlock"></div>
+
+  <div class="sum-table" id="sumTable">
+    <div style="text-align:center;padding:20px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
+  </div>
+
+  <div class="slabel">Checkliste</div>
+  <div class="checklist">
+    <div class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-label">Fahrtenbuch (Excel) hochgeladen</div></div>
+    <div class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-label">Alle Belege fotografiert und hochgeladen</div></div>
+    <div class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-label">Klient-Zuordnung bei allen Belegen gesetzt</div></div>
+    <div class="check-item" onclick="toggleCheck(this)"><div class="check-box">✓</div><div class="check-label">Richtigkeit der Angaben bestätigt</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Einreichung an Teamleiter</div>
+    <div class="field">
+      <label>Teamleiter / Prüfer *</label>
+      <select id="selTeamleiter">
+        <option value="">— wird geladen —</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Anmerkung (optional)</label>
+      <textarea rows="2" id="txtAnmerkung" placeholder="Besonderheiten, Rückfragen…"></textarea>
+    </div>
+  </div>
+
+  <div id="abschlussStatus"></div>
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="pdfVorschau()" style="padding:10px 14px">👁 Vorschau</button>
+    <button class="btn btn-primary" style="flex:1" onclick="openModal('submitModal')" id="btnEinreichen">📨 Einreichen</button>
+  </div>
+
+  <div class="slabel">Frühere Abrechnungen</div>
+  <div id="archivList">
+    <div style="text-align:center;padding:20px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: TEAMLEITER ══ -->
+<div id="screen-teamleiter" class="screen">
+  <div style="padding:14px 16px 4px">
+    <div class="section-title">Teamleiter</div>
+    <div class="section-sub">Prüfung und Freigabe von Spesenabrechnungen</div>
+  </div>
+  <div id="tlStatus"></div>
+  <div class="slabel">Ausstehende Prüfungen</div>
+  <div id="tlPending">
+    <div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
+  </div>
+  <div class="slabel">Team-Übersicht</div>
+  <div class="sum-table" id="teamTable">
+    <div style="text-align:center;padding:20px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
+  </div>
+</div>
+
+</div><!-- /app-body -->
+
+<!-- FAB -->
+<button class="fab" id="fab" onclick="showScreen('erfassen')" title="Neuer Beleg">+</button>
+
+<!-- Bottom Nav -->
+<div class="bottom-nav">
+  <button class="nav-btn active" id="nav-home"       onclick="showScreen('home')"><span class="ni">🏠</span>Übersicht</button>
+  <button class="nav-btn"        id="nav-erfassen"   onclick="showScreen('erfassen')"><span class="ni">📷</span>Erfassen</button>
+  <button class="nav-btn"        id="nav-abschluss"  onclick="showScreen('abschluss')"><span class="ni">📋</span>Abschluss</button>
+  <button class="nav-btn"        id="nav-teamleiter" onclick="showScreen('teamleiter')"><span class="ni">✅</span>Teamleiter<span class="nav-badge" id="tlBadge" style="display:none">0</span></button>
+</div>
+</div><!-- /app-shell -->
+</div><!-- /appScreen -->
+
+<!-- SHEET: Beleg Detail / Edit -->
+<div class="sheet-overlay" id="belegSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <span class="sheet-title">Beleg bearbeiten</span>
+      <button class="sheet-close" onclick="closeSheet('belegSheet')">✕</button>
+    </div>
+    <div class="sheet-body" id="belegSheetBody"></div>
+    <div class="sheet-footer">
+      <button class="btn btn-danger" style="padding:10px 14px;font-size:13px" onclick="loescheBeleg()">🗑</button>
+      <button class="btn btn-primary" style="flex:1" onclick="updateBeleg()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHEET: Fahrtenbuch -->
+<div class="sheet-overlay" id="fahrtSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <span class="sheet-title" id="fahrtSheetTitle">Fahrtenbuch</span>
+      <button class="sheet-close" onclick="closeSheet('fahrtSheet')">✕</button>
+    </div>
+    <div class="sheet-body" id="fahrtSheetBody"></div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" onclick="closeSheet('fahrtSheet')">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHEET: TL Prüfung -->
+<div class="sheet-overlay" id="reviewSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <span class="sheet-title" id="reviewTitle">Abrechnung prüfen</span>
+      <button class="sheet-close" onclick="closeSheet('reviewSheet')">✕</button>
+    </div>
+    <div class="sheet-body" id="reviewBody"></div>
+    <div class="sheet-footer" id="reviewFooter"></div>
+  </div>
+</div>
+
+<!-- MODAL: Einreichen -->
+<div class="modal-overlay" id="submitModal">
+  <div class="modal-box">
+    <div class="modal-icon">📨</div>
+    <div class="modal-title">Abrechnung einreichen?</div>
+    <div class="modal-text" id="submitModalText">Ihre Abrechnung wird zur Prüfung übermittelt. Danach sind keine Änderungen mehr möglich.</div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeModal('submitModal')">Abbrechen</button>
+      <button class="btn btn-primary"   style="flex:1" onclick="closeModal('submitModal');einreichen()">Einreichen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Genehmigt -->
+<div class="modal-overlay" id="approvedModal">
+  <div class="modal-box">
+    <div class="modal-icon">✅</div>
+    <div class="modal-title">Freigegeben!</div>
+    <div class="modal-text" id="approvedText">PDF wurde erstellt und automatisch an spesen@praxisneuewege.de gesendet.</div>
+    <div class="modal-btns"><button class="btn btn-primary btn-full" onclick="closeModal('approvedModal');ladeTLAbrechnungen()">Fertig</button></div>
+  </div>
+</div>
+
+<!-- MODAL: Ablehnen -->
+<div class="modal-overlay" id="rejectModal">
+  <div class="modal-box">
+    <div class="modal-icon">✕</div>
+    <div class="modal-title">Abrechnung ablehnen</div>
+    <div class="modal-text">
+      <div class="field" style="text-align:left">
+        <label>Grund (wird an Mitarbeiter gesendet)</label>
+        <textarea id="rejectGrund" rows="3" placeholder="Begründung eingeben…" style="font-size:14px"></textarea>
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-secondary" style="flex:1" onclick="closeModal('rejectModal')">Abbrechen</button>
+      <button class="btn btn-danger"    style="flex:1" onclick="closeModal('rejectModal');ablehnen()">Ablehnen &amp; senden</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// KONFIGURATION — identisch zu index.html
+// ══════════════════════════════════════════════════════════════════
+const CFG = {
+  clientId:    'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://peltzm.github.io/pnw-app/spesenabrechnung.html',
+  siteUrl:     'https://praxisneuewegesonjapeltz978.sharepoint.com',
+  sitePath:    '/sites/PraxisNeueWegeIntern',
+  spFolder:    '/Spesenbelege',
+  listName:    'Spesenbelege_Entwuerfe',
+  spesen_mail: 'spesen@praxisneuewege.de',
+  tlGroupName: 'PNW-Teamleitung',
+  teamGroupName:'PNW-Team'
+};
+const SCOPES = ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','User.Read','Mail.Send','GroupMember.Read.All'];
+
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+let msalInstance = null, currentAccount = null, accessToken = null;
+let _graphSiteId = null, _graphListId = null, _graphDriveId = null;
+let _tlMembers = [], _teamMembers = [];
+let _groupLoadPromise = Promise.resolve();
+let _currentMonat = '2026-06';   // YYYY-MM
+let _currentBelegId = null;      // für Edit-Sheet
+let _currentReviewId = null;     // für TL-Review-Sheet
+let _uploadedPhotos = [];        // { name, dataUrl, uploaded }
+let _fahrtDaten = null;          // { gesamtKm, betrag, datei, klienten: [{name,km,betrag}] }
+let _isTL = false;
+
+// ══════════════════════════════════════════════════════════════════
+// MSAL — 1:1 aus index.html
+// ══════════════════════════════════════════════════════════════════
+async function initMsal() {
+  const msalConfig = {
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
+  };
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; accessToken = r.accessToken; await showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; await getToken(); await showApp(); }
+}
+
+async function login() {
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) { showLoginError('Fehler: ' + (e.errorMessage || e.message)); }
+}
+async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
+async function getToken() {
+  if (!currentAccount) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    accessToken = r.accessToken; return accessToken;
+  } catch(e) {
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES });
+  }
+}
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.style.display = 'block'; el.textContent = msg;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GRAPH HELPERS — 1:1 aus index.html
+// ══════════════════════════════════════════════════════════════════
+async function getSiteAndDrive() {
+  const token = await getToken();
+  if (_graphSiteId && _graphDriveId) return { token, siteId: _graphSiteId, driveId: _graphDriveId };
+  const siteHost = CFG.siteUrl.replace('https://','').split('/')[0];
+  const sitePath = CFG.sitePath || '/' + CFG.siteUrl.replace('https://','').split('/').slice(1).join('/');
+  const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteHost}:${sitePath}`, { headers: { Authorization: 'Bearer ' + token } });
+  if (!sr.ok) throw new Error('Site nicht gefunden');
+  const site = await sr.json();
+  _graphSiteId = site.id;
+  const dr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/drives`, { headers: { Authorization: 'Bearer ' + token } });
+  const drives = await dr.json();
+  const drive = drives.value.find(d => ['Dokumente','Documents','Freigegebene Dokumente'].includes(d.name));
+  if (!drive) throw new Error('Dokumentenbibliothek nicht gefunden');
+  _graphDriveId = drive.id;
+  return { token, siteId: _graphSiteId, driveId: _graphDriveId };
+}
+
+async function getGraphListIds() {
+  if (_graphSiteId && _graphListId) return { siteId: _graphSiteId, listId: _graphListId };
+  await getSiteAndDrive();
+  const token = await getToken();
+  const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$filter=displayName eq '${CFG.listName}'`, { headers: { Authorization: 'Bearer ' + token } });
+  const lists = await lr.json();
+  if (!lists.value?.length) throw new Error(`SharePoint-Liste "${CFG.listName}" nicht gefunden. Bitte zuerst anlegen.`);
+  _graphListId = lists.value[0].id;
+  return { siteId: _graphSiteId, listId: _graphListId };
+}
+
+async function uploadFile(path, body, contentType) {
+  const { token, driveId } = await getSiteAndDrive();
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:${path}:/content`, {
+    method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': contentType }, body
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.error?.message || 'Upload fehlgeschlagen'); }
+  return await r.json();
+}
+
+async function getFileUrl(path) {
+  try {
+    const { token, driveId } = await getSiteAndDrive();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:${path}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (r.ok) { const f = await r.json(); return f.webUrl || ''; }
+  } catch(e) {}
+  return '';
+}
+
+async function sendMail(to, cc, subject, htmlBody) {
+  const token = await getToken();
+  const mail = {
+    message: {
+      subject,
+      body: { contentType: 'HTML', content: htmlBody },
+      toRecipients: (Array.isArray(to) ? to : [to]).map(a => ({ emailAddress: { address: a } })),
+      ccRecipients: (cc || []).map(a => ({ emailAddress: { address: a } }))
+    },
+    saveToSentItems: false
+  };
+  const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(mail)
+  });
+  return r.ok;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// M365 GROUP MEMBERS — TL & Team
+// ══════════════════════════════════════════════════════════════════
+async function loadGroupMembers() {
+  const token = await getToken();
+  async function getGrp(name) {
+    const r = await fetch(`https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${name}'&$select=id`, { headers: { Authorization: 'Bearer ' + token } });
+    const d = await r.json(); return d.value?.[0]?.id;
+  }
+  async function getMembers(gid) {
+    if (!gid) return [];
+    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${gid}/members?$select=id,displayName,mail,mobilePhone,businessPhones`, { headers: { Authorization: 'Bearer ' + token } });
+    const d = await r.json();
+    return (d.value || []).filter(m => m['@odata.type'] === '#microsoft.graph.user');
+  }
+  const [tlId, teamId] = await Promise.all([getGrp(CFG.tlGroupName), getGrp(CFG.teamGroupName)]);
+  [_tlMembers, _teamMembers] = await Promise.all([getMembers(tlId), getMembers(teamId)]);
+  const myMail = (currentAccount?.username || '').toLowerCase();
+  const myName = (currentAccount?.name || '').toLowerCase();
+  _isTL = _tlMembers.some(m => (m.mail || '').toLowerCase() === myMail || (m.displayName || '').toLowerCase() === myName);
+  // Populate TL select
+  const sel = document.getElementById('selTeamleiter');
+  sel.innerHTML = '<option value="">— bitte wählen —</option>';
+  _tlMembers.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.mail || m.displayName;
+    opt.textContent = m.displayName;
+    sel.appendChild(opt);
+  });
+  // Populate Klient Fälle — load from SharePoint list or use static
+  populateKlientOptionen();
+  // Show TL tab badge
+  if (_isTL) { document.getElementById('tlBadge').style.display = 'flex'; ladeTLAbrechnungen(); }
+}
+
+function populateKlientOptionen() {
+  // Static list — in production, load from a SharePoint list of active cases
+  const faelle = [
+    { az: '2024-0187', name: 'Familie Hoffmann' },
+    { az: '2025-0043', name: 'Familie Bauer' },
+    { az: '2025-0089', name: 'Familie Gruber' },
+    { az: '2025-0112', name: 'Familie Weber' },
+  ];
+  const grp = document.getElementById('fKlientFaelle');
+  grp.innerHTML = '';
+  faelle.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = `fall:${f.az}:${f.name}`;
+    opt.textContent = `${f.name} (Az. ${f.az})`;
+    grp.appendChild(opt);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SHAREPOINT LIST — Belege
+// ══════════════════════════════════════════════════════════════════
+async function saveBelegToList(data, existingId = null) {
+  const token = await getToken();
+  const { siteId, listId } = await getGraphListIds();
+  const fachkraft = currentAccount?.name || currentAccount?.username || '';
+  const fields = {
+    Title: `SP_${data.monat}_${data.kategorie}_${Date.now()}`,
+    Monat: data.monat,
+    Kategorie: data.kategorie,
+    Unterkategorie: data.unterkategorie || '',
+    KategorieLabel: data.kategorieLabel || data.kategorie,
+    Betrag: parseFloat(data.betrag) || 0,
+    Datum: data.datum ? new Date(data.datum).toISOString() : null,
+    Haendler: data.haendler || '',
+    Beschreibung: data.beschreibung || '',
+    Klient: data.klient || '',
+    Fachkraft: fachkraft,
+    Fachkraft_Mail: currentAccount?.username || '',
+    Status: data.status || 'Entwurf',
+    FotoUrls: JSON.stringify(data.fotoUrls || []),
+    FahrtDaten: data.fahrtDaten ? JSON.stringify(data.fahrtDaten) : '',
+    FormularDaten: JSON.stringify(data)
+  };
+  let url, method;
+  if (existingId) {
+    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}/fields`;
+    method = 'PATCH';
+  } else {
+    url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`;
+    method = 'POST';
+  }
+  const body = existingId ? fields : { fields };
+  const r = await fetch(url, { method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error('Speichern fehlgeschlagen: ' + (e?.error?.message || r.status)); }
+  if (!existingId) { const res = await r.json(); return res.id; }
+  return existingId;
+}
+
+async function ladeBelege(monat) {
+  const token = await getToken();
+  const { siteId, listId } = await getGraphListIds();
+  const myMail = (currentAccount?.username || '').toLowerCase();
+  const filter = _isTL ? '' : `&$filter=fields/Fachkraft_Mail eq '${myMail}'`;
+  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$orderby=fields/Modified desc&$top=200${filter}`;
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (!r.ok) throw new Error('Belege konnten nicht geladen werden');
+  const res = await r.json();
+  const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
+  return alle.filter(b => (b.Monat || '').startsWith(monat));
+}
+
+async function ladeMonatsdaten() {
+  setHomeStatus('uploading', 'Wird geladen…');
+  try {
+    const belege = await ladeBelege(_currentMonat);
+    renderHome(belege);
+    clearHomeStatus();
+  } catch(e) {
+    setHomeStatus('error', 'Fehler: ' + e.message);
+  }
+}
+
+function renderHome(belege) {
+  // Separate Fahrtenbuch from regular belege
+  const fahrt = belege.find(b => b.Kategorie === 'fahrtenbuch');
+  const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
+
+  // Stats
+  const fahrtBetrag = fahrt ? parseFloat(fahrt.Betrag || 0) : 0;
+  const sonstBetrag = regular.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
+  const total = fahrtBetrag + sonstBetrag;
+
+  document.getElementById('homeTotal').textContent = fmt(total);
+  const status = belege.find(b => b.Status === 'Eingereicht') ? 'Eingereicht' : belege.find(b => b.Status === 'Genehmigt') ? 'Genehmigt' : 'Entwurf';
+  document.getElementById('homeSub').textContent = `${regular.length + (fahrt ? 1 : 0)} Positionen · ${status}`;
+  document.getElementById('statFahrt').textContent = fahrtBetrag ? fmt(fahrtBetrag) : '— €';
+  document.getElementById('statFahrtSub').textContent = fahrt ? `${fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten).gesamtKm + ' km' : ''} · Fahrtenbuch ✓` : 'Nicht hochgeladen';
+  document.getElementById('statSonst').textContent = fmt(sonstBetrag);
+  document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
+
+  // Fahrtenbuch block
+  if (fahrt) {
+    const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
+    document.getElementById('fbAmt').textContent = fmt(fahrtBetrag);
+    document.getElementById('fbBadge').className = 'badge badge-approved';
+    document.getElementById('fbBadge').innerHTML = '<span class="bdot"></span> Excel ✓';
+    document.getElementById('fbFoot').textContent = `${fd.dateiname || 'Fahrtenbuch.xlsx'} · ${fd.gesamtKm || '—'} km · ${(fd.klienten || []).length} Klienten`;
+    document.getElementById('spesMonat') && (document.getElementById('spesMonat').textContent = _currentMonat);
+    // Store for sheet
+    _fahrtDaten = { ...fd, id: fahrt.id, betrag: fahrtBetrag };
+  }
+
+  // Beleg list
+  const list = document.getElementById('belegList');
+  if (regular.length === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Noch keine Belege für diesen Monat.<br>Tippe auf + um einen Beleg zu erfassen.</div>';
+    return;
+  }
+  const catIcon = { freizeit:'🎡', gastro:'🍽️', einkauf:'🛍️', fahrzeug:'🚗', parken:'🅿️', fahrtenbuch:'📊' };
+  list.innerHTML = regular.map(b => {
+    const hkat = b.Kategorie || 'sonst';
+    const hasPhoto = (b.FotoUrls && JSON.parse(b.FotoUrls || '[]').length > 0);
+    const katDisplay = b.KategorieLabel || b.Kategorie || '—';
+    // Show only Unterkategorie part if it has " › "
+    const katShort = katDisplay.includes(' › ') ? katDisplay.split(' › ')[1] : katDisplay;
+    const icon = catIcon[hkat] || '📋';
+    return `<div class="beleg-card" onclick="openBelegSheet('${b.id}')">
+      <div class="beleg-side ${hasPhoto ? '' : 'fw'}">${hasPhoto ? icon : '⚠️'}</div>
+      <div class="beleg-body">
+        <div class="beleg-top">
+          <div class="beleg-desc">${esc(b.Beschreibung || b.Haendler || katShort || '—')}</div>
+          <div class="beleg-amt">${fmt(b.Betrag)}</div>
+        </div>
+        <div class="beleg-meta">
+          <span class="beleg-date">${fmtDate(b.Datum)}</span>
+          <span class="cpill" style="background:var(--accent-light);color:var(--accent)">${icon} ${esc(katShort)}</span>
+          <span class="ktag">${esc(klientLabel(b.Klient))}</span>
+          ${!hasPhoto ? '<span class="wtag">⚠ Kein Foto</span>' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BELEG SHEET (Detail / Edit)
+// ══════════════════════════════════════════════════════════════════
+async function openBelegSheet(id) {
+  _currentBelegId = id;
+  document.getElementById('belegSheetBody').innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-hint)">Wird geladen…</div>';
+  openSheet('belegSheet');
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}?expand=fields`, { headers: { Authorization: 'Bearer ' + token } });
+    const res = await r.json();
+    const b = res.fields || {};
+    const fotos = JSON.parse(b.FotoUrls || '[]');
+    document.getElementById('belegSheetBody').innerHTML = `
+      ${fotos.length > 0
+        ? `<div class="photo-strip" style="margin-bottom:12px">${fotos.map((u,i) => `<div class="photo-thumb" onclick="window.open('${u}','_blank')">🧾<button class="photo-del" onclick="event.stopPropagation();removeFotoFromBeleg(${i},'${id}')">✕</button></div>`).join('')}<div class="add-photo" onclick="addPhotoToExisting('${id}')">+</div></div>`
+        : `<div style="background:var(--accent-light);border-radius:var(--radius);height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:12px;color:var(--accent);cursor:pointer;flex-direction:column;gap:6px" onclick="addPhotoToExisting('${id}')"><span style="font-size:28px">📷</span>Foto hinzufügen</div>`}
+      <div class="field"><label>Klient / Zuordnung *</label>
+        <select id="edKlient"><option value="">—</option>${buildKlientOptions(b.Klient)}</select></div>
+      <div class="field-row">
+        <div class="field"><label>Datum</label><input type="date" id="edDatum" value="${isoDate(b.Datum)}"></div>
+        <div class="field"><label>Betrag (€)</label><input type="number" id="edBetrag" value="${b.Betrag || ''}" step="0.01"></div>
+      </div>
+      <div class="field"><label>Kategorie</label><select id="edKat">
+        <option value="fahrt" ${b.Kategorie==='fahrt'?'selected':''}>🚗 Fahrtkosten</option>
+        <option value="verpf" ${b.Kategorie==='verpf'?'selected':''}>🍽️ Verpflegung</option>
+        <option value="mat"   ${b.Kategorie==='mat'?'selected':''}>🎨 Material</option>
+        <option value="sonst" ${b.Kategorie==='sonst'?'selected':''}>📋 Sonstiges</option>
+      </select></div>
+      <div class="field"><label>Händler</label><input type="text" id="edHaendler" value="${esc(b.Haendler||'')}"></div>
+      <div class="field"><label>Beschreibung</label><textarea rows="2" id="edBeschreibung">${esc(b.Beschreibung||'')}</textarea></div>
+      <div style="font-size:11px;color:var(--text-hint);margin-top:4px">SharePoint: ${CFG.spFolder}/${_currentMonat}/${shortName()}/</div>`;
+  } catch(e) {
+    document.getElementById('belegSheetBody').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+async function updateBeleg() {
+  if (!_currentBelegId) return;
+  const btnRow = document.querySelector('#belegSheet .sheet-footer .btn-primary');
+  btnRow.disabled = true; btnRow.textContent = 'Speichern…';
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const fields = {
+      Klient: document.getElementById('edKlient').value,
+      Datum: document.getElementById('edDatum').value ? new Date(document.getElementById('edDatum').value).toISOString() : null,
+      Betrag: parseFloat(document.getElementById('edBetrag').value) || 0,
+      Kategorie: document.getElementById('edKat').value,
+      Haendler: document.getElementById('edHaendler').value,
+      Beschreibung: document.getElementById('edBeschreibung').value,
+    };
+    await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${_currentBelegId}/fields`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(fields)
+    });
+    closeSheet('belegSheet');
+    showToast('Gespeichert', true);
+    ladeMonatsdaten();
+  } catch(e) {
+    showToast('Fehler: ' + e.message);
+  } finally {
+    btnRow.disabled = false; btnRow.textContent = 'Speichern';
+  }
+}
+
+async function loescheBeleg() {
+  if (!_currentBelegId || !confirm('Beleg wirklich löschen?')) return;
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${_currentBelegId}`, {
+      method: 'DELETE', headers: { Authorization: 'Bearer ' + token }
+    });
+    closeSheet('belegSheet');
+    showToast('Gelöscht');
+    ladeMonatsdaten();
+  } catch(e) { showToast('Fehler: ' + e.message); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// KI SCAN — Anthropic API
+// ══════════════════════════════════════════════════════════════════
+function triggerScan() {
+  document.getElementById('fileInput').click();
+}
+
+async function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  // Store for upload
+  _uploadedPhotos = [{ file, name: file.name }];
+  renderPhotoStrip();
+  // Show spinner
+  document.getElementById('scanIcon').textContent = '⚙️';
+  document.getElementById('scanIcon').className = 'si spin';
+  document.getElementById('scanText').textContent = 'KI analysiert Beleg…';
+  document.getElementById('scanSub').textContent = '';
+  document.getElementById('scanResult').style.display = 'none';
+
+  try {
+    const b64 = await fileToBase64(file);
+    const mime = file.type || 'image/jpeg';
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+            { type: 'text', text: 'Analysiere diesen Kassenbon/Beleg. Antworte NUR mit JSON (kein Markdown): {"haendler":"","datum":"TT.MM.JJJJ","betrag_brutto":"0,00","mwst":"","hauptkategorie":"","unterkategorie":""}. Hauptkategorie ist EINE von: freizeit, gastro, einkauf, fahrzeug, parken. Unterkategorie: für freizeit=schwimmbad/freizeitpark/klettern/bowling/museum/kino/freizeit-sonst; gastro=restaurant/baeckerei/eisdiele/lebensmittel/gastro-sonst; einkauf=basteln/buero/spiele/bekleidung/digital/einkauf-sonst; fahrzeug=tanken/waschen/oepnv/post; parken=parkhaus/parkschein/handyparken.' }
+          ]
+        }]
+      })
+    });
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || '{}';
+    let parsed = {};
+    try { parsed = JSON.parse(text.replace(/```json|```/g,'')); } catch(e) {}
+    document.getElementById('srHaendler').textContent = parsed.haendler || '—';
+    document.getElementById('srDatum').textContent    = parsed.datum || '—';
+    document.getElementById('srBetrag').textContent   = parsed.betrag_brutto ? parsed.betrag_brutto + ' €' : '—';
+    document.getElementById('srMwst').textContent     = parsed.mwst || '—';
+    document.getElementById('srKat').textContent      = parsed.hauptkategorie && parsed.unterkategorie
+      ? `${KATEGORIEN[parsed.hauptkategorie]?.label||parsed.hauptkategorie} › ${KATEGORIEN[parsed.hauptkategorie]?.unter?.find(u=>u.id===parsed.unterkategorie)?.label||parsed.unterkategorie}`
+      : (parsed.hauptkategorie || '—');
+    // Auto-fill form
+    if (parsed.haendler) document.getElementById('fHaendler').value = parsed.haendler;
+    if (parsed.betrag_brutto) document.getElementById('fBetrag').value = parsed.betrag_brutto.replace(',','.');
+    if (parsed.datum && parsed.datum.match(/\d{2}\.\d{2}\.\d{4}/)) {
+      const [d,m,y] = parsed.datum.split('.');
+      document.getElementById('fDatum').value = `${y}-${m}-${d}`;
+    }
+    // Auto-select category
+    if (parsed.hauptkategorie && KATEGORIEN[parsed.hauptkategorie]) {
+      selectHkat(parsed.hauptkategorie);
+      if (parsed.unterkategorie) setTimeout(() => selectUkat(parsed.unterkategorie), 100);
+    }
+    document.getElementById('scanResult').style.display = 'block';
+    document.getElementById('scanIcon').className = 'si'; document.getElementById('scanIcon').textContent = '✅';
+    document.getElementById('scanText').textContent = 'Erkannt — Felder prüfen';
+    document.getElementById('scanSub').textContent = 'Korrekt? Einfach auf Speichern tippen.';
+    showToast('✨ Beleg ausgelesen', true);
+  } catch(e) {
+    document.getElementById('scanIcon').className = 'si'; document.getElementById('scanIcon').textContent = '📸';
+    document.getElementById('scanText').textContent = 'Beleg fotografieren';
+    document.getElementById('scanSub').textContent = 'KI-Analyse fehlgeschlagen — bitte manuell eingeben';
+    console.warn('AI scan error:', e);
+  }
+  input.value = '';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BELEG SPEICHERN
+// ══════════════════════════════════════════════════════════════════
+async function speicherBeleg() {
+  // Validate Pflichtfelder
+  const klient = document.getElementById('fKlient').value;
+  const betrag  = document.getElementById('fBetrag').value;
+  const datum   = document.getElementById('fDatum').value;
+  const isFahrt = _selectedHkat === 'fahrtenbuch';
+
+  if (!_selectedHkat) { showToast('Bitte Hauptkategorie wählen'); return; }
+  if (!isFahrt && !_selectedUkat) { showToast('Bitte Unterkategorie wählen'); return; }
+  if (!isFahrt && !klient) { showToast('Bitte Klient wählen'); return; }
+  if (!isFahrt && !datum)  { showToast('Bitte Datum eingeben'); return; }
+  if (!isFahrt && !betrag) { showToast('Bitte Betrag eingeben'); return; }
+  if (!isFahrt && _uploadedPhotos.length === 0) { showToast('⚠ Originalbeleg (Foto) fehlt — Pflichtfeld'); return; }
+
+  const btn = document.getElementById('btnSpeichern');
+  btn.disabled = true; btn.textContent = '💾 Wird gespeichert…';
+  setStatus('erfassenStatus', 'uploading', 'Foto wird hochgeladen…');
+  try {
+    // Upload photos to SharePoint
+    const fotoUrls = [];
+    for (const p of _uploadedPhotos) {
+      if (!p.file) continue;
+      const ext = p.file.name.split('.').pop();
+      const fn = `Beleg_${Date.now()}.${ext}`;
+      const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
+      const f = await uploadFile(path, await p.file.arrayBuffer(), p.file.type || 'image/jpeg');
+      fotoUrls.push(f.webUrl || path);
+    }
+    setStatus('erfassenStatus', 'uploading', 'Daten werden gespeichert…');
+    const data = {
+      monat: _currentMonat,
+      kategorie: _selectedHkat,
+      unterkategorie: _selectedUkat || '',
+      kategorieLabel: getKatLabel(),
+      betrag: parseFloat(betrag),
+      datum,
+      haendler: document.getElementById('fHaendler').value,
+      beschreibung: document.getElementById('fBeschreibung').value,
+      klient, fotoUrls, status: 'Entwurf'
+    };
+    await saveBelegToList(data);
+    setStatus('erfassenStatus', 'done', '✓ In SharePoint gespeichert');
+    showToast('Beleg gespeichert', true);
+    resetErfassenForm();
+    setTimeout(() => { clearStatus('erfassenStatus'); showScreen('home'); ladeMonatsdaten(); }, 1200);
+  } catch(e) {
+    setStatus('erfassenStatus', 'error', 'Fehler: ' + e.message);
+    showToast('Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 Speichern & in SharePoint ablegen';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FAHRTENBUCH UPLOAD
+// ══════════════════════════════════════════════════════════════════
+function triggerFahrtUpload() { document.getElementById('fahrtFileInput').click(); }
+
+async function handleFahrtUpload(input) {
+  const file = input.files[0]; if (!file) return;
+  const zone = document.getElementById('fahrtUploadZone');
+  zone.innerHTML = '<div class="si spin" style="font-size:32px">⚙️</div><div style="font-size:13px;color:var(--text-muted);margin-top:8px">Lese Excel und lade hoch…</div>';
+  try {
+    // Upload Excel to SharePoint
+    const fn = `Fahrtenbuch_${_currentMonat}.xlsx`;
+    const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
+    const ab = await file.arrayBuffer();
+    const uploaded = await uploadFile(path, ab, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    // Parse Excel with SheetJS for km totals
+    let gesamtKm = 0, klienten = [];
+    try {
+      const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+      const wb = XLSX.read(ab, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      // Try to find km column and klient column heuristically
+      const kmKey = Object.keys(rows[0]||{}).find(k => /km|kilometer|strecke/i.test(k));
+      const klKey = Object.keys(rows[0]||{}).find(k => /klient|fall|name/i.test(k));
+      const sumMap = {};
+      rows.forEach(r => {
+        const km = parseFloat(String(r[kmKey]||'').replace(',','.')) || 0;
+        gesamtKm += km;
+        const kl = r[klKey] ? String(r[klKey]).trim() : 'Sonstiges';
+        sumMap[kl] = (sumMap[kl] || 0) + km;
+      });
+      klienten = Object.entries(sumMap).map(([name,km]) => ({ name, km: Math.round(km*10)/10, betrag: Math.round(km*0.30*100)/100 }));
+    } catch(e) { console.warn('XLSX parse failed, using totals only:', e); }
+    const betrag = Math.round(gesamtKm * 0.30 * 100) / 100;
+    const fd = { gesamtKm, betrag, dateiname: fn, dateiUrl: uploaded.webUrl || '', klienten };
+    // Save as special fahrtenbuch beleg
+    await saveBelegToList({ monat: _currentMonat, kategorie: 'fahrtenbuch', betrag, klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`, fahrtDaten: fd, fotoUrls: [uploaded.webUrl||''], status: 'Entwurf' });
+    // Show result
+    zone.style.display = 'none';
+    document.getElementById('fahrtUploadResult').style.display = 'block';
+    document.getElementById('fahrtInfoCard').innerHTML = `
+      <div class="info-row"><span class="info-label">Datei</span><span class="info-val">${fn}</span></div>
+      <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${gesamtKm} km</span></div>
+      <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
+      ${klienten.map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
+      <div class="info-row"><span class="info-label" style="font-weight:700">Fahrtkosten gesamt</span><span class="info-val" style="font-size:15px;font-weight:700">${fmt(betrag)}</span></div>`;
+    showToast(`📊 ${gesamtKm} km · ${fmt(betrag)} eingelesen`, true);
+    ladeMonatsdaten();
+  } catch(e) {
+    zone.innerHTML = `<div class="uz-icon">📊</div><div class="uz-title">Fehler: ${e.message}</div><div class="uz-sub">Erneut versuchen</div>`;
+    zone.onclick = triggerFahrtUpload;
+    showToast('Fehler: ' + e.message);
+  }
+  input.value = '';
+}
+
+function resetFahrtUpload() {
+  const zone = document.getElementById('fahrtUploadZone');
+  zone.style.display = 'block';
+  zone.innerHTML = '<div class="uz-icon">📊</div><div class="uz-title">Fahrtenbuch hochladen</div><div class="uz-sub">Excel (.xlsx) auswählen</div>';
+  document.getElementById('fahrtUploadResult').style.display = 'none';
+}
+
+// Fahrtenbuch Sheet
+function openFahrtSheet(fd) {
+  if (!fd && !_fahrtDaten) { openSheet('fahrtSheet'); document.getElementById('fahrtSheetBody').innerHTML = '<div class="alert alert-info">Noch kein Fahrtenbuch für diesen Monat hochgeladen.</div>'; return; }
+  const d = fd || _fahrtDaten;
+  document.getElementById('fahrtSheetTitle').textContent = `Fahrtenbuch ${_currentMonat}`;
+  document.getElementById('fahrtSheetBody').innerHTML = `
+    <div class="alert alert-success" style="margin:0 0 12px">✓ ${esc(d.dateiname || 'Fahrtenbuch.xlsx')} · in SharePoint gespeichert</div>
+    <div class="info-card" style="margin:0 0 14px">
+      <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${d.gesamtKm || '—'} km</span></div>
+      <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
+      ${(d.klienten||[]).map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
+      <div class="info-row"><span class="info-label" style="font-weight:700">Gesamt</span><span class="info-val" style="font-size:15px;font-weight:700">${fmt(d.betrag)}</span></div>
+    </div>
+    ${d.dateiUrl ? `<a href="${d.dateiUrl}" target="_blank" class="btn btn-secondary btn-full" style="text-decoration:none;margin-bottom:8px">📊 In SharePoint öffnen</a>` : ''}
+    <button class="btn-add" style="width:100%;justify-content:center" onclick="closeSheet('fahrtSheet');showScreen('erfassen');setTimeout(()=>selectCat('fahrt'),100)">↺ Neues Fahrtenbuch hochladen</button>`;
+  openSheet('fahrtSheet');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MONATSABSCHLUSS
+// ══════════════════════════════════════════════════════════════════
+async function ladeAbschluss() {
+  try {
+    const belege = await ladeBelege(_currentMonat);
+    const fahrt = belege.find(b => b.Kategorie === 'fahrtenbuch');
+    const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
+    const eingereicht = belege.some(b => ['Eingereicht','Genehmigt'].includes(b.Status));
+
+    document.getElementById('abschlussSubtitle').textContent = `${fmtMonat(_currentMonat)} · ${eingereicht ? (belege[0]?.Status||'Entwurf') : 'Entwurf'}`;
+
+    // Fahrtenbuch status
+    const fd = fahrt?.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : null;
+    document.getElementById('fahrtStatusBlock').innerHTML = fahrt
+      ? `<div class="fahrt-block" onclick="openFahrtSheet(${fd ? JSON.stringify(fd).replace(/"/g,'&quot;') : 'null'})">
+          <div class="fb-head"><div><div class="fb-lbl">🚗 Fahrtenbuch ${_currentMonat}</div><div class="fb-amt">${fmt(fahrt.Betrag)} · ${fd?.gesamtKm||'—'} km</div></div><span class="badge badge-approved"><span class="bdot"></span> Hochgeladen</span></div>
+          <div class="fb-foot">${esc(fd?.dateiname||'Fahrtenbuch.xlsx')} · in SharePoint · ${(fd?.klienten||[]).length} Klienten</div>
+        </div>`
+      : `<div class="alert alert-warn" style="margin-bottom:10px">⚠ Fahrtenbuch noch nicht hochgeladen. <button onclick="showScreen('erfassen');setTimeout(()=>selectCat('fahrt'),100)" style="background:none;border:none;color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline">Jetzt hochladen →</button></div>`;
+
+    // Summary table
+    const cats = { fahrt:0, verpf:0, mat:0, sonst:0 };
+    const cnts = { fahrt:0, verpf:0, mat:0, sonst:0 };
+    regular.forEach(b => { const k = b.Kategorie||'sonst'; cats[k]=(cats[k]||0)+parseFloat(b.Betrag||0); cnts[k]=(cnts[k]||0)+1; });
+    const fahrtAmt = fahrt ? parseFloat(fahrt.Betrag||0) : 0;
+    const total = fahrtAmt + Object.values(cats).reduce((s,v)=>s+v,0);
+    const rows = [
+      fahrt ? `<div class="sum-row"><div class="sr-cat"><span>🚗</span> Fahrtkosten (Fahrtenbuch)</div><div class="sr-r"><div class="sr-amt">${fmt(fahrtAmt)}</div><div class="sr-cnt">${fd?.gesamtKm||'—'} km</div></div></div>` : '',
+      cats.verpf ? `<div class="sum-row"><div class="sr-cat"><span>🍽️</span> Verpflegung</div><div class="sr-r"><div class="sr-amt">${fmt(cats.verpf)}</div><div class="sr-cnt">${cnts.verpf} Beleg${cnts.verpf!==1?'e':''}</div></div></div>` : '',
+      cats.mat   ? `<div class="sum-row"><div class="sr-cat"><span>🎨</span> Material</div><div class="sr-r"><div class="sr-amt">${fmt(cats.mat)}</div><div class="sr-cnt">${cnts.mat} Beleg${cnts.mat!==1?'e':''}</div></div></div>` : '',
+      cats.sonst ? `<div class="sum-row"><div class="sr-cat"><span>📋</span> Sonstiges</div><div class="sr-r"><div class="sr-amt">${fmt(cats.sonst)}</div><div class="sr-cnt">${cnts.sonst} Beleg${cnts.sonst!==1?'e':''}</div></div></div>` : '',
+      `<div class="sum-row"><div class="sr-cat" style="color:var(--accent)">Gesamt</div><div class="sr-r"><div class="sr-amt" style="font-size:16px;color:var(--accent)">${fmt(total)}</div><div class="sr-cnt">${regular.length + (fahrt?1:0)} Positionen</div></div></div>`
+    ].filter(Boolean).join('');
+    document.getElementById('sumTable').innerHTML = rows || '<div style="padding:20px;text-align:center;color:var(--text-hint)">Noch keine Belege</div>';
+
+    // Update submit modal text
+    document.getElementById('submitModalText').innerHTML = `<strong>${fmt(total)}</strong> · ${regular.length + (fahrt?1:0)} Positionen · ${fmtMonat(_currentMonat)}<br>werden an <strong>${document.getElementById('selTeamleiter').options[document.getElementById('selTeamleiter').selectedIndex]?.text||'Teamleiter'}</strong> zur Prüfung übermittelt.<br><br>Danach sind keine Änderungen mehr möglich.`;
+
+    // Archive
+    await ladeArchiv();
+  } catch(e) {
+    setStatus('abschlussStatus', 'error', 'Fehler: ' + e.message);
+  }
+}
+
+async function ladeArchiv() {
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const myMail = (currentAccount?.username||'').toLowerCase();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$orderby=fields/Modified desc&$top=200`, { headers: { Authorization: 'Bearer ' + token } });
+    const res = await r.json();
+    const belege = (res.value||[]).map(i=>({id:i.id,...i.fields})).filter(b => (b.Fachkraft_Mail||'').toLowerCase()===myMail || _isTL);
+    // Group by monat
+    const monate = {};
+    belege.forEach(b => { if (!b.Monat) return; monate[b.Monat] = monate[b.Monat] || []; monate[b.Monat].push(b); });
+    const keys = Object.keys(monate).sort().reverse().filter(m => m !== _currentMonat);
+    if (keys.length === 0) { document.getElementById('archivList').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-hint);font-size:13px">Keine früheren Abrechnungen</div>'; return; }
+    document.getElementById('archivList').innerHTML = keys.slice(0,6).map(m => {
+      const mbelege = monate[m];
+      const total = mbelege.reduce((s,b)=>s+parseFloat(b.Betrag||0),0);
+      const status = mbelege.find(b=>b.Status==='Genehmigt') ? 'Genehmigt' : mbelege.find(b=>b.Status==='Eingereicht') ? 'Eingereicht' : 'Entwurf';
+      const badgeClass = status==='Genehmigt' ? 'badge-approved' : status==='Eingereicht' ? 'badge-pending' : 'badge-draft';
+      return `<div class="archiv-row"><div class="am">${fmtMonat(m)}<br><span style="font-size:12px;color:var(--text-hint)">${mbelege.length} Positionen</span></div><div class="ar"><div class="aa">${fmt(total)}</div><span class="badge ${badgeClass}"><span class="bdot"></span>${status}</span></div></div>`;
+    }).join('');
+  } catch(e) { document.getElementById('archivList').innerHTML = `<div class="alert alert-error">${e.message}</div>`; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EINREICHEN
+// ══════════════════════════════════════════════════════════════════
+async function einreichen() {
+  const tl = document.getElementById('selTeamleiter').value;
+  if (!tl) { showToast('Bitte Teamleiter wählen'); return; }
+  const btn = document.getElementById('btnEinreichen');
+  btn.disabled = true; btn.textContent = '📨 Wird eingereicht…';
+  setStatus('abschlussStatus', 'uploading', 'Abrechnung wird eingereicht…');
+  try {
+    const belege = await ladeBelege(_currentMonat);
+    if (belege.length === 0) { showToast('Keine Belege vorhanden'); return; }
+    // Update all belege status to Eingereicht
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    await Promise.all(belege.map(b =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
+        method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Status: 'Eingereicht', Teamleiter: tl })
+      })
+    ));
+    // Compute totals for email
+    const total = belege.reduce((s,b)=>s+parseFloat(b.Betrag||0),0);
+    const fachkraft = currentAccount?.name || '';
+    const anmerkung = document.getElementById('txtAnmerkung').value;
+    const appUrl = CFG.redirectUri;
+    const html = `<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
+      <div style="border-left:4px solid #7b3f1e;padding-left:16px;margin-bottom:24px">
+        <h2 style="color:#7b3f1e;margin:0 0 4px">Spesenabrechnung zur Prüfung</h2>
+        <p style="margin:0;color:#666">Praxis NeueWege — Spesenabrechnung</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+        <tr><td style="padding:8px 0;color:#666;width:140px">Mitarbeiter/in</td><td style="padding:8px 0;font-weight:bold">${esc(fachkraft)}</td></tr>
+        <tr><td style="padding:8px 0;color:#666">Monat</td><td style="padding:8px 0">${fmtMonat(_currentMonat)}</td></tr>
+        <tr><td style="padding:8px 0;color:#666">Positionen</td><td style="padding:8px 0">${belege.length}</td></tr>
+        <tr><td style="padding:8px 0;color:#666;font-weight:700">Gesamtbetrag</td><td style="padding:8px 0;font-size:18px;font-weight:700;color:#7b3f1e">${fmt(total)}</td></tr>
+        ${anmerkung ? `<tr><td style="padding:8px 0;color:#666">Anmerkung</td><td style="padding:8px 0">${esc(anmerkung)}</td></tr>` : ''}
+      </table>
+      <a href="${appUrl}" style="display:inline-block;background:#7b3f1e;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Abrechnung prüfen &amp; freigeben →</a>
+      <p style="color:#888;font-size:12px;margin-top:24px;border-top:1px solid #eee;padding-top:16px">Nach Freigabe wird automatisch ein PDF erstellt und an ${CFG.spesen_mail} gesendet.</p>
+    </body></html>`;
+    const sent = await sendMail(tl, [currentAccount?.username||''], `[Spesen] ${fachkraft} · ${fmtMonat(_currentMonat)} · ${fmt(total)}`, html);
+    setStatus('abschlussStatus', 'done', `✓ Eingereicht${sent ? ` — E-Mail an ${tl} gesendet` : ''}`);
+    showToast('📨 Eingereicht', true);
+    if (_isTL) ladeTLAbrechnungen();
+  } catch(e) {
+    setStatus('abschlussStatus', 'error', 'Fehler: ' + e.message);
+    showToast('Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '📨 Einreichen';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TEAMLEITER
+// ══════════════════════════════════════════════════════════════════
+async function ladeTLAbrechnungen() {
+  if (!_isTL) return;
+  document.getElementById('tlPending').innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-hint);font-size:13px">Wird geladen…</div>';
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$orderby=fields/Modified desc&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
+    const res = await r.json();
+    const alle = (res.value||[]).map(i=>({id:i.id,...i.fields})).filter(b=>b.Status==='Eingereicht');
+    // Group by fachkraft+monat
+    const gruppen = {};
+    alle.forEach(b => {
+      const key = `${b.Fachkraft_Mail||b.Fachkraft}::${b.Monat}`;
+      if (!gruppen[key]) gruppen[key] = { fachkraft: b.Fachkraft||'—', mail: b.Fachkraft_Mail||'', monat: b.Monat||'', belege: [], total: 0 };
+      gruppen[key].belege.push(b);
+      gruppen[key].total += parseFloat(b.Betrag||0);
+    });
+    const keys = Object.keys(gruppen);
+    // Badge
+    document.getElementById('tlBadge').textContent = keys.length;
+    document.getElementById('tlBadge').style.display = keys.length ? 'flex' : 'none';
+    if (keys.length === 0) {
+      document.getElementById('tlPending').innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Keine ausstehenden Abrechnungen 🎉</div>';
+      document.getElementById('teamTable').innerHTML = '';
+      return;
+    }
+    // Initials helper
+    const initials = n => n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('tlPending').innerHTML = keys.map(k => {
+      const g = gruppen[k];
+      return `<div class="tl-card">
+        <div class="tl-head">
+          <div class="tl-avatar">${initials(g.fachkraft)}</div>
+          <div class="tl-info"><strong>${esc(g.fachkraft)}</strong><span>${fmtMonat(g.monat)} · ${g.belege.length} Positionen</span></div>
+          <div class="tl-amt">${fmt(g.total)}</div>
+        </div>
+        <div class="tl-meta">Eingereicht · Wartet auf Prüfung</div>
+        <div class="tl-foot">
+          <button class="btn btn-secondary" style="flex:1;font-size:13px" onclick='openReviewSheet(${JSON.stringify(g)})'>🔍 Prüfen</button>
+          <button class="btn btn-success" style="flex:1;font-size:13px" onclick='genehmigen(${JSON.stringify(g)})'>✓ Freigeben</button>
+        </div>
+      </div>`;
+    }).join('');
+    // Team table
+    document.getElementById('teamTable').innerHTML = keys.map(k => {
+      const g = gruppen[k];
+      return `<div class="sum-row"><span>${esc(g.fachkraft)} · ${fmtMonat(g.monat)}</span><span class="badge badge-pending"><span class="bdot"></span>Ausstehend</span></div>`;
+    }).join('') + `<div class="sum-row"><span style="color:var(--accent)">Gesamt</span><span style="color:var(--accent);font-weight:700">${fmt(keys.reduce((s,k)=>s+gruppen[k].total,0))}</span></div>`;
+  } catch(e) {
+    document.getElementById('tlPending').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+  }
+}
+
+function openReviewSheet(g) {
+  _currentReviewId = g;
+  document.getElementById('reviewTitle').textContent = `${g.fachkraft} — ${fmtMonat(g.monat)}`;
+  const catLabel = { fahrt:'🚗', verpf:'🍽️', mat:'🎨', sonst:'📋', fahrtenbuch:'🚗 Fahrtenbuch' };
+  document.getElementById('reviewBody').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <span style="font-size:15px;font-weight:600">${esc(g.fachkraft)}</span>
+      <span style="font-size:20px;font-weight:700;color:var(--accent)">${fmt(g.total)}</span>
+    </div>
+    <div class="info-card" style="margin:0 0 14px;padding:.75rem">
+      ${g.belege.map(b=>`<div class="info-row"><span class="info-label">${catLabel[b.Kategorie]||'📋'} ${esc(b.Beschreibung||b.Haendler||'—')}<br><span style="font-size:10px;color:var(--accent)">${esc(klientLabel(b.Klient))}</span></span><span class="info-val">${fmt(b.Betrag)}</span></div>`).join('')}
+      <div class="info-row"><span class="info-label" style="font-weight:700">Gesamt</span><span class="info-val" style="font-weight:700">${fmt(g.total)}</span></div>
+    </div>
+    <div class="field"><label>Kommentar bei Ablehnung</label><textarea id="reviewKommentar" rows="2" placeholder="Rückfrage oder Begründung…"></textarea></div>`;
+  document.getElementById('reviewFooter').innerHTML = `
+    <button class="btn btn-danger" style="padding:10px 14px;font-size:13px" onclick="openModal('rejectModal');closeSheet('reviewSheet')">✕ Ablehnen</button>
+    <button class="btn btn-success" style="flex:1" onclick="closeSheet('reviewSheet');genehmigen(_currentReviewId)">✓ Genehmigen &amp; PDF senden</button>`;
+  openSheet('reviewSheet');
+}
+
+async function genehmigen(g) {
+  if (!g) return;
+  const btn = document.querySelector(`button[onclick*='genehmigen']`);
+  setStatus('tlStatus', 'uploading', 'Freigabe wird verarbeitet…');
+  try {
+    const token = await getToken();
+    const { siteId, listId, driveId } = { ...(await getGraphListIds()), driveId: (await getSiteAndDrive()).driveId };
+    // 1. Update all belege status
+    await Promise.all(g.belege.map(b =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
+        method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Status: 'Genehmigt' })
+      })
+    ));
+    // 2. Generate PDF report (HTML → upload as PDF via Graph)
+    const pdfHtml = buildAbrechnungHTML(g);
+    const pdfName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}.pdf`;
+    const htmlName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}_report.html`;
+    const htmlPath = `${CFG.spFolder}/Genehmigt/${htmlName}`;
+    // Upload HTML (Graph can't create PDF directly without Word; we upload HTML as report)
+    await uploadFile(htmlPath, new TextEncoder().encode(pdfHtml), 'text/html');
+    // 3. Try PDF conversion via Graph
+    let pdfUrl = '';
+    try {
+      const convR = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:${htmlPath}:/content?format=pdf`, { headers: { Authorization: 'Bearer ' + token } });
+      if (convR.ok) {
+        const pdfBytes = await convR.arrayBuffer();
+        const pdfPath = `${CFG.spFolder}/Genehmigt/${pdfName}`;
+        const pu = await uploadFile(pdfPath, pdfBytes, 'application/pdf');
+        pdfUrl = pu.webUrl || '';
+      }
+    } catch(e) { console.warn('PDF conversion failed:', e); }
+    // 4. Send email to spesen@ and fachkraft
+    const html = buildFreigabeEmail(g, pdfUrl);
+    await sendMail([CFG.spesen_mail, g.mail].filter(Boolean), [], `✓ Spesenabrg. genehmigt: ${g.fachkraft} · ${fmtMonat(g.monat)} · ${fmt(g.total)}`, html);
+    setStatus('tlStatus', 'done', `✓ ${g.fachkraft} genehmigt — PDF erstellt und an ${CFG.spesen_mail} gesendet`);
+    document.getElementById('approvedText').innerHTML = `PDF wurde erstellt und an <strong>${CFG.spesen_mail}</strong> und <strong>${g.mail||g.fachkraft}</strong> gesendet.<br><br>SharePoint: ${CFG.spFolder}/Genehmigt/${pdfName}`;
+    openModal('approvedModal');
+    showToast(`✅ ${g.fachkraft} genehmigt`, true);
+  } catch(e) {
+    setStatus('tlStatus', 'error', 'Fehler: ' + e.message);
+    showToast('Fehler: ' + e.message);
+  }
+}
+
+async function ablehnen() {
+  const g = _currentReviewId; if (!g) return;
+  const grund = document.getElementById('rejectGrund').value;
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    await Promise.all(g.belege.map(b =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
+        method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Status: 'Abgelehnt' })
+      })
+    ));
+    const html = `<p>Ihre Spesenabrechnung für <strong>${fmtMonat(g.monat)}</strong> wurde abgelehnt.</p>${grund ? `<p><strong>Grund:</strong> ${esc(grund)}</p>` : ''}<p>Bitte korrigieren Sie die Abrechnung und reichen Sie sie erneut ein.</p>`;
+    await sendMail(g.mail||'', [], `[Abgelehnt] Spesenabr. ${fmtMonat(g.monat)}`, html);
+    showToast('Abgelehnt — E-Mail gesendet');
+    ladeTLAbrechnungen();
+  } catch(e) { showToast('Fehler: ' + e.message); }
+}
+
+function buildAbrechnungHTML(g) {
+  const catLabel = { fahrt:'Fahrtkosten', verpf:'Verpflegung', mat:'Material', sonst:'Sonstiges', fahrtenbuch:'Fahrtkosten (Fahrtenbuch)' };
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Spesenabrechnung ${g.fachkraft} ${g.monat}</title>
+  <style>body{font-family:Arial,sans-serif;color:#333;max-width:700px;margin:40px auto;padding:0 20px}h1{color:#7b3f1e}table{width:100%;border-collapse:collapse}th,td{padding:10px 12px;border:1px solid #e2dfd8;text-align:left}th{background:#f7f6f2;font-weight:600;font-size:12px;text-transform:uppercase;color:#6b6860}tfoot td{font-weight:700;background:#f5ede7;color:#7b3f1e}</style>
+  </head><body>
+  <h1>Spesenabrechnung</h1>
+  <p><strong>Mitarbeiter/in:</strong> ${esc(g.fachkraft)}<br><strong>Monat:</strong> ${fmtMonat(g.monat)}<br><strong>Erstellt:</strong> ${new Date().toLocaleDateString('de-DE')}<br><strong>Status:</strong> Genehmigt</p>
+  <table><thead><tr><th>Datum</th><th>Kategorie</th><th>Beschreibung</th><th>Klient</th><th style="text-align:right">Betrag</th></tr></thead>
+  <tbody>${g.belege.map(b=>`<tr><td>${fmtDate(b.Datum)}</td><td>${catLabel[b.Kategorie]||b.Kategorie}</td><td>${esc(b.Beschreibung||b.Haendler||'—')}</td><td>${esc(klientLabel(b.Klient))}</td><td style="text-align:right">${fmt(b.Betrag)}</td></tr>`).join('')}</tbody>
+  <tfoot><tr><td colspan="4">Gesamt</td><td style="text-align:right">${fmt(g.total)}</td></tr></tfoot>
+  </table></body></html>`;
+}
+
+function buildFreigabeEmail(g, pdfUrl) {
+  return `<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
+    <div style="border-left:4px solid #2d6a4f;padding-left:16px;margin-bottom:24px">
+      <h2 style="color:#2d6a4f;margin:0 0 4px">✓ Spesenabrechnung genehmigt</h2>
+      <p style="margin:0;color:#666">Praxis NeueWege — Spesenabrechnung</p>
+    </div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+      <tr><td style="padding:8px 0;color:#666;width:160px">Mitarbeiter/in</td><td style="padding:8px 0;font-weight:bold">${esc(g.fachkraft)}</td></tr>
+      <tr><td style="padding:8px 0;color:#666">Monat</td><td style="padding:8px 0">${fmtMonat(g.monat)}</td></tr>
+      <tr><td style="padding:8px 0;color:#666">Positionen</td><td style="padding:8px 0">${g.belege.length}</td></tr>
+      <tr><td style="padding:8px 0;color:#666;font-weight:700">Auszahlungsbetrag</td><td style="padding:8px 0;font-size:18px;font-weight:700;color:#2d6a4f">${fmt(g.total)}</td></tr>
+    </table>
+    ${pdfUrl ? `<a href="${pdfUrl}" style="display:inline-block;background:#2d6a4f;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin-bottom:16px">📄 Abrechnung als PDF öffnen →</a>` : ''}
+    <p style="color:#888;font-size:12px;margin-top:16px;border-top:1px solid #eee;padding-top:16px">Praxis NeueWege · Spesenabrechnung</p>
+  </body></html>`;
+}
+
+function pdfVorschau() {
+  showToast('PDF-Vorschau öffnet sich…');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FOTO MANAGEMENT
+// ══════════════════════════════════════════════════════════════════
+function addPhoto() { document.getElementById('fileInput').click(); }
+
+function renderPhotoStrip() {
+  const strip = document.getElementById('photoStrip');
+  strip.innerHTML = _uploadedPhotos.map((p,i) => `<div class="photo-thumb"><span style="font-size:26px">🖼️</span><button class="photo-del" onclick="removePhoto(${i})">✕</button></div>`).join('') + '<div class="add-photo" onclick="addPhoto()">+</div>';
+}
+
+function removePhoto(i) { _uploadedPhotos.splice(i,1); renderPhotoStrip(); }
+
+async function addPhotoToExisting(belegId) {
+  // trigger file picker and upload to existing beleg
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*,application/pdf'; input.capture = 'environment';
+  input.onchange = async function() {
+    const file = this.files[0]; if (!file) return;
+    try {
+      const fn = `Beleg_${Date.now()}_${file.name}`;
+      const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
+      const uf = await uploadFile(path, await file.arrayBuffer(), file.type || 'image/jpeg');
+      // Update list item
+      const token = await getToken();
+      const { siteId, listId } = await getGraphListIds();
+      const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${belegId}?expand=fields(select=FotoUrls)`, { headers: { Authorization: 'Bearer ' + token } });
+      const res = await r.json();
+      const existingUrls = JSON.parse(res.fields?.FotoUrls || '[]');
+      existingUrls.push(uf.webUrl || path);
+      await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${belegId}/fields`, {
+        method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ FotoUrls: JSON.stringify(existingUrls) })
+      });
+      closeSheet('belegSheet');
+      openBelegSheet(belegId);
+      showToast('Foto gespeichert', true);
+    } catch(e) { showToast('Fehler: ' + e.message); }
+  };
+  input.click();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════════════════════════════════
+function showScreen(name) {
+  ['home','erfassen','abschluss','teamleiter'].forEach(s => {
+    document.getElementById('screen-'+s).classList.toggle('active', s===name);
+    document.getElementById('nav-'+s)?.classList.toggle('active', s===name);
+  });
+  document.getElementById('fab').style.display = name==='erfassen' ? 'none' : 'flex';
+  document.getElementById('appBody').scrollTo(0,0);
+  if (name==='home')       ladeMonatsdaten();
+  if (name==='abschluss')  ladeAbschluss();
+  if (name==='teamleiter') ladeTLAbrechnungen();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// KATEGORIE-DATEN
+// ══════════════════════════════════════════════════════════════════
+const KATEGORIEN = {
+  freizeit: {
+    label: 'Freizeitaktivitäten', icon: '🎡',
+    unter: [
+      { id: 'schwimmbad',   label: 'Schwimmbad / Therme',        icon: '🏊' },
+      { id: 'freizeitpark', label: 'Freizeitpark / Zoo',          icon: '🎢' },
+      { id: 'klettern',     label: 'Klettern / Sport',            icon: '🧗' },
+      { id: 'bowling',      label: 'Bowling / Minigolf',          icon: '🎳' },
+      { id: 'museum',       label: 'Museum / Ausstellung',        icon: '🏛️' },
+      { id: 'kino',         label: 'Kino',                        icon: '🎬' },
+      { id: 'freizeit-sonst', label: 'Sonstiges Freizeit',        icon: '🎭' },
+    ]
+  },
+  gastro: {
+    label: 'Gastronomie / Verpflegung', icon: '🍽️',
+    unter: [
+      { id: 'restaurant',   label: 'Restaurant / Imbiss',         icon: '🍜' },
+      { id: 'baeckerei',    label: 'Bäckerei / Café',             icon: '☕' },
+      { id: 'eisdiele',     label: 'Eisdiele',                    icon: '🍦' },
+      { id: 'lebensmittel', label: 'Lebensmittel (Kochen mit Klient)', icon: '🛒' },
+      { id: 'gastro-sonst', label: 'Sonstige Verpflegung',        icon: '🍱' },
+    ]
+  },
+  einkauf: {
+    label: 'Einkäufe / Material', icon: '🛍️',
+    unter: [
+      { id: 'basteln',      label: 'Bastelmaterial / Kreatives',  icon: '🎨' },
+      { id: 'buero',        label: 'Büromaterial',                icon: '📎' },
+      { id: 'spiele',       label: 'Spiele / Lernmaterial',       icon: '🎲' },
+      { id: 'bekleidung',   label: 'Bekleidung / Sportartikel',   icon: '👕' },
+      { id: 'digital',      label: 'Digitale Dienste / Abos',     icon: '💻' },
+      { id: 'einkauf-sonst', label: 'Sonstige Einkäufe',          icon: '🛒' },
+    ]
+  },
+  fahrzeug: {
+    label: 'Fahrzeug / Transport', icon: '🚗',
+    unter: [
+      { id: 'tanken',       label: 'Tanken',                      icon: '⛽' },
+      { id: 'waschen',      label: 'Autowäsche / Fahrzeugpflege', icon: '🚿' },
+      { id: 'oepnv',        label: 'ÖPNV / Taxi',                 icon: '🚌' },
+      { id: 'post',         label: 'Post / Versand',              icon: '📦' },
+    ]
+  },
+  parken: {
+    label: 'Parkkosten', icon: '🅿️',
+    unter: [
+      { id: 'parkhaus',     label: 'Parkhaus / Tiefgarage',       icon: '🏢' },
+      { id: 'parkschein',   label: 'Parkscheinautomat',           icon: '🎫' },
+      { id: 'handyparken',  label: 'Handyparken / Parkster',      icon: '📱' },
+    ]
+  },
+  fahrtenbuch: {
+    label: 'Fahrtenbuch', icon: '📊',
+    unter: []  // kein Unterkategorie-Step, direkt Upload
+  }
+};
+
+let _selectedHkat = null;
+let _selectedUkat = null;
+
+function selectHkat(hkat) {
+  _selectedHkat = hkat;
+  _selectedUkat = null;
+  // Buttons highlighten
+  Object.keys(KATEGORIEN).forEach(k => document.getElementById('hkat-' + k)?.classList.toggle('active', k === hkat));
+  const kat = KATEGORIEN[hkat];
+  // Fahrtenbuch: direkt Upload zeigen
+  const isFahrt = hkat === 'fahrtenbuch';
+  document.getElementById('fahrtForm').style.display     = isFahrt ? 'block' : 'none';
+  document.getElementById('ukatCard').style.display      = (!isFahrt && kat.unter.length) ? 'block' : 'none';
+  document.getElementById('belegFormCard').style.display = (!isFahrt && kat.unter.length) ? 'none' : (!isFahrt ? 'block' : 'none');
+  document.getElementById('fotoCard').style.display      = isFahrt ? 'none' : 'none'; // shown after ukat selection
+  // Render Unterkategorien
+  if (!isFahrt && kat.unter.length) {
+    document.getElementById('ukatList').innerHTML = kat.unter.map(u =>
+      `<button class="ukat-item" id="ukat-${u.id}" onclick="selectUkat('${u.id}')">${u.icon} ${u.label}</button>`
+    ).join('');
+  }
+  document.getElementById('appBody').scrollTo({ top: document.getElementById('ukatCard').offsetTop - 10, behavior: 'smooth' });
+}
+
+function selectUkat(ukatId) {
+  _selectedUkat = ukatId;
+  // Highlight
+  document.querySelectorAll('.ukat-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('ukat-' + ukatId)?.classList.add('active');
+  // Show form + photo
+  document.getElementById('belegFormCard').style.display = 'block';
+  document.getElementById('fotoCard').style.display      = 'block';
+  // Scroll to form
+  setTimeout(() => document.getElementById('belegFormCard').scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+function getKatLabel() {
+  if (!_selectedHkat) return '';
+  const hkat = KATEGORIEN[_selectedHkat];
+  if (_selectedHkat === 'fahrtenbuch') return hkat.label;
+  if (!_selectedUkat) return hkat.label;
+  const ukat = hkat.unter.find(u => u.id === _selectedUkat);
+  return ukat ? `${hkat.label} › ${ukat.label}` : hkat.label;
+}
+
+function getKatIcon() {
+  if (!_selectedHkat) return '📋';
+  const hkat = KATEGORIEN[_selectedHkat];
+  if (_selectedHkat === 'fahrtenbuch') return '📊';
+  if (!_selectedUkat) return hkat.icon;
+  const ukat = hkat.unter.find(u => u.id === _selectedUkat);
+  return ukat ? ukat.icon : hkat.icon;
+}
+
+// Legacy compat for old selectCat references
+function selectCat(cat) {
+  const map = { fahrt:'fahrtenbuch', verpf:'gastro', mat:'einkauf', sonst:'freizeit', fahrtenbuch:'fahrtenbuch' };
+  selectHkat(map[cat] || cat);
+}
+
+function toggleCheck(el) { el.querySelector('.check-box').classList.toggle('on'); }
+
+function openSheet(id)  { document.getElementById(id).classList.add('open'); }
+function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+document.querySelectorAll('.sheet-overlay, .modal-overlay').forEach(el => {
+  el.addEventListener('click', function(e) { if (e.target===this) this.classList.remove('open'); });
+});
+
+function ladeMonat(val) { _currentMonat = val; ladeMonatsdaten(); }
+
+let _toastTimer;
+function showToast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show' + (ok?' ok':'');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+function setStatus(elId, type, msg) {
+  const el = document.getElementById(elId); if (!el) return;
+  el.innerHTML = `<div class="status-bar ${type}">${msg}</div>`;
+}
+function clearStatus(elId) { const el=document.getElementById(elId); if(el) el.innerHTML=''; }
+function setHomeStatus(t,m) { setStatus('homeStatus',t,m); }
+function clearHomeStatus() { clearStatus('homeStatus'); }
+
+function resetErfassenForm() {
+  ['fKlient','fHaendler','fBetrag','fBeschreibung'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
+  // Reset Hauptkategorien
+  Object.keys(KATEGORIEN).forEach(k => document.getElementById('hkat-'+k)?.classList.remove('active'));
+  _selectedHkat = null; _selectedUkat = null;
+  document.getElementById('ukatCard').style.display      = 'none';
+  document.getElementById('fahrtForm').style.display     = 'none';
+  document.getElementById('belegFormCard').style.display = 'none';
+  document.getElementById('fotoCard').style.display      = 'none';
+  document.getElementById('scanResult').style.display    = 'none';
+  document.getElementById('scanIcon').textContent = '📸'; document.getElementById('scanIcon').className = 'si';
+  document.getElementById('scanText').textContent = 'Beleg fotografieren';
+  document.getElementById('scanSub').textContent  = 'KI erkennt Betrag, Datum, Händler';
+  _uploadedPhotos = []; renderPhotoStrip();
+  resetFahrtUpload();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FORMAT / UTIL HELPERS
+// ══════════════════════════════════════════════════════════════════
+function fmt(v)     { return parseFloat(v||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function esc(s)     { return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDate(iso){ if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('de-DE'); } catch(e) { return iso||'—'; } }
+function isoDate(iso){ if (!iso) return ''; try { return iso.slice(0,10); } catch(e) { return ''; } }
+function fmtMonat(ym){ if (!ym) return '—'; const [y,m] = ym.split('-'); const mn=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']; return (mn[parseInt(m)-1]||m)+' '+y; }
+function shortName() { const n=currentAccount?.name||''; return n.split(' ').map(w=>w[0]).join('').toUpperCase()||'MA'; }
+function klientLabel(v) { if (!v) return '—'; if (v.startsWith('intern:')) return v.replace('intern:',''); if (v.startsWith('fall:')) { const p=v.split(':'); return `${p[2]||''} (${p[1]||''})`.trim(); } return v; }
+function buildKlientOptions(selected) {
+  const opts = [
+    {v:'',l:'— bitte wählen —'},
+    {v:'fall:2024-0187:Familie Hoffmann',l:'Familie Hoffmann (Az. 2024-0187)'},
+    {v:'fall:2025-0043:Familie Bauer',l:'Familie Bauer (Az. 2025-0043)'},
+    {v:'fall:2025-0089:Familie Gruber',l:'Familie Gruber (Az. 2025-0089)'},
+    {v:'intern:Nordstern',l:'Nordstern WG allgemein'},
+    {v:'intern:Dienstbesprechung',l:'Dienstbesprechung / Team'},
+    {v:'intern:Fortbildung',l:'Fortbildung'},
+    {v:'intern:Buero',l:'Bürobedarf / intern'},
+  ];
+  return opts.map(o=>`<option value="${o.v}" ${o.v===selected?'selected':''}>${esc(o.l)}</option>`).join('');
+}
+
+async function fileToBase64(file) {
+  return new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SHOW APP
+// ══════════════════════════════════════════════════════════════════
+async function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
+  // Set today as default date
+  document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
+  // Update SharePoint path displays
+  const sn = shortName();
+  document.getElementById('spName').textContent = sn;
+  document.getElementById('spMonat').textContent = _currentMonat;
+  // Load groups and initial data
+  _groupLoadPromise = loadGroupMembers();
+  _groupLoadPromise.catch(e => console.warn('Group load failed:', e));
+  ladeMonatsdaten();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.msal) { initMsal(); }
+  else { setTimeout(() => {
+    if (window.msal) initMsal();
+    else showLoginError('MSAL konnte nicht geladen werden. Bitte Seite neu laden.');
+  }, 2000); }
+});
+</script>
+</body>
+</html>
