@@ -908,13 +908,20 @@ async function ladeBelege(monat) {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
   const myMail = (currentAccount?.username || '').toLowerCase();
-  const filter = _isTL ? '' : `&$filter=fields/Fachkraft_Mail eq '${myMail}'`;
-  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$orderby=fields/Modified desc&$top=200${filter}`;
+  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$orderby=fields/Modified desc&$top=500`;
   const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) throw new Error('Belege konnten nicht geladen werden');
+  if (!r.ok) {
+    const e = await r.json().catch(()=>({}));
+    throw new Error('Belege konnten nicht geladen werden: ' + (e.error?.message || r.status));
+  }
   const res = await r.json();
   const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
-  return alle.filter(b => (b.Monat || '').startsWith(monat));
+  // Client-seitig filtern: TL sieht alle, Fachkraft nur eigene
+  const gefiltert = _isTL ? alle : alle.filter(b =>
+    (b.Fachkraft_Mail || '').toLowerCase() === myMail ||
+    (b.Fachkraft || '').toLowerCase() === (currentAccount?.name || '').toLowerCase()
+  );
+  return gefiltert.filter(b => (b.Monat || '').startsWith(monat));
 }
 
 async function ladeMonatsdaten() {
