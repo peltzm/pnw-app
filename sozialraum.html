@@ -264,7 +264,7 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     color: var(--accent);
     font-weight: 600;
   }
-  /* Dots für aktive Filter */
+  /* Aktive Filter als kleine Badges */
   .filter-dots {
     display: flex;
     align-items: center;
@@ -274,17 +274,21 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     overflow: hidden;
   }
   .filter-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
     flex-shrink: 0;
-    position: relative;
   }
-  .filter-dot.kat  { background: var(--accent); }
-  .filter-dot.zg   { background: #6b21a8; }
-  .filter-dot.lk   { background: var(--info); }
-  .filter-dot-label {
-    display: none; /* nur Dots, kein Text */
-  }
+  .filter-dot.kat  { background: var(--accent-light); color: var(--accent); }
+  .filter-dot.zg   { background: #f3e8ff; color: #6b21a8; }
+  .filter-dot.lk   { background: var(--info-bg); color: var(--info); }
   .mobile-add-btn {
     margin-left: auto;
     flex-shrink: 0;
@@ -820,6 +824,8 @@ function totalActiveFilters() {
   return activeKat.size + activeZg.size + (activeLk ? 1 : 0);
 }
 
+function trunc(s) { return s.length > 10 ? s.slice(0, 9) + '…' : s; }
+
 function updateMobileFilterLabel() {
   const btn  = document.getElementById('mobileFilterBtn');
   const dots = document.getElementById('filterDots');
@@ -834,7 +840,7 @@ function updateMobileFilterLabel() {
   if (allActive.length) {
     btn.classList.add('has-filter');
     dots.innerHTML = allActive.map(f =>
-      `<div class="filter-dot ${f.type}" title="${esc(f.val)}"></div>`
+      `<span class="filter-dot ${f.type}">${esc(trunc(f.val))}</span>`
     ).join('');
   } else {
     btn.classList.remove('has-filter');
