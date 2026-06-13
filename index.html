@@ -893,6 +893,11 @@ async function fillTemplate(templateBytes, data) {
   // indem die dazwischenliegenden XML-Tags entfernt werden – aber NUR zwischen {{ und }}.
   xml = repairSplitTokens(xml);
 
+  // Optionale Blöcke ({{#Name}}…{{/Name}}) auflösen: leere Blöcke (z.B. nicht
+  // belegte Ziele) komplett entfernen, statt nur deren Tokens — sonst blieben
+  // die festen Überschriften ("Ziel 3", "Methoden…") als leere Abschnitte stehen.
+  xml = processConditionalBlocks(xml, data);
+
   for (const [key, value] of Object.entries(data)) {
     // ISO-Datum (yyyy-mm-dd) ins deutsche Kurzformat dd.mm.yy umwandeln.
     // Datumsfelder kommen aus <input type="date"> immer als "2026-04-01".
@@ -917,6 +922,34 @@ async function fillTemplate(templateBytes, data) {
   xml = xml.replace(/\{\{\s*[\w.\-]+\s*\}\}/g, '');
   zip.file('word/document.xml', xml);
   return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+}
+
+// Optionale Template-Blöcke verarbeiten.
+// Konvention: ein Block wird mit {{#Name}} … {{/Name}} markiert (Marker liegen im
+// Text der ersten bzw. letzten Zeile des Blocks). Enthält KEINES der im Block
+// referenzierten Tokens einen nicht-leeren Wert, wird der gesamte Block inkl. der
+// umschließenden Absätze entfernt. Andernfalls bleiben nur die Marker-Zeichen weg.
+// Generisch: funktioniert für Ziele und jeden künftigen optionalen Block.
+function processConditionalBlocks(xml, data) {
+  const names = [...xml.matchAll(/\{\{#([\w.\-]+)\}\}/g)].map(m => m[1]);
+  for (const name of names) {
+    const region = xml.match(new RegExp('\\{\\{#' + name + '\\}\\}([\\s\\S]*?)\\{\\{/' + name + '\\}\\}'));
+    if (!region) continue;
+    const tokens = [...region[1].matchAll(/\{\{([\w.\-]+)\}\}/g)].map(t => t[1]);
+    const hasContent = tokens.some(t => String(data[t] == null ? '' : data[t]).trim() !== '');
+    if (hasContent) {
+      // Block behalten: nur die beiden Marker-Zeichenfolgen entfernen
+      xml = xml.replace('{{#' + name + '}}', '').replace('{{/' + name + '}}', '');
+    } else {
+      // Block entfernen: vom <w:p> mit dem Start-Marker bis zur </w:p> nach dem End-Marker
+      const block = new RegExp(
+        '<w:p\\b[^>]*>(?:(?!</w:p>)[\\s\\S])*?\\{\\{#' + name +
+        '\\}\\}[\\s\\S]*?\\{\\{/' + name + '\\}\\}(?:(?!</w:p>)[\\s\\S])*?</w:p>'
+      );
+      xml = xml.replace(block, '');
+    }
+  }
+  return xml;
 }
 
 // Fügt Tokens zusammen, die Word über mehrere Text-Runs verteilt hat.
