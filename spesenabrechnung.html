@@ -675,7 +675,7 @@ const CFG = {
   tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
   redirectUri: 'https://peltzm.github.io/pnw-app/spesenabrechnung.html',
   siteUrl:     'https://praxisneuewegesonjapeltz978.sharepoint.com',
-  sitePath:    '/sites/PraxisNeueWegeIntern',
+  sitePath:    '',
   spFolder:    '/Spesenbelege',
   listName:    'Spesenbelege_Entwuerfe',
   spesen_mail: 'spesen@praxisneuewege.de',
@@ -739,20 +739,23 @@ function showLoginError(msg) {
 // GRAPH HELPERS — 1:1 aus index.html
 // ══════════════════════════════════════════════════════════════════
 async function getSiteAndDrive() {
-  const token = await getToken();
-  if (_graphSiteId && _graphDriveId) return { token, siteId: _graphSiteId, driveId: _graphDriveId };
+  if (_graphSiteId && _graphDriveId) return { token: await getToken(), siteId: _graphSiteId, driveId: _graphDriveId };
+  const t = await getToken();
   const siteHost = CFG.siteUrl.replace('https://','').split('/')[0];
-  const sitePath = CFG.sitePath || '/' + CFG.siteUrl.replace('https://','').split('/').slice(1).join('/');
-  const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteHost}:${sitePath}`, { headers: { Authorization: 'Bearer ' + token } });
+  // Root site: use hostname directly, no :path: syntax
+  const siteQuery = CFG.sitePath
+    ? `${siteHost}:${CFG.sitePath}`
+    : siteHost;
+  const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteQuery}`, { headers: { Authorization: 'Bearer ' + t } });
   if (!sr.ok) throw new Error('Site nicht gefunden');
   const site = await sr.json();
   _graphSiteId = site.id;
-  const dr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/drives`, { headers: { Authorization: 'Bearer ' + token } });
+  const dr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/drives`, { headers: { Authorization: 'Bearer ' + t } });
   const drives = await dr.json();
-  const drive = drives.value.find(d => ['Dokumente','Documents','Freigegebene Dokumente'].includes(d.name));
-  if (!drive) throw new Error('Dokumentenbibliothek nicht gefunden');
+  const drive = drives.value.find(d => ['Freigegebene Dokumente','Documents','Dokumente'].includes(d.name));
+  if (!drive) throw new Error(`Dokumentenbibliothek nicht gefunden. Verfügbar: ${drives.value.map(d=>d.name).join(', ')}`);
   _graphDriveId = drive.id;
-  return { token, siteId: _graphSiteId, driveId: _graphDriveId };
+  return { token: t, siteId: _graphSiteId, driveId: _graphDriveId };
 }
 
 async function getGraphListIds() {
