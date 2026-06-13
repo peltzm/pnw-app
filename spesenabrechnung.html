@@ -1579,6 +1579,8 @@ function oeffneReviewModus(g) {
   showScreen('home');
   aktiviereReviewModus(g.mail);
 }
+
+function openReviewSheet(g) {
   _currentReviewId = g;
   document.getElementById('reviewTitle').textContent = `${g.fachkraft} — ${fmtMonat(g.monat)}`;
   const catLabel = { fahrt:'🚗', verpf:'🍽️', mat:'🎨', sonst:'📋', fahrtenbuch:'🚗 Fahrtenbuch' };
