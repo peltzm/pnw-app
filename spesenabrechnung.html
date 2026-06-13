@@ -1621,8 +1621,8 @@ async function genehmigen(g) {
         body: JSON.stringify({ Status: 'Genehmigt' })
       })
     ));
-    // 2. Generate PDF report (HTML → upload as PDF via Graph)
-    const pdfHtml = buildAbrechnungHTML(g);
+    // 2. Generate PDF report (mit Belegfotos)
+    const pdfHtml = await buildAbrechnungHTMLMitFotos(g.belege, g.fachkraft, g.monat, 'Genehmigt');
     const pdfName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}.pdf`;
     const htmlName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}_report.html`;
     const htmlPath = `${CFG.spFolder}/Genehmigt/${htmlName}`;
@@ -1671,17 +1671,189 @@ async function ablehnen() {
   } catch(e) { showToast('Fehler: ' + e.message); }
 }
 
-function buildAbrechnungHTML(g) {
-  const catLabel = { fahrt:'Fahrtkosten', verpf:'Verpflegung', mat:'Material', sonst:'Sonstiges', fahrtenbuch:'Fahrtkosten (Fahrtenbuch)' };
-  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Spesenabrechnung ${g.fachkraft} ${g.monat}</title>
-  <style>body{font-family:Arial,sans-serif;color:#333;max-width:700px;margin:40px auto;padding:0 20px}h1{color:#7b3f1e}table{width:100%;border-collapse:collapse}th,td{padding:10px 12px;border:1px solid #e2dfd8;text-align:left}th{background:#f7f6f2;font-weight:600;font-size:12px;text-transform:uppercase;color:#6b6860}tfoot td{font-weight:700;background:#f5ede7;color:#7b3f1e}</style>
-  </head><body>
-  <h1>Spesenabrechnung</h1>
-  <p><strong>Mitarbeiter/in:</strong> ${esc(g.fachkraft)}<br><strong>Monat:</strong> ${fmtMonat(g.monat)}<br><strong>Erstellt:</strong> ${new Date().toLocaleDateString('de-DE')}<br><strong>Status:</strong> Genehmigt</p>
-  <table><thead><tr><th>Datum</th><th>Kategorie</th><th>Beschreibung</th><th>Klient</th><th style="text-align:right">Betrag</th></tr></thead>
-  <tbody>${g.belege.map(b=>`<tr><td>${fmtDate(b.Datum)}</td><td>${catLabel[b.Kategorie]||b.Kategorie}</td><td>${esc(b.Beschreibung||b.Haendler||'—')}</td><td>${esc(klientLabel(b.Klient))}</td><td style="text-align:right">${fmt(b.Betrag)}</td></tr>`).join('')}</tbody>
-  <tfoot><tr><td colspan="4">Gesamt</td><td style="text-align:right">${fmt(g.total)}</td></tr></tfoot>
-  </table></body></html>`;
+// Bild-URL → Base64 (via fetch mit Auth-Token für SharePoint)
+async function bildZuBase64(url) {
+  try {
+    const token = await getToken();
+    // SharePoint-URLs brauchen Auth, externe URLs nicht
+    const headers = url.includes('sharepoint.com') ? { Authorization: 'Bearer ' + token } : {};
+    const r = await fetch(url, { headers });
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    return new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result); // data:image/...;base64,...
+      reader.onerror = rej;
+      reader.readAsDataURL(blob);
+    });
+  } catch(e) { return null; }
+}
+
+async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
+  const fahrt   = belege.find(b => b.Kategorie === 'fahrtenbuch');
+  const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
+  const total   = belege.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
+  const fd      = fahrt?.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : null;
+  const catLabel = {
+    freizeit:'Freizeitaktivitäten', gastro:'Gastronomie / Verpflegung',
+    einkauf:'Einkäufe / Material', fahrzeug:'Fahrzeug / Transport',
+    parken:'Parkkosten', fahrtenbuch:'Fahrtkosten (Fahrtenbuch)'
+  };
+
+  // Alle Fotos als Base64 vorladen
+  const fotoMap = {};
+  for (const b of regular) {
+    const urls = JSON.parse(b.FotoUrls || '[]');
+    if (urls.length > 0) {
+      fotoMap[b.id] = [];
+      for (const url of urls) {
+        const b64 = await bildZuBase64(url);
+        if (b64) fotoMap[b.id].push(b64);
+      }
+    }
+  }
+  // Fahrtenbuch-Datei
+  let fahrtB64 = null;
+  if (fd?.dateiUrl) fahrtB64 = await bildZuBase64(fd.dateiUrl).catch(() => null);
+
+  const styles = `
+    @page { size: A4; margin: 16mm 16mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 10.5pt; color: #1a1916; line-height: 1.5; }
+    .page-break { page-break-before: always; }
+    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #7b3f1e; }
+    .header img { height: 38px; width: auto; }
+    .header h1 { font-size: 15pt; font-weight: 700; color: #7b3f1e; margin: 0; }
+    .header p  { font-size: 9pt; color: #6b6860; margin: 2px 0 0; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin-bottom: 16px; background: #f5ede7; border-radius: 5px; padding: 10px 12px; font-size: 9.5pt; }
+    .meta-row { display: flex; gap: 6px; }
+    .meta-label { color: #6b6860; min-width: 100px; }
+    .meta-val { font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9.5pt; }
+    th { background: #7b3f1e; color: #fff; padding: 6px 8px; text-align: left; font-size: 8.5pt; }
+    td { padding: 6px 8px; border-bottom: 1px solid #e2dfd8; vertical-align: top; }
+    tr:nth-child(even) td { background: #fdf6f2; }
+    .total-row td { font-weight: 700; background: #f5ede7; color: #7b3f1e; font-size: 11pt; border-top: 2px solid #7b3f1e; }
+    .fahrt-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 5px; padding: 8px 12px; margin-bottom: 16px; font-size: 9.5pt; }
+    .fahrt-box h3 { color: #1d4ed8; font-size: 10pt; margin-bottom: 6px; }
+    .fahrt-row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #dbeafe; }
+    .fahrt-row:last-child { border: none; font-weight: 700; }
+    .sig-box { margin-top: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+    .sig-line { border-top: 1px solid #1a1916; padding-top: 5px; font-size: 8.5pt; color: #6b6860; }
+    .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #e2dfd8; font-size: 8pt; color: #a09e99; display: flex; justify-content: space-between; }
+    /* Beleg-Anhang Seiten */
+    .beleg-seite { padding: 0; }
+    .beleg-header { background: #f5ede7; border-radius: 5px; padding: 8px 12px; margin-bottom: 12px; font-size: 9.5pt; }
+    .beleg-header strong { color: #7b3f1e; }
+    .beleg-foto { width: 100%; max-height: 240mm; object-fit: contain; border: 1px solid #e2dfd8; border-radius: 4px; display: block; }
+    .beleg-foto + .beleg-foto { margin-top: 8px; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`;
+
+  // ── Seite 1: Übersicht ──
+  let html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
+<title>Spesenabrechnung ${esc(fachkraft)} ${monat}</title>
+<style>${styles}</style></head><body>
+
+<div class="header">
+  <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+  <div><h1>Spesenabrechnung</h1><p>Praxis NeueWege · ${fmtMonat(monat)}</p></div>
+</div>
+
+<div class="meta">
+  <div class="meta-row"><span class="meta-label">Mitarbeiter/in</span><span class="meta-val">${esc(fachkraft)}</span></div>
+  <div class="meta-row"><span class="meta-label">Monat</span><span class="meta-val">${fmtMonat(monat)}</span></div>
+  <div class="meta-row"><span class="meta-label">Erstellt am</span><span class="meta-val">${new Date().toLocaleDateString('de-DE')}</span></div>
+  <div class="meta-row"><span class="meta-label">Status</span><span class="meta-val">${esc(status||'Genehmigt')}</span></div>
+</div>
+
+${fahrt && fd ? `<div class="fahrt-box">
+  <h3>🚗 Fahrtkosten (Fahrtenbuch)</h3>
+  <div class="fahrt-row"><span>Gesamt km</span><span>${fd.gesamtKm||0} km</span></div>
+  <div class="fahrt-row"><span>Pauschale</span><span>0,30 €/km</span></div>
+  ${(fd.klienten||[]).map(k=>`<div class="fahrt-row"><span>${esc(k.name)}</span><span>${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
+  <div class="fahrt-row"><span>Fahrtkosten gesamt</span><span>${fmt(fahrt.Betrag)}</span></div>
+</div>` : ''}
+
+<table>
+  <thead><tr><th>#</th><th>Datum</th><th>Kategorie</th><th>Beschreibung / Händler</th><th>Klient</th><th style="text-align:right">Betrag</th></tr></thead>
+  <tbody>
+    ${regular.map((b, i) => `<tr>
+      <td>${i+1}</td>
+      <td>${fmtDate(b.Datum)}</td>
+      <td>${esc(b.KategorieLabel || catLabel[b.Kategorie] || b.Kategorie || '—')}</td>
+      <td>${esc(b.Beschreibung||b.Haendler||'—')}</td>
+      <td>${esc(b.Klient&&b.Klient!=='kein Klient'?b.Klient:'—')}</td>
+      <td style="text-align:right">${fmt(b.Betrag)}</td>
+    </tr>`).join('')}
+    ${fahrt ? `<tr><td>—</td><td>—</td><td>Fahrtkosten (Fahrtenbuch)</td><td>${esc(fd?.dateiname||'Fahrtenbuch.xlsx')}</td><td>—</td><td style="text-align:right">${fmt(fahrt.Betrag)}</td></tr>` : ''}
+    <tr class="total-row"><td colspan="5">Gesamtbetrag</td><td style="text-align:right">${fmt(total)}</td></tr>
+  </tbody>
+</table>
+
+<div class="sig-box">
+  <div><div class="sig-line">Datum, Unterschrift Mitarbeiter/in</div></div>
+  <div><div class="sig-line">Datum, Unterschrift Teamleiter/in</div></div>
+</div>
+<div class="footer">
+  <span>Praxis NeueWege · Spesenabrechnung · ${fmtMonat(monat)}</span>
+  <span>Seite 1 von ${regular.filter(b=>fotoMap[b.id]?.length).length + 1}</span>
+</div>`;
+
+  // ── Folgeseiten: je Beleg eine Seite mit Foto(s) ──
+  let seite = 2;
+  for (let i = 0; i < regular.length; i++) {
+    const b = regular[i];
+    const fotos = fotoMap[b.id] || [];
+    if (!fotos.length) continue;
+    const katShort = (b.KategorieLabel||b.Kategorie||'').includes(' › ')
+      ? (b.KategorieLabel||'').split(' › ')[1]
+      : (b.KategorieLabel||b.Kategorie||'—');
+    html += `
+<div class="page-break beleg-seite">
+  <div class="header" style="margin-bottom:12px">
+    <div><h1 style="font-size:13pt">Beleg ${i+1} — Originalbeleg</h1><p>Praxis NeueWege · Spesenabrechnung ${fmtMonat(monat)}</p></div>
+  </div>
+  <div class="beleg-header">
+    <strong>${esc(b.Beschreibung||b.Haendler||'—')}</strong> &nbsp;·&nbsp;
+    ${fmtDate(b.Datum)} &nbsp;·&nbsp;
+    ${esc(katShort)} &nbsp;·&nbsp;
+    <strong style="color:#7b3f1e">${fmt(b.Betrag)}</strong>
+    ${b.Klient&&b.Klient!=='kein Klient'?` &nbsp;·&nbsp; Klient: ${esc(b.Klient)}`:''}
+  </div>
+  ${fotos.map(src => `<img class="beleg-foto" src="${src}" alt="Beleg ${i+1}">`).join('')}
+  <div class="footer" style="margin-top:12px">
+    <span>Praxis NeueWege · Spesenabrechnung · ${fmtMonat(monat)}</span>
+    <span>Seite ${seite++}</span>
+  </div>
+</div>`;
+  }
+
+  html += `</body></html>`;
+  return html;
+}
+
+async function pdfVorschau() {
+  setStatus('abschlussStatus', 'uploading', 'PDF wird erstellt — Fotos werden geladen…');
+  try {
+    const belege  = await ladeBelege(_currentMonat);
+    const fachkraft = currentAccount?.name || '';
+    const html = await buildAbrechnungHTMLMitFotos(belege, fachkraft, _currentMonat, 'Entwurf');
+
+    // Download + Drucken
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Spesenabrechnung_${(fachkraft||'MA').replace(/\s+/g,'_')}_${_currentMonat}.html`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 1000); }
+
+    setStatus('abschlussStatus', 'done', '✓ PDF geöffnet — im Druckdialog „Als PDF speichern" wählen');
+  } catch(e) {
+    setStatus('abschlussStatus', 'error', 'Fehler: ' + e.message);
+  }
 }
 
 function buildFreigabeEmail(g, pdfUrl) {
