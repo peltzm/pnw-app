@@ -1896,8 +1896,9 @@ function showScreen(name) {
     document.getElementById('screen-'+s).classList.toggle('active', s===name);
     document.getElementById('nav-'+s)?.classList.toggle('active', s===name);
   });
-  document.getElementById('fab').style.display = name==='erfassen' ? 'none' : 'flex';
   document.getElementById('appBody').scrollTo(0,0);
+  // Im Review-Modus niemals ladeMonatsdaten aufrufen — überschreibt Kommentarfelder
+  if (_isReviewMode) return;
   if (name==='home')       ladeMonatsdaten();
   if (name==='abschluss')  ladeAbschluss();
   if (name==='teamleiter') ladeTLAbrechnungen();
