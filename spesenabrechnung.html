@@ -1152,7 +1152,7 @@ async function handleFileSelect(input) {
     document.getElementById('srDatum').textContent    = datumDE;
     document.getElementById('srBetrag').textContent   = betrag ? betragStr + ' €' : '—';
     document.getElementById('srMwst').textContent     = mwstStr;
-    document.getElementById('srKat').textContent      = '— bitte wählen';
+    // Kategorie wird per Button-Vorauswahl gesetzt (kein srKat-Element mehr)
 
     // Formular auto-befüllen
     if (haendler) document.getElementById('fHaendler').value = haendler;
