@@ -92,7 +92,7 @@
     .nav-item .nav-num { width: 32px; height: 32px; font-size: 13px; }
     .nav-item span:not(.nav-num) { display: none; }
     .sidebar-badge { display: none; }
-    .field-grid.triple { grid-template-columns: 1fr 1fr; }
+    .field-grid.triple { grid-template-columns: 1fr 1fr 1fr; }
     .main { padding: 1.25rem; }
     .field input, .field select, .field textarea { font-size: 16px !important; padding: 10px 12px; min-height: 44px; }
     .btn { padding: 11px 20px; font-size: 14px; min-height: 44px; }
@@ -661,9 +661,10 @@ function goToStart() {
 // Greift auch für dynamisch erzeugte Felder (weitere Ziele/Kinder, TL-Kommentare),
 // da nach jedem Seitenaufbau erneut aufgerufen.
 function enableSpellcheck() {
-  document.querySelectorAll('textarea, input[type="text"]').forEach(el => {
+  // Alle Textfelder erfassen (auch <input> ohne explizites type-Attribut).
+  document.querySelectorAll('textarea, input[type="text"], input:not([type])').forEach(el => {
     el.setAttribute('spellcheck', 'true');
-    el.setAttribute('lang', 'de-DE');
+    el.setAttribute('lang', 'de');
   });
 }
 
