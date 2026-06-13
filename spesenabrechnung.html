@@ -762,10 +762,16 @@ async function getGraphListIds() {
   if (_graphSiteId && _graphListId) return { siteId: _graphSiteId, listId: _graphListId };
   await getSiteAndDrive();
   const token = await getToken();
-  const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$filter=displayName eq '${CFG.listName}'`, { headers: { Authorization: 'Bearer ' + token } });
+  const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/lists?$select=id,displayName,name&$top=200`, { headers: { Authorization: 'Bearer ' + token } });
   const lists = await lr.json();
-  if (!lists.value?.length) throw new Error(`SharePoint-Liste "${CFG.listName}" nicht gefunden. Bitte zuerst anlegen.`);
-  _graphListId = lists.value[0].id;
+  const found = (lists.value || []).find(l =>
+    l.displayName === CFG.listName ||
+    l.name === CFG.listName ||
+    l.displayName === CFG.listName.replace(/_/g,' ') ||
+    l.name === CFG.listName.toLowerCase()
+  );
+  if (!found) throw new Error(`Liste nicht gefunden. Verfügbar: ${(lists.value||[]).map(l=>l.displayName).join(', ')}`);
+  _graphListId = found.id;
   return { siteId: _graphSiteId, listId: _graphListId };
 }
 
