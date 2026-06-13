@@ -247,20 +247,20 @@
               <select id="Jugendamt"><option>Dachau</option><option>Dahme-Spreewald</option><option>Eichstätt</option><option>Freising</option><option>Ingolstadt</option><option>Kelheim</option><option>Landshut</option><option>Neuburg-Schrobenhausen</option><option>Pfaffenhofen</option><option>Regensburg</option><option>Starnberg</option></select>
             </div>
             <div class="field"><label>Hilfeart</label>
-              <select id="Hilfeart" data-sortby="bezeichnung">
-                <option>§ 13 Abs. 3 SGB VIII - Jugendsozialarbeit</option>
-                <option>§ 18 SGB VIII - Begleiteter Umgang</option>
-                <option>§ 27 (2) SGB VIII - Clearing</option>
-                <option>§ 27 (3) SGB VIII - Aufsuchende Familientherapie (AFT)</option>
-                <option>§ 27 SGB VIII - Heimerziehung als sonstige betreute Wohnform</option>
-                <option>§ 27 SGB VIII - Schnelle Hilfe</option>
-                <option>§ 30 SGB VIII - Erziehungsbeistandschaft</option>
-                <option>§ 31 SGB VIII - Sozialpädagogische Familienhilfe</option>
-                <option>§ 35a (2) SGB VIII - Intensive sozialpädagogische Einzelbetreuung</option>
-                <option>§ 35a SGB VIII - Ambulante Eingliederungshilfe</option>
-                <option>§ 37a SGB VIII - Beratung und Unterstützung der Pflegeperson</option>
-                <option>§ 3 KKG - Bundeskinderschutzgesetz</option>
-                <option>§ 41 SGB VIII - Hilfe für junge Volljährige</option>
+              <select id="Hilfeart">
+                <option value="§ 13 Abs. 3 SGB VIII - Jugendsozialarbeit">Jugendsozialarbeit - § 13 Abs. 3 SGB VIII</option>
+                <option value="§ 18 SGB VIII - Begleiteter Umgang">Begleiteter Umgang - § 18 SGB VIII</option>
+                <option value="§ 27 (2) SGB VIII - Clearing">Clearing - § 27 (2) SGB VIII</option>
+                <option value="§ 27 (3) SGB VIII - Aufsuchende Familientherapie (AFT)">Aufsuchende Familientherapie (AFT) - § 27 (3) SGB VIII</option>
+                <option value="§ 27 SGB VIII - Heimerziehung als sonstige betreute Wohnform">Heimerziehung als sonstige betreute Wohnform - § 27 SGB VIII</option>
+                <option value="§ 27 SGB VIII - Schnelle Hilfe">Schnelle Hilfe - § 27 SGB VIII</option>
+                <option value="§ 30 SGB VIII - Erziehungsbeistandschaft">Erziehungsbeistandschaft - § 30 SGB VIII</option>
+                <option value="§ 31 SGB VIII - Sozialpädagogische Familienhilfe">Sozialpädagogische Familienhilfe - § 31 SGB VIII</option>
+                <option value="§ 35a (2) SGB VIII - Intensive sozialpädagogische Einzelbetreuung">Intensive sozialpädagogische Einzelbetreuung - § 35a (2) SGB VIII</option>
+                <option value="§ 35a SGB VIII - Ambulante Eingliederungshilfe">Ambulante Eingliederungshilfe - § 35a SGB VIII</option>
+                <option value="§ 37a SGB VIII - Beratung und Unterstützung der Pflegeperson">Beratung und Unterstützung der Pflegeperson - § 37a SGB VIII</option>
+                <option value="§ 3 KKG - Bundeskinderschutzgesetz">Bundeskinderschutzgesetz - § 3 KKG</option>
+                <option value="§ 41 SGB VIII - Hilfe für junge Volljährige">Hilfe für junge Volljährige - § 41 SGB VIII</option>
               </select>
             </div>
           </div>
@@ -770,7 +770,7 @@ function buildSummary() {
   document.getElementById('summaryContent').innerHTML = `
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px;">
       ${[['Kind/Jugendliche*r',kind],['Jugendamt',d.Jugendamt||'—'],['Fachkraft',d.Fachkraft_NeueWege||'—'],
-         ['Hilfebeginn',d.Hilfebeginn||'—'],['Hilfeart',d.Hilfeart||'—'],['Datum',d.Datum_Unterschrift||'—']]
+         ['Hilfebeginn',d.Hilfebeginn||'—'],['Hilfeart',formatHilfeart(d.Hilfeart)||'—'],['Datum',d.Datum_Unterschrift||'—']]
         .map(([l,v]) => `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;">
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${l}</div>
           <div style="font-size:13px;">${escHtml(v)}</div></div>`).join('')}
@@ -783,6 +783,9 @@ function buildSummary() {
 
 // ─── TEMPLATE BEFÜLLEN ────────────────────────────────────────────────────────
 async function fillTemplate(templateBytes, data) {
+  // Kopie, damit der gespeicherte Wert unangetastet bleibt; Hilfeart für die Ausgabe drehen.
+  data = { ...data };
+  if (data.Hilfeart) data.Hilfeart = formatHilfeart(data.Hilfeart);
   const zip = await JSZip.loadAsync(templateBytes);
   let xml = await zip.file('word/document.xml').async('string');
 
@@ -1066,6 +1069,18 @@ function syncBetreuungszeitraum() {
   else if (!bz.dataset.manuallySet) bz.value = '';
 }
 
+// Hilfeart für die Anzeige umdrehen: "§ 27 SGB VIII - Schnelle Hilfe" -> "Schnelle Hilfe - § 27 SGB VIII"
+// Der gespeicherte Wert bleibt kanonisch (Paragraf zuerst); nur die Darstellung wird gedreht.
+function formatHilfeart(v) {
+  if (!v) return v;
+  const i = v.indexOf(' - ');
+  if (i < 0) return v;
+  const para = v.slice(0, i).trim();
+  const bez = v.slice(i + 3).trim();
+  if (!para.startsWith('§')) return v; // nur kanonische Werte (Paragraf zuerst) drehen
+  return `${bez} - ${para}`;
+}
+
 // Hilfeart je nach Berichtstyp voreinstellen/sperren:
 // Bei Clearing ist die Hilfeart fest "§ 27 (2) SGB VIII - Clearing" und nicht änderbar
 function applyHilfeartPreset(typ) {
@@ -1136,7 +1151,7 @@ async function showCopyList() {
       const itemId = item._itemId || item.ID;
       return `<div id="draft_row_${itemId}" style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:5px;">
         <div style="flex:1; min-width:0;">
-          <div style="font-size:13px; font-weight:500;">${escHtml(item.Kind_Vorname || '')} ${escHtml(item.Kind_Familienname || '')}</div>
+          <div style="font-size:13px; font-weight:500;">${_btBadge(item)}${escHtml(item.Kind_Vorname || '')} ${escHtml(item.Kind_Familienname || '')}</div>
           <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt || '—')} · ${geaendert}</div>
         </div>
         <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
