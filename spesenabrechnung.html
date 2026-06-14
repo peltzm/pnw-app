@@ -30,13 +30,13 @@
   --nav-h:60px; --hdr-h:56px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;height:100dvh;overflow:hidden}
-body{display:flex;flex-direction:column;min-height:0;max-height:100dvh}
-#appScreen{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+html{height:100%}
+body{min-height:100%;min-height:100dvh}
+#appScreen{display:block}
 body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
 
 /* Header */
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);z-index:100;flex-shrink:0}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
 .header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
 .header-brand img{height:28px;width:auto}
 .header-brand span{font-size:13px;font-weight:600;color:var(--text)}
@@ -45,8 +45,8 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
 .btn-logout{margin-left:6px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted)}
 
 /* App shell */
-.app-shell{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
-.app-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0) + 24px);background:var(--bg)}
+.app-shell{display:block}
+.app-body{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0) + 24px);background:var(--bg)}
 
 /* Bottom nav */
 .bottom-nav{position:fixed;left:0;right:0;bottom:0;min-height:var(--nav-h);background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:stretch;z-index:90;padding-bottom:env(safe-area-inset-bottom,0)}
@@ -303,7 +303,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
     <div style="display:flex;align-items:baseline;gap:7px">
       <span>Spesenabrechnung</span>
-      <span style="font-size:10px;font-weight:400;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-family:monospace;letter-spacing:.3px">v24b7e97</span>
+      <span style="font-size:10px;font-weight:400;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-family:monospace;letter-spacing:.3px">v0480132</span>
     </div>
   </div>
   <div class="user-badge" id="userBadge" style="display:none">
@@ -2423,7 +2423,7 @@ function showScreen(name) {
     document.getElementById('screen-'+s).classList.toggle('active', s===name);
     document.getElementById('nav-'+s)?.classList.toggle('active', s===name);
   });
-  document.getElementById('appBody').scrollTo(0,0);
+  window.scrollTo(0,0);
   if (_isReviewMode) return;
   if (name==='home')         ladeMonatsdaten();
   if (name==='abschluss')    ladeAbschluss();
@@ -2516,7 +2516,7 @@ function selectHkat(hkat) {
       `<button class="ukat-item" id="ukat-${u.id}" onclick="selectUkat('${u.id}')">${u.icon} ${u.label}</button>`
     ).join('');
   }
-  document.getElementById('appBody').scrollTo({ top: document.getElementById('ukatCard').offsetTop - 10, behavior: 'smooth' });
+  { const el=document.getElementById('ukatCard'); if(el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 66, behavior: 'smooth' }); }
 }
 
 function showKatHinweis() {
@@ -2780,7 +2780,7 @@ async function aktiviereReviewModus(fkMail) {
     document.getElementById('screen-'+s).classList.toggle('active', s==='home');
     document.getElementById('nav-'+s)?.classList.toggle('active', s==='home');
   });
-  document.getElementById('appBody').scrollTo(0,0);
+  window.scrollTo(0,0);
 
   // Gelber Streifen
   if (!document.getElementById('reviewFrame')) {
