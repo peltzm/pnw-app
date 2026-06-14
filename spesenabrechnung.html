@@ -355,26 +355,6 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
     <div style="font-size:20px;opacity:.7">📨</div>
   </button>
 
-  <!-- Fahrtenbuch als Checkbox-Toggle -->
-  <div style="padding:10px 12px 4px">
-    <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-muted)">
-      <input type="checkbox" id="chkFahrtenbuch" onchange="toggleFahrtenbuchBlock()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
-      Fahrtenbuch erfassen
-    </label>
-  </div>
-  <div id="fahrtBlock" style="display:none">
-    <div class="fahrt-block" onclick="openSheet('fahrtSheet')">
-      <div class="fb-head">
-        <div>
-          <div class="fb-lbl">🚗 Fahrtenbuch</div>
-          <div class="fb-amt" id="fbAmt">— €</div>
-        </div>
-        <span class="badge badge-draft" id="fbBadge"><span class="bdot"></span> Nicht hochgeladen</span>
-      </div>
-      <div class="fb-foot" id="fbFoot">Tippen um Fahrtenbuch hochzuladen</div>
-    </div>
-  </div>
-
   <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px">
     <div class="slabel" style="padding:0">Belege</div>
     <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;gap:5px;background:var(--accent);color:#fff;border:none;border-radius:20px;padding:5px 12px 5px 8px;font-size:12px;font-weight:600;cursor:pointer;min-height:32px"><span style="font-size:16px;line-height:1">+</span> Neuer Beleg</button>
@@ -580,16 +560,45 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
   </div>
 </div>
 
+<!-- ══ SCREEN: FAHRTENBUCH ══ -->
+<div id="screen-fahrtenbuch" class="screen">
+  <div style="padding:14px 16px 8px">
+    <div class="section-title">Fahrtenbuch</div>
+    <div class="section-sub" id="fahrtScreenSub">Monatsnachweis für Fahrtkosten</div>
+  </div>
+  <div id="fahrtScreenStatus"></div>
+
+  <!-- Upload Zone -->
+  <div class="card" id="fahrtScreenUploadCard">
+    <div class="card-title">Excel hochladen</div>
+    <div class="alert alert-info" style="margin:0 0 12px;padding:9px 12px;font-size:12px">
+      Nur Fahrten <strong>mit Klient-Eintrag</strong> werden gezählt. Pauschale: 0,30 €/km.
+    </div>
+    <div id="fahrtScreenZone" class="upload-zone" onclick="triggerFahrtUpload()">
+      <div class="uz-icon">📊</div>
+      <div class="uz-title">Fahrtenbuch hochladen</div>
+      <div class="uz-sub">Excel (.xlsx) auswählen</div>
+    </div>
+    <div id="fahrtScreenResult" style="display:none;margin-top:12px">
+      <div class="alert alert-success" style="margin:0 0 10px">✓ Fahrtenbuch eingelesen und in SharePoint gespeichert</div>
+      <div class="info-card" style="margin:0" id="fahrtScreenInfoCard"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">↺ Ersetzen</button>
+        <button onclick="loescheFahrtenbuch()" style="font-size:13px;color:var(--error);background:none;border:1px solid var(--error);border-radius:var(--radius);padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:4px">× Löschen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- /app-body -->
 
-<!-- FAB entfernt — Beleg erfassen via Erfassen-Tab in der Bottom Nav -->
-
-<!-- Bottom Nav -->
+<!-- Bottom Nav — 5 Tabs -->
 <div class="bottom-nav">
-  <button class="nav-btn active" id="nav-home"       onclick="showScreen('home')"><span class="ni">🏠</span>Übersicht</button>
-  <button class="nav-btn"        id="nav-erfassen"   onclick="showScreen('erfassen')"><span class="ni">📷</span>Erfassen</button>
-  <button class="nav-btn"        id="nav-abschluss"  onclick="showScreen('abschluss')"><span class="ni">📋</span>Abschluss</button>
-  <button class="nav-btn"        id="nav-teamleiter" onclick="showScreen('teamleiter')"><span class="ni">✅</span>Teamleiter<span class="nav-badge" id="tlBadge" style="display:none">0</span></button>
+  <button class="nav-btn active" id="nav-home"        onclick="showScreen('home')"><span class="ni">🏠</span>Übersicht</button>
+  <button class="nav-btn"        id="nav-erfassen"    onclick="showScreen('erfassen')"><span class="ni">📷</span>Erfassen</button>
+  <button class="nav-btn"        id="nav-fahrtenbuch" onclick="showScreen('fahrtenbuch')"><span class="ni">🚗</span>Fahrtenbuch</button>
+  <button class="nav-btn"        id="nav-abschluss"   onclick="showScreen('abschluss')"><span class="ni">📋</span>Abschluss</button>
+  <button class="nav-btn"        id="nav-teamleiter"  onclick="showScreen('teamleiter')"><span class="ni">✅</span>Team<span class="nav-badge" id="tlBadge" style="display:none">0</span></button>
 </div>
 </div><!-- /app-shell -->
 </div><!-- /appScreen -->
@@ -1394,6 +1403,32 @@ async function speicherBeleg() {
 // ══════════════════════════════════════════════════════════════════
 function triggerFahrtUpload() { document.getElementById('fahrtFileInput').click(); }
 
+async function ladeFahrtenbuchScreen() {
+  try {
+    const belege = await ladeBelege(_currentMonat);
+    const fahrt = belege.find(b => b.Kategorie === 'fahrtenbuch');
+    const monatSel = document.getElementById('monatSelect');
+    document.getElementById('fahrtScreenSub').textContent = `${monatSel?.options[monatSel.selectedIndex]?.text || fmtMonat(_currentMonat)} — Monatsnachweis`;
+    if (fahrt) {
+      const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
+      _fahrtDaten = { ...fd, id: fahrt.id, betrag: fahrt.Betrag };
+      document.getElementById('fahrtScreenZone').style.display = 'none';
+      document.getElementById('fahrtScreenResult').style.display = 'block';
+      document.getElementById('fahrtScreenInfoCard').innerHTML = `
+        <div class="info-row"><span class="info-label">Datei</span><span class="info-val">${esc(fd.dateiname||'Fahrtenbuch.xlsx')}</span></div>
+        <div class="info-row"><span class="info-label">Fahrten mit Klient</span><span class="info-val">${fd.anzahlFahrten||'—'} Fahrten</span></div>
+        <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${fd.gesamtKm||'—'} km</span></div>
+        <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
+        ${(fd.klienten||[]).map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
+        <div class="info-row"><span class="info-label" style="font-weight:700">Fahrtkosten gesamt</span><span class="info-val" style="font-size:15px;font-weight:700">${fmt(fahrt.Betrag)}</span></div>`;
+    } else {
+      _fahrtDaten = null;
+      document.getElementById('fahrtScreenZone').style.display = 'block';
+      document.getElementById('fahrtScreenResult').style.display = 'none';
+    }
+  } catch(e) { setStatus('fahrtScreenStatus', 'error', 'Fehler: ' + e.message); }
+}
+
 async function handleFahrtUpload(input) {
   const file = input.files[0]; if (!file) return;
   const zone = document.getElementById('fahrtUploadZone');
@@ -1404,46 +1439,44 @@ async function handleFahrtUpload(input) {
     const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
     const ab = await file.arrayBuffer();
     const uploaded = await uploadFile(path, ab, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    // Parse Excel — Fahrtenbuch Struktur:
-    // Zeilen 0-4: Metadaten (Von, Bis, Fahrzeug, Name, leer)
-    // Zeile 5: Header (Datum, Start, Ziel, Fahrer, Klient, Zweck, Start-km, End-km, Strecke in km)
-    // Ab Zeile 6: Daten
-    let gesamtKm = 0, klienten = [];
+    let gesamtKm = 0, klienten = [], anzahlFahrten = 0;
     try {
       const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
       const wb = XLSX.read(ab, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      // Header in Zeile 6 (0-basiert = row index 5)
-      const rows = XLSX.utils.sheet_to_json(ws, { range: 5, defval: '' });
-      // Spaltenname normalisieren
-      const klientKey  = Object.keys(rows[0] || {}).find(k => /klient/i.test(k)) || 'Klient';
-      const kmKey      = Object.keys(rows[0] || {}).find(k => /strecke|km/i.test(k)) || 'Strecke in km';
-      // Nur Zeilen mit nicht-leerem Klient
+      // Fahrtenbuch-Struktur: Header in Zeile 7 (Excel), = Index 6 (0-basiert)
+      // range:6 → SheetJS liest ab Zeile 7, erste Zeile = Header
+      const rows = XLSX.utils.sheet_to_json(ws, { range: 6, defval: '' });
+      if (!rows.length) throw new Error('Keine Daten gefunden');
+      const klientKey = Object.keys(rows[0]).find(k => /klient/i.test(k)) || 'Klient';
+      const kmKey     = Object.keys(rows[0]).find(k => /strecke.*km|^km$/i.test(k)) ||
+                        Object.keys(rows[0]).find(k => /km/i.test(k)) || 'Strecke in km';
+      // Nur Zeilen mit Klient-Eintrag (nicht leer, nicht NaN)
       const mitKlient = rows.filter(r => {
         const k = String(r[klientKey] || '').trim();
-        return k !== '' && k !== 'nan' && k !== 'Klient';
+        return k !== '' && k.toLowerCase() !== 'nan' && k !== klientKey;
       });
-      // Gesamt-km
-      gesamtKm = mitKlient.reduce((s, r) => s + (parseFloat(r[kmKey]) || 0), 0);
-      // Pro Klient aufschlüsseln
+      anzahlFahrten = mitKlient.length;
+      gesamtKm = mitKlient.reduce((s, r) => s + (parseFloat(String(r[kmKey]).replace(',','.')) || 0), 0);
+      gesamtKm = Math.round(gesamtKm * 10) / 10;
+      // Pro Klient summieren
       const sumMap = {};
       mitKlient.forEach(r => {
         const name = String(r[klientKey]).trim();
-        sumMap[name] = (sumMap[name] || 0) + (parseFloat(r[kmKey]) || 0);
+        sumMap[name] = (sumMap[name] || 0) + (parseFloat(String(r[kmKey]).replace(',','.')) || 0);
       });
       klienten = Object.entries(sumMap)
         .sort((a, b) => b[1] - a[1])
-        .map(([name, km]) => ({ name, km: Math.round(km * 10) / 10, betrag: Math.round(km * 0.30 * 100) / 100 }));
-    } catch(e) { console.warn('XLSX parse failed:', e); }
+        .map(([name, km]) => ({ name, km: Math.round(km*10)/10, betrag: Math.round(km*0.30*100)/100 }));
+    } catch(e) { console.warn('XLSX parse failed:', e); showToast('Excel-Parse Fehler: ' + e.message); }
     const betrag = Math.round(gesamtKm * 0.30 * 100) / 100;
-    const fd = { gesamtKm, betrag, dateiname: fn, dateiUrl: uploaded.webUrl || '', klienten };
-    // Save as special fahrtenbuch beleg
+    const fd = { gesamtKm, betrag, anzahlFahrten, dateiname: fn, dateiUrl: uploaded.webUrl || '', klienten };
     await saveBelegToList({ monat: _currentMonat, kategorie: 'fahrtenbuch', betrag, klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`, fahrtDaten: fd, fotoUrls: [uploaded.webUrl||''], status: 'Entwurf' });
-    // Show result
     zone.style.display = 'none';
     document.getElementById('fahrtUploadResult').style.display = 'block';
     document.getElementById('fahrtInfoCard').innerHTML = `
       <div class="info-row"><span class="info-label">Datei</span><span class="info-val">${fn}</span></div>
+      <div class="info-row"><span class="info-label">Fahrten mit Klient</span><span class="info-val">${anzahlFahrten} Fahrten</span></div>
       <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${gesamtKm} km</span></div>
       <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
       ${klienten.map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
@@ -2166,16 +2199,16 @@ async function addPhotoToExisting(belegId) {
 // UI HELPERS
 // ══════════════════════════════════════════════════════════════════
 function showScreen(name) {
-  ['home','erfassen','abschluss','teamleiter'].forEach(s => {
+  ['home','erfassen','abschluss','teamleiter','fahrtenbuch'].forEach(s => {
     document.getElementById('screen-'+s).classList.toggle('active', s===name);
     document.getElementById('nav-'+s)?.classList.toggle('active', s===name);
   });
   document.getElementById('appBody').scrollTo(0,0);
-  // Im Review-Modus niemals ladeMonatsdaten aufrufen — überschreibt Kommentarfelder
   if (_isReviewMode) return;
-  if (name==='home')       ladeMonatsdaten();
-  if (name==='abschluss')  ladeAbschluss();
-  if (name==='teamleiter') ladeTLAbrechnungen();
+  if (name==='home')         ladeMonatsdaten();
+  if (name==='abschluss')    ladeAbschluss();
+  if (name==='teamleiter')   ladeTLAbrechnungen();
+  if (name==='fahrtenbuch')  ladeFahrtenbuchScreen();
 }
 
 // ══════════════════════════════════════════════════════════════════
