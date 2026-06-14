@@ -1927,49 +1927,88 @@ async function ablehnen() {
 async function bildZuBase64(url) {
   if (!url) return null;
   try {
+    // _graphDriveId sicherstellen
+    if (!_graphDriveId) { try { await getSiteAndDrive(); } catch(e) {} }
     const token = await getToken();
-    let fetchUrl = url;
-    // SharePoint webUrls (https://tenant.sharepoint.com/sites/.../file.jpg) können nicht
-    // direkt mit Bearer Token geladen werden — stattdessen Graph API /content Endpoint nutzen
-    if (url.includes('sharepoint.com') && !url.includes('graph.microsoft.com')) {
+
+    // Strategie 1: Bereits ein Graph-API-URL → direkt laden
+    if (url.includes('graph.microsoft.com')) {
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (r.ok) return blobToBase64(await r.blob());
+    }
+
+    // Strategie 2: SharePoint webUrl → Graph /drives/{id}/root:{relPfad}:/content
+    if (url.includes('sharepoint.com') && _graphDriveId) {
       try {
-        // Relativen Pfad aus URL extrahieren und über Graph API /drives/{driveId}/root:{path}:/content laden
-        const spBase = CFG.siteUrl; // z.B. https://tenant.sharepoint.com
-        let relPath = url.replace(spBase, '');
-        // /sites/{siteName}/Freigegebene Dokumente/... → /Spesenbelege/...
-        // Graph Drive: /drives/{driveId}/root:{relPath}:/content
-        if (_graphDriveId && relPath) {
-          // SharePoint-Pfad beginnt oft mit /sites/{site}/Shared Documents/ oder /sites/{site}/Freigegebene Dokumente/
-          // Wir nehmen den Teil nach /sites/{siteName}/
-          const sitePart = relPath.match(/\/sites\/[^/]+\/(.*)/);
-          if (sitePart) {
-            const docRelPath = '/' + sitePart[1]; // z.B. /Freigegebene Dokumente/Spesenbelege/...
-            fetchUrl = `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${docRelPath}:/content`;
-          }
+        const decoded = decodeURIComponent(url);
+        const hostEnd = decoded.indexOf('/', 8);
+        const fullPath = decoded.slice(hostEnd);
+        // /sites/{site}/{bibliothek}/{rest} → /{rest}
+        const parts = fullPath.split('/').filter(Boolean);
+        // parts: ['sites', '{site}', '{bibliothek}', ...rest]
+        if (parts.length > 3) {
+          const relPfad = '/' + parts.slice(3).join('/');
+          const graphUrl = `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${relPfad}:/content`;
+          const r = await fetch(graphUrl, { headers: { Authorization: 'Bearer ' + token } });
+          if (r.ok) return blobToBase64(await r.blob());
         }
-      } catch(e) { /* Fallback zur Original-URL */ }
+      } catch(e) { /* weiter */ }
     }
-    const headers = { Authorization: 'Bearer ' + token };
-    const r = await fetch(fetchUrl, { headers });
-    if (!r.ok) {
-      // Letzter Versuch: Original-URL mit Token
-      if (fetchUrl !== url) {
-        const r2 = await fetch(url, { headers });
-        if (!r2.ok) return null;
-        const blob2 = await r2.blob();
-        return new Promise((res, rej) => { const reader = new FileReader(); reader.onload = () => res(reader.result); reader.onerror = rej; reader.readAsDataURL(blob2); });
-      }
-      return null;
+
+    // Strategie 3: Relativer Pfad → Graph direkt
+    if (!url.startsWith('http') && _graphDriveId) {
+      const r = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${url}:/content`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (r.ok) return blobToBase64(await r.blob());
     }
-    const blob = await r.blob();
-    return new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload = () => res(reader.result); // data:image/...;base64,...
-      reader.onerror = rej;
-      reader.readAsDataURL(blob);
-    });
+
+    // Strategie 4: URL mit Token (letzter Versuch)
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (r.ok) return blobToBase64(await r.blob());
+    return null;
   } catch(e) { return null; }
 }
+
+function blobToBase64(blob) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload  = () => res(reader.result);
+    reader.onerror = rej;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Base64-Bild (beliebiges Format) → sauberes JPEG-DataURL + Dimensionen
+// löst webp/avif/png-Inkompatibilitäten mit jsPDF
+function reencodeToJpeg(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        // Sehr große Bilder begrenzen (max 1600px lange Kante)
+        let { width, height } = img;
+        const maxPx = 1600;
+        if (Math.max(width, height) > maxPx) {
+          const s = maxPx / Math.max(width, height);
+          width = Math.round(width * s);
+          height = Math.round(height * s);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.9), width, height });
+      } catch(e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('Bild laden fehlgeschlagen'));
+    img.src = dataUrl;
+  });
+}
+
 
 async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
   const fahrt   = belege.find(b => b.Kategorie === 'fahrtenbuch');
@@ -2182,6 +2221,7 @@ async function htmlToPdfBuffer(result, progressCb) {
 
   // ── Folgeseiten: je Beleg direkt aus Base64 ──
   const belageMitFotos = (regularBelege || []).filter(b => fotoMap[b.id]?.length);
+  let seitenNr = 2; // Seite 1 ist die Übersicht
   for (let i = 0; i < belageMitFotos.length; i++) {
     const b = belageMitFotos[i];
     const fotos = fotoMap[b.id];
@@ -2201,29 +2241,38 @@ async function htmlToPdfBuffer(result, progressCb) {
       pdf.setDrawColor(123, 63, 30); pdf.setLineWidth(0.4);
       pdf.line(16, 22, 194, 22);
 
-      // Bild einpassen (max. Bereich: 178mm × 260mm ab Y=26)
+      // Bild einpassen (max. Bereich: 178mm breit × 258mm hoch ab Y=26)
       const b64 = fotos[f];
-      const imgType = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-      // Dimensionen aus Base64 ermitteln
-      await new Promise(res => {
-        const img = new Image();
-        img.onload = () => {
-          const maxW = 178, maxH = 260;
-          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
-          const w = img.width * ratio * (25.4/96); // px→mm @96dpi
-          const h = img.height * ratio * (25.4/96);
-          const x = (PW - Math.min(w, maxW)) / 2;
-          try { pdf.addImage(b64, imgType, x, 26, Math.min(w, maxW), Math.min(h, maxH)); } catch(e) {}
-          res();
-        };
-        img.onerror = res;
-        img.src = b64;
-      });
+      const maxW = 178, maxH = 258, topY = 26;
+      // PDF-Belege können nicht als Bild eingebettet werden → Hinweis ausgeben
+      if (b64.startsWith('data:application/pdf')) {
+        pdf.setFontSize(11); pdf.setTextColor(120,120,120);
+        pdf.text('Originalbeleg liegt als PDF-Datei vor (im SharePoint hinterlegt).', PW/2, 140, { align: 'center', maxWidth: 160 });
+      } else {
+        // Jedes Format über Canvas in sauberes JPEG reencoden (webp/avif/png → jpeg)
+        const reencoded = await reencodeToJpeg(b64).catch(() => null);
+        if (reencoded) {
+          const { dataUrl, width, height } = reencoded;
+          // mm-Größe: an maxW/maxH einpassen unter Beibehaltung des Seitenverhältnisses
+          const ratio = Math.min(maxW / width, maxH / height);
+          const w = width  * ratio;
+          const h = height * ratio;
+          const x = (PW - w) / 2;
+          try { pdf.addImage(dataUrl, 'JPEG', x, topY, w, h); }
+          catch(e) {
+            pdf.setFontSize(10); pdf.setTextColor(180,60,60);
+            pdf.text('Bild konnte nicht eingebettet werden: ' + (e.message||''), PW/2, 140, { align:'center', maxWidth:160 });
+          }
+        } else {
+          pdf.setFontSize(10); pdf.setTextColor(180,60,60);
+          pdf.text('Belegbild konnte nicht geladen werden.', PW/2, 140, { align:'center', maxWidth:160 });
+        }
+      }
 
       // Footer
       pdf.setFontSize(8); pdf.setTextColor(160,158,153);
       pdf.text(`Praxis NeueWege · Spesenabrechnung · ${fmtMonat(result.monat||'')}`, 16, PH - 8);
-      pdf.text(`Seite ${i + 2}`, PW - 16, PH - 8, { align: 'right' });
+      pdf.text(`Seite ${seitenNr++}`, PW - 16, PH - 8, { align: 'right' });
     }
   }
 
