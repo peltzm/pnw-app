@@ -1624,7 +1624,9 @@ async function ladeAbschluss() {
     document.getElementById('sumTable').innerHTML = rows || '<div style="padding:20px;text-align:center;color:var(--text-hint)">Noch keine Belege</div>';
 
     // Update submit modal text
-    document.getElementById('submitModalText').innerHTML = `<strong>${fmt(total)}</strong> · ${regular.length + (fahrt?1:0)} Positionen · ${fmtMonat(_currentMonat)}<br>werden an <strong>${document.getElementById('selTeamleiter').options[document.getElementById('selTeamleiter').selectedIndex]?.text||'Teamleiter'}</strong> zur Prüfung übermittelt.<br><br>Danach sind keine Änderungen mehr möglich.`;
+    const tlSel = document.getElementById('selTeamleiter');
+    const tlName = tlSel.options[tlSel.selectedIndex]?.text || tlSel.value || '—';
+    document.getElementById('submitModalText').innerHTML = `<strong>${fmt(total)}</strong> · ${regular.length + (fahrt?1:0)} Positionen · ${fmtMonat(_currentMonat)}<br>werden an <strong>${esc(tlName)}</strong> zur Prüfung übermittelt.<br><br>Danach sind keine Änderungen mehr möglich.`;
 
     // Archive
     await ladeArchiv();
@@ -2539,15 +2541,9 @@ function renderHomeReview(belege) {
   document.getElementById('statFahrt').textContent  = fahrt ? fmt(fahrt.Betrag) : '—';
   document.getElementById('statSonst').textContent  = fmt(regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0));
   document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
-
-  // Fahrtenbuch
-  if (fahrt) {
-    const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
-    document.getElementById('fbAmt').textContent   = fmt(fahrt.Betrag);
-    document.getElementById('fbBadge').className   = 'badge badge-approved';
-    document.getElementById('fbBadge').innerHTML   = '<span class="bdot"></span> Excel ✓';
-    document.getElementById('fbFoot').textContent  = `${fd.dateiname||'Fahrtenbuch.xlsx'} · ${fd.gesamtKm||'—'} km`;
-  }
+  // statFahrtSub nur setzen wenn Element vorhanden
+  const sfs = document.getElementById('statFahrtSub');
+  if (sfs) sfs.textContent = fahrt ? 'Fahrtenbuch ✓' : 'Nicht hochgeladen';
 
   // Beleg-Liste mit Kommentarfeldern
   const list = document.getElementById('belegList');
@@ -2602,17 +2598,17 @@ function startKommentar(belegId) {
     datum: new Date().toLocaleDateString('de-DE'),
     status: 'offen'
   };
-  ladeMonatsdatenMitKommentaren();
+  ladeReviewBelege();
 }
 function updateKommentar(belegId, val) {
   if (_belegKommentare[belegId]) _belegKommentare[belegId].text = val;
 }
 function deleteKommentar(belegId) {
   delete _belegKommentare[belegId];
-  ladeMonatsdatenMitKommentaren();
+  ladeReviewBelege();
 }
 function reopenKommentar(belegId) {
-  if (_belegKommentare[belegId]) { _belegKommentare[belegId].status = 'offen'; ladeMonatsdatenMitKommentaren(); }
+  if (_belegKommentare[belegId]) { _belegKommentare[belegId].status = 'offen'; ladeReviewBelege(); }
 }
 
 async function speichereKommentare() {
@@ -2638,13 +2634,15 @@ async function speichereKommentare() {
 }
 
 async function freigebenUndPDF() {
-  if (!confirm('Abrechnung freigeben und PDF erstellen?')) return;
-  setHomeStatus('uploading', 'Freigabe wird verarbeitet…');
+  setHomeStatus('uploading', '⏳ Freigabe wird verarbeitet…');
+  // Kurz warten damit der Status sichtbar wird
+  await new Promise(r => setTimeout(r, 100));
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
     // Alle Kommentare speichern
     await speichereKommentare();
+    setHomeStatus('uploading', '⏳ Belege werden genehmigt…');
     // Status aller Belege auf Genehmigt setzen
     const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
     const res = await r.json();
@@ -2657,9 +2655,11 @@ async function freigebenUndPDF() {
       })
     ));
     // PDF generieren und per Mail senden
+    setHomeStatus('uploading', '📄 PDF wird erstellt — Belegfotos werden geladen…');
     const total = belege.reduce((s,b)=>s+parseFloat(b.Betrag||0),0);
     const fachkraft = belege[0]?.Fachkraft || _reviewFkMail;
     const g = { fachkraft, mail: _reviewFkMail, monat: _reviewMonat, belege, total };
+    setHomeStatus('uploading', '📧 PDF wird hochgeladen und E-Mail wird gesendet…');
     await genehmigen(g);
     // Banner entfernen
     document.getElementById('reviewBanner')?.remove();
