@@ -720,7 +720,7 @@ const CFG = {
   azureDIEndpoint: 'https://dispesen.cognitiveservices.azure.com/',
   azureDIKey: '' // Key wurde aus Sicherheitsgründen entfernt — wird über Azure Function Proxy bezogen
 };
-const SCOPES = ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','User.Read','Mail.Send','GroupMember.Read.All'];
+const SCOPES = ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','User.Read','Mail.Send','GroupMember.Read.All','https://cognitiveservices.azure.com/user_impersonation'];
 
 // ══════════════════════════════════════════════════════════════════
 // STATE
@@ -1225,19 +1225,23 @@ async function handleFileSelect(input) {
   try {
     const b64 = await fileToBase64(file);
 
-    // ── Azure Document Intelligence — Auth via MSAL-Token (kein API-Key) ──
+    // ── Azure Document Intelligence — Auth via MSAL-Token ──
     let diToken;
     try {
       const r = await msalInstance.acquireTokenSilent({
-        scopes: ['https://cognitiveservices.azure.com/.default'],
+        scopes: ['https://cognitiveservices.azure.com/user_impersonation'],
         account: currentAccount
       });
       diToken = r.accessToken;
     } catch(e) {
-      const r = await msalInstance.acquireTokenPopup({
-        scopes: ['https://cognitiveservices.azure.com/.default']
-      });
-      diToken = r.accessToken;
+      // Token nicht verfügbar — KI-Scan überspringen, Felder manuell ausfüllen
+      console.warn('DI Token nicht verfügbar:', e);
+      document.getElementById('scanIcon').className = 'si';
+      document.getElementById('scanIcon').textContent = '📸';
+      document.getElementById('scanText').textContent = 'Beleg fotografieren';
+      document.getElementById('scanSub').textContent = 'KI-Scan nicht verfügbar — bitte manuell eingeben';
+      showToast('KI-Scan: Neu anmelden erforderlich — abmelden und wieder anmelden');
+      return;
     }
 
     // 1. Analyse starten
