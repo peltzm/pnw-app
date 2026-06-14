@@ -241,9 +241,10 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 .scan-hero{background:var(--surface);border-bottom:1px solid var(--border);padding:16px}
 .scan-hero h2{font-size:17px;font-weight:600;color:var(--text);margin-bottom:3px}
 .scan-hero p{font-size:13px;color:var(--text-muted);margin-bottom:12px}
-.scan-big{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:28px 16px;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s}
+.scan-big{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:12px 16px;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:12px}
 .scan-big:active{border-color:var(--accent-mid);background:var(--accent-light)}
-.scan-big .si{font-size:40px;margin-bottom:8px}
+.scan-big .si{font-size:28px;margin-bottom:0;line-height:1}
+.scan-big .txt{text-align:left}
 .scan-big .st{font-size:15px;font-weight:600;color:var(--text)}
 .scan-big .ss{font-size:12px;color:var(--text-muted);margin-top:4px}
 
@@ -379,8 +380,10 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <p>Foto aufnehmen — KI liest den Beleg automatisch aus</p>
     <div class="scan-big" onclick="triggerScan()">
       <div class="si" id="scanIcon">📸</div>
-      <div class="st" id="scanText">Beleg fotografieren</div>
-      <div class="ss" id="scanSub">KI erkennt Betrag, Datum, Händler</div>
+      <div class="txt">
+        <div class="st" id="scanText">Beleg fotografieren</div>
+        <div class="ss" id="scanSub">KI erkennt Betrag, Datum, Händler</div>
+      </div>
     </div>
     <input type="file" id="fileInput" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="handleFileSelect(this)">
   </div>
