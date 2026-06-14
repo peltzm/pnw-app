@@ -1240,6 +1240,7 @@ async function schnellLoeschen(id) {
 async function belegFotoAnsehen(id) {
   // Tab sofort öffnen (sonst blockiert mobiler Popup-Blocker nach await)
   const w = window.open('', '_blank');
+  if (w) w.document.write('<p style="font-family:sans-serif;padding:20px;color:#666">Beleg wird geladen…</p>');
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
@@ -1247,11 +1248,13 @@ async function belegFotoAnsehen(id) {
     const res = await r.json();
     const fotos = JSON.parse(res.fields?.FotoUrls || '[]');
     if (!fotos.length) { if (w) w.close(); showToast('Kein Beleg vorhanden'); return; }
-    // Erste Datei als Base64 laden (bildZuBase64 behandelt alle URL-Formate, Foto + PDF)
-    const b64 = await bildZuBase64(fotos[0]);
-    if (b64 && w) {
-      // PDF und Bild beide darstellbar via data-URL im neuen Tab
-      w.location.href = b64;
+    // Datei als Blob laden → Blob-URL (funktioniert für Bild UND PDF als Tab-Navigation;
+    // data:-URLs werden von Browsern als Top-Level-Navigation blockiert)
+    const blob = await belegDateiAlsBlob(fotos[0]);
+    if (blob && w) {
+      const blobUrl = URL.createObjectURL(blob);
+      w.location.href = blobUrl;
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } else if (w) {
       w.location.href = fotos[0]; // Fallback: Original-URL
     }
@@ -1958,51 +1961,48 @@ async function ablehnen() {
 }
 
 // Bild-URL → Base64 (via fetch mit Auth-Token für SharePoint)
-async function bildZuBase64(url) {
+// Holt eine Beleg-Datei (Foto/PDF) als Blob — behandelt alle URL-Formate
+async function belegDateiAlsBlob(url) {
   if (!url) return null;
   try {
-    // _graphDriveId sicherstellen
     if (!_graphDriveId) { try { await getSiteAndDrive(); } catch(e) {} }
     const token = await getToken();
 
     // Strategie 1: Bereits ein Graph-API-URL → direkt laden
     if (url.includes('graph.microsoft.com')) {
       const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-      if (r.ok) return blobToBase64(await r.blob());
+      if (r.ok) return await r.blob();
     }
-
     // Strategie 2: SharePoint webUrl → Graph /drives/{id}/root:{relPfad}:/content
     if (url.includes('sharepoint.com') && _graphDriveId) {
       try {
         const decoded = decodeURIComponent(url);
         const hostEnd = decoded.indexOf('/', 8);
         const fullPath = decoded.slice(hostEnd);
-        // /sites/{site}/{bibliothek}/{rest} → /{rest}
         const parts = fullPath.split('/').filter(Boolean);
-        // parts: ['sites', '{site}', '{bibliothek}', ...rest]
         if (parts.length > 3) {
           const relPfad = '/' + parts.slice(3).join('/');
           const graphUrl = `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${relPfad}:/content`;
           const r = await fetch(graphUrl, { headers: { Authorization: 'Bearer ' + token } });
-          if (r.ok) return blobToBase64(await r.blob());
+          if (r.ok) return await r.blob();
         }
       } catch(e) { /* weiter */ }
     }
-
     // Strategie 3: Relativer Pfad → Graph direkt
     if (!url.startsWith('http') && _graphDriveId) {
-      const r = await fetch(
-        `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${url}:/content`,
-        { headers: { Authorization: 'Bearer ' + token } }
-      );
-      if (r.ok) return blobToBase64(await r.blob());
+      const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${url}:/content`, { headers: { Authorization: 'Bearer ' + token } });
+      if (r.ok) return await r.blob();
     }
-
     // Strategie 4: URL mit Token (letzter Versuch)
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-    if (r.ok) return blobToBase64(await r.blob());
+    if (r.ok) return await r.blob();
     return null;
   } catch(e) { return null; }
+}
+
+async function bildZuBase64(url) {
+  const blob = await belegDateiAlsBlob(url);
+  return blob ? blobToBase64(blob) : null;
 }
 
 function blobToBase64(blob) {
