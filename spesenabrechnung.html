@@ -2045,119 +2045,114 @@ async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
   if (fd?.dateiUrl) fahrtB64 = await bildZuBase64(fd.dateiUrl).catch(() => null);
 
   const styles = `
-    @page { size: A4; margin: 16mm 16mm; }
+    @page { size: A4; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; font-size: 10.5pt; color: #1a1916; line-height: 1.5; }
+    body { font-family: -apple-system, 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #2a2118; line-height: 1.45; background: #fff; }
+    .page { width: 210mm; min-height: 297mm; padding: 14mm 14mm 12mm; }
     .page-break { page-break-before: always; }
-    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #7b3f1e; }
-    .header img { height: 38px; width: auto; }
-    .header h1 { font-size: 15pt; font-weight: 700; color: #7b3f1e; margin: 0; }
-    .header p  { font-size: 9pt; color: #6b6860; margin: 2px 0 0; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin-bottom: 16px; background: #f5ede7; border-radius: 5px; padding: 10px 12px; font-size: 9.5pt; }
-    .meta-row { display: flex; gap: 6px; }
-    .meta-label { color: #6b6860; min-width: 100px; }
-    .meta-val { font-weight: 600; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9.5pt; }
-    th { background: #7b3f1e; color: #fff; padding: 6px 8px; text-align: left; font-size: 8.5pt; }
-    td { padding: 6px 8px; border-bottom: 1px solid #e2dfd8; vertical-align: top; }
-    tr:nth-child(even) td { background: #fdf6f2; }
-    .total-row td { font-weight: 700; background: #f5ede7; color: #7b3f1e; font-size: 11pt; border-top: 2px solid #7b3f1e; }
-    .fahrt-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 5px; padding: 8px 12px; margin-bottom: 16px; font-size: 9.5pt; }
-    .fahrt-box h3 { color: #1d4ed8; font-size: 10pt; margin-bottom: 6px; }
-    .fahrt-row { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #dbeafe; }
-    .fahrt-row:last-child { border: none; font-weight: 700; }
-    .sig-box { margin-top: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-    .sig-line { border-top: 1px solid #1a1916; padding-top: 5px; font-size: 8.5pt; color: #6b6860; }
-    .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #e2dfd8; font-size: 8pt; color: #a09e99; display: flex; justify-content: space-between; }
-    /* Beleg-Anhang Seiten */
-    .beleg-seite { padding: 0; }
-    .beleg-header { background: #f5ede7; border-radius: 5px; padding: 8px 12px; margin-bottom: 12px; font-size: 9.5pt; }
-    .beleg-header strong { color: #7b3f1e; }
-    .beleg-foto { width: 100%; max-height: 240mm; object-fit: contain; border: 1px solid #e2dfd8; border-radius: 4px; display: block; }
-    .beleg-foto + .beleg-foto { margin-top: 8px; }
+    /* Kopf */
+    .head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .head img { height: 42px; width: auto; }
+    .head .t h1 { font-size: 16pt; font-weight: 800; color: #7b3f1e; line-height: 1.1; letter-spacing: -.3px; }
+    .head .t p { font-size: 9pt; color: #8a8178; margin-top: 1px; }
+    .head .badge { margin-left: auto; background: #fdf2e8; color: #7b3f1e; border: 1px solid #e8cdb5; border-radius: 20px; padding: 5px 14px; font-size: 8.5pt; font-weight: 700; }
+    /* Meta-Karte (transparent) */
+    .meta { border: 1px solid #ece4db; border-radius: 12px; padding: 13px 16px; margin-bottom: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px 24px; }
+    .meta .row { display: flex; justify-content: space-between; align-items: baseline; }
+    .meta .lbl { color: #8a8178; font-size: 9pt; }
+    .meta .val { font-weight: 700; font-size: 9.5pt; color: #2a2118; }
+    /* Fahrtkosten-Karte (dezent) */
+    .fcard { border: 1px solid #ece4db; border-radius: 12px; padding: 13px 16px; margin-bottom: 16px; }
+    .fcard .fhead { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 9px; border-bottom: 1px solid #f0ebe4; }
+    .fcard .cap { font-size: 9.5pt; font-weight: 700; color: #2a2118; }
+    .fcard .famt { font-size: 12pt; font-weight: 800; color: #7b3f1e; white-space: nowrap; }
+    .fcard .sub { font-size: 8.5pt; color: #9a8f84; margin-top: 2px; }
+    .fcard .det { margin-top: 9px; }
+    .fcard .drow { display: flex; justify-content: space-between; padding: 3px 0; font-size: 9pt; }
+    .fcard .drow .k { color: #8a8178; }
+    .fcard .drow .v { font-weight: 600; }
+    /* Belege als Karten */
+    .sec-title { font-size: 8pt; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: #a8845f; margin: 4px 0 8px; }
+    .bcard { border: 1px solid #ece4db; border-radius: 10px; padding: 11px 14px; margin-bottom: 7px; display: flex; align-items: center; gap: 12px; }
+    .bcard .num { width: 22px; height: 22px; border-radius: 6px; background: #fdf2e8; color: #7b3f1e; font-weight: 700; font-size: 9pt; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .bcard .body { flex: 1; min-width: 0; }
+    .bcard .b1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .bcard .desc { font-weight: 700; font-size: 9.5pt; color: #2a2118; }
+    .bcard .amt { font-weight: 700; font-size: 10pt; color: #7b3f1e; white-space: nowrap; }
+    .bcard .b2 { display: flex; gap: 8px; align-items: center; margin-top: 3px; flex-wrap: wrap; }
+    .bcard .date { font-size: 8pt; color: #9a8f84; }
+    .bcard .pill { font-size: 7.5pt; background: #fdf2e8; color: #a8845f; padding: 1.5px 8px; border-radius: 10px; font-weight: 600; }
+    .bcard .kl { font-size: 7.5pt; background: #eef3fb; color: #5577aa; padding: 1.5px 8px; border-radius: 10px; font-weight: 600; }
+    /* Gesamt (dezent) */
+    .total { border: 1.5px solid #7b3f1e; border-radius: 12px; padding: 13px 18px; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
+    .total .tl { font-size: 10.5pt; font-weight: 700; color: #2a2118; }
+    .total .tv { font-size: 15pt; font-weight: 800; color: #7b3f1e; letter-spacing: -.3px; }
+    .foot { margin-top: 20px; padding-top: 9px; border-top: 1px solid #f0ebe4; font-size: 7.5pt; color: #b5a99c; display: flex; justify-content: space-between; }
+    /* Beleg-Anhang Seiten (unverändert, von jsPDF gezeichnet) */
     @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`;
 
-  // ── Seite 1: Übersicht ──
+  // ── Seite 1: Übersicht (Karten-Design) ──
+  const statusLabel = (status||'Genehmigt').toUpperCase();
   let html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
 <title>Spesenabrechnung ${esc(fachkraft)} ${monat}</title>
 <style>${styles}</style></head><body>
+<div class="page">
 
-<div class="header">
+<div class="head">
   <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
-  <div><h1>Spesenabrechnung</h1><p>Praxis NeueWege · ${fmtMonat(monat)}</p></div>
+  <div class="t"><h1>Spesenabrechnung</h1><p>Praxis NeueWege · ${fmtMonat(monat)}</p></div>
+  <div class="badge">${esc(statusLabel)}</div>
 </div>
 
 <div class="meta">
-  <div class="meta-row"><span class="meta-label">Mitarbeiter/in</span><span class="meta-val">${esc(fachkraft)}</span></div>
-  <div class="meta-row"><span class="meta-label">Monat</span><span class="meta-val">${fmtMonat(monat)}</span></div>
-  <div class="meta-row"><span class="meta-label">Erstellt am</span><span class="meta-val">${new Date().toLocaleDateString('de-DE')}</span></div>
-  <div class="meta-row"><span class="meta-label">Status</span><span class="meta-val">${esc(status||'Genehmigt')}</span></div>
+  <div class="row"><span class="lbl">Mitarbeiter/in</span><span class="val">${esc(fachkraft)}</span></div>
+  <div class="row"><span class="lbl">Monat</span><span class="val">${fmtMonat(monat)}</span></div>
+  <div class="row"><span class="lbl">Erstellt am</span><span class="val">${new Date().toLocaleDateString('de-DE')}</span></div>
+  <div class="row"><span class="lbl">Positionen</span><span class="val">${regular.length + (fahrt?1:0)}</span></div>
 </div>
 
-${fahrt && fd ? `<div class="fahrt-box">
-  <h3>🚗 Fahrtkosten (Fahrtenbuch)</h3>
-  <div class="fahrt-row"><span>Gesamt km</span><span>${fd.gesamtKm||0} km</span></div>
-  <div class="fahrt-row"><span>Pauschale</span><span>0,30 €/km</span></div>
-  ${(fd.klienten||[]).map(k=>`<div class="fahrt-row"><span>${esc(k.name)}</span><span>${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
-  <div class="fahrt-row"><span>Fahrtkosten gesamt</span><span>${fmt(fahrt.Betrag)}</span></div>
+${fahrt && fd ? `<div class="fcard">
+  <div class="fhead">
+    <div><div class="cap">🚐 Fahrtkosten (Fahrtenbuch)</div><div class="sub">${fd.anzahlFahrten||fd.klienten?.length||0} Fahrten · ${fd.gesamtKm||0} km · 0,30 €/km</div></div>
+    <div class="famt">${fmt(fahrt.Betrag)}</div>
+  </div>
+  <div class="det">
+    <div class="drow"><span class="k">Datei</span><span class="v">${esc(fd.dateiname||'Fahrtenbuch.xlsx')}</span></div>
+    <div class="drow"><span class="k">Fahrten mit Klient</span><span class="v">${fd.anzahlFahrten||fd.klienten?.length||0} Fahrten</span></div>
+    <div class="drow"><span class="k">Gesamt km</span><span class="v">${fd.gesamtKm||0} km</span></div>
+  </div>
 </div>` : ''}
 
-<table>
-  <thead><tr><th>#</th><th>Datum</th><th>Kategorie</th><th>Beschreibung / Händler</th><th>Klient</th><th style="text-align:right">Betrag</th></tr></thead>
-  <tbody>
-    ${regular.map((b, i) => `<tr>
-      <td>${i+1}</td>
-      <td>${fmtDate(b.Datum)}</td>
-      <td>${esc(b.KategorieLabel || catLabel[b.Kategorie] || b.Kategorie || '—')}</td>
-      <td>${esc(b.Beschreibung||b.Haendler||'—')}</td>
-      <td>${esc(b.Klient&&b.Klient!=='kein Klient'?b.Klient:'—')}</td>
-      <td style="text-align:right">${fmt(b.Betrag)}</td>
-    </tr>`).join('')}
-    ${fahrt ? `<tr><td>—</td><td>—</td><td>Fahrtkosten (Fahrtenbuch)</td><td>${esc(fd?.dateiname||'Fahrtenbuch.xlsx')}</td><td>—</td><td style="text-align:right">${fmt(fahrt.Betrag)}</td></tr>` : ''}
-    <tr class="total-row"><td colspan="5">Gesamtbetrag</td><td style="text-align:right">${fmt(total)}</td></tr>
-  </tbody>
-</table>
+${regular.length ? `<div class="sec-title">Einzelbelege</div>
+${regular.map((b, i) => {
+  const katShort = (b.KategorieLabel||catLabel[b.Kategorie]||b.Kategorie||'—').includes(' › ')
+    ? (b.KategorieLabel||'').split(' › ')[1]
+    : (b.KategorieLabel||catLabel[b.Kategorie]||b.Kategorie||'—');
+  const hasKlient = b.Klient && b.Klient !== 'kein Klient';
+  return `<div class="bcard">
+  <div class="num">${i+1}</div>
+  <div class="body">
+    <div class="b1"><span class="desc">${esc(b.Beschreibung||b.Haendler||'—')}</span><span class="amt">${fmt(b.Betrag)}</span></div>
+    <div class="b2"><span class="date">${fmtDate(b.Datum)}</span><span class="pill">${esc(katShort)}</span>${hasKlient?`<span class="kl">${esc(b.Klient)}</span>`:''}</div>
+  </div>
+</div>`;
+}).join('')}` : ''}
 
-<div class="sig-box">
-  <div><div class="sig-line">Datum, Unterschrift Mitarbeiter/in</div></div>
-  <div><div class="sig-line">Datum, Unterschrift Teamleiter/in</div></div>
+<div class="total">
+  <span class="tl">Gesamtbetrag</span>
+  <span class="tv">${fmt(total)}</span>
 </div>
-<div class="footer">
-  <span>Praxis NeueWege · Spesenabrechnung · ${fmtMonat(monat)}</span>
+
+<div class="foot">
+  <span>Praxis NeueWege · ${esc(fachkraft)} · Spesenabrechnung ${fmtMonat(monat)}</span>
   <span>Seite 1 von ${regular.filter(b=>fotoMap[b.id]?.length).length + 1}</span>
+</div>
+
 </div>`;
 
-  // ── Folgeseiten: je Beleg eine Seite mit Foto(s) ──
-  let seite = 2;
-  for (let i = 0; i < regular.length; i++) {
-    const b = regular[i];
-    const fotos = fotoMap[b.id] || [];
-    if (!fotos.length) continue;
-    const katShort = (b.KategorieLabel||b.Kategorie||'').includes(' › ')
-      ? (b.KategorieLabel||'').split(' › ')[1]
-      : (b.KategorieLabel||b.Kategorie||'—');
-    html += `
-<div class="page-break beleg-seite">
-  <div class="header" style="margin-bottom:12px">
-    <div><h1 style="font-size:13pt">Beleg ${i+1} — Originalbeleg</h1><p>Praxis NeueWege · Spesenabrechnung ${fmtMonat(monat)}</p></div>
-  </div>
-  <div class="beleg-header">
-    <strong>${esc(b.Beschreibung||b.Haendler||'—')}</strong> &nbsp;·&nbsp;
-    ${fmtDate(b.Datum)} &nbsp;·&nbsp;
-    ${esc(katShort)} &nbsp;·&nbsp;
-    <strong style="color:#7b3f1e">${fmt(b.Betrag)}</strong>
-    ${b.Klient&&b.Klient!=='kein Klient'?` &nbsp;·&nbsp; Klient: ${esc(b.Klient)}`:''}
-  </div>
-  ${fotos.map(src => `<img class="beleg-foto" src="${src}" alt="Beleg ${i+1}">`).join('')}
-  <div class="footer" style="margin-top:12px">
-    <span>Praxis NeueWege · Spesenabrechnung · ${fmtMonat(monat)}</span>
-    <span>Seite ${seite++}</span>
-  </div>
-</div>`;
-  }
-
+  // Belegseiten werden in htmlToPdfBuffer via jsPDF gezeichnet (nicht hier als HTML)
   html += `</body></html>`;
-  return { html, fotoMap, regularBelege: regular };
+  return { html, fotoMap, regularBelege: regular, fachkraft, monat };
 }
 
 async function pdfVorschau() {
@@ -2260,7 +2255,7 @@ async function htmlToPdfBuffer(result, progressCb) {
         pdf.setFontSize(10); pdf.setTextColor(180,60,60);
         pdf.text('Belegdatei konnte nicht eingebettet werden (im SharePoint hinterlegt).', PW/2, 140, { align:'center', maxWidth:160 });
         pdf.setFontSize(8); pdf.setTextColor(160,158,153);
-        pdf.text(`Praxis NeueWege · Spesenabrechnung · ${fmtMonat(result.monat||'')}`, 16, PH - 8);
+        pdf.text(`Praxis NeueWege · ${result.fachkraft||''} · Spesenabrechnung ${fmtMonat(result.monat||'')}`, 16, PH - 8);
         pdf.text(`Seite ${seitenNr++}`, PW - 16, PH - 8, { align: 'right' });
         continue;
       }
@@ -2281,7 +2276,7 @@ async function htmlToPdfBuffer(result, progressCb) {
           pdf.text('Bild konnte nicht eingebettet werden.', PW/2, 140, { align:'center', maxWidth:160 });
         }
         pdf.setFontSize(8); pdf.setTextColor(160,158,153);
-        pdf.text(`Praxis NeueWege · Spesenabrechnung · ${fmtMonat(result.monat||'')}`, 16, PH - 8);
+        pdf.text(`Praxis NeueWege · ${result.fachkraft||''} · Spesenabrechnung ${fmtMonat(result.monat||'')}`, 16, PH - 8);
         pdf.text(`Seite ${seitenNr++}`, PW - 16, PH - 8, { align: 'right' });
       });
     }
