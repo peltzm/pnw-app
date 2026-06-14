@@ -293,7 +293,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
     <div style="display:flex;align-items:baseline;gap:7px">
       <span>Spesenabrechnung</span>
-      <span style="font-size:10px;font-weight:400;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-family:monospace;letter-spacing:.3px">ve6c4c88</span>
+      <span style="font-size:10px;font-weight:400;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-family:monospace;letter-spacing:.3px">vNEWVER</span>
     </div>
   </div>
   <div class="user-badge" id="userBadge" style="display:none">
@@ -1880,10 +1880,11 @@ async function genehmigen(g) {
     ));
     // 2. PDF clientseitig erzeugen (html2canvas + jsPDF)
     setStatus('tlStatus', 'uploading', '📄 PDF wird erzeugt — Belegfotos werden geladen…');
-    const pdfHtml = await buildAbrechnungHTMLMitFotos(g.belege, g.fachkraft, g.monat, 'Genehmigt');
-    const pdfName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}.pdf`;
-    const pdfBuf  = await htmlToPdfBuffer(pdfHtml, (p, total) =>
-      setStatus('tlStatus', 'uploading', `📄 PDF Seite ${p} von ${total}…`));
+    const pdfResult = await buildAbrechnungHTMLMitFotos(g.belege, g.fachkraft, g.monat, 'Genehmigt');
+    pdfResult.monat = g.monat; // für Footer in htmlToPdfBuffer
+    const pdfName   = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}.pdf`;
+    const pdfBuf    = await htmlToPdfBuffer(pdfResult, (msg) =>
+      setStatus('tlStatus', 'uploading', msg));
     // 3. PDF nach SharePoint hochladen
     setStatus('tlStatus', 'uploading', '☁️ PDF wird in SharePoint gespeichert…');
     const pdfPath = `${CFG.spFolder}/Genehmigt/${pdfName}`;
@@ -2110,7 +2111,7 @@ ${fahrt && fd ? `<div class="fahrt-box">
   }
 
   html += `</body></html>`;
-  return html;
+  return { html, fotoMap, regularBelege: regular };
 }
 
 async function pdfVorschau() {
@@ -2118,11 +2119,10 @@ async function pdfVorschau() {
   try {
     const belege    = await ladeBelege(_currentMonat);
     const fachkraft = currentAccount?.name || '';
-    const htmlStr   = await buildAbrechnungHTMLMitFotos(belege, fachkraft, _currentMonat, 'Entwurf');
+    const result    = await buildAbrechnungHTMLMitFotos(belege, fachkraft, _currentMonat, 'Entwurf');
     const fileName  = `Spesen_${(fachkraft||'Entwurf').replace(/\s+/g,'_')}_${_currentMonat}.pdf`;
-    const pdfBuf    = await htmlToPdfBuffer(htmlStr, (p, total) =>
-      setStatus('abschlussStatus', 'uploading', `PDF wird erstellt — Seite ${p} von ${total}…`));
-    // Download auslösen
+    const pdfBuf    = await htmlToPdfBuffer(result, (msg) =>
+      setStatus('abschlussStatus', 'uploading', msg));
     const blob = new Blob([pdfBuf], { type: 'application/pdf' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -2134,63 +2134,100 @@ async function pdfVorschau() {
   }
 }
 
-// HTML-String → ArrayBuffer (A4-PDF, seitenweise via html2canvas + jsPDF)
-// progressCb(currentPage, totalPages) optional
-async function htmlToPdfBuffer(htmlStr, progressCb) {
-  return new Promise((resolve, reject) => {
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:794px;height:auto;min-height:1123px;border:none;visibility:hidden';
-    document.body.appendChild(iframe);
+// { html, fotoMap, regularBelege } → ArrayBuffer (A4-PDF)
+// Seite 1 (Übersicht): iframe + html2canvas
+// Folgeseiten (Belegfotos): direkt aus Base64 via jsPDF.addImage
+async function htmlToPdfBuffer(result, progressCb) {
+  const { html: htmlStr, fotoMap, regularBelege } = result;
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW = 210, PH = 297; // mm
 
+  // ── Seite 1: Übersichts-HTML in iframe rendern ──
+  if (progressCb) progressCb('📄 Übersichtsseite wird gerendert…');
+  await new Promise((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:794px;height:1123px;border:none;visibility:hidden;';
+    document.body.appendChild(iframe);
     const cleanup = () => { try { document.body.removeChild(iframe); } catch(e) {} };
 
     iframe.onload = async () => {
       try {
-        // Kurz warten bis Bilder gerendert
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 800)); // Fonts + Layout abwarten
         const iDoc = iframe.contentDocument || iframe.contentWindow.document;
-        const body = iDoc.body;
-
-        const A4_W_PX = 794, A4_H_PX = 1123;
-        const PDF_W_MM = 210, PDF_H_MM = 297;
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-        const totalH    = Math.max(body.scrollHeight, A4_H_PX);
-        const pageCount = Math.ceil(totalH / A4_H_PX);
-
-        for (let p = 0; p < pageCount; p++) {
-          if (p > 0) pdf.addPage();
-          if (progressCb) progressCb(p + 1, pageCount);
-          const canvas = await html2canvas(body, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            width: A4_W_PX,
-            height: A4_H_PX,
-            x: 0,
-            y: p * A4_H_PX,
-            windowWidth: A4_W_PX,
-            scrollX: 0,
-            scrollY: p * A4_H_PX
-          });
-          pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PDF_W_MM, PDF_H_MM);
-        }
-
-        const buf = pdf.output('arraybuffer');
+        // Nur die erste A4-Seite rendern (794×1123px)
+        const canvas = await html2canvas(iDoc.body, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          width: 794,
+          height: 1123,
+          windowWidth: 794,
+          scrollX: 0,
+          scrollY: 0
+        });
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PW, PH);
         cleanup();
-        resolve(buf);
-      } catch(e) {
-        cleanup();
-        reject(e);
-      }
+        resolve();
+      } catch(e) { cleanup(); reject(e); }
     };
-
-    iframe.onerror = (e) => { cleanup(); reject(new Error('iframe Ladefehler')); };
-    iframe.srcdoc = htmlStr;
+    iframe.onerror = () => { cleanup(); reject(new Error('iframe Fehler')); };
+    // Nur Seite-1-HTML einspeisen (ohne page-break Elemente)
+    // Dazu: alles vor dem ersten page-break abschneiden
+    const page1Html = htmlStr.replace(/<div class="page-break[\s\S]*$/i, '</body></html>');
+    iframe.srcdoc = page1Html;
   });
+
+  // ── Folgeseiten: je Beleg direkt aus Base64 ──
+  const belageMitFotos = (regularBelege || []).filter(b => fotoMap[b.id]?.length);
+  for (let i = 0; i < belageMitFotos.length; i++) {
+    const b = belageMitFotos[i];
+    const fotos = fotoMap[b.id];
+    if (progressCb) progressCb(`📎 Belegfoto ${i+1} von ${belageMitFotos.length} wird eingefügt…`);
+
+    for (let f = 0; f < fotos.length; f++) {
+      pdf.addPage();
+      // Kurze Info-Zeile oben (manuell in PDF zeichnen)
+      const katShort = (b.KategorieLabel||b.Kategorie||'—').includes(' › ')
+        ? (b.KategorieLabel||'').split(' › ')[1]
+        : (b.KategorieLabel||b.Kategorie||'—');
+      pdf.setFontSize(9); pdf.setTextColor(107, 104, 96);
+      pdf.text(`Beleg ${i+1}`, 16, 12);
+      pdf.setFontSize(10); pdf.setTextColor(123, 63, 30);
+      const desc = [b.Beschreibung||b.Haendler||'—', fmtDate(b.Datum), katShort, fmt(b.Betrag)].filter(Boolean).join('  ·  ');
+      pdf.text(desc, 16, 19, { maxWidth: 178 });
+      pdf.setDrawColor(123, 63, 30); pdf.setLineWidth(0.4);
+      pdf.line(16, 22, 194, 22);
+
+      // Bild einpassen (max. Bereich: 178mm × 260mm ab Y=26)
+      const b64 = fotos[f];
+      const imgType = b64.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+      // Dimensionen aus Base64 ermitteln
+      await new Promise(res => {
+        const img = new Image();
+        img.onload = () => {
+          const maxW = 178, maxH = 260;
+          const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+          const w = img.width * ratio * (25.4/96); // px→mm @96dpi
+          const h = img.height * ratio * (25.4/96);
+          const x = (PW - Math.min(w, maxW)) / 2;
+          try { pdf.addImage(b64, imgType, x, 26, Math.min(w, maxW), Math.min(h, maxH)); } catch(e) {}
+          res();
+        };
+        img.onerror = res;
+        img.src = b64;
+      });
+
+      // Footer
+      pdf.setFontSize(8); pdf.setTextColor(160,158,153);
+      pdf.text(`Praxis NeueWege · Spesenabrechnung · ${fmtMonat(result.monat||'')}`, 16, PH - 8);
+      pdf.text(`Seite ${i + 2}`, PW - 16, PH - 8, { align: 'right' });
+    }
+  }
+
+  return pdf.output('arraybuffer');
 }
 
 function buildFreigabeEmail(g, pdfUrl) {
