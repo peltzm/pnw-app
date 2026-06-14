@@ -363,19 +363,12 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 
   <div id="homeStatus"></div>
 
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px">
-    <div class="slabel" style="padding:0">Belege</div>
-    <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;gap:5px;background:var(--accent);color:#fff;border:none;border-radius:20px;padding:5px 12px 5px 8px;font-size:12px;font-weight:600;cursor:pointer;min-height:32px"><span style="font-size:16px;line-height:1">+</span> Neuer Beleg</button>
+  <div style="padding:14px 16px 6px">
+    <div class="slabel" style="padding:0;margin-bottom:10px">Belege</div>
+    <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;justify-content:center;gap:5px;background:var(--accent);color:#fff;border:none;border-radius:20px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;min-height:40px;width:100%"><span style="font-size:17px;line-height:1">+</span> Neuer Beleg</button>
   </div>
   <div id="belegList">
     <div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
-  </div>
-
-  <!-- Einreichen-Link dezent unten -->
-  <div style="padding:12px 16px 8px;text-align:center">
-    <button onclick="showScreen('abschluss')" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;text-decoration:underline">
-      Zur Monatsabrechnung → Einreichen
-    </button>
   </div>
 </div>
 
@@ -1114,6 +1107,8 @@ function renderHome(belege) {
           <div class="beleg-desc">${esc(b.Beschreibung || b.Haendler || katShort || '—')}</div>
           <div style="display:flex;align-items:center;gap:6px">
             <div class="beleg-amt">${fmt(b.Betrag)}</div>
+            ${hasPhoto ? `<button onclick="event.stopPropagation();belegFotoAnsehen('${b.id}')" title="Beleg ansehen"
+              style="font-size:14px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:none;border:1px solid var(--accent-mid);color:var(--accent);border-radius:4px;cursor:pointer;flex-shrink:0">👁</button>` : ''}
             <button onclick="event.stopPropagation();schnellLoeschen('${b.id}')"
               style="font-size:13px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:none;border:1px solid var(--error);color:var(--error);border-radius:4px;cursor:pointer;flex-shrink:0">×</button>
           </div>
@@ -1239,6 +1234,31 @@ async function schnellLoeschen(id) {
     showToast('Beleg gelöscht');
     ladeMonatsdaten();
   } catch(e) { showToast('Fehler: ' + e.message); }
+}
+
+// Belegfoto/PDF aus der Liste ansehen — öffnet in neuem Tab
+async function belegFotoAnsehen(id) {
+  // Tab sofort öffnen (sonst blockiert mobiler Popup-Blocker nach await)
+  const w = window.open('', '_blank');
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}?expand=fields(select=FotoUrls)`, { headers: { Authorization: 'Bearer ' + token } });
+    const res = await r.json();
+    const fotos = JSON.parse(res.fields?.FotoUrls || '[]');
+    if (!fotos.length) { if (w) w.close(); showToast('Kein Beleg vorhanden'); return; }
+    // Erste Datei als Base64 laden (bildZuBase64 behandelt alle URL-Formate, Foto + PDF)
+    const b64 = await bildZuBase64(fotos[0]);
+    if (b64 && w) {
+      // PDF und Bild beide darstellbar via data-URL im neuen Tab
+      w.location.href = b64;
+    } else if (w) {
+      w.location.href = fotos[0]; // Fallback: Original-URL
+    }
+  } catch(e) {
+    if (w) w.close();
+    showToast('Beleg kann nicht angezeigt werden');
+  }
 }
 
 async function loescheBeleg() {
