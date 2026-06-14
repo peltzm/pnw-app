@@ -446,7 +446,10 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
     <div id="fahrtUploadResult" style="display:none;margin-top:12px">
       <div class="alert alert-success" style="margin:0 0 10px">✓ Fahrtenbuch eingelesen und in SharePoint gespeichert</div>
       <div class="info-card" style="margin:0" id="fahrtInfoCard"></div>
-      <button class="btn-add" style="margin-top:10px;width:100%;justify-content:center" onclick="resetFahrtUpload()">↺ Andere Datei</button>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">↺ Ersetzen</button>
+        <button onclick="loescheFahrtenbuch()" style="font-size:13px;color:var(--error);background:none;border:1px solid var(--error);border-radius:var(--radius);padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:4px">× Löschen</button>
+      </div>
     </div>
   </div>
 
@@ -601,7 +604,7 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
     </div>
     <div class="sheet-body" id="belegSheetBody"></div>
     <div class="sheet-footer">
-      <button class="btn btn-danger" style="padding:10px 14px;font-size:13px" onclick="loescheBeleg()">🗑</button>
+      <button onclick="loescheBeleg()" style="font-size:14px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:none;border:1px solid var(--error);color:var(--error);border-radius:var(--radius);cursor:pointer">×</button>
       <button class="btn btn-primary" style="flex:1" onclick="updateBeleg()">Speichern</button>
     </div>
   </div>
@@ -1047,12 +1050,16 @@ function renderHome(belege) {
     // Show only Unterkategorie part if it has " › "
     const katShort = katDisplay.includes(' › ') ? katDisplay.split(' › ')[1] : katDisplay;
     const icon = catIcon[hkat] || '📋';
-    return `<div class="beleg-card" onclick="openBelegSheet('${b.id}')">
+    return `<div class="beleg-card" style="position:relative" onclick="openBelegSheet('${b.id}')">
       <div class="beleg-side ${hasPhoto ? '' : 'fw'}">${hasPhoto ? icon : '⚠️'}</div>
       <div class="beleg-body">
         <div class="beleg-top">
           <div class="beleg-desc">${esc(b.Beschreibung || b.Haendler || katShort || '—')}</div>
-          <div class="beleg-amt">${fmt(b.Betrag)}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="beleg-amt">${fmt(b.Betrag)}</div>
+            <button onclick="event.stopPropagation();schnellLoeschen('${b.id}')"
+              style="font-size:13px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:none;border:1px solid var(--error);color:var(--error);border-radius:4px;cursor:pointer;flex-shrink:0">×</button>
+          </div>
         </div>
         <div class="beleg-meta">
           <span class="beleg-date">${fmtDate(b.Datum)}</span>
@@ -1162,6 +1169,19 @@ async function updateBeleg() {
   } finally {
     btnRow.disabled = false; btnRow.textContent = 'Speichern';
   }
+}
+
+async function schnellLoeschen(id) {
+  if (!confirm('Beleg löschen?')) return;
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}`, {
+      method: 'DELETE', headers: { Authorization: 'Bearer ' + token }
+    });
+    showToast('Beleg gelöscht');
+    ladeMonatsdaten();
+  } catch(e) { showToast('Fehler: ' + e.message); }
 }
 
 async function loescheBeleg() {
@@ -1443,6 +1463,22 @@ function resetFahrtUpload() {
   zone.style.display = 'block';
   zone.innerHTML = '<div class="uz-icon">📊</div><div class="uz-title">Fahrtenbuch hochladen</div><div class="uz-sub">Excel (.xlsx) auswählen</div>';
   document.getElementById('fahrtUploadResult').style.display = 'none';
+}
+
+async function loescheFahrtenbuch() {
+  if (!_fahrtDaten?.id) { resetFahrtUpload(); return; }
+  if (!confirm('Fahrtenbuch wirklich löschen?')) return;
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${_fahrtDaten.id}`, {
+      method: 'DELETE', headers: { Authorization: 'Bearer ' + token }
+    });
+    _fahrtDaten = null;
+    resetFahrtUpload();
+    showToast('Fahrtenbuch gelöscht', false);
+    ladeMonatsdaten();
+  } catch(e) { showToast('Fehler: ' + e.message); }
 }
 
 // Fahrtenbuch Sheet
@@ -2186,6 +2222,7 @@ const KATEGORIEN = {
       { id: 'waschen',      label: 'Autowäsche / Fahrzeugpflege', icon: '🚿' },
       { id: 'oepnv',        label: 'ÖPNV / Taxi',                 icon: '🚌' },
       { id: 'post',         label: 'Post / Versand',              icon: '📦' },
+      { id: 'fahrzeug-sonst', label: 'Sonstiges Fahrzeug',        icon: '🔧' },
     ]
   },
   parken: {
@@ -2610,7 +2647,7 @@ function renderHomeReview(belege) {
           : komm
             ? `<div style="font-size:11px;font-weight:600;color:#8a6d1a;margin-bottom:4px">💬 Kommentar Teamleitung · ${esc(komm.datum||'')}</div>
                <textarea oninput="updateKommentar('${b.id}',this.value)" style="width:100%;border:1px solid #e3d49a;border-radius:6px;padding:7px 10px;font-size:13px;min-height:52px;background:#fffdf5;resize:vertical;font-family:inherit">${esc(komm.text)}</textarea>
-               <button onclick="deleteKommentar('${b.id}')" style="font-size:11px;background:none;border:none;color:var(--error);cursor:pointer;margin-top:4px">🗑 Kommentar löschen</button>`
+               <button onclick="deleteKommentar('${b.id}')" style="font-size:11px;background:none;border:none;color:var(--error);cursor:pointer;margin-top:4px">× Kommentar löschen</button>`
             : `<button onclick="startKommentar('${b.id}')" style="font-size:12px;color:#8a6d1a;background:none;border:1px dashed #c9a227;border-radius:6px;padding:6px 14px;cursor:pointer;width:100%">💬 Kommentar hinzufügen</button>`
         }
       </div>
