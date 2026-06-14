@@ -1424,7 +1424,12 @@ async function speicherBeleg() {
       const fn = `Beleg_${Date.now()}.${ext}`;
       const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
       const f = await uploadFile(path, await compressed.arrayBuffer(), compressed.type || 'image/jpeg');
-      fotoUrls.push(f.webUrl || path);
+      // Graph API Content-URL als primäre Referenz (funktioniert mit Bearer Token)
+      // Format: https://graph.microsoft.com/v1.0/drives/{driveId}/root:{path}:/content
+      const graphUrl = _graphDriveId
+        ? `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${path}:/content`
+        : (f.webUrl || path);
+      fotoUrls.push(graphUrl);
     }
     setStatus('erfassenStatus', 'uploading', 'Daten werden gespeichert…');
     const data = {
@@ -1565,8 +1570,11 @@ async function handleFahrtUpload(input) {
         .map(([name, km]) => ({ name, km: Math.round(km*10)/10, betrag: Math.round(km*0.30*100)/100 }));
     } catch(e) { console.warn('XLSX parse failed:', e); showToast('Excel-Parse Fehler: ' + e.message); }
     const betrag = Math.round(gesamtKm * 0.30 * 100) / 100;
-    const fd = { gesamtKm, betrag, anzahlFahrten, dateiname: fn, dateiUrl: uploaded.webUrl || '', klienten };
-    await saveBelegToList({ monat: _currentMonat, kategorie: 'fahrtenbuch', betrag, klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`, fahrtDaten: fd, fotoUrls: [uploaded.webUrl||''], status: 'Entwurf' });
+    const fahrtGraphUrl = _graphDriveId
+      ? `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}:/content`
+      : (uploaded.webUrl || '');
+    const fd = { gesamtKm, betrag, anzahlFahrten, dateiname: fn, dateiUrl: fahrtGraphUrl, klienten };
+    await saveBelegToList({ monat: _currentMonat, kategorie: 'fahrtenbuch', betrag, klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`, fahrtDaten: fd, fotoUrls: [fahrtGraphUrl], status: 'Entwurf' });
     zone.style.display = 'none';
     document.getElementById('fahrtUploadResult').style.display = 'block';
     document.getElementById('fahrtInfoCard').innerHTML = `
@@ -1920,12 +1928,42 @@ async function ablehnen() {
 
 // Bild-URL → Base64 (via fetch mit Auth-Token für SharePoint)
 async function bildZuBase64(url) {
+  if (!url) return null;
   try {
     const token = await getToken();
-    // SharePoint-URLs brauchen Auth, externe URLs nicht
-    const headers = url.includes('sharepoint.com') ? { Authorization: 'Bearer ' + token } : {};
-    const r = await fetch(url, { headers });
-    if (!r.ok) return null;
+    let fetchUrl = url;
+    // SharePoint webUrls (https://tenant.sharepoint.com/sites/.../file.jpg) können nicht
+    // direkt mit Bearer Token geladen werden — stattdessen Graph API /content Endpoint nutzen
+    if (url.includes('sharepoint.com') && !url.includes('graph.microsoft.com')) {
+      try {
+        // Relativen Pfad aus URL extrahieren und über Graph API /drives/{driveId}/root:{path}:/content laden
+        const spBase = CFG.siteUrl; // z.B. https://tenant.sharepoint.com
+        let relPath = url.replace(spBase, '');
+        // /sites/{siteName}/Freigegebene Dokumente/... → /Spesenbelege/...
+        // Graph Drive: /drives/{driveId}/root:{relPath}:/content
+        if (_graphDriveId && relPath) {
+          // SharePoint-Pfad beginnt oft mit /sites/{site}/Shared Documents/ oder /sites/{site}/Freigegebene Dokumente/
+          // Wir nehmen den Teil nach /sites/{siteName}/
+          const sitePart = relPath.match(/\/sites\/[^/]+\/(.*)/);
+          if (sitePart) {
+            const docRelPath = '/' + sitePart[1]; // z.B. /Freigegebene Dokumente/Spesenbelege/...
+            fetchUrl = `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${docRelPath}:/content`;
+          }
+        }
+      } catch(e) { /* Fallback zur Original-URL */ }
+    }
+    const headers = { Authorization: 'Bearer ' + token };
+    const r = await fetch(fetchUrl, { headers });
+    if (!r.ok) {
+      // Letzter Versuch: Original-URL mit Token
+      if (fetchUrl !== url) {
+        const r2 = await fetch(url, { headers });
+        if (!r2.ok) return null;
+        const blob2 = await r2.blob();
+        return new Promise((res, rej) => { const reader = new FileReader(); reader.onload = () => res(reader.result); reader.onerror = rej; reader.readAsDataURL(blob2); });
+      }
+      return null;
+    }
     const blob = await r.blob();
     return new Promise((res, rej) => {
       const reader = new FileReader();
@@ -2145,7 +2183,10 @@ async function addPhotoToExisting(belegId) {
       const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${belegId}?expand=fields(select=FotoUrls)`, { headers: { Authorization: 'Bearer ' + token } });
       const res = await r.json();
       const existingUrls = JSON.parse(res.fields?.FotoUrls || '[]');
-      existingUrls.push(uf.webUrl || path);
+      const graphUrl = _graphDriveId
+        ? `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${path}:/content`
+        : (uf.webUrl || path);
+      existingUrls.push(graphUrl);
       await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${belegId}/fields`, {
         method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ FotoUrls: JSON.stringify(existingUrls) })
@@ -2590,7 +2631,8 @@ async function ladeReviewBelege() {
       document.getElementById('fbBadge').innerHTML  = '<span class="bdot"></span> Excel ✓';
       document.getElementById('fbFoot').textContent = `${fd.dateiname||'Fahrtenbuch.xlsx'} · ${fd.gesamtKm||'—'} km`;
     }
-    // Mit Kommentarfeldern rendern
+    // Mit Kommentarfeldern rendern (Cache für lokale Updates ohne Re-Fetch)
+    _cachedReviewBelege = belege;
     renderHomeReview(regular);
     clearHomeStatus();
   } catch(e) {
@@ -2684,6 +2726,10 @@ function renderHomeReview(belege) {
 }
 
 // Kommentar-Funktionen
+// _cachedReviewBelege hält die zuletzt geladenen Belege für lokale Re-Renders
+// ohne SharePoint-Roundtrip (verhindert Überschreiben ungespeicherter Kommentare)
+let _cachedReviewBelege = [];
+
 function startKommentar(belegId) {
   _belegKommentare[belegId] = {
     text: '',
@@ -2691,17 +2737,17 @@ function startKommentar(belegId) {
     datum: new Date().toLocaleDateString('de-DE'),
     status: 'offen'
   };
-  ladeReviewBelege();
+  renderHomeReview(_cachedReviewBelege);
 }
 function updateKommentar(belegId, val) {
   if (_belegKommentare[belegId]) _belegKommentare[belegId].text = val;
 }
 function deleteKommentar(belegId) {
   delete _belegKommentare[belegId];
-  ladeReviewBelege();
+  renderHomeReview(_cachedReviewBelege);
 }
 function reopenKommentar(belegId) {
-  if (_belegKommentare[belegId]) { _belegKommentare[belegId].status = 'offen'; ladeReviewBelege(); }
+  if (_belegKommentare[belegId]) { _belegKommentare[belegId].status = 'offen'; renderHomeReview(_cachedReviewBelege); }
 }
 
 async function speichereKommentare() {
