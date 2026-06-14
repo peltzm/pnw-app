@@ -533,7 +533,10 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
 
   <div id="abschlussStatus"></div>
   <div class="btn-row">
-    <button class="btn btn-secondary" onclick="pdfVorschau()" style="padding:10px 14px">👁 Vorschau</button>
+    <button class="btn btn-secondary" onclick="pdfVorschau()" style="padding:8px 14px;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2">
+      <span>👁 Vorschau</span>
+      <span style="font-size:10px;color:var(--text-hint);font-weight:400">in neuem Fenster</span>
+    </button>
     <button class="btn btn-primary" style="flex:1" onclick="openModal('submitModal')" id="btnEinreichen">📨 Einreichen</button>
   </div>
 
@@ -1979,18 +1982,14 @@ async function pdfVorschau() {
     const fachkraft = currentAccount?.name || '';
     const html = await buildAbrechnungHTMLMitFotos(belege, fachkraft, _currentMonat, 'Entwurf');
 
-    // Download + Drucken
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `Spesenabrechnung_${(fachkraft||'MA').replace(/\s+/g,'_')}_${_currentMonat}.html`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-
+    // Nur neues Fenster öffnen — kein Download, kein Auto-Print
     const w = window.open('', '_blank');
-    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 1000); }
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
 
-    setStatus('abschlussStatus', 'done', '✓ PDF geöffnet — im Druckdialog „Als PDF speichern" wählen');
+    setStatus('abschlussStatus', 'done', '✓ Vorschau geöffnet — Datei → Drucken → Als PDF speichern');
   } catch(e) {
     setStatus('abschlussStatus', 'error', 'Fehler: ' + e.message);
   }
