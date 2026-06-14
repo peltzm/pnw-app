@@ -187,7 +187,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 .checklist{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin:0 12px 10px}
 .check-item{display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid var(--border);cursor:pointer}
 .check-item:last-child{border:none}
-.check-box{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--border-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .12s}
+.check-box{width:20px;height:20px;border-radius:5px;border:1.5px solid var(--border-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .12s;color:transparent}
 .check-box.on{background:var(--accent);border-color:var(--accent);color:white}
 .check-label{font-size:14px;color:var(--text);line-height:1.35}
 
@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6f1ec25</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v4a0f2ee</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -510,7 +510,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
   <div class="btn-row">
     <button class="btn btn-primary btn-full" onclick="speicherBeleg()" id="btnSpeichern">💾 Speichern</button>
   </div>
-  <div style="display:none" id="spInfoText"><span id="spMonat">2026-06</span><span id="spName">—</span></div>
+  <div style="text-align:center;font-size:11px;color:var(--text-hint);padding:0 16px 12px" id="spInfoText">Foto + Daten → SharePoint / Spesenbelege / <span id="spMonat">2026-06</span> / <span id="spName">—</span></div>
 </div>
 
 <!-- ══ SCREEN: MONATSABSCHLUSS ══ -->
@@ -540,7 +540,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="card-title">Einreichung an Teamleiter</div>
     <div class="field">
       <label>Teamleiter / Prüfer *</label>
-      <select id="selTeamleiter">
+      <select id="selTeamleiter" onchange="updateEinreichenState()">
         <option value="">— wird geladen —</option>
       </select>
     </div>
@@ -1733,6 +1733,7 @@ async function ladeAbschluss() {
 
     // Archive
     await ladeArchiv();
+    updateEinreichenState();
   } catch(e) {
     setStatus('abschlussStatus', 'error', 'Fehler: ' + e.message);
   }
@@ -2589,7 +2590,14 @@ function toggleKlientfeld() {
 }
 
 function openSubmitModal() {
+  // Absicherung: nur wenn alle Checkboxen an und TL gewählt
+  const boxes = document.querySelectorAll('.checklist .check-box');
+  const allChecked = boxes.length > 0 && Array.from(boxes).every(b => b.classList.contains('on'));
   const s = document.getElementById('selTeamleiter');
+  if (!allChecked || !s?.value) {
+    showToast('Bitte alle Punkte abhaken und einen Teamleiter wählen');
+    return;
+  }
   const tlName = s?.options[s.selectedIndex]?.text || s?.value || '—';
   const total  = document.getElementById('homeTotal')?.textContent || '';
   const sub    = document.getElementById('homeSub')?.textContent || '';
@@ -2628,7 +2636,24 @@ function selectCat(cat) {
   selectHkat(map[cat] || cat);
 }
 
-function toggleCheck(el) { el.querySelector('.check-box').classList.toggle('on'); }
+function toggleCheck(el) {
+  el.querySelector('.check-box').classList.toggle('on');
+  updateEinreichenState();
+}
+
+// Einreichen-Button nur aktiv wenn alle Checkboxen an UND ein Teamleiter gewählt
+function updateEinreichenState() {
+  const btn = document.getElementById('btnEinreichen');
+  if (!btn) return;
+  const boxes = document.querySelectorAll('.checklist .check-box');
+  const allChecked = boxes.length > 0 && Array.from(boxes).every(b => b.classList.contains('on'));
+  const tlGewaehlt = !!document.getElementById('selTeamleiter')?.value;
+  const ok = allChecked && tlGewaehlt;
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '.45';
+  btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+  btn.title = ok ? '' : 'Bitte alle Punkte abhaken und einen Teamleiter wählen';
+}
 
 function openSheet(id)  { document.getElementById(id).classList.add('open'); }
 function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
