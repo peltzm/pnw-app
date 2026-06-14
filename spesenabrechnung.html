@@ -882,10 +882,13 @@ async function ladeKlientVorschlaegeInto(datalistId) {
     const namen = new Set();
     (res.value || []).forEach(i => {
       const k = (i.fields?.Klient || '').trim();
-      if (k && k !== 'kein Klient') namen.add(k);
+      if (k && k !== 'kein Klient') {
+        // Lesbaren Label speichern statt Rohwert
+        namen.add(klientLabel(k));
+      }
     });
     const dl = document.getElementById(datalistId);
-    if (dl) dl.innerHTML = [...namen].sort().map(n => `<option value="${n}">`).join('');
+    if (dl) dl.innerHTML = [...namen].sort().map(n => `<option value="${esc(n)}">`).join('');
   } catch(e) { console.warn('Klient-Vorschläge:', e); }
 }
 
@@ -1050,7 +1053,7 @@ async function openBelegSheet(id) {
         ? `<div class="photo-strip" style="margin-bottom:12px">${fotos.map((u,i) => `<div class="photo-thumb" onclick="window.open('${u}','_blank')">🧾<button class="photo-del" onclick="event.stopPropagation();removeFotoFromBeleg(${i},'${id}')">✕</button></div>`).join('')}<div class="add-photo" onclick="addPhotoToExisting('${id}')">+</div></div>`
         : `<div style="background:var(--accent-light);border-radius:var(--radius);height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:12px;color:var(--accent);cursor:pointer;flex-direction:column;gap:6px" onclick="addPhotoToExisting('${id}')"><span style="font-size:28px">📷</span>Foto hinzufügen</div>`}
       <div class="field"><label>Klient</label>
-        <input type="text" id="edKlient" list="edKlientVorschlaege" value="${esc(b.Klient||'')}" placeholder="Nachname, Vorname" autocomplete="off"
+        <input type="text" id="edKlient" list="edKlientVorschlaege" value="${esc(klientLabel(b.Klient||''))}" placeholder="Nachname, Vorname" autocomplete="off"
           style="background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22%3E%3Cpath fill=%22%236b6860%22 d=%22M6 8L1 3h10z%22/%3E%3C/svg%3E');background-repeat:no-repeat;background-position:right 10px center;padding-right:30px">
         <datalist id="edKlientVorschlaege"></datalist></div>
       <div class="field-row">
