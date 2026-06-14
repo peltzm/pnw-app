@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Spesenabrechnung — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 /* ══ TOKENS — 1:1 aus index.html ══ */
 :root {
@@ -537,8 +539,8 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
   <div id="abschlussStatus"></div>
   <div class="btn-row">
     <button class="btn btn-secondary" onclick="pdfVorschau()" style="padding:8px 14px;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2">
-      <span>👁 Vorschau</span>
-      <span style="font-size:10px;color:var(--text-hint);font-weight:400">in neuem Fenster</span>
+      <span>📄 PDF</span>
+      <span style="font-size:10px;color:var(--text-hint);font-weight:400">herunterladen</span>
     </button>
     <button class="btn btn-primary" style="flex:1" onclick="openSubmitModal()" id="btnEinreichen">📨 Einreichen</button>
   </div>
@@ -1868,36 +1870,30 @@ async function genehmigen(g) {
   setStatus('tlStatus', 'uploading', 'Freigabe wird verarbeitet…');
   try {
     const token = await getToken();
-    const { siteId, listId, driveId } = { ...(await getGraphListIds()), driveId: (await getSiteAndDrive()).driveId };
-    // 1. Update all belege status
+    const { siteId, listId } = await getGraphListIds();
+    // 1. Alle Belege auf Genehmigt setzen
     await Promise.all(g.belege.map(b =>
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
         method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ Status: 'Genehmigt' })
       })
     ));
-    // 2. Generate PDF report (mit Belegfotos)
+    // 2. PDF clientseitig erzeugen (html2canvas + jsPDF)
+    setStatus('tlStatus', 'uploading', '📄 PDF wird erzeugt — Belegfotos werden geladen…');
     const pdfHtml = await buildAbrechnungHTMLMitFotos(g.belege, g.fachkraft, g.monat, 'Genehmigt');
     const pdfName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}.pdf`;
-    const htmlName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}_report.html`;
-    const htmlPath = `${CFG.spFolder}/Genehmigt/${htmlName}`;
-    // Upload HTML (Graph can't create PDF directly without Word; we upload HTML as report)
-    await uploadFile(htmlPath, new TextEncoder().encode(pdfHtml), 'text/html');
-    // 3. Try PDF conversion via Graph
-    let pdfUrl = '';
-    try {
-      const convR = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:${htmlPath}:/content?format=pdf`, { headers: { Authorization: 'Bearer ' + token } });
-      if (convR.ok) {
-        const pdfBytes = await convR.arrayBuffer();
-        const pdfPath = `${CFG.spFolder}/Genehmigt/${pdfName}`;
-        const pu = await uploadFile(pdfPath, pdfBytes, 'application/pdf');
-        pdfUrl = pu.webUrl || '';
-      }
-    } catch(e) { console.warn('PDF conversion failed:', e); }
-    // 4. Send email to spesen@ and fachkraft
-    const html = buildFreigabeEmail(g, pdfUrl);
-    await sendMail([CFG.spesen_mail, g.mail].filter(Boolean), [], `✓ Spesenabrg. genehmigt: ${g.fachkraft} · ${fmtMonat(g.monat)} · ${fmt(g.total)}`, html);
-    setStatus('tlStatus', 'done', `✓ ${g.fachkraft} genehmigt — PDF erstellt und an ${CFG.spesen_mail} gesendet`);
+    const pdfBuf  = await htmlToPdfBuffer(pdfHtml, (p, total) =>
+      setStatus('tlStatus', 'uploading', `📄 PDF Seite ${p} von ${total}…`));
+    // 3. PDF nach SharePoint hochladen
+    setStatus('tlStatus', 'uploading', '☁️ PDF wird in SharePoint gespeichert…');
+    const pdfPath = `${CFG.spFolder}/Genehmigt/${pdfName}`;
+    const pu = await uploadFile(pdfPath, pdfBuf, 'application/pdf');
+    const pdfUrl = pu.webUrl || '';
+    // 4. E-Mail senden
+    setStatus('tlStatus', 'uploading', '📧 E-Mail wird gesendet…');
+    const mailHtml = buildFreigabeEmail(g, pdfUrl);
+    await sendMail([CFG.spesen_mail, g.mail].filter(Boolean), [], `✓ Spesenabrg. genehmigt: ${g.fachkraft} · ${fmtMonat(g.monat)} · ${fmt(g.total)}`, mailHtml);
+    setStatus('tlStatus', 'done', `✓ ${g.fachkraft} genehmigt — PDF an ${CFG.spesen_mail} gesendet`);
     document.getElementById('approvedText').innerHTML = `PDF wurde erstellt und an <strong>${CFG.spesen_mail}</strong> und <strong>${g.mail||g.fachkraft}</strong> gesendet.<br><br>SharePoint: ${CFG.spFolder}/Genehmigt/${pdfName}`;
     openModal('approvedModal');
     showToast(`✅ ${g.fachkraft} genehmigt`, true);
@@ -2120,21 +2116,81 @@ ${fahrt && fd ? `<div class="fahrt-box">
 async function pdfVorschau() {
   setStatus('abschlussStatus', 'uploading', 'PDF wird erstellt — Fotos werden geladen…');
   try {
-    const belege  = await ladeBelege(_currentMonat);
+    const belege    = await ladeBelege(_currentMonat);
     const fachkraft = currentAccount?.name || '';
-    const html = await buildAbrechnungHTMLMitFotos(belege, fachkraft, _currentMonat, 'Entwurf');
-
-    // Nur neues Fenster öffnen — kein Download, kein Auto-Print
-    const w = window.open('', '_blank');
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-    }
-
-    setStatus('abschlussStatus', 'done', '✓ Vorschau geöffnet');
+    const htmlStr   = await buildAbrechnungHTMLMitFotos(belege, fachkraft, _currentMonat, 'Entwurf');
+    const fileName  = `Spesen_${(fachkraft||'Entwurf').replace(/\s+/g,'_')}_${_currentMonat}.pdf`;
+    const pdfBuf    = await htmlToPdfBuffer(htmlStr, (p, total) =>
+      setStatus('abschlussStatus', 'uploading', `PDF wird erstellt — Seite ${p} von ${total}…`));
+    // Download auslösen
+    const blob = new Blob([pdfBuf], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setStatus('abschlussStatus', 'done', '✓ PDF heruntergeladen');
   } catch(e) {
     setStatus('abschlussStatus', 'error', 'Fehler: ' + e.message);
   }
+}
+
+// HTML-String → ArrayBuffer (A4-PDF, seitenweise via html2canvas + jsPDF)
+// progressCb(currentPage, totalPages) optional
+async function htmlToPdfBuffer(htmlStr, progressCb) {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:794px;height:auto;min-height:1123px;border:none;visibility:hidden';
+    document.body.appendChild(iframe);
+
+    const cleanup = () => { try { document.body.removeChild(iframe); } catch(e) {} };
+
+    iframe.onload = async () => {
+      try {
+        // Kurz warten bis Bilder gerendert
+        await new Promise(r => setTimeout(r, 600));
+        const iDoc = iframe.contentDocument || iframe.contentWindow.document;
+        const body = iDoc.body;
+
+        const A4_W_PX = 794, A4_H_PX = 1123;
+        const PDF_W_MM = 210, PDF_H_MM = 297;
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+        const totalH    = Math.max(body.scrollHeight, A4_H_PX);
+        const pageCount = Math.ceil(totalH / A4_H_PX);
+
+        for (let p = 0; p < pageCount; p++) {
+          if (p > 0) pdf.addPage();
+          if (progressCb) progressCb(p + 1, pageCount);
+          const canvas = await html2canvas(body, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            width: A4_W_PX,
+            height: A4_H_PX,
+            x: 0,
+            y: p * A4_H_PX,
+            windowWidth: A4_W_PX,
+            scrollX: 0,
+            scrollY: p * A4_H_PX
+          });
+          pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PDF_W_MM, PDF_H_MM);
+        }
+
+        const buf = pdf.output('arraybuffer');
+        cleanup();
+        resolve(buf);
+      } catch(e) {
+        cleanup();
+        reject(e);
+      }
+    };
+
+    iframe.onerror = (e) => { cleanup(); reject(new Error('iframe Ladefehler')); };
+    iframe.srcdoc = htmlStr;
+  });
 }
 
 function buildFreigabeEmail(g, pdfUrl) {
