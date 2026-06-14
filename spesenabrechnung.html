@@ -355,8 +355,14 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
     <div style="font-size:20px;opacity:.7">📨</div>
   </button>
 
-  <div class="slabel">Fahrtkosten — Monatssumme</div>
-  <div id="fahrtBlock">
+  <!-- Fahrtenbuch als Checkbox-Toggle -->
+  <div style="padding:10px 12px 4px">
+    <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-muted)">
+      <input type="checkbox" id="chkFahrtenbuch" onchange="toggleFahrtenbuchBlock()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+      Fahrtenbuch erfassen
+    </label>
+  </div>
+  <div id="fahrtBlock" style="display:none">
     <div class="fahrt-block" onclick="openSheet('fahrtSheet')">
       <div class="fb-head">
         <div>
@@ -1011,16 +1017,20 @@ function renderHome(belege) {
   document.getElementById('statSonst').textContent = fmt(sonstBetrag);
   document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
 
-  // Fahrtenbuch block
+  // Fahrtenbuch-Checkbox & Block
+  const chkFahrt = document.getElementById('chkFahrtenbuch');
   if (fahrt) {
+    if (chkFahrt) chkFahrt.checked = true;
+    document.getElementById('fahrtBlock').style.display = 'block';
     const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
     document.getElementById('fbAmt').textContent = fmt(fahrtBetrag);
     document.getElementById('fbBadge').className = 'badge badge-approved';
     document.getElementById('fbBadge').innerHTML = '<span class="bdot"></span> Excel ✓';
     document.getElementById('fbFoot').textContent = `${fd.dateiname || 'Fahrtenbuch.xlsx'} · ${fd.gesamtKm || '—'} km · ${(fd.klienten || []).length} Klienten`;
-    document.getElementById('spesMonat') && (document.getElementById('spesMonat').textContent = _currentMonat);
-    // Store for sheet
     _fahrtDaten = { ...fd, id: fahrt.id, betrag: fahrtBetrag };
+  } else {
+    if (chkFahrt) chkFahrt.checked = false;
+    document.getElementById('fahrtBlock').style.display = 'none';
   }
 
   // Beleg list
@@ -1073,25 +1083,43 @@ async function openBelegSheet(id) {
       ${fotos.length > 0
         ? `<div class="photo-strip" style="margin-bottom:12px">${fotos.map((u,i) => `<div class="photo-thumb" onclick="window.open('${u}','_blank')">🧾<button class="photo-del" onclick="event.stopPropagation();removeFotoFromBeleg(${i},'${id}')">✕</button></div>`).join('')}<div class="add-photo" onclick="addPhotoToExisting('${id}')">+</div></div>`
         : `<div style="background:var(--accent-light);border-radius:var(--radius);height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:12px;color:var(--accent);cursor:pointer;flex-direction:column;gap:6px" onclick="addPhotoToExisting('${id}')"><span style="font-size:28px">📷</span>Foto hinzufügen</div>`}
-      <div class="field"><label>Klient</label>
-        <select id="edKlient">
-          <option value="${esc(klientLabel(b.Klient||''))}" selected>${esc(klientLabel(b.Klient||'') || '— bitte wählen —')}</option>
-        </select></div>
+      <!-- Klient als Checkbox-Toggle -->
+      <div class="field" style="margin-bottom:12px">
+        <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-muted);text-transform:none;font-weight:400;letter-spacing:0">
+          <input type="checkbox" id="edChkKlient" onchange="toggleEdKlient()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer"
+            ${(b.Klient && b.Klient !== 'kein Klient') ? 'checked' : ''}>
+          Klientenbezug
+        </label>
+        <div id="edKlientWrap" style="margin-top:8px;${(b.Klient && b.Klient !== 'kein Klient') ? '' : 'display:none'}">
+          <select id="edKlient">
+            <option value="${esc(klientLabel(b.Klient||''))}" selected>${esc(klientLabel(b.Klient||'') || '— bitte wählen —')}</option>
+          </select>
+        </div>
+      </div>
+      <!-- Datum + Betrag -->
       <div class="field-row">
         <div class="field"><label>Datum</label><input type="date" id="edDatum" value="${isoDate(b.Datum)}"></div>
-        <div class="field"><label>Betrag (€)</label><input type="number" id="edBetrag" value="${b.Betrag || ''}" step="0.01"></div>
+        <div class="field"><label>Betrag (€)</label><input type="number" id="edBetrag" value="${parseFloat(b.Betrag||0).toFixed(2)}" step="0.01" inputmode="decimal"></div>
       </div>
-      <div class="field"><label>Kategorie</label><select id="edKat">
-        <option value="fahrt" ${b.Kategorie==='fahrt'?'selected':''}>🚗 Fahrtkosten</option>
-        <option value="verpf" ${b.Kategorie==='verpf'?'selected':''}>🍽️ Verpflegung</option>
-        <option value="mat"   ${b.Kategorie==='mat'?'selected':''}>🎨 Material</option>
-        <option value="sonst" ${b.Kategorie==='sonst'?'selected':''}>📋 Sonstiges</option>
-      </select></div>
+      <!-- Kategorie + Unterkategorie in einer Zeile -->
+      <div class="field-row">
+        <div class="field"><label>Kategorie</label><select id="edKat" onchange="updateEdUnterkat()">
+          <option value="freizeit" ${b.Kategorie==='freizeit'?'selected':''}>🎡 Freizeit</option>
+          <option value="gastro"   ${b.Kategorie==='gastro'?'selected':''}>🍽️ Gastronomie</option>
+          <option value="einkauf"  ${b.Kategorie==='einkauf'?'selected':''}>🛍️ Einkäufe</option>
+          <option value="fahrzeug" ${b.Kategorie==='fahrzeug'?'selected':''}>🚗 Fahrzeug</option>
+          <option value="parken"   ${b.Kategorie==='parken'?'selected':''}>🅿️ Parken</option>
+        </select></div>
+        <div class="field"><label>Unterkategorie</label><select id="edUnterkat">${buildEdUnterkatOptions(b.Kategorie, b.Unterkategorie)}</select></div>
+      </div>
       <div class="field"><label>Händler</label><input type="text" id="edHaendler" value="${esc(b.Haendler||'')}"></div>
       <div class="field"><label>Beschreibung</label><textarea rows="2" id="edBeschreibung">${esc(b.Beschreibung||'')}</textarea></div>
       <div style="font-size:11px;color:var(--text-hint);margin-top:4px">SharePoint: ${CFG.spFolder}/${_currentMonat}/${shortName()}/</div>`;
     // Klient-Vorschläge nachladen (script-Tags in innerHTML werden nicht ausgeführt)
-    ladeKlientVorschlaegeInto('edKlient', true);
+    // Klient-Vorschläge nur laden wenn Klientenbezug aktiv
+    if (b.Klient && b.Klient !== 'kein Klient') {
+      ladeKlientVorschlaegeInto('edKlient', true);
+    }
   } catch(e) {
     document.getElementById('belegSheetBody').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   }
@@ -1104,11 +1132,21 @@ async function updateBeleg() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
+    const klientChecked = document.getElementById('edChkKlient')?.checked;
     const fields = {
-      Klient: document.getElementById('edKlient').value,
+      Klient: klientChecked ? (document.getElementById('edKlient').value || '') : 'kein Klient',
       Datum: document.getElementById('edDatum').value ? new Date(document.getElementById('edDatum').value).toISOString() : null,
       Betrag: parseFloat(document.getElementById('edBetrag').value) || 0,
       Kategorie: document.getElementById('edKat').value,
+      Unterkategorie: document.getElementById('edUnterkat').value,
+      KategorieLabel: (() => {
+        const hkat = document.getElementById('edKat').value;
+        const ukat = document.getElementById('edUnterkat').value;
+        const h = KATEGORIEN[hkat];
+        if (!h) return hkat;
+        const u = h.unter.find(x => x.id === ukat);
+        return u ? `${h.label} › ${u.label}` : h.label;
+      })(),
       Haendler: document.getElementById('edHaendler').value,
       Beschreibung: document.getElementById('edBeschreibung').value,
     };
@@ -2236,6 +2274,30 @@ function toggleKlientfeld() {
   } else {
     ladeKlientVorschlaegeInto('fKlient', true);
   }
+}
+
+function toggleFahrtenbuchBlock() {
+  const show = document.getElementById('chkFahrtenbuch').checked;
+  document.getElementById('fahrtBlock').style.display = show ? 'block' : 'none';
+}
+
+function toggleEdKlient() {
+  const show = document.getElementById('edChkKlient').checked;
+  document.getElementById('edKlientWrap').style.display = show ? 'block' : 'none';
+  if (!show) document.getElementById('edKlient').value = '';
+}
+
+function buildEdUnterkatOptions(hkat, selected) {
+  const kat = KATEGORIEN[hkat];
+  if (!kat || !kat.unter.length) return '<option value="">—</option>';
+  return kat.unter.map(u =>
+    `<option value="${u.id}" ${u.id===selected?'selected':''}>${u.icon} ${u.label}</option>`
+  ).join('');
+}
+
+function updateEdUnterkat() {
+  const hkat = document.getElementById('edKat').value;
+  document.getElementById('edUnterkat').innerHTML = buildEdUnterkatOptions(hkat, '');
 }
 
 // Legacy compat
