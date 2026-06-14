@@ -718,7 +718,7 @@ const CFG = {
     { displayName: 'Markus Peltz',    mail: 'markus.peltz@praxisneuewege.de' },
   ],
   azureDIEndpoint: 'https://dispesen.cognitiveservices.azure.com/',
-  azureDIKey: '1ljrnEyoPNmUlowPnUOTV9IR7cHCeHukyhseTkmYo88OwuUPbNhAJQQJ99CFACPV0roXJ3w3AAALACOGn4Cg'
+  azureDIKey: '' // Key wurde aus Sicherheitsgründen entfernt — wird über Azure Function Proxy bezogen
 };
 const SCOPES = ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','User.Read','Mail.Send','GroupMember.Read.All'];
 
@@ -1223,6 +1223,14 @@ async function handleFileSelect(input) {
   document.getElementById('scanResult').style.display = 'none';
 
   try {
+    if (!CFG.azureDIKey) {
+      document.getElementById('scanIcon').className = 'si';
+      document.getElementById('scanIcon').textContent = '📸';
+      document.getElementById('scanText').textContent = 'Beleg fotografieren';
+      document.getElementById('scanSub').textContent = 'KI-Scan nicht verfügbar — bitte manuell eingeben';
+      showToast('KI-Scan aktuell nicht verfügbar');
+      return;
+    }
     const b64 = await fileToBase64(file);
     const mime = file.type || 'image/jpeg';
 
