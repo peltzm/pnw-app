@@ -21,7 +21,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html,body{height:100%;overflow:hidden}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6}
+body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
 
 /* Header */
 .header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100;flex-shrink:0}
@@ -568,28 +568,64 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 
 <!-- ══ SCREEN: FAHRTENBUCH ══ -->
 <div id="screen-fahrtenbuch" class="screen">
-  <div style="padding:14px 16px 8px">
-    <div class="section-title">Fahrtenbuch</div>
-    <div class="section-sub" id="fahrtScreenSub">Monatsnachweis für Fahrtkosten</div>
+
+  <!-- Hero Card — Login-Screen Stil -->
+  <div style="display:flex;flex-direction:column;align-items:center;padding:32px 24px 20px;text-align:center">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png"
+      style="height:48px;width:auto;margin-bottom:16px" alt="Praxis NeueWege">
+    <div style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:4px">Fahrtenbuch</div>
+    <div style="font-size:13px;color:var(--text-muted)" id="fahrtScreenSub">Monatsnachweis für Fahrtkosten</div>
   </div>
+
   <div id="fahrtScreenStatus"></div>
 
   <!-- Upload Zone -->
-  <div class="card" id="fahrtScreenUploadCard">
-    <div class="card-title">Excel hochladen</div>
+  <div style="padding:0 16px 16px">
     <div class="alert alert-info" style="margin:0 0 12px;padding:9px 12px;font-size:12px">
-      Nur Fahrten <strong>mit Klient-Eintrag</strong> werden gezählt. Pauschale: 0,30 €/km.
+      Nur Fahrten <strong>mit Klient-Eintrag</strong> werden gezählt · Pauschale: <strong>0,30 €/km</strong>
     </div>
+
     <div id="fahrtScreenZone" class="upload-zone" onclick="triggerFahrtUpload()">
       <div class="uz-icon">📊</div>
       <div class="uz-title">Fahrtenbuch hochladen</div>
       <div class="uz-sub">Excel (.xlsx) auswählen</div>
     </div>
+
     <div id="fahrtScreenResult" style="display:none;margin-top:12px">
-      <div class="alert alert-success" style="margin:0 0 10px">✓ Fahrtenbuch eingelesen und in SharePoint gespeichert</div>
-      <div class="info-card" style="margin:0" id="fahrtScreenInfoCard"></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">📊 Fahrtenbuch hochladen</button>
+      <!-- Zusammenfassung -->
+      <div id="fahrtScreenSummary" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px">
+        <div style="background:var(--accent-light);padding:14px 16px;border-bottom:1px solid #e8c4a8">
+          <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">🚗 Fahrtkosten gesamt</div>
+          <div style="font-size:28px;font-weight:700;color:var(--accent)" id="fahrtScreenTotal">—</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="fahrtScreenMeta">—</div>
+        </div>
+        <div style="padding:12px 16px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text-muted)">Datei</span>
+            <span style="font-weight:500;color:var(--text);text-align:right;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="fahrtScreenDatei">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text-muted)">Fahrten mit Klient</span>
+            <span style="font-weight:500" id="fahrtScreenAnzahl">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0">
+            <span style="color:var(--text-muted)">Gesamt km</span>
+            <span style="font-weight:500" id="fahrtScreenKm">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Klienten aufklappbar -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px">
+        <button onclick="toggleKlientenAufklapp()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:none;border:none;cursor:pointer;font-family:inherit">
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Aufschlüsselung nach Klient</span>
+          <span id="klientenChevron" style="color:var(--text-muted);font-size:16px;transition:transform .2s">▼</span>
+        </button>
+        <div id="klientenAufklapp" style="display:none;border-top:1px solid var(--border)" id="fahrtScreenKlienten"></div>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">📊 Neu hochladen</button>
         <button onclick="loescheFahrtenbuch()" style="font-size:13px;color:var(--error);background:none;border:1px solid var(--error);border-radius:var(--radius);padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:4px">× Löschen</button>
       </div>
     </div>
@@ -1380,10 +1416,14 @@ async function speicherBeleg() {
     const fotoUrls = [];
     for (const p of _uploadedPhotos) {
       if (!p.file) continue;
-      const ext = p.file.name.split('.').pop();
+      // Bild komprimieren vor Upload
+      const compressed = p.file.type.startsWith('image/')
+        ? await komprimiereUndCropBild(p.file, 1600, 0.82)
+        : p.file;
+      const ext = compressed.name.split('.').pop();
       const fn = `Beleg_${Date.now()}.${ext}`;
       const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
-      const f = await uploadFile(path, await p.file.arrayBuffer(), p.file.type || 'image/jpeg');
+      const f = await uploadFile(path, await compressed.arrayBuffer(), compressed.type || 'image/jpeg');
       fotoUrls.push(f.webUrl || path);
     }
     setStatus('erfassenStatus', 'uploading', 'Daten werden gespeichert…');
@@ -1418,7 +1458,6 @@ function triggerFahrtUpload() { document.getElementById('fahrtFileInput').click(
 
 async function ladeFahrtenbuchScreen() {
   try {
-    // Direkt alle Belege laden — nicht gefiltert nach Fachkraft für Fahrtenbuch
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
     const r = await fetch(
@@ -1439,7 +1478,6 @@ async function ladeFahrtenbuchScreen() {
       `${monatSel?.options[monatSel.selectedIndex]?.text || fmtMonat(_currentMonat)} — Monatsnachweis`;
 
     if (fahrt) {
-      // Robustes JSON-Parsen
       let fd = {};
       try { fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {}; } catch(e) {}
       _fahrtDaten = { ...fd, id: fahrt.id, betrag: parseFloat(fahrt.Betrag||0) };
@@ -1447,26 +1485,43 @@ async function ladeFahrtenbuchScreen() {
       document.getElementById('fahrtScreenZone').style.display = 'none';
       document.getElementById('fahrtScreenResult').style.display = 'block';
 
-      const gesamtKm    = fd.gesamtKm    || '—';
-      const anzFahrten  = fd.anzahlFahrten || '—';
-      const dateiname   = fd.dateiname   || 'Fahrtenbuch.xlsx';
-      const klienten    = fd.klienten    || [];
-      const betrag      = parseFloat(fahrt.Betrag||0);
+      const betrag     = parseFloat(fahrt.Betrag||0);
+      const gesamtKm   = fd.gesamtKm    || '—';
+      const anzFahrten = fd.anzahlFahrten != null ? fd.anzahlFahrten : '—';
+      const dateiname  = fd.dateiname   || 'Fahrtenbuch.xlsx';
+      const klienten   = fd.klienten    || [];
 
-      document.getElementById('fahrtScreenInfoCard').innerHTML = `
-        <div class="info-row"><span class="info-label">Datei</span><span class="info-val">${esc(dateiname)}</span></div>
-        <div class="info-row"><span class="info-label">Fahrten mit Klient</span><span class="info-val">${anzFahrten !== '—' ? anzFahrten + ' Fahrten' : '—'}</span></div>
-        <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${gesamtKm !== '—' ? gesamtKm + ' km' : '—'}</span></div>
-        <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
-        ${klienten.map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
-        <div class="info-row"><span class="info-label" style="font-weight:700">Fahrtkosten gesamt</span>
-          <span class="info-val" style="font-size:15px;font-weight:700">${fmt(betrag)}</span></div>`;
+      // Summary
+      document.getElementById('fahrtScreenTotal').textContent = fmt(betrag);
+      document.getElementById('fahrtScreenMeta').textContent  = `${anzFahrten !== '—' ? anzFahrten + ' Fahrten · ' : ''}${gesamtKm} km · 0,30 €/km`;
+      document.getElementById('fahrtScreenDatei').textContent = dateiname;
+      document.getElementById('fahrtScreenAnzahl').textContent = anzFahrten !== '—' ? anzFahrten + ' Fahrten' : '—';
+      document.getElementById('fahrtScreenKm').textContent    = gesamtKm !== '—' ? gesamtKm + ' km' : '—';
+
+      // Klienten-Liste (in aufklappbarem Bereich)
+      const klientenDiv = document.getElementById('klientenAufklapp');
+      if (klientenDiv) {
+        klientenDiv.innerHTML = klienten.map(k => `
+          <div style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;border-bottom:1px solid var(--border);last-child:border:none">
+            <span style="color:var(--text)">${esc(k.name)}</span>
+            <span style="color:var(--text-muted)">${k.km} km · <strong style="color:var(--accent)">${fmt(k.betrag)}</strong></span>
+          </div>`).join('') || '<div style="padding:12px 16px;font-size:13px;color:var(--text-hint)">Keine Klienten gefunden</div>';
+      }
     } else {
       _fahrtDaten = null;
       document.getElementById('fahrtScreenZone').style.display = 'block';
       document.getElementById('fahrtScreenResult').style.display = 'none';
     }
   } catch(e) { console.warn('ladeFahrtenbuchScreen:', e); }
+}
+
+function toggleKlientenAufklapp() {
+  const div = document.getElementById('klientenAufklapp');
+  const chevron = document.getElementById('klientenChevron');
+  if (!div) return;
+  const open = div.style.display === 'block';
+  div.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 async function handleFahrtUpload(input) {
@@ -2364,8 +2419,36 @@ function buildKlientOptions(selected) {
   return opts.map(o=>`<option value="${o.v}" ${o.v===selected?'selected':''}>${esc(o.l)}</option>`).join('');
 }
 
+// ── Bildkomprimierung + optionaler Crop ──────────────────────────
+async function komprimiereUndCropBild(file, maxWidth = 1600, quality = 0.82) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      // Skalieren wenn zu groß
+      let w = img.width, h = img.height;
+      if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+        resolve(compressed);
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = () => resolve(file); // Fallback: Original
+    img.src = url;
+  });
+}
+
 async function fileToBase64(file) {
-  return new Promise((res,rej) => {
+  // Automatisch komprimieren wenn Bild
+  if (file.type.startsWith('image/')) {
+    file = await komprimiereUndCropBild(file);
+  }
+  return new Promise((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result.split(',')[1]);
     r.onerror = rej;
