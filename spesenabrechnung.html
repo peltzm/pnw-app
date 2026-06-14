@@ -90,10 +90,10 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:44px}
-.btn-primary{background:var(--accent);color:white}.btn-primary:active{background:#6a3418}
+.btn-primary{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}.btn-primary:active{background:var(--accent-light)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed}
 .btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}.btn-secondary:active{background:var(--bg)}
-.btn-success{background:var(--success);color:white}.btn-success:active{background:#245a41}
+.btn-success{background:var(--surface);color:var(--success);border:1px solid var(--success)}.btn-success:active{background:#e6f4ec}
 .btn-danger{background:var(--error);color:white}
 .btn-full{width:100%}
 .btn-add{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent-mid);background:none;border:1px dashed var(--accent-mid);border-radius:var(--radius);padding:6px 14px;cursor:pointer;font-family:inherit;min-height:36px}
@@ -365,7 +365,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 
   <div style="padding:14px 16px 6px">
     <div class="slabel" style="padding:0;margin-bottom:10px">Belege</div>
-    <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;justify-content:center;gap:5px;background:var(--accent);color:#fff;border:none;border-radius:20px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;min-height:40px;width:100%"><span style="font-size:17px;line-height:1">+</span> Neuer Beleg</button>
+    <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;justify-content:center;gap:5px;background:var(--surface);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;min-height:40px;width:100%"><span style="font-size:17px;line-height:1">+</span> Neuer Beleg</button>
   </div>
   <div id="belegList">
     <div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
