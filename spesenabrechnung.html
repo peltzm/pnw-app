@@ -456,8 +456,9 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
       </label>
       <div id="klientFeldWrap" class="field" style="display:none;margin-top:10px;margin-bottom:0">
         <label>Klient (Nachname, V.)</label>
-        <input type="text" id="fKlient" list="klientVorschlaege" placeholder="Nachname, Vorname — oder neu eingeben" autocomplete="off">
-        <datalist id="klientVorschlaege"></datalist>
+        <select id="fKlient">
+          <option value="">— bitte wählen / eingeben —</option>
+        </select>
         <div style="font-size:11px;color:var(--text-hint);margin-top:4px">Bereits verwendete Namen werden vorgeschlagen</div>
       </div>
     </div>
@@ -869,10 +870,10 @@ async function loadGroupMembers() {
 }
 
 async function ladeKlientVorschlaege() {
-  await ladeKlientVorschlaegeInto('klientVorschlaege');
+  await ladeKlientVorschlaegeInto('fKlient', true);
 }
 
-async function ladeKlientVorschlaegeInto(datalistId) {
+async function ladeKlientVorschlaegeInto(elId, isSelect) {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
@@ -885,13 +886,30 @@ async function ladeKlientVorschlaegeInto(datalistId) {
     const namen = new Set();
     (res.value || []).forEach(i => {
       const k = (i.fields?.Klient || '').trim();
-      if (k && k !== 'kein Klient') {
-        // Lesbaren Label speichern statt Rohwert
-        namen.add(klientLabel(k));
-      }
+      if (k && k !== 'kein Klient') namen.add(klientLabel(k));
     });
-    const dl = document.getElementById(datalistId);
-    if (dl) dl.innerHTML = [...namen].sort().map(n => `<option value="${esc(n)}">`).join('');
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (el.tagName === 'SELECT') {
+      const current = el.value;
+      el.innerHTML = '<option value="">— bitte wählen —</option>' +
+        [...namen].sort().map(n => `<option value="${esc(n)}" ${n===current?'selected':''}>${esc(n)}</option>`).join('') +
+        '<option value="__neu__">✏️ Anderen Namen eingeben…</option>';
+      el.onchange = function() {
+        if (this.value === '__neu__') {
+          const neu = prompt('Klientenname eingeben (Nachname, Vorname):');
+          if (neu && neu.trim()) {
+            const opt = document.createElement('option');
+            opt.value = neu.trim(); opt.textContent = neu.trim(); opt.selected = true;
+            this.insertBefore(opt, this.lastElementChild);
+            this.value = neu.trim();
+          } else { this.value = ''; }
+        }
+      };
+    } else {
+      // datalist fallback
+      el.innerHTML = [...namen].sort().map(n => `<option value="${esc(n)}">`).join('');
+    }
   } catch(e) { console.warn('Klient-Vorschläge:', e); }
 }
 
@@ -1056,8 +1074,9 @@ async function openBelegSheet(id) {
         ? `<div class="photo-strip" style="margin-bottom:12px">${fotos.map((u,i) => `<div class="photo-thumb" onclick="window.open('${u}','_blank')">🧾<button class="photo-del" onclick="event.stopPropagation();removeFotoFromBeleg(${i},'${id}')">✕</button></div>`).join('')}<div class="add-photo" onclick="addPhotoToExisting('${id}')">+</div></div>`
         : `<div style="background:var(--accent-light);border-radius:var(--radius);height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:12px;color:var(--accent);cursor:pointer;flex-direction:column;gap:6px" onclick="addPhotoToExisting('${id}')"><span style="font-size:28px">📷</span>Foto hinzufügen</div>`}
       <div class="field"><label>Klient</label>
-        <input type="text" id="edKlient" list="edKlientVorschlaege" value="${esc(klientLabel(b.Klient||''))}" placeholder="Nachname, Vorname" autocomplete="off">
-        <datalist id="edKlientVorschlaege"></datalist></div>
+        <select id="edKlient">
+          <option value="${esc(klientLabel(b.Klient||''))}" selected>${esc(klientLabel(b.Klient||'') || '— bitte wählen —')}</option>
+        </select></div>
       <div class="field-row">
         <div class="field"><label>Datum</label><input type="date" id="edDatum" value="${isoDate(b.Datum)}"></div>
         <div class="field"><label>Betrag (€)</label><input type="number" id="edBetrag" value="${b.Betrag || ''}" step="0.01"></div>
@@ -1072,7 +1091,7 @@ async function openBelegSheet(id) {
       <div class="field"><label>Beschreibung</label><textarea rows="2" id="edBeschreibung">${esc(b.Beschreibung||'')}</textarea></div>
       <div style="font-size:11px;color:var(--text-hint);margin-top:4px">SharePoint: ${CFG.spFolder}/${_currentMonat}/${shortName()}/</div>`;
     // Klient-Vorschläge nachladen (script-Tags in innerHTML werden nicht ausgeführt)
-    ladeKlientVorschlaegeInto('edKlientVorschlaege');
+    ladeKlientVorschlaegeInto('edKlient', true);
   } catch(e) {
     document.getElementById('belegSheetBody').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   }
@@ -2215,8 +2234,7 @@ function toggleKlientfeld() {
   if (!checked) {
     document.getElementById('fKlient').value = '';
   } else {
-    ladeKlientVorschlaege(); // Aktuellste Einträge laden
-    setTimeout(() => document.getElementById('fKlient').focus(), 100);
+    ladeKlientVorschlaegeInto('fKlient', true);
   }
 }
 
