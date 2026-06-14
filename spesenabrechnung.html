@@ -9,6 +9,13 @@
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  // pdf.js Worker konfigurieren (für PDF-Beleg-Rendering)
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 <style>
 /* ══ TOKENS — 1:1 aus index.html ══ */
 :root {
@@ -2159,6 +2166,7 @@ async function pdfVorschau() {
     const belege    = await ladeBelege(_currentMonat);
     const fachkraft = currentAccount?.name || '';
     const result    = await buildAbrechnungHTMLMitFotos(belege, fachkraft, _currentMonat, 'Entwurf');
+    result.monat    = _currentMonat;
     const fileName  = `Spesen_${(fachkraft||'Entwurf').replace(/\s+/g,'_')}_${_currentMonat}.pdf`;
     const pdfBuf    = await htmlToPdfBuffer(result, (msg) =>
       setStatus('abschlussStatus', 'uploading', msg));
@@ -2219,64 +2227,105 @@ async function htmlToPdfBuffer(result, progressCb) {
     iframe.srcdoc = page1Html;
   });
 
-  // ── Folgeseiten: je Beleg direkt aus Base64 ──
+  // ── Folgeseiten: je Beleg eine oder mehrere Bild-Seiten ──
   const belageMitFotos = (regularBelege || []).filter(b => fotoMap[b.id]?.length);
   let seitenNr = 2; // Seite 1 ist die Übersicht
+
   for (let i = 0; i < belageMitFotos.length; i++) {
     const b = belageMitFotos[i];
     const fotos = fotoMap[b.id];
-    if (progressCb) progressCb(`📎 Belegfoto ${i+1} von ${belageMitFotos.length} wird eingefügt…`);
+    if (progressCb) progressCb(`📎 Beleg ${i+1} von ${belageMitFotos.length} wird eingefügt…`);
+
+    const katShort = (b.KategorieLabel||b.Kategorie||'—').includes(' › ')
+      ? (b.KategorieLabel||'').split(' › ')[1]
+      : (b.KategorieLabel||b.Kategorie||'—');
+    const desc = [b.Beschreibung||b.Haendler||'—', fmtDate(b.Datum), katShort, fmt(b.Betrag)].filter(Boolean).join('  ·  ');
 
     for (let f = 0; f < fotos.length; f++) {
-      pdf.addPage();
-      // Kurze Info-Zeile oben (manuell in PDF zeichnen)
-      const katShort = (b.KategorieLabel||b.Kategorie||'—').includes(' › ')
-        ? (b.KategorieLabel||'').split(' › ')[1]
-        : (b.KategorieLabel||b.Kategorie||'—');
-      pdf.setFontSize(9); pdf.setTextColor(107, 104, 96);
-      pdf.text(`Beleg ${i+1}`, 16, 12);
-      pdf.setFontSize(10); pdf.setTextColor(123, 63, 30);
-      const desc = [b.Beschreibung||b.Haendler||'—', fmtDate(b.Datum), katShort, fmt(b.Betrag)].filter(Boolean).join('  ·  ');
-      pdf.text(desc, 16, 19, { maxWidth: 178 });
-      pdf.setDrawColor(123, 63, 30); pdf.setLineWidth(0.4);
-      pdf.line(16, 22, 194, 22);
-
-      // Bild einpassen (max. Bereich: 178mm breit × 258mm hoch ab Y=26)
       const b64 = fotos[f];
-      const maxW = 178, maxH = 258, topY = 26;
-      // PDF-Belege können nicht als Bild eingebettet werden → Hinweis ausgeben
+      // Liste der einzubettenden JPEG-Bilder für diesen Beleg-Anhang ermitteln
+      let images = []; // [{ dataUrl, width, height }]
       if (b64.startsWith('data:application/pdf')) {
-        pdf.setFontSize(11); pdf.setTextColor(120,120,120);
-        pdf.text('Originalbeleg liegt als PDF-Datei vor (im SharePoint hinterlegt).', PW/2, 140, { align: 'center', maxWidth: 160 });
+        // PDF-Beleg → jede Seite zu Bild rendern
+        images = await pdfBelegToImages(b64).catch(() => []);
       } else {
-        // Jedes Format über Canvas in sauberes JPEG reencoden (webp/avif/png → jpeg)
-        const reencoded = await reencodeToJpeg(b64).catch(() => null);
-        if (reencoded) {
-          const { dataUrl, width, height } = reencoded;
-          // mm-Größe: an maxW/maxH einpassen unter Beibehaltung des Seitenverhältnisses
-          const ratio = Math.min(maxW / width, maxH / height);
-          const w = width  * ratio;
-          const h = height * ratio;
-          const x = (PW - w) / 2;
-          try { pdf.addImage(dataUrl, 'JPEG', x, topY, w, h); }
-          catch(e) {
-            pdf.setFontSize(10); pdf.setTextColor(180,60,60);
-            pdf.text('Bild konnte nicht eingebettet werden: ' + (e.message||''), PW/2, 140, { align:'center', maxWidth:160 });
-          }
-        } else {
-          pdf.setFontSize(10); pdf.setTextColor(180,60,60);
-          pdf.text('Belegbild konnte nicht geladen werden.', PW/2, 140, { align:'center', maxWidth:160 });
-        }
+        const reenc = await reencodeToJpeg(b64).catch(() => null);
+        if (reenc) images = [reenc];
       }
 
-      // Footer
-      pdf.setFontSize(8); pdf.setTextColor(160,158,153);
-      pdf.text(`Praxis NeueWege · Spesenabrechnung · ${fmtMonat(result.monat||'')}`, 16, PH - 8);
-      pdf.text(`Seite ${seitenNr++}`, PW - 16, PH - 8, { align: 'right' });
+      if (!images.length) {
+        // Konnte nicht gerendert werden → Hinweisseite
+        pdf.addPage();
+        zeichneBelegKopf(pdf, i+1, desc, PW);
+        pdf.setFontSize(10); pdf.setTextColor(180,60,60);
+        pdf.text('Belegdatei konnte nicht eingebettet werden (im SharePoint hinterlegt).', PW/2, 140, { align:'center', maxWidth:160 });
+        pdf.setFontSize(8); pdf.setTextColor(160,158,153);
+        pdf.text(`Praxis NeueWege · Spesenabrechnung · ${fmtMonat(result.monat||'')}`, 16, PH - 8);
+        pdf.text(`Seite ${seitenNr++}`, PW - 16, PH - 8, { align: 'right' });
+        continue;
+      }
+
+      // Jede ermittelte Bild-Seite einbetten
+      images.forEach((im, pageIdx) => {
+        pdf.addPage();
+        const suffix = images.length > 1 ? ` (Seite ${pageIdx+1}/${images.length})` : '';
+        zeichneBelegKopf(pdf, i+1, desc + suffix, PW);
+        const maxW = 178, maxH = 258, topY = 26;
+        const ratio = Math.min(maxW / im.width, maxH / im.height);
+        const w = im.width  * ratio;
+        const h = im.height * ratio;
+        const x = (PW - w) / 2;
+        try { pdf.addImage(im.dataUrl, 'JPEG', x, topY, w, h); }
+        catch(e) {
+          pdf.setFontSize(10); pdf.setTextColor(180,60,60);
+          pdf.text('Bild konnte nicht eingebettet werden.', PW/2, 140, { align:'center', maxWidth:160 });
+        }
+        pdf.setFontSize(8); pdf.setTextColor(160,158,153);
+        pdf.text(`Praxis NeueWege · Spesenabrechnung · ${fmtMonat(result.monat||'')}`, 16, PH - 8);
+        pdf.text(`Seite ${seitenNr++}`, PW - 16, PH - 8, { align: 'right' });
+      });
     }
   }
 
   return pdf.output('arraybuffer');
+}
+
+// Beleg-Kopfzeile auf aktueller PDF-Seite zeichnen
+function zeichneBelegKopf(pdf, nr, desc, PW) {
+  pdf.setFontSize(9); pdf.setTextColor(107, 104, 96);
+  pdf.text(`Beleg ${nr}`, 16, 12);
+  pdf.setFontSize(10); pdf.setTextColor(123, 63, 30);
+  pdf.text(desc, 16, 19, { maxWidth: 178 });
+  pdf.setDrawColor(123, 63, 30); pdf.setLineWidth(0.4);
+  pdf.line(16, 22, 194, 22);
+}
+
+// PDF-Beleg (data:application/pdf;base64,...) → Array von JPEG-Bildern (je Seite)
+async function pdfBelegToImages(dataUrl) {
+  if (!window.pdfjsLib) throw new Error('pdf.js nicht geladen');
+  // Base64 → Uint8Array
+  const base64 = dataUrl.split(',')[1];
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+
+  const loadingTask = window.pdfjsLib.getDocument({ data: bytes });
+  const pdfDoc = await loadingTask.promise;
+  const out = [];
+  const maxSeiten = Math.min(pdfDoc.numPages, 10); // Sicherheitslimit
+  for (let p = 1; p <= maxSeiten; p++) {
+    const page = await pdfDoc.getPage(p);
+    const viewport = page.getViewport({ scale: 2.0 }); // gute Auflösung
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push({ dataUrl: canvas.toDataURL('image/jpeg', 0.9), width: canvas.width, height: canvas.height });
+  }
+  return out;
 }
 
 function buildFreigabeEmail(g, pdfUrl) {
