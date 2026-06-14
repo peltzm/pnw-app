@@ -450,7 +450,13 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 
   <!-- ── Pflichtfelder Beleg ── -->
   <div id="belegFormCard" class="card" style="display:none">
-    <div class="card-title">Belegdaten — Pflichtfelder</div>
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Belegdaten — Pflichtfelder</span>
+      <button id="btnBelegVorschau" onclick="belegVorschau()" title="Gescannten Beleg ansehen"
+        style="display:none;align-items:center;gap:5px;background:var(--accent-light);color:var(--accent);border:none;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;min-height:32px">
+        <span style="font-size:15px;line-height:1">👁</span> Beleg ansehen
+      </button>
+    </div>
 
     <!-- Klientenbezug -->
     <div class="field" style="margin-bottom:14px">
@@ -2349,7 +2355,30 @@ function addPhoto() { document.getElementById('fileInput').click(); }
 
 function renderPhotoStrip() {
   const strip = document.getElementById('photoStrip');
-  strip.innerHTML = _uploadedPhotos.map((p,i) => `<div class="photo-thumb"><span style="font-size:26px">🖼️</span><button class="photo-del" onclick="removePhoto(${i})">✕</button></div>`).join('') + '<div class="add-photo" onclick="addPhoto()">+</div>';
+  strip.innerHTML = _uploadedPhotos.map((p,i) => {
+    const isPdf = (p.file?.type === 'application/pdf') || /\.pdf$/i.test(p.name||'');
+    return `<div class="photo-thumb"><span style="font-size:26px">${isPdf ? '📄' : '🖼️'}</span><button class="photo-del" onclick="removePhoto(${i})">✕</button></div>`;
+  }).join('') + '<div class="add-photo" onclick="addPhoto()">+</div>';
+  // Auge-Button im Belegdaten-Kopf nur zeigen, wenn ein Beleg vorliegt
+  const eye = document.getElementById('btnBelegVorschau');
+  if (eye) eye.style.display = _uploadedPhotos.length ? 'flex' : 'none';
+}
+
+// Gescannten Beleg ansehen — Foto ODER PDF
+function belegVorschau() {
+  const p = _uploadedPhotos[0];
+  if (!p) { showToast('Kein Beleg vorhanden'); return; }
+  if (p.file) {
+    // Lokale Datei (gerade gescannt/ausgewählt) → Blob-URL öffnen
+    const url = URL.createObjectURL(p.file);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } else if (p.url || p.dataUrl) {
+    // Bereits hochgeladener Beleg → URL direkt öffnen
+    window.open(p.url || p.dataUrl, '_blank');
+  } else {
+    showToast('Beleg kann nicht angezeigt werden');
+  }
 }
 
 function removePhoto(i) { _uploadedPhotos.splice(i,1); renderPhotoStrip(); }
