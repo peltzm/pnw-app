@@ -1223,25 +1223,30 @@ async function handleFileSelect(input) {
   document.getElementById('scanResult').style.display = 'none';
 
   try {
-    if (!CFG.azureDIKey) {
-      document.getElementById('scanIcon').className = 'si';
-      document.getElementById('scanIcon').textContent = '📸';
-      document.getElementById('scanText').textContent = 'Beleg fotografieren';
-      document.getElementById('scanSub').textContent = 'KI-Scan nicht verfügbar — bitte manuell eingeben';
-      showToast('KI-Scan aktuell nicht verfügbar');
-      return;
-    }
     const b64 = await fileToBase64(file);
-    const mime = file.type || 'image/jpeg';
 
-    // ── Azure Document Intelligence — Receipt Model ──
-    // 1. Analyse starten (async)
+    // ── Azure Document Intelligence — Auth via MSAL-Token (kein API-Key) ──
+    let diToken;
+    try {
+      const r = await msalInstance.acquireTokenSilent({
+        scopes: ['https://cognitiveservices.azure.com/.default'],
+        account: currentAccount
+      });
+      diToken = r.accessToken;
+    } catch(e) {
+      const r = await msalInstance.acquireTokenPopup({
+        scopes: ['https://cognitiveservices.azure.com/.default']
+      });
+      diToken = r.accessToken;
+    }
+
+    // 1. Analyse starten
     const analyzeResp = await fetch(
       `${CFG.azureDIEndpoint}formrecognizer/documentModels/prebuilt-receipt:analyze?api-version=2023-07-31`,
       {
         method: 'POST',
         headers: {
-          'Ocp-Apim-Subscription-Key': CFG.azureDIKey,
+          'Authorization': 'Bearer ' + diToken,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ base64Source: b64 })
@@ -1256,7 +1261,7 @@ async function handleFileSelect(input) {
     for (let i = 0; i < 15; i++) {
       await new Promise(r => setTimeout(r, 1000));
       const pollResp = await fetch(operationUrl, {
-        headers: { 'Ocp-Apim-Subscription-Key': CFG.azureDIKey }
+        headers: { 'Authorization': 'Bearer ' + diToken }
       });
       const pollData = await pollResp.json();
       if (pollData.status === 'succeeded') { result = pollData; break; }
