@@ -350,17 +350,19 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
 
   <div id="homeStatus"></div>
 
-  <button class="submit-cta" onclick="showScreen('abschluss')">
-    <div><div class="cl">Abrechnung bereit?</div><div class="ca">Jetzt einreichen →</div></div>
-    <div style="font-size:20px;opacity:.7">📨</div>
-  </button>
-
   <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px">
     <div class="slabel" style="padding:0">Belege</div>
     <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;gap:5px;background:var(--accent);color:#fff;border:none;border-radius:20px;padding:5px 12px 5px 8px;font-size:12px;font-weight:600;cursor:pointer;min-height:32px"><span style="font-size:16px;line-height:1">+</span> Neuer Beleg</button>
   </div>
   <div id="belegList">
     <div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
+  </div>
+
+  <!-- Einreichen-Link dezent unten -->
+  <div style="padding:12px 16px 8px;text-align:center">
+    <button onclick="showScreen('abschluss')" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;text-decoration:underline">
+      Zur Monatsabrechnung → Einreichen
+    </button>
   </div>
 </div>
 
@@ -1027,7 +1029,7 @@ function renderHome(belege) {
   document.getElementById('homeTotal').textContent = fmt(total);
   const status = belege.find(b => b.Status === 'Eingereicht') ? 'Eingereicht' : belege.find(b => b.Status === 'Genehmigt') ? 'Genehmigt' : 'Entwurf';
   document.getElementById('homeSub').textContent = `${regular.length + (fahrt ? 1 : 0)} Positionen · ${status}`;
-  document.getElementById('statFahrt').textContent = fahrtBetrag ? fmt(fahrtBetrag) : '— €';
+  document.getElementById('statFahrt').textContent = fahrt ? fmt(fahrtBetrag) : '—';
   document.getElementById('statFahrtSub').textContent = fahrt ? `${fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten).gesamtKm + ' km' : ''} · Fahrtenbuch ✓` : 'Nicht hochgeladen';
   document.getElementById('statSonst').textContent = fmt(sonstBetrag);
   document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
@@ -1398,28 +1400,55 @@ function triggerFahrtUpload() { document.getElementById('fahrtFileInput').click(
 
 async function ladeFahrtenbuchScreen() {
   try {
-    const belege = await ladeBelege(_currentMonat);
-    const fahrt = belege.find(b => b.Kategorie === 'fahrtenbuch');
+    // Direkt alle Belege laden — nicht gefiltert nach Fachkraft für Fahrtenbuch
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const res = await r.json();
+    const myMail = (currentAccount?.username||'').toLowerCase();
+    const alle = (res.value||[]).map(i=>({id:i.id,...i.fields}));
+    const fahrt = alle.find(b =>
+      b.Kategorie === 'fahrtenbuch' &&
+      (b.Monat||'').startsWith(_currentMonat) &&
+      (b.Fachkraft_Mail||'').toLowerCase() === myMail
+    );
+
     const monatSel = document.getElementById('monatSelect');
-    document.getElementById('fahrtScreenSub').textContent = `${monatSel?.options[monatSel.selectedIndex]?.text || fmtMonat(_currentMonat)} — Monatsnachweis`;
+    document.getElementById('fahrtScreenSub').textContent =
+      `${monatSel?.options[monatSel.selectedIndex]?.text || fmtMonat(_currentMonat)} — Monatsnachweis`;
+
     if (fahrt) {
-      const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
-      _fahrtDaten = { ...fd, id: fahrt.id, betrag: fahrt.Betrag };
+      // Robustes JSON-Parsen
+      let fd = {};
+      try { fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {}; } catch(e) {}
+      _fahrtDaten = { ...fd, id: fahrt.id, betrag: parseFloat(fahrt.Betrag||0) };
+
       document.getElementById('fahrtScreenZone').style.display = 'none';
       document.getElementById('fahrtScreenResult').style.display = 'block';
+
+      const gesamtKm    = fd.gesamtKm    || '—';
+      const anzFahrten  = fd.anzahlFahrten || '—';
+      const dateiname   = fd.dateiname   || 'Fahrtenbuch.xlsx';
+      const klienten    = fd.klienten    || [];
+      const betrag      = parseFloat(fahrt.Betrag||0);
+
       document.getElementById('fahrtScreenInfoCard').innerHTML = `
-        <div class="info-row"><span class="info-label">Datei</span><span class="info-val">${esc(fd.dateiname||'Fahrtenbuch.xlsx')}</span></div>
-        <div class="info-row"><span class="info-label">Fahrten mit Klient</span><span class="info-val">${fd.anzahlFahrten||'—'} Fahrten</span></div>
-        <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${fd.gesamtKm||'—'} km</span></div>
+        <div class="info-row"><span class="info-label">Datei</span><span class="info-val">${esc(dateiname)}</span></div>
+        <div class="info-row"><span class="info-label">Fahrten mit Klient</span><span class="info-val">${anzFahrten !== '—' ? anzFahrten + ' Fahrten' : '—'}</span></div>
+        <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${gesamtKm !== '—' ? gesamtKm + ' km' : '—'}</span></div>
         <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
-        ${(fd.klienten||[]).map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
-        <div class="info-row"><span class="info-label" style="font-weight:700">Fahrtkosten gesamt</span><span class="info-val" style="font-size:15px;font-weight:700">${fmt(fahrt.Betrag)}</span></div>`;
+        ${klienten.map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
+        <div class="info-row"><span class="info-label" style="font-weight:700">Fahrtkosten gesamt</span>
+          <span class="info-val" style="font-size:15px;font-weight:700">${fmt(betrag)}</span></div>`;
     } else {
       _fahrtDaten = null;
       document.getElementById('fahrtScreenZone').style.display = 'block';
       document.getElementById('fahrtScreenResult').style.display = 'none';
     }
-  } catch(e) { setStatus('fahrtScreenStatus', 'error', 'Fehler: ' + e.message); }
+  } catch(e) { console.warn('ladeFahrtenbuchScreen:', e); }
 }
 
 async function handleFahrtUpload(input) {
