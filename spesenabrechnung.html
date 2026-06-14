@@ -35,7 +35,7 @@ body{display:flex;flex-direction:column}
 body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
 
 /* Header */
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100;flex-shrink:0}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);z-index:100;flex-shrink:0}
 .header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
 .header-brand img{height:28px;width:auto}
 .header-brand span{font-size:13px;font-weight:600;color:var(--text)}
@@ -580,11 +580,9 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 <!-- ══ SCREEN: FAHRTENBUCH ══ -->
 <div id="screen-fahrtenbuch" class="screen">
 
-  <!-- Hero Card — Login-Screen Stil -->
-  <div style="display:flex;flex-direction:column;align-items:center;padding:32px 24px 20px;text-align:center">
-    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png"
-      style="height:48px;width:auto;margin-bottom:16px" alt="Praxis NeueWege">
-    <div style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:4px">Fahrtenbuch</div>
+  <!-- Kompakter Kopf -->
+  <div style="padding:18px 16px 8px">
+    <div style="font-size:18px;font-weight:700;color:var(--text)">Fahrtenbuch</div>
     <div style="font-size:13px;color:var(--text-muted)" id="fahrtScreenSub">Monatsnachweis für Fahrtkosten</div>
   </div>
 
