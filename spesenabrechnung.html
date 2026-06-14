@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v72a1ea6</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6836045</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -1934,7 +1934,7 @@ async function genehmigen(g) {
     const mailHtml = buildFreigabeEmail(g, pdfUrl);
     await sendMail([CFG.spesen_mail, g.mail].filter(Boolean), [], `✓ Spesenabrg. genehmigt: ${g.fachkraft} · ${fmtMonat(g.monat)} · ${fmt(g.total)}`, mailHtml);
     setStatus('tlStatus', 'done', `✓ ${g.fachkraft} genehmigt — PDF an ${CFG.spesen_mail} gesendet`);
-    document.getElementById('approvedText').innerHTML = `PDF wurde erstellt und an <strong>${CFG.spesen_mail}</strong> und <strong>${g.mail||g.fachkraft}</strong> gesendet.<br><br>SharePoint: ${CFG.spFolder}/Genehmigt/${pdfName}`;
+    document.getElementById('approvedText').innerHTML = `PDF wurde erstellt und an <strong>${esc(CFG.spesen_mail)}</strong> und <strong>${esc(g.mail||g.fachkraft)}</strong> gesendet.<br><br>SharePoint: ${CFG.spFolder}/Genehmigt/${esc(pdfName)}`;
     openModal('approvedModal');
     showToast(`✅ ${g.fachkraft} genehmigt`, true);
   } catch(e) {
@@ -2888,10 +2888,12 @@ async function ladeReviewBelege() {
     document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
     if (fahrt) {
       const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
-      document.getElementById('fbAmt').textContent  = fmt(fahrt.Betrag);
-      document.getElementById('fbBadge').className  = 'badge badge-approved';
-      document.getElementById('fbBadge').innerHTML  = '<span class="bdot"></span> Excel ✓';
-      document.getElementById('fbFoot').textContent = `${fd.dateiname||'Fahrtenbuch.xlsx'} · ${fd.gesamtKm||'—'} km`;
+      const fbAmtEl = document.getElementById('fbAmt');
+      if (fbAmtEl) fbAmtEl.textContent = fmt(fahrt.Betrag);
+      const fbBadgeEl = document.getElementById('fbBadge');
+      if (fbBadgeEl) { fbBadgeEl.className = 'badge badge-approved'; fbBadgeEl.innerHTML = '<span class="bdot"></span> Excel ✓'; }
+      const fbFootEl = document.getElementById('fbFoot');
+      if (fbFootEl) fbFootEl.textContent = `${fd.dateiname||'Fahrtenbuch.xlsx'} · ${fd.gesamtKm||'—'} km`;
     }
     // Mit Kommentarfeldern rendern (Cache für lokale Updates ohne Re-Fetch)
     _cachedReviewBelege = belege;
