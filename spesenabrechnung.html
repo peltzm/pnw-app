@@ -540,7 +540,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
       <span>👁 Vorschau</span>
       <span style="font-size:10px;color:var(--text-hint);font-weight:400">in neuem Fenster</span>
     </button>
-    <button class="btn btn-primary" style="flex:1" onclick="openModal('submitModal')" id="btnEinreichen">📨 Einreichen</button>
+    <button class="btn btn-primary" style="flex:1" onclick="openSubmitModal()" id="btnEinreichen">📨 Einreichen</button>
   </div>
 
   <div class="slabel">Frühere Abrechnungen</div>
@@ -1679,9 +1679,9 @@ async function ladeAbschluss() {
     document.getElementById('sumTable').innerHTML = rows || '<div style="padding:20px;text-align:center;color:var(--text-hint)">Noch keine Belege</div>';
 
     // Update submit modal text
-    const tlSel = document.getElementById('selTeamleiter');
-    const tlName = tlSel.options[tlSel.selectedIndex]?.text || tlSel.value || '—';
-    document.getElementById('submitModalText').innerHTML = `<strong>${fmt(total)}</strong> · ${regular.length + (fahrt?1:0)} Positionen · ${fmtMonat(_currentMonat)}<br>werden an <strong>${esc(tlName)}</strong> zur Prüfung übermittelt.<br><br>Danach sind keine Änderungen mehr möglich.`;
+  // Update modal text when opened
+  document.getElementById('submitModalText').innerHTML =
+    `<strong>${fmt(total)}</strong> · ${regular.length + (fahrt?1:0)} Positionen · ${fmtMonat(_currentMonat)}<br>werden zur Prüfung übermittelt.<br><br>Danach sind keine Änderungen mehr möglich.`;
 
     // Archive
     await ladeArchiv();
@@ -2310,9 +2310,19 @@ function toggleKlientfeld() {
   }
 }
 
+function openSubmitModal() {
+  const s = document.getElementById('selTeamleiter');
+  const tlName = s?.options[s.selectedIndex]?.text || s?.value || '—';
+  const total  = document.getElementById('homeTotal')?.textContent || '';
+  const sub    = document.getElementById('homeSub')?.textContent || '';
+  document.getElementById('submitModalText').innerHTML =
+    `<strong>${total}</strong> · ${sub}<br>werden an <strong>${esc(tlName)}</strong> zur Prüfung übermittelt.<br><br>Danach sind keine Änderungen mehr möglich.`;
+  openModal('submitModal');
+}
 function toggleFahrtenbuchBlock() {
-  const show = document.getElementById('chkFahrtenbuch').checked;
-  document.getElementById('fahrtBlock').style.display = show ? 'block' : 'none';
+  const show = document.getElementById('chkFahrtenbuch')?.checked;
+  const fb = document.getElementById('fahrtBlock');
+  if (fb) fb.style.display = show ? 'block' : 'none';
 }
 
 function toggleEdKlient() {
@@ -2596,13 +2606,14 @@ async function ladeMonatsdatenMitKommentaren() {
     const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
     const res = await r.json();
     const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
+    const monat = _reviewMonat || _currentMonat;
     const belege = alle.filter(b =>
-      (b.Monat || '').startsWith(_reviewMonat) &&
-      ((b.Fachkraft_Mail || '').toLowerCase() === _reviewFkMail.toLowerCase())
+      (b.Monat || '').startsWith(monat) &&
+      ((b.Fachkraft_Mail || '').toLowerCase() === (_reviewFkMail||'').toLowerCase())
     );
-    // Vorhandene Kommentare laden
+    // TL-Kommentare aus SharePoint laden — nur wenn noch nicht im State
     belege.forEach(b => {
-      if (b.TLKommentar) {
+      if (b.TLKommentar && !_belegKommentare[b.id]) {
         try { _belegKommentare[b.id] = JSON.parse(b.TLKommentar); } catch(e) {}
       }
     });
@@ -2618,15 +2629,14 @@ function renderHomeReview(belege) {
   const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
   const total   = belege.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
 
-  // Stats
-  document.getElementById('homeTotal').textContent = fmt(total);
-  document.getElementById('homeSub').textContent   = `${belege.length} Positionen · Eingereicht`;
-  document.getElementById('statFahrt').textContent  = fahrt ? fmt(fahrt.Betrag) : '—';
-  document.getElementById('statSonst').textContent  = fmt(regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0));
-  document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
-  // statFahrtSub nur setzen wenn Element vorhanden
-  const sfs = document.getElementById('statFahrtSub');
-  if (sfs) sfs.textContent = fahrt ? 'Fahrtenbuch ✓' : 'Nicht hochgeladen';
+  // Stats — safe access (Elemente nur im home-Screen vorhanden)
+  const safeSet = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  safeSet('homeTotal', fmt(total));
+  safeSet('homeSub',   `${belege.length} Positionen · Eingereicht`);
+  safeSet('statFahrt', fahrt ? fmt(fahrt.Betrag) : '—');
+  safeSet('statSonst', fmt(regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0)));
+  safeSet('statSonstSub', `${regular.length} Belege`);
+  safeSet('statFahrtSub', fahrt ? 'Fahrtenbuch ✓' : 'Nicht hochgeladen');
 
   // Beleg-Liste mit Kommentarfeldern
   const list = document.getElementById('belegList');
