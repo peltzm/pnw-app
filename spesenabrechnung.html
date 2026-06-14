@@ -304,13 +304,15 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
     <div style="display:flex;align-items:baseline;gap:7px">
       <span>Spesenabrechnung</span>
-      <span style="font-size:10px;font-weight:400;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-family:monospace;letter-spacing:.3px">v222c7ad</span>
     </div>
   </div>
-  <div class="user-badge" id="userBadge" style="display:none">
-    <div class="user-dot"></div>
-    <span id="userName"></span>
-    <button class="btn-logout" onclick="logout()">Abmelden</button>
+  <div class="user-badge" id="userBadge" style="display:none;flex-direction:column;align-items:flex-end;gap:2px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <div class="user-dot"></div>
+      <span id="userName"></span>
+      <button class="btn-logout" onclick="logout()">Abmelden</button>
+    </div>
+    <span style="font-size:9px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px">v222c7ad</span>
   </div>
 </div>
 
@@ -510,7 +512,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
   <div class="btn-row">
     <button class="btn btn-primary btn-full" onclick="speicherBeleg()" id="btnSpeichern">💾 Speichern</button>
   </div>
-  <div style="text-align:center;font-size:11px;color:var(--text-hint);padding:0 16px 12px" id="spInfoText">Foto + Daten → SharePoint / Spesenbelege / <span id="spMonat">2026-06</span> / <span id="spName">—</span></div>
+  <div style="display:none" id="spInfoText"><span id="spMonat">2026-06</span><span id="spName">—</span></div>
 </div>
 
 <!-- ══ SCREEN: MONATSABSCHLUSS ══ -->
@@ -519,8 +521,6 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="section-title">Monatsabschluss</div>
     <div class="section-sub" id="abschlussSubtitle">Zusammenfassung prüfen und einreichen</div>
   </div>
-
-  <div id="fahrtStatusBlock"></div>
 
   <div class="sum-table" id="sumTable">
     <div style="text-align:center;padding:20px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
@@ -1704,26 +1704,14 @@ async function ladeAbschluss() {
 
     document.getElementById('abschlussSubtitle').textContent = `${fmtMonat(_currentMonat)} · ${eingereicht ? (belege[0]?.Status||'Entwurf') : 'Entwurf'}`;
 
-    // Fahrtenbuch status
-    const fd = fahrt?.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : null;
-    document.getElementById('fahrtStatusBlock').innerHTML = fahrt
-      ? `<div class="fahrt-block" onclick="openFahrtSheet(${fd ? JSON.stringify(fd).replace(/"/g,'&quot;') : 'null'})">
-          <div class="fb-head"><div><div class="fb-lbl">🚗 Fahrtenbuch ${_currentMonat}</div><div class="fb-amt">${fmt(fahrt.Betrag)} · ${fd?.gesamtKm||'—'} km</div></div><span class="badge badge-approved"><span class="bdot"></span> Hochgeladen</span></div>
-          <div class="fb-foot">${esc(fd?.dateiname||'Fahrtenbuch.xlsx')} · in SharePoint · ${(fd?.klienten||[]).length} Klienten</div>
-        </div>`
-      : `<div class="alert alert-warn" style="margin-bottom:10px">⚠ Fahrtenbuch noch nicht hochgeladen. <button onclick="showScreen('erfassen');setTimeout(()=>selectCat('fahrt'),100)" style="background:none;border:none;color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline">Jetzt hochladen →</button></div>`;
-
     // Summary table
-    const cats = { fahrt:0, verpf:0, mat:0, sonst:0 };
-    const cnts = { fahrt:0, verpf:0, mat:0, sonst:0 };
-    regular.forEach(b => { const k = b.Kategorie||'sonst'; cats[k]=(cats[k]||0)+parseFloat(b.Betrag||0); cnts[k]=(cnts[k]||0)+1; });
+    const fd = fahrt?.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : null;
     const fahrtAmt = fahrt ? parseFloat(fahrt.Betrag||0) : 0;
-    const total = fahrtAmt + Object.values(cats).reduce((s,v)=>s+v,0);
+    const sonstAmt = regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0);
+    const total = fahrtAmt + sonstAmt;
     const rows = [
       fahrt ? `<div class="sum-row"><div class="sr-cat"><span>🚗</span> Fahrtkosten (Fahrtenbuch)</div><div class="sr-r"><div class="sr-amt">${fmt(fahrtAmt)}</div><div class="sr-cnt">${fd?.gesamtKm||'—'} km</div></div></div>` : '',
-      cats.verpf ? `<div class="sum-row"><div class="sr-cat"><span>🍽️</span> Verpflegung</div><div class="sr-r"><div class="sr-amt">${fmt(cats.verpf)}</div><div class="sr-cnt">${cnts.verpf} Beleg${cnts.verpf!==1?'e':''}</div></div></div>` : '',
-      cats.mat   ? `<div class="sum-row"><div class="sr-cat"><span>🎨</span> Material</div><div class="sr-r"><div class="sr-amt">${fmt(cats.mat)}</div><div class="sr-cnt">${cnts.mat} Beleg${cnts.mat!==1?'e':''}</div></div></div>` : '',
-      cats.sonst ? `<div class="sum-row"><div class="sr-cat"><span>📋</span> Sonstiges</div><div class="sr-r"><div class="sr-amt">${fmt(cats.sonst)}</div><div class="sr-cnt">${cnts.sonst} Beleg${cnts.sonst!==1?'e':''}</div></div></div>` : '',
+      regular.length ? `<div class="sum-row"><div class="sr-cat"><span>🧾</span> Sonstige Auslagen</div><div class="sr-r"><div class="sr-amt">${fmt(sonstAmt)}</div><div class="sr-cnt">${regular.length} Beleg${regular.length!==1?'e':''}</div></div></div>` : '',
       `<div class="sum-row"><div class="sr-cat" style="color:var(--accent)">Gesamt</div><div class="sr-r"><div class="sr-amt" style="font-size:16px;color:var(--accent)">${fmt(total)}</div><div class="sr-cnt">${regular.length + (fahrt?1:0)} Positionen</div></div></div>`
     ].filter(Boolean).join('');
     document.getElementById('sumTable').innerHTML = rows || '<div style="padding:20px;text-align:center;color:var(--text-hint)">Noch keine Belege</div>';
