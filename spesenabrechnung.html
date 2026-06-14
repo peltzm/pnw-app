@@ -427,7 +427,7 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
       <div class="alert alert-success" style="margin:0 0 10px">✓ Fahrtenbuch eingelesen und in SharePoint gespeichert</div>
       <div class="info-card" style="margin:0" id="fahrtInfoCard"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">↺ Ersetzen</button>
+        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">📊 Fahrtenbuch hochladen</button>
         <button onclick="loescheFahrtenbuch()" style="font-size:13px;color:var(--error);background:none;border:1px solid var(--error);border-radius:var(--radius);padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:4px">× Löschen</button>
       </div>
     </div>
@@ -583,7 +583,7 @@ input[type=text],input[type=number],input[type=date],input[type=email]{backgroun
       <div class="alert alert-success" style="margin:0 0 10px">✓ Fahrtenbuch eingelesen und in SharePoint gespeichert</div>
       <div class="info-card" style="margin:0" id="fahrtScreenInfoCard"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">↺ Ersetzen</button>
+        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">📊 Fahrtenbuch hochladen</button>
         <button onclick="loescheFahrtenbuch()" style="font-size:13px;color:var(--error);background:none;border:1px solid var(--error);border-radius:var(--radius);padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:4px">× Löschen</button>
       </div>
     </div>
@@ -1471,8 +1471,12 @@ async function handleFahrtUpload(input) {
       <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
       ${klienten.map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
       <div class="info-row"><span class="info-label" style="font-weight:700">Fahrtkosten gesamt</span><span class="info-val" style="font-size:15px;font-weight:700">${fmt(betrag)}</span></div>`;
-    showToast(`📊 ${gesamtKm} km · ${fmt(betrag)} eingelesen`, true);
+    showToast(`📊 ${anzahlFahrten} Fahrten · ${gesamtKm} km · ${fmt(betrag)} eingelesen`, true);
     ladeMonatsdaten();
+    // Fahrtenbuch-Screen aktualisieren falls aktiv
+    if (document.getElementById('screen-fahrtenbuch')?.classList.contains('active')) {
+      ladeFahrtenbuchScreen();
+    }
   } catch(e) {
     zone.innerHTML = `<div class="uz-icon">📊</div><div class="uz-title">Fehler: ${e.message}</div><div class="uz-sub">Erneut versuchen</div>`;
     zone.onclick = triggerFahrtUpload;
@@ -1482,10 +1486,21 @@ async function handleFahrtUpload(input) {
 }
 
 function resetFahrtUpload() {
+  // Erfassen-Screen Upload-Zone
   const zone = document.getElementById('fahrtUploadZone');
-  zone.style.display = 'block';
-  zone.innerHTML = '<div class="uz-icon">📊</div><div class="uz-title">Fahrtenbuch hochladen</div><div class="uz-sub">Excel (.xlsx) auswählen</div>';
-  document.getElementById('fahrtUploadResult').style.display = 'none';
+  if (zone) {
+    zone.style.display = 'block';
+    zone.innerHTML = '<div class="uz-icon">📊</div><div class="uz-title">Fahrtenbuch hochladen</div><div class="uz-sub">Excel (.xlsx) auswählen</div>';
+  }
+  const res = document.getElementById('fahrtUploadResult');
+  if (res) res.style.display = 'none';
+  // Fahrtenbuch-Screen zurücksetzen
+  const screenZone = document.getElementById('fahrtScreenZone');
+  const screenResult = document.getElementById('fahrtScreenResult');
+  const screenInfoCard = document.getElementById('fahrtScreenInfoCard');
+  if (screenZone) screenZone.style.display = 'block';
+  if (screenResult) screenResult.style.display = 'none';
+  if (screenInfoCard) screenInfoCard.innerHTML = '';
 }
 
 async function loescheFahrtenbuch() {
@@ -1499,7 +1514,7 @@ async function loescheFahrtenbuch() {
     });
     _fahrtDaten = null;
     resetFahrtUpload();
-    showToast('Fahrtenbuch gelöscht', false);
+    showToast('Fahrtenbuch gelöscht');
     ladeMonatsdaten();
   } catch(e) { showToast('Fehler: ' + e.message); }
 }
