@@ -1474,8 +1474,8 @@ async function handleFahrtUpload(input) {
   const zone = document.getElementById('fahrtUploadZone');
   zone.innerHTML = '<div class="si spin" style="font-size:32px">⚙️</div><div style="font-size:13px;color:var(--text-muted);margin-top:8px">Lese Excel und lade hoch…</div>';
   try {
-    // Upload Excel to SharePoint
-    const fn = `Fahrtenbuch_${_currentMonat}.xlsx`;
+    // Upload Excel to SharePoint — Originaldateiname behalten
+    const fn = file.name; // z.B. "Fahrtenbuch-FS - NW 911.xlsx"
     const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
     const ab = await file.arrayBuffer();
     const uploaded = await uploadFile(path, ab, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
