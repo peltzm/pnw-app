@@ -1029,20 +1029,10 @@ function renderHome(belege) {
   document.getElementById('statSonst').textContent = fmt(sonstBetrag);
   document.getElementById('statSonstSub').textContent = `${regular.length} Belege`;
 
-  // Fahrtenbuch-Checkbox & Block
-  const chkFahrt = document.getElementById('chkFahrtenbuch');
+  // Fahrtdaten für Sheet merken
   if (fahrt) {
-    if (chkFahrt) chkFahrt.checked = true;
-    document.getElementById('fahrtBlock').style.display = 'block';
     const fd = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten) : {};
-    document.getElementById('fbAmt').textContent = fmt(fahrtBetrag);
-    document.getElementById('fbBadge').className = 'badge badge-approved';
-    document.getElementById('fbBadge').innerHTML = '<span class="bdot"></span> Excel ✓';
-    document.getElementById('fbFoot').textContent = `${fd.dateiname || 'Fahrtenbuch.xlsx'} · ${fd.gesamtKm || '—'} km · ${(fd.klienten || []).length} Klienten`;
     _fahrtDaten = { ...fd, id: fahrt.id, betrag: fahrtBetrag };
-  } else {
-    if (chkFahrt) chkFahrt.checked = false;
-    document.getElementById('fahrtBlock').style.display = 'none';
   }
 
   // Beleg list
