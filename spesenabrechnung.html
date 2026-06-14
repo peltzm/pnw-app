@@ -1083,14 +1083,15 @@ async function openBelegSheet(id) {
       ${fotos.length > 0
         ? `<div class="photo-strip" style="margin-bottom:12px">${fotos.map((u,i) => `<div class="photo-thumb" onclick="window.open('${u}','_blank')">🧾<button class="photo-del" onclick="event.stopPropagation();removeFotoFromBeleg(${i},'${id}')">✕</button></div>`).join('')}<div class="add-photo" onclick="addPhotoToExisting('${id}')">+</div></div>`
         : `<div style="background:var(--accent-light);border-radius:var(--radius);height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:12px;color:var(--accent);cursor:pointer;flex-direction:column;gap:6px" onclick="addPhotoToExisting('${id}')"><span style="font-size:28px">📷</span>Foto hinzufügen</div>`}
-      <!-- Klient als Checkbox-Toggle -->
+      <!-- Klient als Checkbox-Toggle — wie Fahrtenbuch -->
       <div class="field" style="margin-bottom:12px">
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-muted);text-transform:none;font-weight:400;letter-spacing:0">
-          <input type="checkbox" id="edChkKlient" onchange="toggleEdKlient()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer"
+          <input type="checkbox" id="edChkKlient" onchange="toggleEdKlient()"
+            style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0"
             ${(b.Klient && b.Klient !== 'kein Klient') ? 'checked' : ''}>
           Klientenbezug
         </label>
-        <div id="edKlientWrap" style="margin-top:8px;${(b.Klient && b.Klient !== 'kein Klient') ? '' : 'display:none'}">
+        <div id="edKlientWrap" style="margin-top:8px${(b.Klient && b.Klient !== 'kein Klient') ? '' : ';display:none'}">
           <select id="edKlient">
             <option value="${esc(klientLabel(b.Klient||''))}" selected>${esc(klientLabel(b.Klient||'') || '— bitte wählen —')}</option>
           </select>
