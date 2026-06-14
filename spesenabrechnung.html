@@ -1179,7 +1179,7 @@ async function openBelegSheet(id) {
       </div>
       <div class="field"><label>Händler</label><input type="text" id="edHaendler" value="${esc(b.Haendler||'')}"></div>
       <div class="field"><label>Beschreibung</label><textarea rows="2" id="edBeschreibung">${esc(b.Beschreibung||'')}</textarea></div>
-      <div style="font-size:11px;color:var(--text-hint);margin-top:4px">SharePoint: ${CFG.spFolder}/${_currentMonat}/${shortName()}/</div>`;
+      <div style="font-size:11px;color:var(--text-hint);margin-top:4px">SharePoint: ${userOrdnerPfad()}/</div>`;
     // Klient-Vorschläge nachladen (script-Tags in innerHTML werden nicht ausgeführt)
     // Klient-Vorschläge nur laden wenn Klientenbezug aktiv
     if (b.Klient && b.Klient !== 'kein Klient') {
@@ -1466,7 +1466,8 @@ async function speicherBeleg() {
         : p.file;
       const ext = compressed.name.split('.').pop();
       const fn = `Beleg_${Date.now()}.${ext}`;
-      const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
+      await ensureUserFolder(_currentMonat);
+      const path = `${userOrdnerPfad()}/${fn}`;
       const f = await uploadFile(path, await compressed.arrayBuffer(), compressed.type || 'image/jpeg');
       // Graph API Content-URL als primäre Referenz (funktioniert mit Bearer Token)
       // Format: https://graph.microsoft.com/v1.0/drives/{driveId}/root:{path}:/content
@@ -1588,7 +1589,8 @@ async function handleFahrtUpload(input) {
   try {
     // Upload Excel to SharePoint — Originaldateiname behalten
     const fn = file.name; // z.B. "Fahrtenbuch-FS - NW 911.xlsx"
-    const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
+    await ensureUserFolder(_currentMonat);
+    const path = `${userOrdnerPfad()}/${fn}`;
     const ab = await file.arrayBuffer();
     const uploaded = await uploadFile(path, ab, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     let gesamtKm = 0, klienten = [], anzahlFahrten = 0;
@@ -1623,7 +1625,7 @@ async function handleFahrtUpload(input) {
     } catch(e) { console.warn('XLSX parse failed:', e); showToast('Excel-Parse Fehler: ' + e.message); }
     const betrag = Math.round(gesamtKm * 0.30 * 100) / 100;
     const fahrtGraphUrl = _graphDriveId
-      ? `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}:/content`
+      ? `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${userOrdnerPfad()}/${fn}:/content`
       : (uploaded.webUrl || '');
     const fd = { gesamtKm, betrag, anzahlFahrten, dateiname: fn, dateiUrl: fahrtGraphUrl, klienten };
     await saveBelegToList({ monat: _currentMonat, kategorie: 'fahrtenbuch', betrag, klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`, fahrtDaten: fd, fotoUrls: [fahrtGraphUrl], status: 'Entwurf' });
@@ -2413,7 +2415,8 @@ async function addPhotoToExisting(belegId) {
     const file = this.files[0]; if (!file) return;
     try {
       const fn = `Beleg_${Date.now()}_${file.name}`;
-      const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
+      await ensureUserFolder(_currentMonat);
+      const path = `${userOrdnerPfad()}/${fn}`;
       const uf = await uploadFile(path, await file.arrayBuffer(), file.type || 'image/jpeg');
       // Update list item
       const token = await getToken();
@@ -2717,6 +2720,74 @@ function fmtDate(iso){ if (!iso) return '—'; try { return new Date(iso).toLoca
 function isoDate(iso){ if (!iso) return ''; try { return iso.slice(0,10); } catch(e) { return ''; } }
 function fmtMonat(ym){ if (!ym) return '—'; const [y,m] = ym.split('-'); const mn=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']; return (mn[parseInt(m)-1]||m)+' '+y; }
 function shortName() { const n=currentAccount?.name||''; return n.split(' ').map(w=>w[0]).join('').toUpperCase()||'MA'; }
+
+// Eindeutiger Mitarbeiter-Ordnername aus E-Mail-Präfix (z.B. "markus.peltz")
+function emailPrefix() {
+  const mail = (currentAccount?.username || '').toLowerCase();
+  const prefix = mail.split('@')[0].replace(/[^a-z0-9._-]/g, '') || 'unbekannt';
+  return prefix;
+}
+// Pfad: /Spesenbelege/{Jahr}/{Monat}/{email-präfix}
+function userOrdnerPfad(monat) {
+  const m = monat || _currentMonat || '';
+  const [jahr, mon] = m.split('-');
+  return `${CFG.spFolder}/${jahr}/${mon}/${emailPrefix()}`;
+}
+
+// Stellt sicher, dass der Mitarbeiter-Ordner existiert; legt ihn an und gibt TL Zugriff.
+// Wird beim ersten Beleg/Upload aufgerufen. Idempotent (mehrfacher Aufruf schadet nicht).
+async function ensureUserFolder(monat) {
+  try {
+    const { token, driveId } = await getSiteAndDrive();
+    const [jahr, mon] = (monat || _currentMonat).split('-');
+    const prefix = emailPrefix();
+    // Ordnerkette Schritt für Schritt anlegen (Graph legt nicht automatisch tiefe Pfade an)
+    const segmente = [CFG.spFolder.replace(/^\//,''), jahr, mon, prefix]; // ['Spesenbelege','2026','06','markus.peltz']
+    let elternId = 'root';
+    let aktuellerPfad = '';
+    for (const seg of segmente) {
+      aktuellerPfad = aktuellerPfad ? `${aktuellerPfad}/${seg}` : seg;
+      // Existiert das Segment schon?
+      const checkUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURI(aktuellerPfad)}`;
+      const chk = await fetch(checkUrl, { headers: { Authorization: 'Bearer ' + token } });
+      if (chk.ok) { const item = await chk.json(); elternId = item.id; continue; }
+      // Anlegen unter elternId
+      const createUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${elternId}/children`;
+      const cr = await fetch(createUrl, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: seg, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' })
+      });
+      if (cr.ok) { const item = await cr.json(); elternId = item.id; }
+      else if (cr.status === 409) {
+        // Race condition: existiert nun doch → erneut lesen
+        const re = await fetch(checkUrl, { headers: { Authorization: 'Bearer ' + token } });
+        if (re.ok) { const item = await re.json(); elternId = item.id; }
+      }
+    }
+    // Best-effort: Teamleitern Zugriff auf den Mitarbeiter-Ordner geben (elternId = User-Ordner)
+    await grantTLZugriff(driveId, elternId, token).catch(()=>{});
+    return elternId;
+  } catch(e) { console.warn('ensureUserFolder:', e); return null; }
+}
+
+// Gibt allen Teamleitern (aus _tlMembers) Lesezugriff auf den Ordner (Graph invite, additiv)
+async function grantTLZugriff(driveId, itemId, token) {
+  const tlMails = (_tlMembers || []).map(m => m.mail).filter(Boolean);
+  if (!tlMails.length || !itemId) return;
+  try {
+    await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/invite`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipients: tlMails.map(m => ({ email: m })),
+        roles: ['read'],
+        requireSignIn: true,
+        sendInvitation: false
+      })
+    });
+  } catch(e) { /* best effort */ }
+}
 function klientLabel(v) { if (!v) return '—'; if (v.startsWith('intern:')) return v.replace('intern:',''); if (v.startsWith('fall:')) { const p=v.split(':'); return `${p[2]||''} (${p[1]||''})`.trim(); } return v; }
 function buildKlientOptions(selected) {
   const opts = [
