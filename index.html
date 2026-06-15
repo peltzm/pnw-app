@@ -1406,6 +1406,8 @@ async function loadDraft(id) {
     currentListId = id;
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
+    currentAssignedReviewer = item.Assigned_Reviewer || data._assignedReviewer || '';
+    currentAssignedReviewerMail = item.Assigned_Reviewer_Mail || data._assignedReviewerMail || '';
     currentVersion = parseInt(data._version, 10) || 0;
     // Fill all fields
     // Alt-Entwürfe: BZ_Von/BZ_Bis fehlten früher — aus kombiniertem Berichtszeitraum rekonstruieren
