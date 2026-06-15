@@ -286,6 +286,13 @@
             <div class="field"><label>Berichtszeitraum von</label><input type="date" id="BZ_Von" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>bis</label><input type="date" id="BZ_Bis" style="font-size:12px; padding:6px 8px;"></div>
             <div class="field"><label>Letztes HPG</label><input type="date" id="Letztes_HPG" style="font-size:12px; padding:6px 8px;"></div>
+            <div class="field"><label>Nächstes HPG</label><input type="date" id="Naechstes_HPG" style="font-size:12px; padding:6px 8px;" oninput="checkHpgVorlaufzeit()"></div>
+          </div>
+          <div id="hpgBegruendungWrap" style="display:none; margin-bottom:10px;">
+            <div class="field">
+              <label style="color:var(--error); font-weight:600;">Begründung <span style="font-weight:400; font-size:11px;">(Berichtszeitraum-Vorlaufzeit &lt; 14 Tage)</span></label>
+              <textarea id="HPG_Begruendung" placeholder="Warum Bericht erst jetzt erstellt werden soll" style="font-size:12px; padding:6px 8px; border-color:var(--error);"></textarea>
+            </div>
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
             <div class="field"><label>Stunden bewilligt</label><input type="number" inputmode="decimal" step="any" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
@@ -631,6 +638,10 @@ function updateSectionTitles() {
 function addZiel() {
   const zc = document.getElementById('zieleContainer');
   if (!zc) return;
+  if (zielCount >= 20) {
+    alert('Maximal 20 Ziele möglich.');
+    return;
+  }
   zielCount++;
   const n = zielCount;
   const div = document.createElement('div');
@@ -662,6 +673,17 @@ function addZiel() {
 
 function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
 
+function checkHpgVorlaufzeit() {
+  const val = document.getElementById('Naechstes_HPG')?.value;
+  const wrap = document.getElementById('hpgBegruendungWrap');
+  if (!wrap) return;
+  if (!val) { wrap.style.display = 'none'; return; }
+  const today = new Date(); today.setHours(0,0,0,0);
+  const hpgDate = new Date(val); hpgDate.setHours(0,0,0,0);
+  const diffDays = Math.round((hpgDate - today) / 86400000);
+  wrap.style.display = (diffDays < 14) ? 'block' : 'none';
+}
+
 // ─── DATEN ────────────────────────────────────────────────────────────────────
 // Kontaktdaten (E-Mail + Telefon) einer Fachkraft anhand des Anzeigenamens aus M365.
 // Telefon: bevorzugt Mobilnummer, sonst erste Geschäftsnummer.
@@ -677,7 +699,7 @@ function fachkraftKontakt(name) {
 
 function collectData() {
   const ids = ['Hilfeart','Jugendamt','Sachbearbeitung_JA','Fachkraft_NeueWege',
-    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Fallleitung','Betreuungszeitraum',
+    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Naechstes_HPG','HPG_Begruendung','Fallleitung','Betreuungszeitraum',
     'BZ_Von','BZ_Bis',
     'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
@@ -751,7 +773,7 @@ function collectData() {
   const bzVon = document.getElementById('BZ_Von')?.value || '';
   const bzBis = document.getElementById('BZ_Bis')?.value || '';
   data['Berichtszeitraum'] = bzVon && bzBis ? _de(bzVon) + ' – ' + _de(bzBis) : (bzVon ? _de(bzVon) : (bzBis ? _de(bzBis) : ''));
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= 20; i++) {
     data['Ziel_' + i + '_Beschreibung'] = document.getElementById('Ziel_' + i + '_Beschreibung')?.value || '';
     data['Ziel_' + i + '_Methoden'] = document.getElementById('Ziel_' + i + '_Methoden')?.value || '';
     data['Ziel_' + i + '_Ergebnis'] = document.getElementById('Ziel_' + i + '_Ergebnis')?.value || '';
@@ -1239,6 +1261,7 @@ async function copyStammdaten(id) {
     }
     // Kind 1 befüllt -> abhängige "wie Kind 1"-Blöcke synchronisieren
     syncKind1Addr();
+    checkHpgVorlaufzeit();
     showMainLayout();
     goTo(1);
     window.scrollTo(0,0);
@@ -1416,7 +1439,7 @@ function showMainLayout() {
 
 function resetForm() {
   const ids = ['Jugendamt','Hilfeart','Sachbearbeitung_JA','Fachkraft_NeueWege','Fallleitung',
-    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG',
+    'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Naechstes_HPG','HPG_Begruendung',
     'BZ_Von','BZ_Bis','Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift',
@@ -1441,6 +1464,9 @@ function resetForm() {
   // Betreuungszeitraum-Automatik wieder aktivieren
   const bzReset = document.getElementById('Betreuungszeitraum');
   if (bzReset) delete bzReset.dataset.manuallySet;
+  // HPG-Vorlaufzeit-Hinweis zurücksetzen
+  const hpgWrap = document.getElementById('hpgBegruendungWrap');
+  if (hpgWrap) hpgWrap.style.display = 'none';
   // Kommentare zurücksetzen
   _tlKommentare = {};
   _isReviewMode = false;
@@ -1966,6 +1992,25 @@ async function sendApprovalEmail(listItemId, data, filename) {
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   const fachkraft = data.Fachkraft_NeueWege || currentAccount?.name || '';
   const jugendamt = data.Jugendamt || '';
+
+  // HPG-Vorlaufzeit prüfen (< 14 Tage)
+  const naechstesHpg = data.Naechstes_HPG || '';
+  let hpgWarningHtml = '';
+  if (naechstesHpg) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const hpgDate = new Date(naechstesHpg); hpgDate.setHours(0,0,0,0);
+    const diffDays = Math.round((hpgDate - today) / 86400000);
+    if (diffDays < 14) {
+      const hpgBegruendung = escHtml(data.HPG_Begruendung || '(keine Begründung angegeben)');
+      const hpgDeDate = naechstesHpg.split('-').reverse().join('.');
+      hpgWarningHtml = `
+  <div style="background:#fef2f2; border:2px solid #dc2626; border-radius:6px; padding:14px 16px; margin-bottom:24px;">
+    <div style="color:#9b1c1c; font-weight:bold; font-size:14px; margin-bottom:6px;">⚠ Berichtsvorlaufzeit unterschritten</div>
+    <div style="color:#7f1d1d; font-size:13px; margin-bottom:6px;">Nächstes HPG am <strong>${hpgDeDate}</strong> (in ${diffDays} Tag${diffDays === 1 ? '' : 'en'}) — weniger als 14 Tage Vorlauf.</div>
+    <div style="color:#7f1d1d; font-size:13px;"><strong>Begründung der Fachkraft:</strong> ${hpgBegruendung}</div>
+  </div>`;
+    }
+  }
   
   // Deep link back to app with item ID
   const appUrl = `https://peltzm.github.io/pnw-app/?review=${listItemId}&typ=${currentBerichtstyp}`;
@@ -2010,6 +2055,8 @@ async function sendApprovalEmail(listItemId, data, filename) {
     <tr><td style="padding: 8px 0; color: #666;">Dateiname</td><td style="padding: 8px 0; font-family: monospace; font-size: 13px;">${escHtml(filename)}</td></tr>
   </table>
 
+  ${hpgWarningHtml}
+
   <div style="margin-bottom: 24px; display:flex; gap:12px; flex-wrap:wrap;">
     <a href="${appUrl}" style="display: inline-block; background: #7b3f1e; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
       Bericht prüfen &amp; freigeben →
@@ -2033,10 +2080,16 @@ async function sendApprovalEmail(listItemId, data, filename) {
     message: {
       subject: `[Freigabe] ${berichtstyp}: ${kind} – ${jugendamt}`,
       body: { contentType: 'HTML', content: emailBody },
-      toRecipients: [
-        { emailAddress: { address: getFalleitungMail() || 'markus.peltz@praxisneuewege.de' } },
-        { emailAddress: { address: 'markus.peltz@praxisneuewege.de' } }
-      ],
+      toRecipients: (() => {
+        // An alle TL Ambulant senden
+        const tlMails = _tlMembers.map(m => m.mail).filter(Boolean);
+        if (tlMails.length > 0) return tlMails.map(address => ({ emailAddress: { address } }));
+        // Fallback: ausgewählter TL + Markus
+        return [
+          { emailAddress: { address: getFalleitungMail() || 'markus.peltz@praxisneuewege.de' } },
+          { emailAddress: { address: 'markus.peltz@praxisneuewege.de' } }
+        ];
+      })(),
       ccRecipients: []
     },
     saveToSentItems: false
