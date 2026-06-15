@@ -42,7 +42,7 @@
   .field-grid.full { grid-template-columns: 1fr; }
   .field-grid.triple { grid-template-columns: 1fr 1fr 1fr; }
   .field-grid.sig-triple { grid-template-columns: 1fr 1fr 1fr; }
-  .bt-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .bt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
   .field input, .field select, .field textarea { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; color: var(--text); background: white; outline: none; font-family: inherit; transition: border-color 0.12s; width: 100%; }
@@ -97,7 +97,7 @@
     .btn { padding: 11px 20px; font-size: 14px; min-height: 44px; }
     .btn-add, .btn-remove { min-height: 36px; padding: 6px 14px; }
     .start-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
-    .bt-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .bt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   /* Mobile */
   @media (max-width: 640px) {
