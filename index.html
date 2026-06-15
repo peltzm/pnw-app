@@ -2178,8 +2178,8 @@ async function sendApprovalEmail(listItemId, data, filename) {
   ${hpgWarningHtml}
 
   <div style="margin-bottom:24px;">
-    <a href="${appUrl}" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #7b3f1e; color:#7b3f1e; background:white; margin-bottom:10px;">Bericht prüfen &amp; freigeben →</a>
-    <a href="${docUrl}" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #0078d4; color:#0078d4; background:white;">Dokument in SharePoint öffnen →</a>
+    <a href="${appUrl}" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #7b3f1e; color:#222; background:white; margin-bottom:10px;">Bericht prüfen &amp; freigeben →</a>
+    <a href="${docUrl}" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #0078d4; color:#222; background:white;">Dokument in SharePoint öffnen →</a>
   </div>
 
   <p style="color: #666; font-size: 13px; margin-bottom: 24px;">
@@ -2255,7 +2255,7 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
     <tr><td style="padding: 8px 0; color: #666;">Jugendamt</td><td style="padding: 8px 0;">${escHtml(data.Jugendamt || '—')}</td></tr>
     <tr><td style="padding: 8px 0; color: #666;">Dateiname</td><td style="padding: 8px 0; font-family: monospace; font-size: 13px;">${escHtml(pdfName)}</td></tr>
   </table>
-  ${pdfUrl ? `<p><a href="${pdfUrl}" style="display:block; max-width:260px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2e7d32; color:#2e7d32; background:white;">Finales PDF öffnen →</a></p>` : `<p style="color:#888;">Das PDF liegt im SharePoint-Ordner ${escHtml(CONFIG.outputFolder)}.</p>`}
+  ${pdfUrl ? `<p><a href="${pdfUrl}" style="display:block; max-width:260px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2e7d32; color:#222; background:white;">Finales PDF öffnen →</a></p>` : `<p style="color:#888;">Das PDF liegt im SharePoint-Ordner ${escHtml(CONFIG.outputFolder)}.</p>`}
 </body></html>` },
       toRecipients: (() => {
         // An Sonja + alle TL Ambulant + einreichende Fachkraft
@@ -2664,9 +2664,9 @@ async function tlFreigebenAnSonja() {
       + '</table>'
       + hpgWarning
       + '<div style="margin-bottom:24px;">'
-      + '<a href="' + sonjaUrl + '?direct_approve=1" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2d6a4f; color:#2d6a4f; background:white; margin-bottom:10px;">✓ Final freigeben &amp; PDF erstellen →</a>'
-      + '<a href="' + sonjaUrl + '" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #7b3f1e; color:#7b3f1e; background:white; margin-bottom:10px;">Bericht prüfen &amp; bearbeiten →</a>'
-      + '<a href="' + docUrl + '" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #0078d4; color:#0078d4; background:white;">Dokument in SharePoint öffnen →</a>'
+      + '<a href="' + sonjaUrl + '?direct_approve=1" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2d6a4f; color:#222; background:white; margin-bottom:10px;">✓ Final freigeben &amp; PDF erstellen →</a>'
+      + '<a href="' + sonjaUrl + '" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #7b3f1e; color:#222; background:white; margin-bottom:10px;">Bericht prüfen &amp; bearbeiten →</a>'
+      + '<a href="' + docUrl + '" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #0078d4; color:#222; background:white;">Dokument in SharePoint öffnen →</a>'
       + '</div>'
       + '<p style="color:#666; font-size:13px; margin-bottom:24px;">Alle Berichte im Überblick: <a href="' + folderUrl + '" style="color:#0078d4;">Ordner in SharePoint öffnen →</a></p>'
       + '<p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Nach der Prüfung können Sie den Bericht in der App final freigeben — dabei wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>'
