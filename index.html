@@ -174,7 +174,7 @@
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Clearingbericht</div>
           </div>
           <div onclick="selectBerichtstyp('stationaer')" id="bt_stationaer" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s; min-height:44px; display:flex; align-items:center; justify-content:center;" onmouseover="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--accent-mid)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
-            <div style="font-size:12px; font-weight:500; color:var(--text-muted);">VB stationär</div>
+            <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Verlaufsbericht stationär</div>
           </div>
           <div style="padding:10px; border:1px dashed var(--border); border-radius:var(--radius); text-align:center; background:var(--bg); cursor:default; opacity:0.55; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Monatsbericht</div>
@@ -720,7 +720,7 @@ function goTo(n) {
 }
 
 function updateSectionTitles() {
-  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'};
+  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'};
   const typ = labels[currentBerichtstyp] || 'Verlaufsbericht';
   const staticTitles = {
     's1_title': 'Stammdaten',
@@ -1265,7 +1265,7 @@ function selectBerichtstyp(typ) {
     stationaer: '/Templates/Verlaufsbericht-Stationaer_Template.docx'
   };
   CONFIG.templatePath = paths[typ];
-  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'};
+  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'};
   const badge = document.getElementById('berichtstypBadge');
   if (badge) badge.textContent = labels[typ];
   updateSectionTitles();
@@ -2146,7 +2146,7 @@ function getFalleitungMail() {
 
 async function sendApprovalEmail(listItemId, data, filename) {
   const token = await getToken();
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   const fachkraft = data.Fachkraft_NeueWege || currentAccount?.name || '';
   const jugendamt = data.Jugendamt || '';
@@ -2267,7 +2267,7 @@ async function sendApprovalEmail(listItemId, data, filename) {
 
 // Fertigstellungs-Mail an info@ nach finaler Freigabe + PDF-Erstellung
 async function sendCompletionEmail(token, driveId, pdfName, data) {
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
   const nachname = data.Kind_Familienname || 'Unbekannt';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // webUrl des finalen PDFs per Graph ermitteln
@@ -2640,7 +2640,7 @@ async function tlFreigebenAnSonja() {
 
     // Mail an Sonja
     const token = await getToken();
-    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[currentBerichtstyp] || 'Bericht';
+    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
     const jugendamt = data.Jugendamt || '';
     const sonjaUrl = `${APP_BASE_URL}?sonja=${currentListId}&typ=${currentBerichtstyp}`;
@@ -3290,8 +3290,8 @@ const SECTION_TEMPLATES = {
     },
     s4: {
       title: 'Hilfeplanziele',
-      sub: 'Einschätzung zur Zielerreichung und des weiteren Hilfebedarfs anhand der in der Hilfeplanung festgelegten Teilziele',
-      hasZiele: true
+      sub: '',
+      fields: []
     },
     s5: {
       title: 'Perspektive & Empfehlung',
@@ -3318,7 +3318,7 @@ function buildDynamicSections(force = false) {
   
   // Build S3
   const s3 = tpl.s3;
-  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[typ] || typ;
+  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[typ] || typ;
   const _s3t = document.getElementById('s3_title'); if(_s3t) _s3t.textContent = s3.title + ' — ' + _typLabel;
   const _s3s = document.getElementById('s3_sub'); if(_s3s) _s3s.textContent = s3.sub;
   let s3html = '';
