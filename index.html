@@ -435,10 +435,10 @@
             </div>
           </div>
         </div>
-        <!-- Sonja-Prüfmodus (finale Freigabe) -->
+        <!-- GF-Prüfmodus (finale Freigabe) -->
         <div id="sonjaReviewActions" style="display:none; margin-bottom:1rem;">
           <div style="background:#eaf4ee; border:2px solid #2d6a4f; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
-            <div style="font-size:13px; font-weight:600; color:#2d6a4f; margin-bottom:8px;">✅ Finale Freigabe — Sonja</div>
+            <div style="font-size:13px; font-weight:600; color:#2d6a4f; margin-bottom:8px;">✅ GF-Modus — Finale Freigabe</div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht wurde von der Teamleitung geprüft. Jetzt final freigeben und PDF erstellen, oder zurück an die Teamleitung.</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
               <button class="btn" onclick="approveReport()" style="background:#2d6a4f; color:white; min-height:44px;">✓ Final freigeben & PDF erstellen</button>
@@ -1116,7 +1116,7 @@ let currentEingereichtVon = ''; // ursprüngliche/r Einreicher/in (darf durch TL
 let currentVersion = 0;         // Versionsnummer der hochgeladenen Dokumente (steigt bei jeder Freigabeanfrage)
 let currentAssignedReviewer = ''; // TL der den Bericht angenommen hat (displayName)
 let currentAssignedReviewerMail = ''; // Mail des annehmenden TL
-let _isSonjaMode = false;       // Sonja's finale Freigabe-Modus
+let _isSonjaMode = false;       // GF-Modus (finale Freigabe)
 let _groupLoadPromise = Promise.resolve(); // damit auf geladene Gruppen gewartet werden kann
 
 // Ist die angemeldete Person Teamleitung (oder Admin)?
@@ -1497,7 +1497,7 @@ async function loadDraft(id) {
     const isReviewLink = _params.get('review') === String(id);
     const isSonjaLink  = _params.get('sonja')  === String(id);
     if (isSonjaLink && isTLUser()) {
-      // Sonja (oder TL) öffnet finalen Prüf-Link
+      // GF-Modus: öffnet finalen Prüf-Link
       goTo(1);
       activateSonjaMode();
       window.scrollTo(0,0);
@@ -2638,11 +2638,11 @@ async function tlFreigebenAnSonja() {
       + '</table>'
       + hpgWarning
       + '<div style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">'
-      + '<a href="' + sonjaUrl + '" style="display:inline-block; background:#2d6a4f; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht final freigeben →</a>'
+      + '<a href="' + sonjaUrl + '" style="display:inline-block; background:#7b3f1e; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht prüfen &amp; bearbeiten →</a>'
       + '<a href="' + docUrl + '" style="display:inline-block; background:#0078d4; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Dokument in SharePoint öffnen →</a>'
       + '</div>'
       + '<p style="color:#666; font-size:13px; margin-bottom:24px;">Alle Berichte im Überblick: <a href="' + folderUrl + '" style="color:#0078d4;">Ordner in SharePoint öffnen →</a></p>'
-      + '<p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Bei Freigabe wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>'
+      + '<p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Nach der Prüfung können Sie den Bericht in der App final freigeben — dabei wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>'
       + '</body></html>';
 
     const mail = {
@@ -2666,7 +2666,7 @@ async function tlFreigebenAnSonja() {
       const errMsg = errBody?.error?.message || ('HTTP ' + mailResp.status);
       setStatus('error', '✓ Gespeichert — aber Mail an Sonja fehlgeschlagen: ' + errMsg);
     } else {
-      setStatus('done', '✓ Freigabe weitergeleitet — Sonja erhält eine E-Mail zur finalen Freigabe.');
+      setStatus('done', '✓ Freigabe weitergeleitet — GF erhält eine E-Mail zur finalen Freigabe.');
     }
 
     document.getElementById('tlAktionen').style.display = 'none';
@@ -2723,7 +2723,7 @@ function activateSonjaMode() {
   document.getElementById('sonjaReviewActions').style.display = 'block';
   document.getElementById('normalActions').style.display = 'none';
   renderFieldComments();
-  // Grüner Rahmen für Sonja-Modus
+  // Grüner Rahmen für GF-Modus
   if (!document.getElementById('reviewFrame')) {
     const frame = document.createElement('div');
     frame.id = 'reviewFrame';
@@ -2736,7 +2736,7 @@ function activateSonjaMode() {
     banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#2d6a4f; color:#fff; z-index:999; padding:10px 16px; box-shadow:0 2px 6px rgba(0,0,0,0.25);';
     const tlInfo = currentAssignedReviewer ? ` · Geprüft von: <strong>${escHtml(currentAssignedReviewer)}</strong>` : '';
     banner.innerHTML = `<div style="text-align:center; font-size:13px;">
-      <strong>✅ FINALE FREIGABE — Sie prüfen diesen Bericht als Sonja${tlInfo}.</strong><br>
+      <strong>✅ GF-MODUS — Sie prüfen diesen Bericht als Geschäftsführung${tlInfo}.</strong><br>
       <span style="font-size:12px; opacity:0.9;">Seite „Absenden": Final freigeben & PDF erstellen — oder zurück an die Teamleitung.</span>
     </div>`;
     document.body.appendChild(banner);
