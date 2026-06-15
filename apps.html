@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#ffffff">
 <title>Interner Bereich — Praxis NeueWege</title>
-<script src="https://alcdn.msauth.net/browser/3.28.1/js/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
@@ -254,7 +254,8 @@ const CFG = {
 };
 const msalConfig = {
   auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
-  cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+  system: { allowNativeBroker: false }
 };
 const msalInstance = new msal.PublicClientApplication(msalConfig);
 const SCOPES = ['User.Read'];
@@ -266,22 +267,11 @@ async function login() {
   errEl.style.display = 'none';
   const req = { scopes: SCOPES };
   try {
-    // Try popup first (works on iOS Safari private mode)
-    const result = await msalInstance.loginPopup(req);
-    if (result && result.account) {
-      msalInstance.setActiveAccount(result.account);
-      await showApp(result.account);
-    }
-  } catch(popupErr) {
-    // Popup blocked? Fall back to redirect
-    if (popupErr.errorCode === 'popup_window_error' || popupErr.errorCode === 'empty_window_error') {
-      try { await msalInstance.loginRedirect(req); }
-      catch(e) { console.error(e); errEl.style.display = 'block'; btn.disabled = false; }
-    } else {
-      console.error(popupErr);
-      errEl.style.display = 'block';
-      btn.disabled = false;
-    }
+    await msalInstance.loginRedirect(req);
+  } catch(e) {
+    console.error(e);
+    errEl.style.display = 'block';
+    btn.disabled = false;
   }
 }
 
