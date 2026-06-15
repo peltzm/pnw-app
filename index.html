@@ -485,10 +485,17 @@
 
 <script>
 // ─── FESTE KONFIGURATION ──────────────────────────────────────────────────────
+// Dynamische Basis-URL — funktioniert auf GitHub Pages und apps.praxisneuewege.de
+const APP_BASE_URL = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+
 const CONFIG = {
   clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
   tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
-  redirectUri: 'https://apps.praxisneuewege.de/',
+  redirectUri: (function() {
+    // Dynamisch: funktioniert sowohl auf peltzm.github.io als auch auf apps.praxisneuewege.de
+    const h = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+    return h.endsWith('/') ? h : h + '/';
+  })(),
   siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com',
   templatePath: '/Templates/Verlaufsbericht_Template.docx',
   outputFolder: '/Verlaufsberichte',
@@ -509,44 +516,24 @@ async function initMsal() {
       authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
       redirectUri: CONFIG.redirectUri
     },
-    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
-  system: { allowNativeBroker: false }
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
   try {
     const response = await msalInstance.handleRedirectPromise();
-    if (response) {
-      currentAccount = response.account; accessToken = response.accessToken;
-      // Restore query params that were present before the redirect
-      const savedQs = sessionStorage.getItem('pnw_redirect_qs');
-      if (savedQs) {
-        sessionStorage.removeItem('pnw_redirect_qs');
-        const newUrl = window.location.pathname + savedQs;
-        window.history.replaceState(null, '', newUrl);
-      }
-      showApp(); return;
-    }
+    if (response) { currentAccount = response.account; accessToken = response.accessToken; showApp(); return; }
   } catch(e) { console.warn(e); }
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) { currentAccount = accounts[0]; await getToken(); showApp(); }
 }
 
 async function login() {
-  const btn = document.getElementById('loginBtn');
-  const errEl = document.getElementById('loginError');
-  btn.disabled = true;
-  errEl.style.display = 'none';
-  const req = { scopes: SCOPES };
   try {
-    // Save query params so they survive the redirect
-    const qs = window.location.search;
-    if (qs) sessionStorage.setItem('pnw_redirect_qs', qs);
-    await msalInstance.loginRedirect(req);
+    await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'] });
   } catch(e) {
-    console.error(e);
-    errEl.style.display = 'block';
-    btn.disabled = false;
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('loginError').textContent = 'Fehler: ' + (e.errorMessage || e.message);
   }
 }
 
@@ -2114,7 +2101,7 @@ async function sendApprovalEmail(listItemId, data, filename) {
   }
   
   // Deep link back to app with item ID
-  const appUrl = `https://peltzm.github.io/pnw-app/?review=${listItemId}&typ=${currentBerichtstyp}`;
+  const appUrl = `${APP_BASE_URL}?review=${listItemId}&typ=${currentBerichtstyp}`;
 
   // Direktlink zum hochgeladenen Dokument + Link zum Ordner per Graph ermitteln.
   // Fallback jeweils: Site-URL.
@@ -2393,7 +2380,7 @@ async function rejectReport() {
     const mail = {
       message: {
         subject: `[Zurückgewiesen] ${kind} – Bitte korrigieren`,
-        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="https://peltzm.github.io/pnw-app/?edit=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und überarbeiten →</a></p><p style="font-size:13px; color:#666;">Nach der Überarbeitung bitte auf der Seite „Absenden“ erneut „Freigabe anfordern“ anklicken — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage.</p>` },
+        body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="${APP_BASE_URL}?edit=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und überarbeiten →</a></p><p style="font-size:13px; color:#666;">Nach der Überarbeitung bitte auf der Seite „Absenden“ erneut „Freigabe anfordern“ anklicken — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage.</p>` },
         toRecipients: [{ emailAddress: { address: currentEingereichtVon || data._eingereichtVon || currentAccount?.username || 'info@praxisneuewege.de' } }]
       },
       saveToSentItems: false
@@ -2590,7 +2577,7 @@ async function tlFreigebenAnSonja() {
     const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[currentBerichtstyp] || 'Bericht';
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
     const jugendamt = data.Jugendamt || '';
-    const sonjaUrl = `https://peltzm.github.io/pnw-app/?sonja=${currentListId}&typ=${currentBerichtstyp}`;
+    const sonjaUrl = `${APP_BASE_URL}?sonja=${currentListId}&typ=${currentBerichtstyp}`;
     const tlName = currentAccount?.name || '';
     const sonjaMail = 'sonja.peltz@praxisneuewege.de';
 
@@ -2676,7 +2663,7 @@ async function rejectBackToTL() {
 
     const token = await getToken();
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim();
-    const reviewUrl = `https://peltzm.github.io/pnw-app/?review=${currentListId}&typ=${currentBerichtstyp}`;
+    const reviewUrl = `${APP_BASE_URL}?review=${currentListId}&typ=${currentBerichtstyp}`;
     const tlMail = currentAssignedReviewerMail || getFalleitungMail() || 'markus.peltz@praxisneuewege.de';
     const mail = {
       message: {
