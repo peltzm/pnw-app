@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sozialraumangebote — Praxis NeueWege</title>
-<script src="https://alcdn.msauth.net/browser/3.28.1/js/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <style>
 /* ── Tokens (1:1 Berichtsgenerator) ─────────────────────────────────────── */
 :root {
@@ -618,7 +618,8 @@ let currentEditId = null;
 async function initMsal() {
   const msalConfig = {
     auth: { clientId: CONFIG.clientId, authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`, redirectUri: CONFIG.redirectUri },
-    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+  system: { allowNativeBroker: false }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
@@ -631,8 +632,18 @@ async function initMsal() {
 }
 
 async function login() {
-  try { await msalInstance.loginPopup({ scopes: ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','User.Read'] }); }
-  catch(e) { document.getElementById('loginError').style.display='block'; document.getElementById('loginError').textContent='Fehler: '+(e.errorMessage||e.message); }
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginError');
+  btn.disabled = true;
+  errEl.style.display = 'none';
+  const req = { scopes: SCOPES };
+  try {
+    await msalInstance.loginRedirect(req);
+  } catch(e) {
+    console.error(e);
+    errEl.style.display = 'block';
+    btn.disabled = false;
+  }
 }
 
 async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CONFIG.redirectUri }); }
