@@ -2583,6 +2583,31 @@ async function tlFreigebenAnSonja() {
     const tlName = currentAccount?.name || '';
     const sonjaMail = 'sonja.peltz@praxisneuewege.de';
 
+    // Dokument- und Ordner-Links aus SharePoint ermitteln
+    let docUrl = '', folderUrl = '';
+    try {
+      const { driveId } = await getSiteAndDrive();
+      const _datum = data.Datum_Unterschrift || '';
+      const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
+      const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
+      const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
+      const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
+      const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
+      const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
+      const fileResp = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (fileResp.ok) { const f = await fileResp.json(); docUrl = f.webUrl || ''; }
+      const folderResp = await fetch(
+        `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (folderResp.ok) { const fo = await folderResp.json(); folderUrl = fo.webUrl || ''; }
+    } catch(e) { /* Fallback: Links bleiben leer */ }
+    if (!docUrl) docUrl = folderUrl || CONFIG.siteUrl;
+    if (!folderUrl) folderUrl = CONFIG.siteUrl;
+
     // HPG-Vorlaufzeit prüfen
     const naechstesHpg = data.Naechstes_HPG || '';
     let hpgWarning = '';
@@ -2614,7 +2639,9 @@ async function tlFreigebenAnSonja() {
       + hpgWarning
       + '<div style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">'
       + '<a href="' + sonjaUrl + '" style="display:inline-block; background:#2d6a4f; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht final freigeben →</a>'
+      + '<a href="' + docUrl + '" style="display:inline-block; background:#0078d4; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Dokument in SharePoint öffnen →</a>'
       + '</div>'
+      + '<p style="color:#666; font-size:13px; margin-bottom:24px;">Alle Berichte im Überblick: <a href="' + folderUrl + '" style="color:#0078d4;">Ordner in SharePoint öffnen →</a></p>'
       + '<p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Bei Freigabe wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>'
       + '</body></html>';
 
