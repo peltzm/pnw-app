@@ -2,148 +2,224 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#ffffff">
-<title>Anwendungen — Praxis NeueWege</title>
+<title>Interner Bereich — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
   --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
   --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
   --success:#2d6a4f; --success-bg:#eaf4ee;
+  --error:#9b1c1c; --error-bg:#fef2f2;
   --radius:8px; --radius-lg:12px;
   --hdr-h:56px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
 
-/* Header */
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
 .header-brand{display:flex;align-items:center;gap:10px}
 .header-brand img{height:28px;width:auto}
 .header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.user-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.btn-logout{margin-left:6px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted);font-family:inherit}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center}
+.login-card img{height:72px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:44px}
+.btn-primary{background:var(--surface);color:var(--accent);border:1px solid var(--accent);width:100%}
+.btn-primary:active{background:var(--accent-light)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;line-height:1.5;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* ── APP SCREEN ── */
+#appScreen{display:none}
 
 /* Hero */
-.hero{text-align:center;padding:40px 20px 28px}
-.hero img{height:72px;width:auto;margin-bottom:16px}
-.hero h1{font-size:20px;font-weight:600;color:var(--text);margin-bottom:6px}
-.hero p{font-size:13px;color:var(--text-muted);max-width:320px;margin:0 auto;line-height:1.6}
+.hero{text-align:center;padding:32px 20px 20px}
+.hero img{height:60px;width:auto;margin-bottom:12px}
+.hero h1{font-size:18px;font-weight:600;color:var(--text);margin-bottom:4px}
+.hero p{font-size:12px;color:var(--text-muted)}
 
 /* Section label */
-.slabel{font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.08em;padding:14px 16px 6px}
+.slabel{font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.08em;padding:12px 16px 6px}
 
-/* App grid */
-.app-grid{display:grid;grid-template-columns:1fr;gap:0;padding:0 12px 8px}
-@media(min-width:540px){.app-grid{grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 12px}}
-@media(min-width:800px){.app-grid{grid-template-columns:1fr 1fr 1fr}}
+/* ── APP GRID — 2×2 quadratisch ── */
+.app-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 12px 12px;max-width:480px;margin:0 auto}
 
-/* App card */
-.app-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;display:flex;align-items:stretch;cursor:pointer;overflow:hidden;text-decoration:none;color:inherit;transition:border-color .12s,box-shadow .12s;-webkit-tap-highlight-color:transparent}
-@media(min-width:540px){.app-card{margin-bottom:0;flex-direction:column}}
-.app-card:active,.app-card:hover{border-color:var(--accent-mid);box-shadow:0 2px 12px rgba(123,63,30,.12)}
+.app-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;text-decoration:none;color:inherit;cursor:pointer;transition:border-color .12s,box-shadow .12s;aspect-ratio:1/1;padding:16px 12px;gap:10px}
+.app-card:active,.app-card:hover{border-color:var(--accent-mid);box-shadow:0 2px 12px rgba(123,63,30,.12);background:var(--accent-light)}
 
-/* Card side (mobile icon column) */
-.card-side{width:64px;flex-shrink:0;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:28px}
-@media(min-width:540px){.card-side{width:100%;height:64px;border-radius:0;border-bottom:1px solid var(--border)}}
+.card-icon{font-size:32px;line-height:1}
+.card-name{font-size:14px;font-weight:600;color:var(--text);line-height:1.25}
+.card-desc{font-size:11px;color:var(--text-muted);line-height:1.4}
 
-/* Card body */
-.card-body{flex:1;padding:14px 14px 12px}
-@media(min-width:540px){.card-body{padding:14px 16px 16px}}
-.card-name{font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px}
-.card-desc{font-size:12px;color:var(--text-muted);line-height:1.5}
-
-/* Card footer / arrow (mobile) */
-.card-arrow{width:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:18px}
-@media(min-width:540px){.card-arrow{display:none}}
-.card-link{display:none}
-@media(min-width:540px){
-  .card-link{display:inline-flex;align-items:center;gap:4px;margin-top:12px;font-size:12px;font-weight:500;color:var(--accent);border:1px solid var(--accent);border-radius:var(--radius);padding:6px 12px;transition:background .12s}
-  .app-card:hover .card-link{background:var(--accent-light)}
-}
-
-/* Soon cards */
-.app-card.soon{opacity:.5;pointer-events:none}
-.soon-pill{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-mid);background:var(--accent-light);border:1px solid #e8c4a8;border-radius:4px;padding:1px 7px;margin-top:6px}
-
-/* Divider */
-.divider{margin:8px 12px 0;border:none;border-top:1px solid var(--border)}
+/* Soon */
+.app-card.soon{opacity:.45;pointer-events:none}
+.soon-pill{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-mid);background:var(--accent-light);border:1px solid #e8c4a8;border-radius:4px;padding:1px 7px;margin-top:2px;display:inline-block}
 
 /* Footer */
-.page-footer{text-align:center;padding:24px 16px;font-size:11px;color:var(--text-hint);border-top:1px solid var(--border);margin-top:16px}
+.page-footer{text-align:center;padding:20px 16px;font-size:11px;color:var(--text-hint);border-top:1px solid var(--border);margin-top:8px}
 .page-footer a{color:var(--accent-mid);text-decoration:none}
 </style>
 </head>
 <body>
 
+<!-- HEADER -->
 <header class="header">
   <div class="header-brand">
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
-    <span>Anwendungen</span>
+    <span>Interner Bereich</span>
+  </div>
+  <div class="user-badge" id="userBadge" style="display:none">
+    <div class="user-dot"></div>
+    <span id="userName"></span>
+    <button class="btn-logout" onclick="logout()">Abmelden</button>
   </div>
 </header>
 
-<div class="hero">
-  <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
-  <h1>Interne Anwendungen</h1>
-  <p>Dieser Bereich ist ausschließlich für autorisierte Mitarbeiter zugänglich. Bitte authentifizieren Sie sich mit Ihrem Konto. Jeder Zugriff wird protokolliert — unbefugte Nutzung ist strafbar gemäß §202a StGB.</p>
-</div>
-
-<div class="slabel">Verfügbar</div>
-
-<div class="app-grid">
-
-  <a class="app-card" href="https://peltzm.github.io/pnw-app/sozialraum.html">
-    <div class="card-side">🗺️</div>
-    <div class="card-body">
-      <div class="card-name">Sozialraumangebote</div>
-      <div class="card-desc">Regionale Angebote in den Versorgungsregionen finden, pflegen und ergänzen.</div>
-      <div class="card-link">Öffnen →</div>
-    </div>
-    <div class="card-arrow">›</div>
-  </a>
-
-  <a class="app-card" href="https://peltzm.github.io/pnw-app/index.html">
-    <div class="card-side">📄</div>
-    <div class="card-body">
-      <div class="card-name">Berichtsgenerator</div>
-      <div class="card-desc">Verlaufsberichte und Förderpläne erstellen und in SharePoint speichern.</div>
-      <div class="card-link">Öffnen →</div>
-    </div>
-    <div class="card-arrow">›</div>
-  </a>
-
-  <a class="app-card" href="https://peltzm.github.io/pnw-app/spesenabrechnung.html">
-    <div class="card-side">🧾</div>
-    <div class="card-body">
-      <div class="card-name">Spesenabrechnung</div>
-      <div class="card-desc">Fahrtkosten und Belege erfassen, scannen und zur Genehmigung einreichen.</div>
-      <div class="card-link">Öffnen →</div>
-    </div>
-    <div class="card-arrow">›</div>
-  </a>
-
-</div>
-
-<hr class="divider">
-<div class="slabel">Demnächst</div>
-
-<div class="app-grid">
-
-  <div class="app-card soon">
-    <div class="card-side">📋</div>
-    <div class="card-body">
-      <div class="card-name">Protokolle</div>
-      <div class="card-desc">Gesprächs- und Verlaufsprotokolle erstellen und in SharePoint speichern.</div>
-      <span class="soon-pill">In Entwicklung</span>
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <div class="login-title">Interner Bereich</div>
+    <div class="login-desc">Dieser Bereich ist ausschließlich für autorisierte Mitarbeiter zugänglich. Bitte authentifizieren Sie sich mit Ihrem Konto. Jeder Zugriff wird protokolliert&nbsp;— unbefugte Nutzung ist strafbar gemäß&nbsp;§202a&nbsp;StGB.</div>
+    <button class="btn btn-primary" id="loginBtn" onclick="login()">
+      <svg width="16" height="16" viewBox="0 0 23 23" fill="none">
+        <path d="M1 1h10v10H1z" fill="#f25022"/>
+        <path d="M12 1h10v10H12z" fill="#7fba00"/>
+        <path d="M1 12h10v10H1z" fill="#00a4ef"/>
+        <path d="M12 12h10v10H12z" fill="#ffb900"/>
+      </svg>
+      Mit Microsoft anmelden
+    </button>
+    <div id="loginError" class="alert alert-error" style="display:none">
+      Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.
     </div>
   </div>
-
 </div>
 
-<footer class="page-footer">
-  Praxis NeueWege · <a href="https://www.praxisneuewege.de">praxisneuewege.de</a>
-</footer>
+<!-- APP SCREEN -->
+<div id="appScreen">
+  <div class="hero">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <h1>Anwendungen</h1>
+    <p id="welcomeText">Willkommen</p>
+  </div>
 
+  <div class="slabel">Verfügbar</div>
+  <div class="app-grid">
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/sozialraum.html">
+      <div class="card-icon">🗺️</div>
+      <div class="card-name">Sozialraum&shy;angebote</div>
+      <div class="card-desc">Regionale Angebote finden und pflegen</div>
+    </a>
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/index.html">
+      <div class="card-icon">📄</div>
+      <div class="card-name">Berichts&shy;generator</div>
+      <div class="card-desc">Berichte erstellen und speichern</div>
+    </a>
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/spesenabrechnung.html">
+      <div class="card-icon">🧾</div>
+      <div class="card-name">Spesen&shy;abrechnung</div>
+      <div class="card-desc">Belege erfassen und einreichen</div>
+    </a>
+
+    <div class="app-card soon">
+      <div class="card-icon">📋</div>
+      <div class="card-name">Protokolle</div>
+      <div class="card-desc">Gesprächsprotokolle erstellen</div>
+      <span class="soon-pill">Demnächst</span>
+    </div>
+
+  </div>
+
+  <footer class="page-footer">
+    Praxis NeueWege · <a href="https://www.praxisneuewege.de">praxisneuewege.de</a>
+  </footer>
+</div>
+
+<script>
+const CFG = {
+  clientId:    'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/apps.html'
+};
+
+const msalConfig = {
+  auth: {
+    clientId:    CFG.clientId,
+    authority:   `https://login.microsoftonline.com/${CFG.tenantId}`,
+    redirectUri: CFG.redirectUri
+  },
+  cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
+};
+
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+const SCOPES = ['User.Read'];
+
+async function login() {
+  document.getElementById('loginBtn').disabled = true;
+  document.getElementById('loginError').style.display = 'none';
+  try {
+    await msalInstance.loginRedirect({ scopes: SCOPES });
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loginError').style.display = 'block';
+    document.getElementById('loginBtn').disabled = false;
+  }
+}
+
+function logout() {
+  msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri });
+}
+
+function showApp(account) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userBadge').style.display = 'flex';
+  const name = account.name || account.username;
+  document.getElementById('userName').textContent = name;
+  document.getElementById('welcomeText').textContent = `Angemeldet als ${name}`;
+}
+
+async function init() {
+  try {
+    // Handle redirect response first
+    const resp = await msalInstance.handleRedirectPromise();
+    if (resp && resp.account) {
+      msalInstance.setActiveAccount(resp.account);
+      showApp(resp.account);
+      return;
+    }
+    // Check for existing session
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+      msalInstance.setActiveAccount(accounts[0]);
+      showApp(accounts[0]);
+    }
+    // else: stay on login screen
+  } catch(e) {
+    console.error('Init error:', e);
+  }
+}
+
+init();
+</script>
 </body>
 </html>
