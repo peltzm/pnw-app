@@ -57,7 +57,7 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
 .slabel{font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.08em;padding:12px 16px 6px}
 
 /* ── APP GRID — 2×2 quadratisch ── */
-.app-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 12px 12px;max-width:480px;margin:0 auto}
+.app-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:0 12px 12px;max-width:680px;margin:0 auto}
 
 .app-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;text-decoration:none;color:inherit;cursor:pointer;transition:border-color .12s,box-shadow .12s;aspect-ratio:1/1;padding:16px 12px;gap:10px}
 .app-card:active,.app-card:hover{border-color:var(--accent-mid);box-shadow:0 2px 12px rgba(123,63,30,.12);background:var(--accent-light)}
@@ -140,10 +140,29 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
       <div class="card-desc">Belege erfassen und einreichen</div>
     </a>
 
+    <a class="app-card" href="https://neue-wege.kilanka.de/login" target="_blank" rel="noopener">
+      <div class="card-icon">🏥</div>
+      <div class="card-name">Kilanka</div>
+      <div class="card-desc">Klientenverwaltung und Dokumentation</div>
+    </a>
+
+    <a class="app-card" href="https://apps.datev.de/ano/de/" target="_blank" rel="noopener">
+      <div class="card-icon">💶</div>
+      <div class="card-name">Gehalts&shy;abrechnung</div>
+      <div class="card-desc">Lohnabrechnungen abrufen via DATEV</div>
+    </a>
+
     <div class="app-card soon">
       <div class="card-icon">📋</div>
       <div class="card-name">Protokolle</div>
       <div class="card-desc">Gesprächsprotokolle erstellen</div>
+      <span class="soon-pill">Demnächst</span>
+    </div>
+
+    <div class="app-card soon">
+      <div class="card-icon">🏠</div>
+      <div class="card-name">Intranet</div>
+      <div class="card-desc">SharePoint-Intranet und Dokumente</div>
       <span class="soon-pill">Demnächst</span>
     </div>
 
