@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">ve98bd1d</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -577,7 +577,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
   <!-- Upload Zone -->
   <div style="padding:0 16px 16px">
     <div class="alert alert-info" style="margin:0 0 12px;padding:9px 12px;font-size:12px">
-      Nur Fahrten <strong>mit Klient-Eintrag</strong> werden gezählt · Pauschale: <strong>0,30 €/km</strong>
+      <strong>Alle Fahrten</strong> werden abgerechnet · Pauschale: <strong>0,30 €/km</strong> · Klienten-Fahrten werden aufgeschlüsselt
     </div>
 
     <div id="fahrtScreenZone" class="upload-zone" onclick="triggerFahrtUpload()">
@@ -600,7 +600,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
             <span style="font-weight:500;color:var(--text);text-align:right;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="fahrtScreenDatei">—</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
-            <span style="color:var(--text-muted)">Fahrten mit Klient</span>
+            <span style="color:var(--text-muted)">Fahrten gesamt</span>
             <span style="font-weight:500" id="fahrtScreenAnzahl">—</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0">
@@ -613,7 +613,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
       <!-- Klienten aufklappbar -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px">
         <button onclick="toggleKlientenAufklapp()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:none;border:none;cursor:pointer;font-family:inherit">
-          <span style="font-size:13px;font-weight:600;color:var(--text)">Aufschlüsselung nach Klient</span>
+          <span style="font-size:13px;font-weight:600;color:var(--text)">Aufschlüsselung nach Klient / Sonstige</span>
           <span id="klientenChevron" style="color:var(--text-muted);font-size:16px;transition:transform .2s">▼</span>
         </button>
         <div id="klientenAufklapp" style="display:none;border-top:1px solid var(--border)" id="fahrtScreenKlienten"></div>
@@ -1514,10 +1514,15 @@ async function ladeFahrtenbuchScreen() {
       document.getElementById('fahrtScreenZone').style.display = 'none';
       document.getElementById('fahrtScreenResult').style.display = 'block';
 
-      const betrag     = parseFloat(fahrt.Betrag||0);
-      const gesamtKm   = fd.gesamtKm    || '—';
-      const anzFahrten = fd.anzahlFahrten != null ? fd.anzahlFahrten : '—';
-      // Dateiname: gespeicherten Namen nehmen, sonst aus dateiUrl extrahieren
+      const betrag        = parseFloat(fahrt.Betrag||0);
+      const gesamtKm      = fd.gesamtKm      != null ? fd.gesamtKm      : '—';
+      // Neue Felder (gesamtFahrten) — Fallback auf altes anzahlFahrten
+      const gesamtFahrten = fd.gesamtFahrten != null ? fd.gesamtFahrten
+                          : fd.anzahlFahrten != null ? fd.anzahlFahrten : '—';
+      const sonstigeKm    = fd.sonstigeKm    != null ? fd.sonstigeKm    : 0;
+      const sonstigeFahrten = fd.sonstigeFahrten != null ? fd.sonstigeFahrten : 0;
+
+      // Dateiname
       let dateiname = fd.dateiname;
       if (!dateiname && fd.dateiUrl) {
         try {
@@ -1526,23 +1531,36 @@ async function ladeFahrtenbuchScreen() {
         } catch(e) {}
       }
       dateiname = dateiname || 'Fahrtenbuch.xlsx';
-      const klienten   = fd.klienten    || [];
+      const klienten = fd.klienten || [];
 
-      // Summary
+      // ── Summary-Header ─────────────────────────────────────────
       document.getElementById('fahrtScreenTotal').textContent = fmt(betrag);
-      document.getElementById('fahrtScreenMeta').textContent  = `${anzFahrten !== '—' ? anzFahrten + ' Fahrten · ' : ''}${gesamtKm} km · 0,30 €/km`;
-      document.getElementById('fahrtScreenDatei').textContent = dateiname;
-      document.getElementById('fahrtScreenAnzahl').textContent = anzFahrten !== '—' ? anzFahrten + ' Fahrten' : '—';
-      document.getElementById('fahrtScreenKm').textContent    = gesamtKm !== '—' ? gesamtKm + ' km' : '—';
+      document.getElementById('fahrtScreenMeta').textContent  =
+        `${gesamtFahrten !== '—' ? gesamtFahrten + ' Fahrten gesamt · ' : ''}${gesamtKm} km · 0,30 €/km`;
+      document.getElementById('fahrtScreenDatei').textContent  = dateiname;
+      document.getElementById('fahrtScreenAnzahl').textContent =
+        gesamtFahrten !== '—' ? gesamtFahrten + ' Fahrten' : '—';
+      document.getElementById('fahrtScreenKm').textContent =
+        gesamtKm !== '—' ? gesamtKm + ' km' : '—';
 
-      // Klienten-Liste (in aufklappbarem Bereich)
+      // ── Klienten-Aufschlüsselung ───────────────────────────────
       const klientenDiv = document.getElementById('klientenAufklapp');
       if (klientenDiv) {
-        klientenDiv.innerHTML = klienten.map(k => `
-          <div style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;border-bottom:1px solid var(--border);last-child:border:none">
+        const klientRows = klienten.map(k => `
+          <div style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;border-bottom:1px solid var(--border)">
             <span style="color:var(--text)">${esc(k.name)}</span>
             <span style="color:var(--text-muted)">${k.km} km · <strong style="color:var(--accent)">${fmt(k.betrag)}</strong></span>
-          </div>`).join('') || '<div style="padding:12px 16px;font-size:13px;color:var(--text-hint)">Keine Klienten gefunden</div>';
+          </div>`).join('');
+
+        // Sonstige Fahrten (ohne Klient) zusammenfassen
+        const sonstigeRow = (sonstigeKm > 0) ? `
+          <div style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;border-bottom:1px solid var(--border);background:var(--surface-alt,#f9f9f9)">
+            <span style="color:var(--text-muted);font-style:italic">📋 Sonstige (${sonstigeFahrten} Fahrten)</span>
+            <span style="color:var(--text-muted)">${sonstigeKm} km · <strong style="color:var(--accent)">${fmt(Math.round(sonstigeKm*0.30*100)/100)}</strong></span>
+          </div>` : '';
+
+        klientenDiv.innerHTML = klientRows + sonstigeRow ||
+          '<div style="padding:12px 16px;font-size:13px;color:var(--text-hint)">Keine Fahrten gefunden</div>';
       }
     } else {
       _fahrtDaten = null;
@@ -1563,89 +1581,99 @@ function toggleKlientenAufklapp() {
 
 async function handleFahrtUpload(input) {
   const file = input.files[0]; if (!file) return;
-  const zone = document.getElementById('fahrtUploadZone');
-  zone.innerHTML = '<div class="si spin" style="font-size:32px">⚙️</div><div style="font-size:13px;color:var(--text-muted);margin-top:8px">Lese Excel und lade hoch…</div>';
+  // Upload läuft immer vom Fahrtenbuch-Tab aus → fahrtScreenZone
+  const zone = document.getElementById('fahrtScreenZone');
+  if (zone) zone.innerHTML = '<div class="uz-icon spin" style="font-size:32px">⚙️</div><div style="font-size:13px;color:var(--text-muted);margin-top:8px">Lese Excel und lade hoch…</div>';
   try {
-    // Upload Excel to SharePoint — Originaldateiname behalten
-    const fn = file.name; // z.B. "Fahrtenbuch-FS - NW 911.xlsx"
+    const fn = file.name;
     const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
     const ab = await file.arrayBuffer();
     const uploaded = await uploadFile(path, ab, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    let gesamtKm = 0, klienten = [], anzahlFahrten = 0;
+
+    // ── Excel parsen ──────────────────────────────────────────────
+    let gesamtKm = 0, gesamtFahrten = 0, klienten = [], sonstigeKm = 0, sonstigeFahrten = 0;
     try {
       const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
       const wb = XLSX.read(ab, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      // Fahrtenbuch-Struktur: Header in Zeile 7 (Excel), = Index 6 (0-basiert)
-      // range:6 → SheetJS liest ab Zeile 7, erste Zeile = Header
+      // Header in Zeile 7 (Excel) = Index 6 (0-basiert)
       const rows = XLSX.utils.sheet_to_json(ws, { range: 6, defval: '' });
       if (!rows.length) throw new Error('Keine Daten gefunden');
+
       const klientKey = Object.keys(rows[0]).find(k => /klient/i.test(k)) || 'Klient';
       const kmKey     = Object.keys(rows[0]).find(k => /strecke.*km|^km$/i.test(k)) ||
                         Object.keys(rows[0]).find(k => /km/i.test(k)) || 'Strecke in km';
-      // Nur Zeilen mit Klient-Eintrag (nicht leer, nicht NaN)
-      const mitKlient = rows.filter(r => {
+
+      // Alle validen Zeilen (hat km-Wert > 0)
+      const alleZeilen = rows.filter(r => {
+        const km = parseFloat(String(r[kmKey]||'').replace(',','.'));
+        return km > 0;
+      });
+
+      gesamtFahrten = alleZeilen.length;
+      gesamtKm = Math.round(alleZeilen.reduce((s,r) => s + (parseFloat(String(r[kmKey]).replace(',','.')) || 0), 0) * 10) / 10;
+
+      // Klienten-Zeilen (hat Klient-Eintrag)
+      const mitKlient = alleZeilen.filter(r => {
         const k = String(r[klientKey] || '').trim();
         return k !== '' && k.toLowerCase() !== 'nan' && k !== klientKey;
       });
-      anzahlFahrten = mitKlient.length;
-      gesamtKm = mitKlient.reduce((s, r) => s + (parseFloat(String(r[kmKey]).replace(',','.')) || 0), 0);
-      gesamtKm = Math.round(gesamtKm * 10) / 10;
+
       // Pro Klient summieren
       const sumMap = {};
       mitKlient.forEach(r => {
         const name = String(r[klientKey]).trim();
-        sumMap[name] = (sumMap[name] || 0) + (parseFloat(String(r[kmKey]).replace(',','.')) || 0);
+        const km   = parseFloat(String(r[kmKey]).replace(',','.')) || 0;
+        sumMap[name] = (sumMap[name] || 0) + km;
       });
       klienten = Object.entries(sumMap)
         .sort((a, b) => b[1] - a[1])
         .map(([name, km]) => ({ name, km: Math.round(km*10)/10, betrag: Math.round(km*0.30*100)/100 }));
+
+      // Sonstige (ohne Klient)
+      const ohneKlient = alleZeilen.filter(r => {
+        const k = String(r[klientKey] || '').trim();
+        return k === '' || k.toLowerCase() === 'nan' || k === klientKey;
+      });
+      sonstigeKm      = Math.round(ohneKlient.reduce((s,r) => s + (parseFloat(String(r[kmKey]).replace(',','.')) || 0), 0) * 10) / 10;
+      sonstigeFahrten = ohneKlient.length;
+
     } catch(e) { console.warn('XLSX parse failed:', e); showToast('Excel-Parse Fehler: ' + e.message); }
+
+    // Gesamtbetrag = ALLE km (Klient + Sonstige)
     const betrag = Math.round(gesamtKm * 0.30 * 100) / 100;
+
     const fahrtGraphUrl = _graphDriveId
       ? `https://graph.microsoft.com/v1.0/drives/${_graphDriveId}/root:${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}:/content`
       : (uploaded.webUrl || '');
-    const fd = { gesamtKm, betrag, anzahlFahrten, dateiname: fn, dateiUrl: fahrtGraphUrl, klienten };
-    await saveBelegToList({ monat: _currentMonat, kategorie: 'fahrtenbuch', betrag, klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`, fahrtDaten: fd, fotoUrls: [fahrtGraphUrl], status: 'Entwurf' });
-    zone.style.display = 'none';
-    document.getElementById('fahrtUploadResult').style.display = 'block';
-    document.getElementById('fahrtInfoCard').innerHTML = `
-      <div class="info-row"><span class="info-label">Datei</span><span class="info-val">${fn}</span></div>
-      <div class="info-row"><span class="info-label">Fahrten mit Klient</span><span class="info-val">${anzahlFahrten} Fahrten</span></div>
-      <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${gesamtKm} km</span></div>
-      <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
-      ${klienten.map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
-      <div class="info-row"><span class="info-label" style="font-weight:700">Fahrtkosten gesamt</span><span class="info-val" style="font-size:15px;font-weight:700">${fmt(betrag)}</span></div>`;
-    showToast(`📊 ${anzahlFahrten} Fahrten · ${gesamtKm} km · ${fmt(betrag)} eingelesen`, true);
+
+    const fd = { gesamtKm, betrag, gesamtFahrten, sonstigeKm, sonstigeFahrten,
+                 dateiname: fn, dateiUrl: fahrtGraphUrl, klienten };
+
+    await saveBelegToList({
+      monat: _currentMonat, kategorie: 'fahrtenbuch', betrag,
+      klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`,
+      fahrtDaten: fd, fotoUrls: [fahrtGraphUrl], status: 'Entwurf'
+    });
+
+    showToast(`📊 ${gesamtFahrten} Fahrten · ${gesamtKm} km · ${fmt(betrag)} eingelesen`, true);
     ladeMonatsdaten();
-    // Fahrtenbuch-Screen aktualisieren falls aktiv
-    if (document.getElementById('screen-fahrtenbuch')?.classList.contains('active')) {
-      ladeFahrtenbuchScreen();
-    }
+    ladeFahrtenbuchScreen();   // Screen direkt aktualisieren
   } catch(e) {
-    zone.innerHTML = `<div class="uz-icon">📊</div><div class="uz-title">Fehler: ${e.message}</div><div class="uz-sub">Erneut versuchen</div>`;
-    zone.onclick = triggerFahrtUpload;
+    if (zone) {
+      zone.innerHTML = '<div class="uz-icon">📊</div><div class="uz-title">Fahrtenbuch hochladen</div><div class="uz-sub">Excel (.xlsx) auswählen</div>';
+      zone.onclick = triggerFahrtUpload;
+    }
     showToast('Fehler: ' + e.message);
   }
   input.value = '';
 }
 
 function resetFahrtUpload() {
-  // Erfassen-Screen Upload-Zone
-  const zone = document.getElementById('fahrtUploadZone');
-  if (zone) {
-    zone.style.display = 'block';
-    zone.innerHTML = '<div class="uz-icon">📊</div><div class="uz-title">Fahrtenbuch hochladen</div><div class="uz-sub">Excel (.xlsx) auswählen</div>';
-  }
-  const res = document.getElementById('fahrtUploadResult');
-  if (res) res.style.display = 'none';
-  // Fahrtenbuch-Screen zurücksetzen
-  const screenZone = document.getElementById('fahrtScreenZone');
+  const screenZone   = document.getElementById('fahrtScreenZone');
   const screenResult = document.getElementById('fahrtScreenResult');
-  const screenInfoCard = document.getElementById('fahrtScreenInfoCard');
-  if (screenZone) screenZone.style.display = 'block';
-  if (screenResult) screenResult.style.display = 'none';
-  if (screenInfoCard) screenInfoCard.innerHTML = '';
+  if (screenZone)   { screenZone.style.display = 'block'; screenZone.innerHTML = '<div class="uz-icon">📊</div><div class="uz-title">Fahrtenbuch hochladen</div><div class="uz-sub">Excel (.xlsx) auswählen</div>'; screenZone.onclick = triggerFahrtUpload; }
+  if (screenResult)   screenResult.style.display = 'none';
 }
 
 async function loescheFahrtenbuch() {
@@ -1668,17 +1696,24 @@ async function loescheFahrtenbuch() {
 function openFahrtSheet(fd) {
   if (!fd && !_fahrtDaten) { openSheet('fahrtSheet'); document.getElementById('fahrtSheetBody').innerHTML = '<div class="alert alert-info">Noch kein Fahrtenbuch für diesen Monat hochgeladen.</div>'; return; }
   const d = fd || _fahrtDaten;
+  const klientRows = (d.klienten||[]).map(k =>
+    `<div class="info-row"><span class="info-label">👤 ${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`
+  ).join('');
+  const sonstigeRow = (d.sonstigeKm > 0)
+    ? `<div class="info-row"><span class="info-label" style="color:var(--text-muted);font-style:italic">📋 Sonstige (${d.sonstigeFahrten||0} Fahrten)</span><span class="info-val">${d.sonstigeKm} km · ${fmt(Math.round(d.sonstigeKm*0.30*100)/100)}</span></div>`
+    : '';
   document.getElementById('fahrtSheetTitle').textContent = `Fahrtenbuch ${_currentMonat}`;
   document.getElementById('fahrtSheetBody').innerHTML = `
     <div class="alert alert-success" style="margin:0 0 12px">✓ ${esc(d.dateiname || 'Fahrtenbuch.xlsx')} · in SharePoint gespeichert</div>
     <div class="info-card" style="margin:0 0 14px">
+      <div class="info-row"><span class="info-label">Fahrten gesamt</span><span class="info-val">${d.gesamtFahrten || d.anzahlFahrten || '—'} Fahrten</span></div>
       <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${d.gesamtKm || '—'} km</span></div>
       <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
-      ${(d.klienten||[]).map(k=>`<div class="info-row"><span class="info-label">${esc(k.name)}</span><span class="info-val">${k.km} km · ${fmt(k.betrag)}</span></div>`).join('')}
+      ${klientRows}${sonstigeRow}
       <div class="info-row"><span class="info-label" style="font-weight:700">Gesamt</span><span class="info-val" style="font-size:15px;font-weight:700">${fmt(d.betrag)}</span></div>
     </div>
     ${d.dateiUrl ? `<a href="${d.dateiUrl}" target="_blank" class="btn btn-secondary btn-full" style="text-decoration:none;margin-bottom:8px">📊 In SharePoint öffnen</a>` : ''}
-    <button class="btn-add" style="width:100%;justify-content:center" onclick="closeSheet('fahrtSheet');showScreen('erfassen');setTimeout(()=>selectCat('fahrt'),100)">↺ Neues Fahrtenbuch hochladen</button>`;
+    <button class="btn-add" style="width:100%;justify-content:center" onclick="closeSheet('fahrtSheet');showScreen('fahrtenbuch')">↺ Neues Fahrtenbuch hochladen</button>`;
   openSheet('fahrtSheet');
 }
 
@@ -2123,12 +2158,12 @@ async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
 
 ${fahrt && fd ? `<div class="fcard">
   <div class="fhead">
-    <div><div class="cap">🚐 Fahrtkosten (Fahrtenbuch)</div><div class="sub">${fd.anzahlFahrten||fd.klienten?.length||0} Fahrten · ${fd.gesamtKm||0} km · 0,30 €/km</div></div>
+    <div><div class="cap">🚐 Fahrtkosten (Fahrtenbuch)</div><div class="sub">${fd.gesamtFahrten||fd.anzahlFahrten||0} Fahrten gesamt · ${fd.gesamtKm||0} km · 0,30 €/km</div></div>
     <div class="famt">${fmt(fahrt.Betrag)}</div>
   </div>
   <div class="det">
     <div class="drow"><span class="k">Datei</span><span class="v">${esc(fd.dateiname||'Fahrtenbuch.xlsx')}</span></div>
-    <div class="drow"><span class="k">Fahrten mit Klient</span><span class="v">${fd.anzahlFahrten||fd.klienten?.length||0} Fahrten</span></div>
+    <div class="drow"><span class="k">Fahrten gesamt</span><span class="v">${fd.gesamtFahrten||fd.anzahlFahrten||0} Fahrten</span></div>
     <div class="drow"><span class="k">Gesamt km</span><span class="v">${fd.gesamtKm||0} km</span></div>
   </div>
 </div>` : ''}
