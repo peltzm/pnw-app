@@ -1060,11 +1060,10 @@ async function uploadToSharePoint() {
     // Send approval email
     try {
       const emailOk = await sendApprovalEmail(savedId, collectData(), name);
-      // Empfänger für die Anzeige ermitteln: ausgewählte TL NeueWege
-      const _flSel = document.getElementById('Fallleitung');
-      const _tlName = _flSel?.options[_flSel.selectedIndex]?.text?.trim() || '';
-      const _tlMail = getFalleitungMail();
-      const _empfaenger = _tlMail ? `${_tlName || 'Teamleiter NeueWege'} (${_tlMail})` : (_tlName || 'die Teamleitung');
+      // Empfänger für die Anzeige: alle TL Ambulant
+      const _empfaenger = _tlMembers.length > 0
+        ? 'alle TL Ambulant (' + _tlMembers.map(m => m.displayName || m.mail).join(', ') + ')'
+        : (getFalleitungMail() || 'die Teamleitung');
       if (emailOk) {
         setStatus('done', `✓ Hochgeladen: ${name} — Freigabeanfrage wurde an ${_empfaenger} gesendet.`);
       } else {
