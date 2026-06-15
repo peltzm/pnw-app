@@ -2573,40 +2573,46 @@ async function tlFreigebenAnSonja() {
     const jugendamt = data.Jugendamt || '';
     const sonjaUrl = `https://peltzm.github.io/pnw-app/?sonja=${currentListId}&typ=${currentBerichtstyp}`;
     const tlName = currentAccount?.name || '';
-
-    const mailBody = `<html><body style="font-family:Arial,sans-serif; color:#333; max-width:600px;">
-  <div style="border-left:4px solid #2d6a4f; padding-left:16px; margin-bottom:24px;">
-    <h2 style="color:#2d6a4f; margin:0 0 4px;">Bericht zur finalen Freigabe</h2>
-    <p style="margin:0; color:#666;">Praxis NeueWege – Berichtsgenerator</p>
-  </div>
-  <table style="width:100%; border-collapse:collapse; margin-bottom:24px;">
-    <tr><td style="padding:8px 0; color:#666; width:140px;">Berichtstyp</td><td style="padding:8px 0; font-weight:bold;">${escHtml(berichtstyp)}</td></tr>
-    <tr><td style="padding:8px 0; color:#666;">Kind/Jugendliche*r</td><td style="padding:8px 0; font-weight:bold;">${escHtml(kind)}</td></tr>
-    <tr><td style="padding:8px 0; color:#666;">Jugendamt</td><td style="padding:8px 0;">${escHtml(jugendamt)}</td></tr>
-    <tr><td style="padding:8px 0; color:#666;">Geprüft von</td><td style="padding:8px 0;">${escHtml(tlName)}</td></tr>
-  </table>
-  <p><a href="${sonjaUrl}" style="display:inline-block; background:#2d6a4f; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht final freigeben →</a></p>
-  <p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Bei Freigabe wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>
-</body></html>`;
-
-    // Alle TL-Mails ermitteln (für Sonja als Empfängerin reicht ihre eigene)
     const sonjaMail = 'sonja.peltz@praxisneuewege.de';
+
+    const mailBody = '<html><body style="font-family:Arial,sans-serif; color:#333; max-width:600px;">'
+      + '<div style="border-left:4px solid #2d6a4f; padding-left:16px; margin-bottom:24px;">'
+      + '<h2 style="color:#2d6a4f; margin:0 0 4px;">Bericht zur finalen Freigabe</h2>'
+      + '<p style="margin:0; color:#666;">Praxis NeueWege – Berichtsgenerator</p></div>'
+      + '<table style="width:100%; border-collapse:collapse; margin-bottom:24px;">'
+      + '<tr><td style="padding:8px 0; color:#666; width:140px;">Berichtstyp</td><td style="padding:8px 0; font-weight:bold;">' + escHtml(berichtstyp) + '</td></tr>'
+      + '<tr><td style="padding:8px 0; color:#666;">Kind/Jugendliche*r</td><td style="padding:8px 0; font-weight:bold;">' + escHtml(kind) + '</td></tr>'
+      + '<tr><td style="padding:8px 0; color:#666;">Jugendamt</td><td style="padding:8px 0;">' + escHtml(jugendamt) + '</td></tr>'
+      + '<tr><td style="padding:8px 0; color:#666;">Geprüft von</td><td style="padding:8px 0;">' + escHtml(tlName) + '</td></tr>'
+      + '</table>'
+      + '<p><a href="' + sonjaUrl + '" style="display:inline-block; background:#2d6a4f; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht final freigeben →</a></p>'
+      + '<p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Bei Freigabe wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>'
+      + '</body></html>';
+
     const mail = {
       message: {
-        subject: `[Finale Freigabe] ${berichtstyp}: ${kind} – ${jugendamt}`,
+        subject: '[Finale Freigabe] ' + berichtstyp + ': ' + kind + ' – ' + jugendamt,
         body: { contentType: 'HTML', content: mailBody },
         toRecipients: [{ emailAddress: { address: sonjaMail } }],
         ccRecipients: []
       },
-      saveToSentItems: false
+      saveToSentItems: true
     };
-    await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+
+    const mailResp = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify(mail)
     });
 
-    setStatus('done', `✓ Bericht an Sonja weitergeleitet — sie erhält eine E-Mail zur finalen Freigabe.`);
+    if (!mailResp.ok) {
+      const errBody = await mailResp.json().catch(() => ({}));
+      const errMsg = errBody?.error?.message || ('HTTP ' + mailResp.status);
+      setStatus('error', '✓ Gespeichert — aber Mail an Sonja fehlgeschlagen: ' + errMsg);
+    } else {
+      setStatus('done', '✓ Bericht an Sonja weitergeleitet — sie erhält eine E-Mail zur finalen Freigabe.');
+    }
+
     document.getElementById('tlAktionen').style.display = 'none';
     if (btn) { btn.disabled = false; btn.textContent = '✓ An Sonja weiterleiten'; }
   } catch(e) {
