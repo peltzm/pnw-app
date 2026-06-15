@@ -170,7 +170,7 @@
           </div>
         </div>
       </div>
-      <div class="start-grid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
+      <div class="start-grid" id="startGrid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
         
         <div onclick="startNew()" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1.5rem; cursor:pointer; text-align:center; transition:all 0.15s;" onmouseover="this.style.borderColor='var(--accent-mid)'; this.style.background='var(--accent-light)'" onmouseout="this.style.borderColor='var(--border)'; this.style.background='var(--surface)'">
           <div style="font-size:28px; margin-bottom:10px;">📄</div>
@@ -190,6 +190,29 @@
           <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Stammdaten aus SharePoint übernehmen</div>
         </div>
 
+        <!-- Status-Kachel: nur für TL Ambulant sichtbar -->
+        <div id="statusBerichteTile" onclick="showStatusBerichte()" style="display:none; background:var(--surface); border:2px solid var(--accent-mid); border-radius:var(--radius-lg); padding:1.5rem; cursor:pointer; text-align:center; transition:all 0.15s;" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='var(--surface)'">
+          <div style="font-size:28px; margin-bottom:10px;">📋</div>
+          <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Status Berichte</div>
+          <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Übersicht & Freigabe-Workflow</div>
+        </div>
+
+      </div>
+
+      <!-- Status Berichte Panel -->
+      <div id="statusBerichtePanel" style="display:none; margin-top:1.5rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+          <div style="font-size:13px; font-weight:600; color:var(--text);">Status Berichte</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="statusFilter" onchange="renderStatusBerichte()" style="font-size:12px; padding:4px 8px; border:1px solid var(--border); border-radius:var(--radius); background:white;">
+              <option value="offen">Warten auf Prüfung</option>
+              <option value="tl_freigegeben">TL freigegeben — warten auf Sonja</option>
+              <option value="alle">Alle anzeigen</option>
+            </select>
+            <button onclick="document.getElementById('statusBerichtePanel').style.display='none'" style="background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted);">×</button>
+          </div>
+        </div>
+        <div id="statusBerichteContent" style="font-size:13px; color:var(--text-muted);">Wird geladen...</div>
       </div>
 
       <!-- Draft list -->
@@ -403,13 +426,36 @@
           <button class="btn btn-secondary" onclick="downloadLocal()">↓ Exportieren</button>
           <button class="btn btn-success" id="btnUpload" onclick="uploadToSharePoint()">↑ Freigabe anfordern</button>
         </div>
+        <!-- TL-Prüfmodus -->
         <div id="reviewActions" style="display:none; margin-bottom:1rem;">
-          <div style="background:var(--accent-light); border:1px solid #e8c4a8; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
+          <!-- Annehmen-Banner (noch nicht angenommen) -->
+          <div id="tlAnnehmenBanner" style="display:none; background:#fffbeb; border:2px solid #c9a227; border-radius:var(--radius-lg); padding:1rem 1.25rem; margin-bottom:10px;">
+            <div style="font-size:13px; font-weight:600; color:#8a6d1a; margin-bottom:6px;">⚠ Dieser Bericht wurde noch von keiner Teamleitung angenommen.</div>
+            <div style="font-size:12px; color:#8a6d1a; margin-bottom:10px;">Klicken Sie auf den Button um diesen Bericht zu übernehmen und zu prüfen.</div>
+            <button class="btn" onclick="tlAnnehmenBericht()" style="background:#c9a227; color:white; min-height:44px;">✋ Ich übernehme diese Prüfung</button>
+          </div>
+          <!-- Bereits angenommen von jemand anderem -->
+          <div id="tlAndererPruefer" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:var(--radius-lg); padding:0.75rem 1.25rem; margin-bottom:10px;">
+            <div style="font-size:12px; color:var(--info);">ℹ Dieser Bericht wird bereits geprüft von: <strong id="tlAndererPrueferName"></strong></div>
+          </div>
+          <!-- Aktions-Buttons (nur wenn angenommen) -->
+          <div id="tlAktionen" style="display:none; background:var(--accent-light); border:1px solid #e8c4a8; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
             <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:8px;">Freigabe-Modus — Teamleitung</div>
-            <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann freigeben.</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann an Sonja weiterleiten oder zurückweisen.</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              <button class="btn" onclick="approveReport()" style="background:var(--success); color:white; min-height:44px;">✓ Freigeben & PDF erstellen</button>
-              <button class="btn btn-secondary" onclick="rejectReport()" style="min-height:44px;">✗ Zurückweisen</button>
+              <button class="btn" onclick="tlFreigebenAnSonja()" style="background:var(--success); color:white; min-height:44px;">✓ An Sonja weiterleiten</button>
+              <button class="btn btn-secondary" onclick="rejectReport()" style="min-height:44px;">✗ Zurückweisen an Fachkraft</button>
+            </div>
+          </div>
+        </div>
+        <!-- Sonja-Prüfmodus (finale Freigabe) -->
+        <div id="sonjaReviewActions" style="display:none; margin-bottom:1rem;">
+          <div style="background:#eaf4ee; border:2px solid #2d6a4f; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
+            <div style="font-size:13px; font-weight:600; color:#2d6a4f; margin-bottom:8px;">✅ Finale Freigabe — Sonja</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht wurde von der Teamleitung geprüft. Jetzt final freigeben und PDF erstellen, oder zurück an die Teamleitung.</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button class="btn" onclick="approveReport()" style="background:#2d6a4f; color:white; min-height:44px;">✓ Final freigeben & PDF erstellen</button>
+              <button class="btn btn-secondary" onclick="rejectBackToTL()" style="min-height:44px;">↩ Zurück an Teamleiter</button>
             </div>
           </div>
         </div>
@@ -494,14 +540,15 @@ async function getToken() {
 function handleReviewLink() {
   const params = new URLSearchParams(window.location.search);
   const reviewId = params.get('review');
-  const editId = params.get('edit'); // Korrektur-Link für die Fachkraft (kein Prüfmodus)
-  const id = reviewId || editId;
+  const sonjaId  = params.get('sonja');
+  const editId   = params.get('edit'); // Korrektur-Link für die Fachkraft (kein Prüfmodus)
+  const id = reviewId || sonjaId || editId;
   const typ = params.get('typ');
   if (!id || !typ) return false;
   if (['verlauf','abschluss','clearing'].includes(typ)) {
     selectBerichtstyp(typ);
   }
-  if (reviewId) {
+  if (reviewId || sonjaId) {
     // Erst Gruppen laden, damit die TL-Prüfung in loadDraft korrekt entscheiden kann
     _groupLoadPromise.catch(() => {}).then(() => loadDraft(id));
   } else {
@@ -521,6 +568,15 @@ function showApp() {
   // Load M365 group members (Promise merken, damit Review-Link darauf warten kann)
   _groupLoadPromise = loadGroupMembers();
   _groupLoadPromise.catch(e => { console.warn('Group load failed:', e); });
+  // Nach Gruppenladen: Status-Kachel für TL einblenden + Grid anpassen
+  _groupLoadPromise.then(() => {
+    if (isTLUser()) {
+      const tile = document.getElementById('statusBerichteTile');
+      if (tile) tile.style.display = 'block';
+      const grid = document.getElementById('startGrid');
+      if (grid) grid.style.gridTemplateColumns = '1fr 1fr';
+    }
+  }).catch(() => {});
   // Check if opened via review link
   setTimeout(() => { if (!handleReviewLink()) { /* normal flow */ } }, 500);
 }
@@ -1043,6 +1099,9 @@ let currentListId = null; // tracks current list item ID
 let currentItemStatus = null;   // Status des geladenen Berichts (bleibt bei Zwischenspeichern erhalten)
 let currentEingereichtVon = ''; // ursprüngliche/r Einreicher/in (darf durch TL-Speichern nicht überschrieben werden)
 let currentVersion = 0;         // Versionsnummer der hochgeladenen Dokumente (steigt bei jeder Freigabeanfrage)
+let currentAssignedReviewer = ''; // TL der den Bericht angenommen hat (displayName)
+let currentAssignedReviewerMail = ''; // Mail des annehmenden TL
+let _isSonjaMode = false;       // Sonja's finale Freigabe-Modus
 let _groupLoadPromise = Promise.resolve(); // damit auf geladene Gruppen gewartet werden kann
 
 // Ist die angemeldete Person Teamleitung (oder Admin)?
@@ -1318,6 +1377,8 @@ async function loadDraft(id) {
     currentListId = id; // Graph item ID (string)
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
+    currentAssignedReviewer = item.Assigned_Reviewer || '';
+    currentAssignedReviewerMail = item.Assigned_Reviewer_Mail || '';
     // Detect berichtstyp from data if available
     if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
     // Show mainLayout first so DOM elements exist
@@ -1414,15 +1475,22 @@ async function loadDraft(id) {
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
     renderFieldComments();
-    // Check if in review mode (opened via email link) — Prüfmodus NUR für Teamleitung/Admin
-    const isReview = new URLSearchParams(window.location.search).get('review') === String(id) && isTLUser();
-    if (isReview) {
+    // Check URL params
+    const _params = new URLSearchParams(window.location.search);
+    const isReviewLink = _params.get('review') === String(id);
+    const isSonjaLink  = _params.get('sonja')  === String(id);
+    if (isSonjaLink && isTLUser()) {
+      // Sonja (oder TL) öffnet finalen Prüf-Link
+      goTo(1);
+      activateSonjaMode();
+      window.scrollTo(0,0);
+    } else if (isReviewLink && isTLUser()) {
+      // TL-Prüfmodus
       goTo(1);
       activateReviewMode();
       window.scrollTo(0,0);
     } else {
       goTo(1);
-      // Fachkraft-Hinweis: zurückgewiesen oder offene Kommentare → überarbeiten + neu einreichen
       showReworkNoticeIfNeeded();
       window.scrollTo(0,0);
     }
@@ -1473,6 +1541,9 @@ function resetForm() {
   currentItemStatus = null;
   currentEingereichtVon = '';
   currentVersion = 0;
+  currentAssignedReviewer = '';
+  currentAssignedReviewerMail = '';
+  _isSonjaMode = false;
   document.getElementById('reviewFloatBar')?.remove();
   document.getElementById('reviewBanner')?.remove();
   document.getElementById('reviewFrame')?.remove();
@@ -1642,6 +1713,8 @@ async function saveToList(data, existingId = null) {
     Kind_Familienname: data.Kind_Familienname || '',
     Jugendamt: data.Jugendamt || '',
     Fachkraft: data.Fachkraft_NeueWege || '',
+    Assigned_Reviewer: data._assignedReviewer || currentAssignedReviewer || '',
+    Assigned_Reviewer_Mail: data._assignedReviewerMail || currentAssignedReviewerMail || '',
     FormularDaten: JSON.stringify(data)
   };
   if (data.Hilfebeginn) fields.Hilfebeginn = new Date(data.Hilfebeginn).toISOString();
@@ -1743,7 +1816,7 @@ async function loadMyDrafts() {
   // Check if user is TL member (safe even if not loaded yet)
   const isTL = _tlMembers.length > 0 && _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
   // Load all items, filter client-side (avoids OData filter issues with missing columns)
-  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified,Eingereicht_Von,FormularDaten)&$orderby=fields/Modified desc&$top=100`;
+  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified,Eingereicht_Von,Assigned_Reviewer,Assigned_Reviewer_Mail,FormularDaten)&$orderby=fields/Modified desc&$top=100`;
   const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
   if (!resp.ok) throw new Error('Entwürfe konnten nicht geladen werden');
   const result = await resp.json();
@@ -2141,13 +2214,15 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
   </table>
   ${pdfUrl ? `<p><a href="${pdfUrl}" style="display: inline-block; background: #2e7d32; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Finales PDF öffnen →</a></p>` : `<p style="color:#888;">Das PDF liegt im SharePoint-Ordner ${escHtml(CONFIG.outputFolder)}.</p>`}
 </body></html>` },
-      toRecipients: [{ emailAddress: { address: 'info@praxisneuewege.de' } }],
-      // CC: zuständige TL NeueWege (aus dem Formular) + einreichende Fachkraft
-      ccRecipients: [...new Set(
-        [getFalleitungMail(), currentEingereichtVon]
-          .filter(Boolean)
-          .map(m => m.toLowerCase())
-      )].map(address => ({ emailAddress: { address } }))
+      toRecipients: (() => {
+        // An Sonja + alle TL Ambulant + einreichende Fachkraft
+        const recipients = new Set();
+        recipients.add('sonja.peltz@praxisneuewege.de');
+        _tlMembers.forEach(m => { if (m.mail) recipients.add(m.mail.toLowerCase()); });
+        if (currentEingereichtVon) recipients.add(currentEingereichtVon.toLowerCase());
+        return [...recipients].map(address => ({ emailAddress: { address } }));
+      })(),
+      ccRecipients: []
     },
     saveToSentItems: false
   };
@@ -2324,12 +2399,276 @@ function showReworkNoticeIfNeeded() {
 }
 
 // Show review mode if opened via link
+// ─── STATUS BERICHTE ÜBERSICHT ───────────────────────────────────────────────
+
+async function showStatusBerichte() {
+  const panel = document.getElementById('statusBerichtePanel');
+  panel.style.display = 'block';
+  document.getElementById('statusBerichteContent').innerHTML = '<div style="color:var(--text-muted);">Wird geladen...</div>';
+  try {
+    await _groupLoadPromise;
+    const allItems = await loadMyDrafts();
+    window._statusBerichteItems = allItems;
+    renderStatusBerichte();
+  } catch(e) {
+    document.getElementById('statusBerichteContent').innerHTML = `<div class="alert alert-error">${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderStatusBerichte() {
+  const filter = document.getElementById('statusFilter')?.value || 'offen';
+  const allItems = window._statusBerichteItems || [];
+  const statusMap = {
+    offen: ['Eingereicht', 'TL angenommen'],
+    tl_freigegeben: ['TL freigegeben'],
+    alle: null
+  };
+  const allowed = statusMap[filter];
+  const items = allowed ? allItems.filter(i => allowed.includes(i.Status)) : allItems;
+
+  if (items.length === 0) {
+    document.getElementById('statusBerichteContent').innerHTML = '<div style="color:var(--text-muted); padding:0.5rem 0;">Keine Berichte gefunden.</div>';
+    return;
+  }
+
+  const statusColor = s => ({
+    'Entwurf': 'var(--text-muted)',
+    'Eingereicht': 'var(--info)',
+    'TL angenommen': '#c9a227',
+    'TL freigegeben': 'var(--success)',
+    'Genehmigt': '#2d6a4f',
+    'Abgelehnt': 'var(--error)'
+  }[s] || 'var(--text-muted)');
+
+  const _fmtDate = iso => iso ? new Date(iso).toLocaleDateString('de-DE') : '—';
+  const _fmtHpg = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diff = Math.round((d - today) / 86400000);
+    const dateStr = d.toLocaleDateString('de-DE');
+    if (diff < 0) return `<span style="color:var(--error);">${dateStr} (überfällig)</span>`;
+    if (diff < 14) return `<span style="color:#c9a227;">${dateStr} (${diff}d)</span>`;
+    return dateStr;
+  };
+
+  const berichtsTypLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL'}[bt] || bt || '—');
+
+  const rows = items.map(item => {
+    const itemId = item._itemId || item.ID;
+    let bt = '—';
+    let naechstesHpg = '—';
+    try {
+      const d = JSON.parse(item.FormularDaten || '{}');
+      bt = berichtsTypLabel(d._berichtstyp);
+      naechstesHpg = d.Naechstes_HPG || '';
+    } catch(e) {}
+
+    const assignedBy = item.Assigned_Reviewer ? `<div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Prüfer: ${escHtml(item.Assigned_Reviewer)}</div>` : '';
+
+    return `<div style="display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:6px; background:var(--surface); flex-wrap:wrap; gap:6px;">
+      <div style="min-width:0; flex:1;">
+        <div style="font-size:13px; font-weight:500; color:var(--text);">${escHtml(item.Kind_Vorname||'')} ${escHtml(item.Kind_Familienname||'')} <span style="font-size:11px; color:var(--text-muted);">${bt}</span></div>
+        <div style="font-size:11px; color:var(--text-muted);">JA: ${escHtml(item.Jugendamt||'—')} · Nächstes HPG: ${_fmtHpg(naechstesHpg)}</div>
+        ${assignedBy}
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <span style="font-size:11px; font-weight:600; color:${statusColor(item.Status)};">${escHtml(item.Status||'Entwurf')}</span>
+        <button onclick="loadDraft('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Öffnen</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('statusBerichteContent').innerHTML = rows;
+}
+
+// ─── TL ANNEHMEN ─────────────────────────────────────────────────────────────
+
+async function tlAnnehmenBericht() {
+  if (!currentListId) return;
+  const myName = currentAccount?.name || currentAccount?.username || '';
+  const myMail = currentAccount?.username || '';
+  const btn = document.querySelector('button[onclick="tlAnnehmenBericht()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Wird gespeichert...'; }
+  try {
+    const data = collectData();
+    data._status = 'TL angenommen';
+    data._assignedReviewer = myName;
+    data._assignedReviewerMail = myMail;
+    currentAssignedReviewer = myName;
+    currentAssignedReviewerMail = myMail;
+    currentItemStatus = 'TL angenommen';
+    await saveToList(data, currentListId);
+    // UI aktualisieren
+    document.getElementById('tlAnnehmenBanner').style.display = 'none';
+    document.getElementById('tlAktionen').style.display = 'block';
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✋ Ich übernehme diese Prüfung'; }
+    alert('Fehler: ' + e.message);
+  }
+}
+
+// ─── TL FREIGEBEN AN SONJA ───────────────────────────────────────────────────
+
+async function tlFreigebenAnSonja() {
+  if (!currentListId) return;
+  const btn = document.querySelector('button[onclick="tlFreigebenAnSonja()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Wird verarbeitet...'; }
+  try {
+    const data = collectData();
+    data._status = 'TL freigegeben';
+    data._assignedReviewer = currentAssignedReviewer;
+    data._assignedReviewerMail = currentAssignedReviewerMail;
+    currentItemStatus = 'TL freigegeben';
+    await saveToList(data, currentListId);
+
+    // Mail an Sonja
+    const token = await getToken();
+    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[currentBerichtstyp] || 'Bericht';
+    const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
+    const jugendamt = data.Jugendamt || '';
+    const sonjaUrl = `https://peltzm.github.io/pnw-app/?sonja=${currentListId}&typ=${currentBerichtstyp}`;
+    const tlName = currentAccount?.name || '';
+
+    const mailBody = `<html><body style="font-family:Arial,sans-serif; color:#333; max-width:600px;">
+  <div style="border-left:4px solid #2d6a4f; padding-left:16px; margin-bottom:24px;">
+    <h2 style="color:#2d6a4f; margin:0 0 4px;">Bericht zur finalen Freigabe</h2>
+    <p style="margin:0; color:#666;">Praxis NeueWege – Berichtsgenerator</p>
+  </div>
+  <table style="width:100%; border-collapse:collapse; margin-bottom:24px;">
+    <tr><td style="padding:8px 0; color:#666; width:140px;">Berichtstyp</td><td style="padding:8px 0; font-weight:bold;">${escHtml(berichtstyp)}</td></tr>
+    <tr><td style="padding:8px 0; color:#666;">Kind/Jugendliche*r</td><td style="padding:8px 0; font-weight:bold;">${escHtml(kind)}</td></tr>
+    <tr><td style="padding:8px 0; color:#666;">Jugendamt</td><td style="padding:8px 0;">${escHtml(jugendamt)}</td></tr>
+    <tr><td style="padding:8px 0; color:#666;">Geprüft von</td><td style="padding:8px 0;">${escHtml(tlName)}</td></tr>
+  </table>
+  <p><a href="${sonjaUrl}" style="display:inline-block; background:#2d6a4f; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht final freigeben →</a></p>
+  <p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Bei Freigabe wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>
+</body></html>`;
+
+    // Alle TL-Mails ermitteln (für Sonja als Empfängerin reicht ihre eigene)
+    const sonjaMail = 'sonja.peltz@praxisneuewege.de';
+    const mail = {
+      message: {
+        subject: `[Finale Freigabe] ${berichtstyp}: ${kind} – ${jugendamt}`,
+        body: { contentType: 'HTML', content: mailBody },
+        toRecipients: [{ emailAddress: { address: sonjaMail } }],
+        ccRecipients: []
+      },
+      saveToSentItems: false
+    };
+    await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(mail)
+    });
+
+    setStatus('done', `✓ Bericht an Sonja weitergeleitet — sie erhält eine E-Mail zur finalen Freigabe.`);
+    document.getElementById('tlAktionen').style.display = 'none';
+    if (btn) { btn.disabled = false; btn.textContent = '✓ An Sonja weiterleiten'; }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✓ An Sonja weiterleiten'; }
+    setStatus('error', 'Fehler: ' + e.message);
+  }
+}
+
+// ─── SONJA: ZURÜCK AN TL ─────────────────────────────────────────────────────
+
+async function rejectBackToTL() {
+  const reason = prompt('Grund für die Rückgabe an die Teamleitung (wird per Mail mitgesendet):');
+  if (reason === null) return;
+  try {
+    const data = collectData();
+    data._status = 'TL angenommen'; // zurück auf TL-Prüfung
+    data._assignedReviewer = currentAssignedReviewer;
+    data._assignedReviewerMail = currentAssignedReviewerMail;
+    currentItemStatus = 'TL angenommen';
+    await saveToList(data, currentListId);
+
+    const token = await getToken();
+    const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim();
+    const reviewUrl = `https://peltzm.github.io/pnw-app/?review=${currentListId}&typ=${currentBerichtstyp}`;
+    const tlMail = currentAssignedReviewerMail || getFalleitungMail() || 'markus.peltz@praxisneuewege.de';
+    const mail = {
+      message: {
+        subject: `[Rückgabe] Bericht ${kind} — Sonja bittet um Nachbesserung`,
+        body: { contentType: 'HTML', content: `<p>Sonja hat den Bericht zu <strong>${escHtml(kind)}</strong> zurückgegeben.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}<p><a href="${reviewUrl}" style="background:#7b3f1e; color:white; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht öffnen →</a></p>` },
+        toRecipients: [{ emailAddress: { address: tlMail } }]
+      },
+      saveToSentItems: false
+    };
+    await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(mail)
+    });
+
+    setStatus('done', `✓ Bericht zurückgegeben — ${escHtml(currentAssignedReviewer || 'Teamleiter')} wurde benachrichtigt.`);
+  } catch(e) {
+    setStatus('error', 'Fehler: ' + e.message);
+  }
+}
+
+// ─── SONJA PRÜFMODUS ─────────────────────────────────────────────────────────
+
+function activateSonjaMode() {
+  _isSonjaMode = true;
+  _isReviewMode = true;
+  document.getElementById('reviewActions').style.display = 'none';
+  document.getElementById('sonjaReviewActions').style.display = 'block';
+  document.getElementById('normalActions').style.display = 'none';
+  renderFieldComments();
+  // Grüner Rahmen für Sonja-Modus
+  if (!document.getElementById('reviewFrame')) {
+    const frame = document.createElement('div');
+    frame.id = 'reviewFrame';
+    frame.style.cssText = 'position:fixed; inset:0; border:4px solid #2d6a4f; pointer-events:none; z-index:998;';
+    document.body.appendChild(frame);
+  }
+  if (!document.getElementById('reviewBanner')) {
+    const banner = document.createElement('div');
+    banner.id = 'reviewBanner';
+    banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#2d6a4f; color:#fff; z-index:999; padding:10px 16px; box-shadow:0 2px 6px rgba(0,0,0,0.25);';
+    const tlInfo = currentAssignedReviewer ? ` · Geprüft von: <strong>${escHtml(currentAssignedReviewer)}</strong>` : '';
+    banner.innerHTML = `<div style="text-align:center; font-size:13px;">
+      <strong>✅ FINALE FREIGABE — Sie prüfen diesen Bericht als Sonja${tlInfo}.</strong><br>
+      <span style="font-size:12px; opacity:0.9;">Seite „Absenden": Final freigeben & PDF erstellen — oder zurück an die Teamleitung.</span>
+    </div>`;
+    document.body.appendChild(banner);
+    document.body.style.paddingTop = banner.offsetHeight + 'px';
+  }
+}
+
 function activateReviewMode() {
   document.getElementById('reviewActions').style.display = 'block';
+  document.getElementById('sonjaReviewActions').style.display = 'none';
   document.getElementById('normalActions').style.display = 'none';
   // Kommentarfunktion für Teamleitung aktivieren (Seiten 3–5)
   _isReviewMode = true;
   renderFieldComments();
+
+  // TL-Annehmen UI aufbauen
+  const myName = currentAccount?.name || '';
+  const myMail = (currentAccount?.username || '').toLowerCase();
+  const assignedMail = (currentAssignedReviewerMail || '').toLowerCase();
+  const isMyBericht = assignedMail === myMail || currentAssignedReviewer === myName;
+
+  if (!currentAssignedReviewer) {
+    // Noch niemand hat angenommen
+    document.getElementById('tlAnnehmenBanner').style.display = 'block';
+    document.getElementById('tlAndererPruefer').style.display = 'none';
+    document.getElementById('tlAktionen').style.display = 'none';
+  } else if (isMyBericht) {
+    // Ich habe angenommen
+    document.getElementById('tlAnnehmenBanner').style.display = 'none';
+    document.getElementById('tlAndererPruefer').style.display = 'none';
+    document.getElementById('tlAktionen').style.display = 'block';
+  } else {
+    // Jemand anderes hat angenommen → Info anzeigen, aber trotzdem lesen lassen
+    document.getElementById('tlAnnehmenBanner').style.display = 'none';
+    document.getElementById('tlAndererPruefer').style.display = 'block';
+    document.getElementById('tlAndererPrueferName').textContent = currentAssignedReviewer;
+    document.getElementById('tlAktionen').style.display = 'none';
+  }
   // ── Deutliche optische Kennzeichnung des Prüfmodus ──
   // 1. Gelber Rahmen um den gesamten Bildschirm
   if (!document.getElementById('reviewFrame')) {
