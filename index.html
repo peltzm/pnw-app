@@ -190,29 +190,8 @@
           <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Stammdaten aus SharePoint übernehmen</div>
         </div>
 
-        <!-- Status-Kachel: nur für TL Ambulant sichtbar -->
-        <div id="statusBerichteTile" onclick="showStatusBerichte()" style="display:none; background:var(--surface); border:2px solid var(--accent-mid); border-radius:var(--radius-lg); padding:1.5rem; cursor:pointer; text-align:center; transition:all 0.15s;" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='var(--surface)'">
-          <div style="font-size:28px; margin-bottom:10px;">📋</div>
-          <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Status Berichte</div>
-          <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Übersicht & Freigabe-Workflow</div>
-        </div>
+        <!-- Status-Kachel entfernt — jetzt als Seite 7 in der Sidebar -->
 
-      </div>
-
-      <!-- Status Berichte Panel -->
-      <div id="statusBerichtePanel" style="display:none; margin-top:1.5rem;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
-          <div style="font-size:13px; font-weight:600; color:var(--text);">Status Berichte</div>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <select id="statusFilter" onchange="renderStatusBerichte()" style="font-size:12px; padding:4px 8px; border:1px solid var(--border); border-radius:var(--radius); background:white;">
-              <option value="offen">Warten auf Prüfung</option>
-              <option value="tl_freigegeben">TL freigegeben — warten auf Sonja</option>
-              <option value="alle">Alle anzeigen</option>
-            </select>
-            <button onclick="document.getElementById('statusBerichtePanel').style.display='none'" style="background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted);">×</button>
-          </div>
-        </div>
-        <div id="statusBerichteContent" style="font-size:13px; color:var(--text-muted);">Wird geladen...</div>
       </div>
 
       <!-- Draft list -->
@@ -244,6 +223,7 @@
       <div class="nav-item" onclick="goTo(4)" id="nav4"><div class="nav-num" id="nn4">4</div> <span>Ziele</span></div>
       <div class="nav-item" onclick="goTo(5)" id="nav5"><div class="nav-num" id="nn5">5</div> <span>Perspektive</span></div>
       <div class="nav-item" onclick="goTo(6)" id="nav6"><div class="nav-num" id="nn6">6</div> <span>Absenden</span></div>
+      <div class="nav-item" onclick="goToStatusBerichte()" id="nav7" style="display:none;"><div class="nav-num" id="nn7" style="background:var(--accent-mid); color:white;">📋</div> <span>Status Berichte</span></div>
     </div>
 
     <div class="main">
@@ -470,6 +450,21 @@
         </div>
       </div>
 
+      <!-- S7: Status Berichte (nur TL Ambulant) -->
+      <div class="section" id="s7">
+        <div class="section-title">Status Berichte</div>
+        <div class="section-sub">Übersicht aller Berichte im Freigabe-Workflow</div>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+          <select id="statusFilter" onchange="renderStatusBerichte()" style="font-size:12px; padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); background:white;">
+            <option value="offen">Warten auf Prüfung</option>
+            <option value="tl_freigegeben">TL freigegeben — warten auf Sonja</option>
+            <option value="alle">Alle anzeigen</option>
+          </select>
+          <button class="btn btn-secondary" onclick="loadStatusBerichte()" style="font-size:12px; padding:6px 12px;">↺ Aktualisieren</button>
+        </div>
+        <div id="statusBerichteContent" style="font-size:13px; color:var(--text-muted);">Wird geladen...</div>
+      </div>
+
     </div>
 
   </div>
@@ -568,13 +563,11 @@ function showApp() {
   // Load M365 group members (Promise merken, damit Review-Link darauf warten kann)
   _groupLoadPromise = loadGroupMembers();
   _groupLoadPromise.catch(e => { console.warn('Group load failed:', e); });
-  // Nach Gruppenladen: Status-Kachel für TL einblenden + Grid anpassen
+  // Nach Gruppenladen: Status Berichte Nav-Item für TL einblenden
   _groupLoadPromise.then(() => {
     if (isTLUser()) {
-      const tile = document.getElementById('statusBerichteTile');
-      if (tile) tile.style.display = 'block';
-      const grid = document.getElementById('startGrid');
-      if (grid) grid.style.gridTemplateColumns = '1fr 1fr';
+      const nav7 = document.getElementById('nav7');
+      if (nav7) nav7.style.display = 'flex';
     }
   }).catch(() => {});
   // Check if opened via review link
@@ -2402,8 +2395,23 @@ function showReworkNoticeIfNeeded() {
 // ─── STATUS BERICHTE ÜBERSICHT ───────────────────────────────────────────────
 
 async function showStatusBerichte() {
-  const panel = document.getElementById('statusBerichtePanel');
-  panel.style.display = 'block';
+  await loadStatusBerichte();
+}
+
+async function goToStatusBerichte() {
+  // Hauptlayout einblenden falls noch auf Startscreen
+  showMainLayout();
+  // Alle Sections ausblenden, s7 einblenden
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('s7')?.classList.add('active');
+  // Nav-Markierung
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('nav7')?.classList.add('active');
+  // Daten laden
+  await loadStatusBerichte();
+}
+
+async function loadStatusBerichte() {
   document.getElementById('statusBerichteContent').innerHTML = '<div style="color:var(--text-muted);">Wird geladen...</div>';
   try {
     await _groupLoadPromise;
