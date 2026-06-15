@@ -1386,8 +1386,8 @@ async function loadDraft(id) {
     currentListId = id; // Graph item ID (string)
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
-    currentAssignedReviewer = item.Assigned_Reviewer || '';
-    currentAssignedReviewerMail = item.Assigned_Reviewer_Mail || '';
+    currentAssignedReviewer = item.Assigned_Reviewer || data._assignedReviewer || '';
+    currentAssignedReviewerMail = item.Assigned_Reviewer_Mail || data._assignedReviewerMail || '';
     // Detect berichtstyp from data if available
     if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
     // Show mainLayout first so DOM elements exist
@@ -2690,6 +2690,7 @@ function activateSonjaMode() {
 
 function showTLAnnehmenPopup() {
   if (document.getElementById('tlAnnehmenModal')) return;
+  if (!currentListId) return; // Bericht noch nicht vollständig geladen
   const kind = `${document.getElementById('Kind_Vorname')?.value || ''} ${document.getElementById('Kind_Familienname')?.value || ''}`.trim() || 'diesem Bericht';
   const modal = document.createElement('div');
   modal.id = 'tlAnnehmenModal';
@@ -2727,13 +2728,28 @@ function showTLAndererPrueferPopup(prueferName) {
 }
 
 async function tlAnnehmenAusPopup() {
-  const btn = document.querySelector('#tlAnnehmenModal button');
-  if (btn) { btn.disabled = true; btn.textContent = 'Wird gespeichert...'; }
-  await tlAnnehmenBericht();
-  document.getElementById('tlAnnehmenModal')?.remove();
-  // Aktionen jetzt einblenden
-  document.getElementById('tlAnnehmenBanner').style.display = 'none';
-  document.getElementById('tlAktionen').style.display = 'block';
+  const modalBtn = document.querySelector('#tlAnnehmenModal button');
+  if (modalBtn) { modalBtn.disabled = true; modalBtn.textContent = 'Wird gespeichert...'; }
+  try {
+    await tlAnnehmenBericht();
+    document.getElementById('tlAnnehmenModal')?.remove();
+    // URL bereinigen damit kein erneuter Review-Trigger beim Reload
+    if (window.history?.replaceState) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    // Aktionen einblenden
+    document.getElementById('tlAnnehmenBanner').style.display = 'none';
+    document.getElementById('tlAndererPruefer').style.display = 'none';
+    document.getElementById('tlAktionen').style.display = 'block';
+    setStatus('done', '✓ Prüfung übernommen — Sie können den Bericht jetzt prüfen und an Sonja weiterleiten.');
+  } catch(e) {
+    if (modalBtn) { modalBtn.disabled = false; modalBtn.textContent = '✋ Ja, ich übernehme'; }
+    // Fehler im Modal anzeigen
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'color:#9b1c1c; font-size:12px; margin-top:12px;';
+    errDiv.textContent = 'Fehler: ' + e.message;
+    document.querySelector('#tlAnnehmenModal > div')?.appendChild(errDiv);
+  }
 }
 
 function activateReviewMode() {
