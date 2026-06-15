@@ -430,7 +430,7 @@
             <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:8px;">Freigabe-Modus — Teamleitung</div>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann an Sonja weiterleiten oder zurückweisen.</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              <button class="btn" onclick="tlFreigebenAnSonja()" style="background:var(--success); color:white; min-height:44px;">✓ An Sonja weiterleiten</button>
+              <button class="btn" onclick="tlFreigebenAnSonja()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
               <button class="btn btn-secondary" onclick="rejectReport()" style="min-height:44px;">✗ Zurückweisen an Fachkraft</button>
             </div>
           </div>
@@ -2574,6 +2574,24 @@ async function tlFreigebenAnSonja() {
     const tlName = currentAccount?.name || '';
     const sonjaMail = 'sonja.peltz@praxisneuewege.de';
 
+    // HPG-Vorlaufzeit prüfen
+    const naechstesHpg = data.Naechstes_HPG || '';
+    let hpgWarning = '';
+    if (naechstesHpg) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const hpgDate = new Date(naechstesHpg); hpgDate.setHours(0,0,0,0);
+      const diffDays = Math.round((hpgDate - today) / 86400000);
+      const hpgDeDate = naechstesHpg.split('-').reverse().join('.');
+      if (diffDays < 14) {
+        const begruendung = escHtml(data.HPG_Begruendung || '(keine Begründung angegeben)');
+        hpgWarning = '<div style="background:#fef2f2; border:2px solid #dc2626; border-radius:6px; padding:14px 16px; margin-bottom:24px;">'
+          + '<div style="color:#9b1c1c; font-weight:bold; font-size:14px; margin-bottom:6px;">⚠ Berichtsvorlaufzeit unterschritten</div>'
+          + '<div style="color:#7f1d1d; font-size:13px; margin-bottom:6px;">Nächstes HPG am <strong>' + hpgDeDate + '</strong> (in ' + diffDays + ' Tag' + (diffDays === 1 ? '' : 'en') + ') — weniger als 14 Tage Vorlauf.</div>'
+          + '<div style="color:#7f1d1d; font-size:13px;"><strong>Begründung der Fachkraft:</strong> ' + begruendung + '</div>'
+          + '</div>';
+      }
+    }
+
     const mailBody = '<html><body style="font-family:Arial,sans-serif; color:#333; max-width:600px;">'
       + '<div style="border-left:4px solid #2d6a4f; padding-left:16px; margin-bottom:24px;">'
       + '<h2 style="color:#2d6a4f; margin:0 0 4px;">Bericht zur finalen Freigabe</h2>'
@@ -2584,7 +2602,10 @@ async function tlFreigebenAnSonja() {
       + '<tr><td style="padding:8px 0; color:#666;">Jugendamt</td><td style="padding:8px 0;">' + escHtml(jugendamt) + '</td></tr>'
       + '<tr><td style="padding:8px 0; color:#666;">Geprüft von</td><td style="padding:8px 0;">' + escHtml(tlName) + '</td></tr>'
       + '</table>'
-      + '<p><a href="' + sonjaUrl + '" style="display:inline-block; background:#2d6a4f; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht final freigeben →</a></p>'
+      + hpgWarning
+      + '<div style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">'
+      + '<a href="' + sonjaUrl + '" style="display:inline-block; background:#2d6a4f; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht final freigeben →</a>'
+      + '</div>'
       + '<p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Bei Freigabe wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>'
       + '</body></html>';
 
@@ -2609,13 +2630,13 @@ async function tlFreigebenAnSonja() {
       const errMsg = errBody?.error?.message || ('HTTP ' + mailResp.status);
       setStatus('error', '✓ Gespeichert — aber Mail an Sonja fehlgeschlagen: ' + errMsg);
     } else {
-      setStatus('done', '✓ Bericht an Sonja weitergeleitet — sie erhält eine E-Mail zur finalen Freigabe.');
+      setStatus('done', '✓ Freigabe weitergeleitet — Sonja erhält eine E-Mail zur finalen Freigabe.');
     }
 
     document.getElementById('tlAktionen').style.display = 'none';
-    if (btn) { btn.disabled = false; btn.textContent = '✓ An Sonja weiterleiten'; }
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Freigabe'; }
   } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = '✓ An Sonja weiterleiten'; }
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Freigabe'; }
     setStatus('error', 'Fehler: ' + e.message);
   }
 }
