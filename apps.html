@@ -13,7 +13,6 @@
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
   --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
   --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
-  --success:#2d6a4f; --success-bg:#eaf4ee;
   --error:#9b1c1c; --error-bg:#fef2f2;
   --radius:8px; --radius-lg:12px;
   --hdr-h:56px;
@@ -29,8 +28,6 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
 .header-brand span{font-size:13px;font-weight:600;color:var(--text)}
 .user-badge{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
 .user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
-.user-avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;border:1.5px solid var(--border);flex-shrink:0;background:var(--accent-light)}
-.user-avatar-fallback{width:28px;height:28px;border-radius:50%;background:var(--accent-light);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1.5px solid var(--border)}
 .btn-logout{margin-left:4px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted);font-family:inherit}
 
 /* ── LOGIN ── */
@@ -50,35 +47,98 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
 #appScreen{display:none}
 
 /* Hero */
-.hero{text-align:center;padding:28px 20px 16px}
-.hero img.hero-logo{height:56px;width:auto;margin-bottom:10px}
-.hero h1{font-size:17px;font-weight:600;color:var(--text);margin-bottom:10px}
-
-/* User profile block */
-.profile-block{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:4px}
-.profile-avatar{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--accent-light)}
-.profile-avatar-fallback{width:56px;height:56px;border-radius:50%;background:var(--accent-light);color:var(--accent);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--border)}
-.profile-label{font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.06em}
+.hero{text-align:center;padding:28px 20px 20px}
+.hero img.hero-logo{height:52px;width:auto;margin-bottom:10px}
+.hero h1{font-size:17px;font-weight:600;color:var(--text);margin-bottom:14px}
+.profile-block{display:flex;flex-direction:column;align-items:center;gap:5px}
+.profile-avatar{width:54px;height:54px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--accent-light);display:block}
+.profile-avatar-fallback{width:54px;height:54px;border-radius:50%;background:var(--accent-light);color:var(--accent);font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--border)}
+.profile-label{font-size:10px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
 .profile-name{font-size:14px;font-weight:600;color:var(--text)}
 
-/* ── APP GRID — 3 Spalten, 2 Zeilen ── */
-.app-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:16px 12px 12px;max-width:600px;margin:0 auto}
+/* ── GRID ── */
+/* Desktop: 4 Spalten, 2 Zeilen */
+.app-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:14px;
+  padding:16px 20px 20px;
+  max-width:760px;
+  margin:0 auto;
+}
 
-.app-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;text-decoration:none;color:inherit;cursor:pointer;transition:border-color .12s,box-shadow .12s;aspect-ratio:1/1;padding:14px 10px;gap:8px;position:relative;overflow:hidden}
-.app-card:active,.app-card:hover{border-color:var(--accent-mid);box-shadow:0 2px 12px rgba(123,63,30,.12);background:var(--accent-light)}
+/* Mobile: 3 Spalten */
+@media(max-width:600px){
+  .app-grid{
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    padding:12px 10px 16px;
+    max-width:100%;
+  }
+}
 
-/* App icon — emoji or image */
-.card-icon{font-size:30px;line-height:1;display:flex;align-items:center;justify-content:center;width:48px;height:48px}
-.card-icon img{width:48px;height:48px;object-fit:contain;border-radius:10px}
-.card-name{font-size:13px;font-weight:600;color:var(--text);line-height:1.2}
-.card-desc{font-size:10px;color:var(--text-muted);line-height:1.35}
+/* ── KACHEL ── */
+.app-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  text-decoration:none;color:inherit;
+  cursor:pointer;
+  transition:border-color .12s,box-shadow .12s;
+  aspect-ratio:1/1;
+  padding:14px 8px;
+  gap:8px;
+}
+.app-card:hover,.app-card:active{
+  border-color:var(--accent-mid);
+  box-shadow:0 2px 12px rgba(123,63,30,.12);
+  background:var(--accent-light);
+}
+
+.card-icon{
+  width:48px;height:48px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:30px;line-height:1;
+  flex-shrink:0;
+}
+.card-icon img{
+  width:48px;height:48px;
+  object-fit:contain;
+  border-radius:10px;
+}
+.card-name{
+  font-size:12px;font-weight:600;
+  color:var(--text);line-height:1.2;
+}
+.card-desc{
+  font-size:10px;color:var(--text-muted);
+  line-height:1.35;
+}
+
+/* Mobile: Beschreibungen ausblenden */
+@media(max-width:600px){
+  .card-desc{display:none}
+  .card-name{font-size:11px}
+  .app-card{gap:6px;padding:10px 6px}
+  .card-icon{width:38px;height:38px;font-size:24px}
+  .card-icon img{width:38px;height:38px}
+}
 
 /* Soon */
 .app-card.soon{opacity:.42;pointer-events:none}
-.soon-pill{font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-mid);background:var(--accent-light);border:1px solid #e8c4a8;border-radius:4px;padding:1px 6px;display:inline-block}
+.soon-pill{
+  font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--accent-mid);background:var(--accent-light);
+  border:1px solid #e8c4a8;border-radius:4px;
+  padding:1px 6px;display:inline-block;
+}
+@media(max-width:600px){.soon-pill{display:none}}
 
 /* Footer */
-.page-footer{text-align:center;padding:16px 16px 24px;font-size:11px;color:var(--text-hint);border-top:1px solid var(--border);margin-top:4px}
+.page-footer{text-align:center;padding:16px 16px 28px;font-size:11px;color:var(--text-hint);border-top:1px solid var(--border);margin-top:4px}
 .page-footer a{color:var(--accent-mid);text-decoration:none}
 </style>
 </head>
@@ -97,7 +157,7 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
   </div>
 </header>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div id="loginScreen" class="login-screen">
   <div class="login-card">
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
@@ -160,13 +220,7 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
 
     <a class="app-card" href="https://apps.datev.de/ano/de/" target="_blank" rel="noopener">
       <div class="card-icon">
-        <!-- DATEV Logo SVG -->
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="48" height="48" rx="10" fill="#003366"/>
-          <text x="50%" y="56%" dominant-baseline="middle" text-anchor="middle"
-                font-family="Arial,sans-serif" font-size="11" font-weight="700"
-                letter-spacing="0.5" fill="#ffffff">DATEV</text>
-        </svg>
+        <img src="https://raw.githubusercontent.com/peltzm/pnw-app/main/assets/datev.webp" alt="DATEV">
       </div>
       <div class="card-name">Gehalts&shy;abrechnung</div>
       <div class="card-desc">Lohnabrechnungen via DATEV</div>
@@ -179,16 +233,13 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
       <span class="soon-pill">Demnächst</span>
     </div>
 
-  </div>
-
-  <!-- Zweite Zeile: nur Intranet als Platzhalter zentriert -->
-  <div style="display:flex;justify-content:center;padding:0 12px 12px;max-width:600px;margin:0 auto">
-    <div class="app-card soon" style="width:calc(33.333% - 8px);max-width:176px">
+    <div class="app-card soon">
       <div class="card-icon">🏠</div>
       <div class="card-name">Intranet</div>
       <div class="card-desc">SharePoint-Intranet und Dokumente</div>
       <span class="soon-pill">Demnächst</span>
     </div>
+
   </div>
 
   <footer class="page-footer">
@@ -202,25 +253,18 @@ const CFG = {
   tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
   redirectUri: 'https://apps.praxisneuewege.de/apps.html'
 };
-
 const msalConfig = {
-  auth: {
-    clientId:    CFG.clientId,
-    authority:   `https://login.microsoftonline.com/${CFG.tenantId}`,
-    redirectUri: CFG.redirectUri
-  },
+  auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
   cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
 };
-
 const msalInstance = new msal.PublicClientApplication(msalConfig);
-const SCOPES = ['User.Read', 'User.ReadBasic.All'];
+const SCOPES = ['User.Read'];
 
 async function login() {
   document.getElementById('loginBtn').disabled = true;
   document.getElementById('loginError').style.display = 'none';
-  try {
-    await msalInstance.loginRedirect({ scopes: SCOPES });
-  } catch(e) {
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) {
     console.error(e);
     document.getElementById('loginError').style.display = 'block';
     document.getElementById('loginBtn').disabled = false;
@@ -231,56 +275,41 @@ function logout() {
   msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri });
 }
 
-async function loadProfilePhoto(accessToken) {
+async function loadProfilePhoto(token) {
   try {
-    const resp = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
+    const r = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+      headers: { Authorization: `Bearer ${token}` }
     });
-    if (!resp.ok) return null;
-    const blob = await resp.blob();
-    return URL.createObjectURL(blob);
-  } catch(e) {
-    return null;
-  }
+    if (!r.ok) return null;
+    return URL.createObjectURL(await r.blob());
+  } catch { return null; }
 }
 
-async function getAccessToken() {
+async function getToken() {
   const account = msalInstance.getActiveAccount();
   if (!account) return null;
   try {
-    const result = await msalInstance.acquireTokenSilent({
-      scopes: SCOPES,
-      account
-    });
-    return result.accessToken;
-  } catch(e) {
-    return null;
-  }
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+    return r.accessToken;
+  } catch { return null; }
 }
 
 async function showApp(account) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userBadge').style.display = 'flex';
-
   const name = account.name || account.username;
   document.getElementById('userName').textContent = name;
   document.getElementById('profileName').textContent = name;
-
-  // Initialen als Fallback
   const initials = name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
   const avatarEl = document.getElementById('profileAvatar');
   avatarEl.textContent = initials;
-
-  // M365 Profilfoto laden
-  const token = await getAccessToken();
+  const token = await getToken();
   if (token) {
-    const photoUrl = await loadProfilePhoto(token);
-    if (photoUrl) {
+    const url = await loadProfilePhoto(token);
+    if (url) {
       const img = document.createElement('img');
-      img.src = photoUrl;
-      img.className = 'profile-avatar';
-      img.alt = name;
+      img.src = url; img.className = 'profile-avatar'; img.alt = name;
       avatarEl.replaceWith(img);
     }
   }
@@ -289,21 +318,11 @@ async function showApp(account) {
 async function init() {
   try {
     const resp = await msalInstance.handleRedirectPromise();
-    if (resp && resp.account) {
-      msalInstance.setActiveAccount(resp.account);
-      await showApp(resp.account);
-      return;
-    }
+    if (resp?.account) { msalInstance.setActiveAccount(resp.account); await showApp(resp.account); return; }
     const accounts = msalInstance.getAllAccounts();
-    if (accounts.length > 0) {
-      msalInstance.setActiveAccount(accounts[0]);
-      await showApp(accounts[0]);
-    }
-  } catch(e) {
-    console.error('Init error:', e);
-  }
+    if (accounts.length > 0) { msalInstance.setActiveAccount(accounts[0]); await showApp(accounts[0]); }
+  } catch(e) { console.error('Init:', e); }
 }
-
 init();
 </script>
 </body>
