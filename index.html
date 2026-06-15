@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Berichtsgenerator — Praxis NeueWege</title>
-<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/3.28.1/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root {
@@ -523,7 +523,7 @@ async function initMsal() {
 
 async function login() {
   try {
-    await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'] });
+    await msalInstance.loginPopup({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'] });
   } catch(e) {
     document.getElementById('loginError').style.display = 'block';
     document.getElementById('loginError').textContent = 'Fehler: ' + (e.errorMessage || e.message);
