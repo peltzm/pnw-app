@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Berichtsgenerator — Praxis NeueWege</title>
-<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/3.28.1/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root {
@@ -529,11 +529,25 @@ async function initMsal() {
 }
 
 async function login() {
+  const errEl = document.getElementById('loginError');
+  const btn = document.querySelector('.login-card .btn-primary');
+  if (btn) btn.disabled = true;
+  if (errEl) errEl.style.display = 'none';
+  const req = { scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'] };
   try {
-    await msalInstance.loginRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'] });
-  } catch(e) {
-    document.getElementById('loginError').style.display = 'block';
-    document.getElementById('loginError').textContent = 'Fehler: ' + (e.errorMessage || e.message);
+    const resp = await msalInstance.loginPopup(req);
+    if (resp) { currentAccount = resp.account; accessToken = resp.accessToken; showApp(); }
+  } catch(popupErr) {
+    if (popupErr.errorCode === 'popup_window_error' || popupErr.errorCode === 'empty_window_error' || popupErr.errorCode === 'user_cancelled') {
+      try { await msalInstance.loginRedirect(req); }
+      catch(e) {
+        if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message); }
+        if (btn) btn.disabled = false;
+      }
+    } else {
+      if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Fehler: ' + (popupErr.errorMessage || popupErr.message); }
+      if (btn) btn.disabled = false;
+    }
   }
 }
 
