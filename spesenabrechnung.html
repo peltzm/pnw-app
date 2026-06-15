@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v5ffc18f</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -778,8 +778,7 @@ let _isTL = false;
 async function initMsal() {
   const msalConfig = {
     auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
-    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
-  system: { allowNativeBroker: false }
+    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
@@ -792,18 +791,8 @@ async function initMsal() {
 }
 
 async function login() {
-  const btn = document.getElementById('loginBtn');
-  const errEl = document.getElementById('loginError');
-  btn.disabled = true;
-  errEl.style.display = 'none';
-  const req = { scopes: SCOPES };
-  try {
-    await msalInstance.loginRedirect(req);
-  } catch(e) {
-    console.error(e);
-    errEl.style.display = 'block';
-    btn.disabled = false;
-  }
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) { showLoginError('Fehler: ' + (e.errorMessage || e.message)); }
 }
 async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
 async function getToken() {
@@ -1064,8 +1053,19 @@ async function ladeMonatsdaten() {
 }
 
 function renderHome(belege) {
-  // Separate Fahrtenbuch from regular belege
-  const fahrt = belege.find(b => b.Kategorie === 'fahrtenbuch');
+  // Separate Fahrtenbuch from regular belege — nur das neueste Fahrtenbuch behalten
+  const fahrtBelege = belege.filter(b => b.Kategorie === 'fahrtenbuch')
+    .sort((a, b) => parseInt(b.id) - parseInt(a.id)); // neuestes zuerst (höchste SharePoint-ID)
+  const fahrt = fahrtBelege[0] || null;
+  // Duplikate still im Hintergrund löschen
+  if (fahrtBelege.length > 1) {
+    fahrtBelege.slice(1).forEach(dup => {
+      getToken().then(token => getGraphListIds().then(({siteId, listId}) =>
+        fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${dup.id}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } })
+      )).catch(()=>{});
+    });
+  }
   const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
 
   // Stats
@@ -1669,15 +1669,38 @@ async function handleFahrtUpload(input) {
     const fd = { gesamtKm, betrag, gesamtFahrten, sonstigeKm, sonstigeFahrten,
                  dateiname: fn, dateiUrl: fahrtGraphUrl, klienten, kennzeichen };
 
-    // Vorhandenes Fahrtenbuch aktualisieren (PATCH), sonst neu anlegen (POST)
-    const existingId = _fahrtDaten?.id || null;
+    // Alle vorhandenen Fahrtenbuch-Einträge dieses Monats aus SharePoint holen und bereinigen
+    let existingId = _fahrtDaten?.id || null;
+    try {
+      const token2 = await getToken();
+      const { siteId: sid2, listId: lid2 } = await getGraphListIds();
+      const myMail = (currentAccount?.username || '').toLowerCase();
+      const checkUrl = `https://graph.microsoft.com/v1.0/sites/${sid2}/lists/${lid2}/items?expand=fields&$top=500`;
+      const checkR = await fetch(checkUrl, { headers: { Authorization: 'Bearer ' + token2 } });
+      const checkRes = await checkR.json();
+      const alleFahrt = (checkRes.value || [])
+        .map(i => ({ id: i.id, ...i.fields }))
+        .filter(b => b.Kategorie === 'fahrtenbuch'
+          && (b.Monat || '').startsWith(_currentMonat)
+          && (b.Fachkraft_Mail || '').toLowerCase() === myMail)
+        .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+      if (alleFahrt.length > 0) {
+        existingId = alleFahrt[0].id; // neuestes als Update-Ziel
+        // Alle weiteren löschen
+        for (const dup of alleFahrt.slice(1)) {
+          await fetch(`https://graph.microsoft.com/v1.0/sites/${sid2}/lists/${lid2}/items/${dup.id}`,
+            { method: 'DELETE', headers: { Authorization: 'Bearer ' + token2 } }).catch(()=>{});
+        }
+      }
+    } catch(e) { console.warn('Fahrtenbuch-Bereinigung fehlgeschlagen:', e); }
+
     await saveBelegToList({
       monat: _currentMonat, kategorie: 'fahrtenbuch', betrag,
       klient: 'Fahrtenbuch', beschreibung: `Fahrtenbuch ${_currentMonat}`,
       fahrtDaten: fd, fotoUrls: [fahrtGraphUrl], status: 'Entwurf'
     }, existingId);
 
-    // Lokalen State sofort aktualisieren damit ladeFahrtenbuchScreen den richtigen Eintrag zeigt
+    // Lokalen State sofort aktualisieren
     _fahrtDaten = { ...fd, id: existingId, betrag };
 
     showToast(`📊 ${gesamtFahrten} Fahrten · ${gesamtKm} km · ${fmt(betrag)} eingelesen`, true);
@@ -2927,10 +2950,13 @@ async function ladeReviewBelege() {
         try { _belegKommentare[b.id] = JSON.parse(b.TLKommentar); } catch(e) {}
       }
     });
-    // Stats updaten
-    const fahrt   = belege.find(b => b.Kategorie === 'fahrtenbuch');
+    // Stats updaten — nur das neueste Fahrtenbuch
+    const fahrtBelege = belege.filter(b => b.Kategorie === 'fahrtenbuch')
+      .sort((a, b) => parseInt(b.id) - parseInt(a.id));
+    const fahrt   = fahrtBelege[0] || null;
     const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
-    const total   = belege.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
+    const total   = (fahrt ? parseFloat(fahrt.Betrag || 0) : 0)
+                  + regular.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
     document.getElementById('homeTotal').textContent = fmt(total);
     document.getElementById('homeSub').textContent   = `${belege.length} Positionen · Eingereicht`;
     document.getElementById('statFahrt').textContent  = fahrt ? fmt(fahrt.Betrag) : '—';
