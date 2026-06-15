@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v71325ac</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -595,6 +595,10 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
           <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="fahrtScreenMeta">—</div>
         </div>
         <div style="padding:12px 16px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text-muted)">Kennzeichen</span>
+            <span style="font-weight:600;color:var(--text)" id="fahrtScreenKennzeichen">—</span>
+          </div>
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
             <span style="color:var(--text-muted)">Datei</span>
             <span style="font-weight:500;color:var(--text);text-align:right;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="fahrtScreenDatei">—</span>
@@ -1534,9 +1538,11 @@ async function ladeFahrtenbuchScreen() {
       const klienten = fd.klienten || [];
 
       // ── Summary-Header ─────────────────────────────────────────
+      const kennzeichen = fd.kennzeichen || '';
       document.getElementById('fahrtScreenTotal').textContent = fmt(betrag);
       document.getElementById('fahrtScreenMeta').textContent  =
         `${gesamtFahrten !== '—' ? gesamtFahrten + ' Fahrten gesamt · ' : ''}${gesamtKm} km · 0,30 €/km`;
+      document.getElementById('fahrtScreenKennzeichen').textContent = kennzeichen || '—';
       document.getElementById('fahrtScreenDatei').textContent  = dateiname;
       document.getElementById('fahrtScreenAnzahl').textContent =
         gesamtFahrten !== '—' ? gesamtFahrten + ' Fahrten' : '—';
@@ -1599,6 +1605,13 @@ async function handleFahrtUpload(input) {
       // Header in Zeile 7 (Excel) = Index 6 (0-basiert)
       const rows = XLSX.utils.sheet_to_json(ws, { range: 6, defval: '' });
       if (!rows.length) throw new Error('Keine Daten gefunden');
+      // Kennzeichen aus Zelle B4 (row-index 3, col-index 1)
+      const kennzeichen = (() => {
+        try {
+          const cell = ws['B4'];
+          return cell ? String(cell.v || '').trim() : '';
+        } catch(e) { return ''; }
+      })();
 
       const klientKey = Object.keys(rows[0]).find(k => /klient/i.test(k)) || 'Klient';
       const kmKey     = Object.keys(rows[0]).find(k => /strecke.*km|^km$/i.test(k)) ||
@@ -1648,7 +1661,7 @@ async function handleFahrtUpload(input) {
       : (uploaded.webUrl || '');
 
     const fd = { gesamtKm, betrag, gesamtFahrten, sonstigeKm, sonstigeFahrten,
-                 dateiname: fn, dateiUrl: fahrtGraphUrl, klienten };
+                 dateiname: fn, dateiUrl: fahrtGraphUrl, klienten, kennzeichen };
 
     await saveBelegToList({
       monat: _currentMonat, kategorie: 'fahrtenbuch', betrag,
@@ -1706,6 +1719,7 @@ function openFahrtSheet(fd) {
   document.getElementById('fahrtSheetBody').innerHTML = `
     <div class="alert alert-success" style="margin:0 0 12px">✓ ${esc(d.dateiname || 'Fahrtenbuch.xlsx')} · in SharePoint gespeichert</div>
     <div class="info-card" style="margin:0 0 14px">
+      ${d.kennzeichen ? `<div class="info-row"><span class="info-label">Kennzeichen</span><span class="info-val" style="font-weight:600">${esc(d.kennzeichen)}</span></div>` : ''}
       <div class="info-row"><span class="info-label">Fahrten gesamt</span><span class="info-val">${d.gesamtFahrten || d.anzahlFahrten || '—'} Fahrten</span></div>
       <div class="info-row"><span class="info-label">Gesamt km</span><span class="info-val">${d.gesamtKm || '—'} km</span></div>
       <div class="info-row"><span class="info-label">Pauschale</span><span class="info-val">0,30 €/km</span></div>
@@ -2162,6 +2176,7 @@ ${fahrt && fd ? `<div class="fcard">
     <div class="famt">${fmt(fahrt.Betrag)}</div>
   </div>
   <div class="det">
+    ${fd.kennzeichen ? `<div class="drow"><span class="k">Kennzeichen</span><span class="v" style="font-weight:600">${esc(fd.kennzeichen)}</span></div>` : ''}
     <div class="drow"><span class="k">Datei</span><span class="v">${esc(fd.dateiname||'Fahrtenbuch.xlsx')}</span></div>
     <div class="drow"><span class="k">Fahrten gesamt</span><span class="v">${fd.gesamtFahrten||fd.anzahlFahrten||0} Fahrten</span></div>
     <div class="drow"><span class="k">Gesamt km</span><span class="v">${fd.gesamtKm||0} km</span></div>
