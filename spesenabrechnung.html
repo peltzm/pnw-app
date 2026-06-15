@@ -411,8 +411,8 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
       <button class="hkat-btn" id="hkat-gastro"      onclick="selectHkat('gastro')">🍽️<span>Gastronomie</span></button>
       <button class="hkat-btn" id="hkat-einkauf"     onclick="selectHkat('einkauf')">🛍️<span>Einkäufe</span></button>
       <button class="hkat-btn" id="hkat-fahrzeug"    onclick="selectHkat('fahrzeug')">🚗<span>Fahrzeug</span></button>
-      <button class="hkat-btn" id="hkat-parken"      onclick="selectHkat('parken')">🅿️<span>Parken</span></button>
-      <button class="hkat-btn" id="hkat-fahrtenbuch" onclick="selectHkat('fahrtenbuch')">📊<span>Fahrtenbuch</span></button>
+      <button class="hkat-btn" id="hkat-sonstiges"   onclick="selectHkat('sonstiges')">🗂️<span>Sonstiges</span></button>
+      <button class="hkat-btn" id="hkat-auslagen"    onclick="selectHkat('auslagen')">🏠<span>Auslagen Stationär</span></button>
     </div>
   </div>
 
@@ -422,27 +422,8 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div id="ukatList" class="ukat-list"></div>
   </div>
 
-  <!-- ── Fahrtenbuch Upload ── -->
-  <div id="fahrtForm" class="card" style="display:none">
-    <div class="card-title">Fahrtenbuch — Monatsnachweis</div>
-    <div class="alert alert-info" style="margin:0 0 12px;padding:9px 12px;font-size:12px">
-      Fahrtkosten werden <strong>einmal pro Monat</strong> als Gesamtsumme abgerechnet. Excel-Fahrtenbuch hochladen.
-    </div>
-    <div id="fahrtUploadZone" class="upload-zone" onclick="triggerFahrtUpload()">
-      <div class="uz-icon">📊</div>
-      <div class="uz-title">Fahrtenbuch hochladen</div>
-      <div class="uz-sub">Excel (.xlsx) auswählen</div>
-    </div>
-    <input type="file" id="fahrtFileInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="handleFahrtUpload(this)">
-    <div id="fahrtUploadResult" style="display:none;margin-top:12px">
-      <div class="alert alert-success" style="margin:0 0 10px">✓ Fahrtenbuch eingelesen und in SharePoint gespeichert</div>
-      <div class="info-card" style="margin:0" id="fahrtInfoCard"></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">📊 Fahrtenbuch hochladen</button>
-        <button onclick="loescheFahrtenbuch()" style="font-size:13px;color:var(--error);background:none;border:1px solid var(--error);border-radius:var(--radius);padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:4px">× Löschen</button>
-      </div>
-    </div>
-  </div>
+  <!-- fahrtFileInput bleibt für den Fahrtenbuch-Tab -->
+  <input type="file" id="fahrtFileInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="handleFahrtUpload(this)">
 
   <!-- ── Pflichtfelder Beleg ── -->
   <div id="belegFormCard" class="card" style="display:none">
@@ -639,7 +620,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
       </div>
 
       <div style="display:flex;gap:8px">
-        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">📊 Neu hochladen</button>
+        <button class="btn-add" style="flex:1;justify-content:center" onclick="triggerFahrtUpload()">📊 Fahrtenbuch hochladen</button>
         <button onclick="loescheFahrtenbuch()" style="font-size:13px;color:var(--error);background:none;border:1px solid var(--error);border-radius:var(--radius);padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:4px">× Löschen</button>
       </div>
     </div>
@@ -1097,7 +1078,7 @@ function renderHome(belege) {
     list.innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Noch keine Belege für diesen Monat.<br>Tippe auf + um einen Beleg zu erfassen.</div>';
     return;
   }
-  const catIcon = { freizeit:'🎡', gastro:'🍽️', einkauf:'🛍️', fahrzeug:'🚗', parken:'🅿️', fahrtenbuch:'📊' };
+  const catIcon = { freizeit:'🎡', gastro:'🍽️', einkauf:'🛍️', fahrzeug:'🚗', sonstiges:'🗂️', auslagen:'🏠', fahrtenbuch:'📊' };
   list.innerHTML = regular.map(b => {
     const hkat = b.Kategorie || 'sonst';
     const hasPhoto = (b.FotoUrls && JSON.parse(b.FotoUrls || '[]').length > 0);
@@ -1169,11 +1150,12 @@ async function openBelegSheet(id) {
       <!-- Kategorie + Unterkategorie in einer Zeile -->
       <div class="field-row">
         <div class="field"><label>Kategorie</label><select id="edKat" onchange="updateEdUnterkat()">
-          <option value="freizeit" ${b.Kategorie==='freizeit'?'selected':''}>🎡 Freizeit</option>
-          <option value="gastro"   ${b.Kategorie==='gastro'?'selected':''}>🍽️ Gastronomie</option>
-          <option value="einkauf"  ${b.Kategorie==='einkauf'?'selected':''}>🛍️ Einkäufe</option>
-          <option value="fahrzeug" ${b.Kategorie==='fahrzeug'?'selected':''}>🚗 Fahrzeug</option>
-          <option value="parken"   ${b.Kategorie==='parken'?'selected':''}>🅿️ Parken</option>
+          <option value="freizeit"  ${b.Kategorie==='freizeit'?'selected':''}>🎡 Freizeit</option>
+          <option value="gastro"    ${b.Kategorie==='gastro'?'selected':''}>🍽️ Gastronomie</option>
+          <option value="einkauf"   ${b.Kategorie==='einkauf'?'selected':''}>🛍️ Einkäufe</option>
+          <option value="fahrzeug"  ${b.Kategorie==='fahrzeug'?'selected':''}>🚗 Fahrzeug</option>
+          <option value="sonstiges" ${b.Kategorie==='sonstiges'?'selected':''}>🗂️ Sonstiges</option>
+          <option value="auslagen"  ${b.Kategorie==='auslagen'?'selected':''}>🏠 Auslagen Stationär</option>
         </select></div>
         <div class="field"><label>Unterkategorie</label><select id="edUnterkat">${buildEdUnterkatOptions(b.Kategorie, b.Unterkategorie)}</select></div>
       </div>
@@ -1404,10 +1386,10 @@ async function handleFileSelect(input) {
       hkatVorschlag = 'freizeit'; ukatVorschlag = 'museum';
     } else if (/zoo|freizeitpark|legoland/.test(hn)) {
       hkatVorschlag = 'freizeit'; ukatVorschlag = 'freizeitpark';
-    } else if (/parkhaus|tiefgarage|parking/.test(hn)) {
-      hkatVorschlag = 'parken'; ukatVorschlag = 'parkhaus';
+    } else if (/parkhaus|tiefgarage|parking|parkschein/.test(hn)) {
+      hkatVorschlag = 'fahrzeug'; ukatVorschlag = 'parken';
     } else if (/parkster|handyparken/.test(hn)) {
-      hkatVorschlag = 'parken'; ukatVorschlag = 'handyparken';
+      hkatVorschlag = 'fahrzeug'; ukatVorschlag = 'parken';
     } else if (/saturn|mediamarkt|dm|rossmann|müller|basteln|schreibwaren|büro|staples/.test(hn)) {
       hkatVorschlag = 'einkauf'; ukatVorschlag = 'basteln';
     }
@@ -1443,14 +1425,12 @@ async function speicherBeleg() {
     : 'kein Klient';
   const betrag  = document.getElementById('fBetrag').value;
   const datum   = document.getElementById('fDatum').value;
-  const isFahrt = _selectedHkat === 'fahrtenbuch';
-
   if (!_selectedHkat) { showKatHinweis(); showToast('Bitte Kategorie wählen'); return; }
   const hatUnter = KATEGORIEN[_selectedHkat]?.unter?.length > 0;
-  if (!isFahrt && hatUnter && !_selectedUkat) { showToast('Bitte Unterkategorie wählen'); document.getElementById('ukatCard').scrollIntoView({behavior:'smooth'}); return; }
-  if (!isFahrt && !datum)  { showToast('Bitte Datum eingeben'); return; }
-  if (!isFahrt && !betrag) { showToast('Bitte Betrag eingeben'); return; }
-  if (!isFahrt && _uploadedPhotos.length === 0) { showToast('⚠ Originalbeleg (Foto) fehlt — Pflichtfeld'); return; }
+  if (hatUnter && !_selectedUkat) { showToast('Bitte Unterkategorie wählen'); document.getElementById('ukatCard').scrollIntoView({behavior:'smooth'}); return; }
+  if (!datum)  { showToast('Bitte Datum eingeben'); return; }
+  if (!betrag) { showToast('Bitte Betrag eingeben'); return; }
+  if (_uploadedPhotos.length === 0) { showToast('⚠ Originalbeleg (Foto) fehlt — Pflichtfeld'); return; }
 
   const btn = document.getElementById('btnSpeichern');
   btn.disabled = true; btn.textContent = '💾 Wird gespeichert…';
@@ -2054,7 +2034,8 @@ async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
   const catLabel = {
     freizeit:'Freizeitaktivitäten', gastro:'Gastronomie / Verpflegung',
     einkauf:'Einkäufe / Material', fahrzeug:'Fahrzeug / Transport',
-    parken:'Parkkosten', fahrtenbuch:'Fahrtkosten (Fahrtenbuch)'
+    sonstiges:'Sonstiges', auslagen:'Auslagen Stationär',
+    fahrtenbuch:'Fahrtkosten (Fahrtenbuch)'
   };
 
   // Alle Fotos als Base64 vorladen
@@ -2496,16 +2477,27 @@ const KATEGORIEN = {
       { id: 'tanken',       label: 'Tanken',                      icon: '⛽' },
       { id: 'waschen',      label: 'Autowäsche / Fahrzeugpflege', icon: '🚿' },
       { id: 'oepnv',        label: 'ÖPNV / Taxi',                 icon: '🚌' },
-      { id: 'post',         label: 'Post / Versand',              icon: '📦' },
+      { id: 'parken',       label: 'Parken',                      icon: '🅿️' },
       { id: 'fahrzeug-sonst', label: 'Sonstiges Fahrzeug',        icon: '🔧' },
     ]
   },
-  parken: {
-    label: 'Parkkosten', icon: '🅿️',
+  sonstiges: {
+    label: 'Sonstiges', icon: '🗂️',
     unter: [
-      { id: 'parkhaus',     label: 'Parkhaus / Tiefgarage',       icon: '🏢' },
-      { id: 'parkschein',   label: 'Parkscheinautomat',           icon: '🎫' },
-      { id: 'handyparken',  label: 'Handyparken / Parkster',      icon: '📱' },
+      { id: 'post',         label: 'Post / Versand',              icon: '📦' },
+      { id: 'schulung',     label: 'Schulung / Seminargebühren',  icon: '🎓' },
+      { id: 'sonstiges-sonst', label: 'Sonstiges',               icon: '📋' },
+    ]
+  },
+  auslagen: {
+    label: 'Auslagen Stationär', icon: '🏠',
+    unter: [
+      { id: 'lebensmittel-stat', label: 'Lebensmittel',          icon: '🛒' },
+      { id: 'reinigung',         label: 'Reinigungsmittel',       icon: '🧹' },
+      { id: 'hygiene',           label: 'Hygiene',                icon: '🧴' },
+      { id: 'deko',              label: 'Deko',                   icon: '🪴' },
+      { id: 'gebaeude',          label: 'Gebäude',                icon: '🏗️' },
+      { id: 'auslagen-sonst',    label: 'Sonstiges',              icon: '📋' },
     ]
   },
   fahrtenbuch: {
@@ -2526,14 +2518,12 @@ function selectHkat(hkat) {
   const hinweis = document.getElementById('katHinweis');
   if (hinweis) hinweis.style.display = 'none';
   const kat = KATEGORIEN[hkat];
-  // Fahrtenbuch: direkt Upload zeigen
-  const isFahrt = hkat === 'fahrtenbuch';
-  document.getElementById('fahrtForm').style.display     = isFahrt ? 'block' : 'none';
-  document.getElementById('ukatCard').style.display      = (!isFahrt && kat.unter.length) ? 'block' : 'none';
-  document.getElementById('belegFormCard').style.display = (!isFahrt && kat.unter.length) ? 'none' : (!isFahrt ? 'block' : 'none');
-  document.getElementById('fotoCard').style.display      = isFahrt ? 'none' : 'none';
+  // Unterkategorie zeigen
+  document.getElementById('ukatCard').style.display      = kat.unter.length ? 'block' : 'none';
+  document.getElementById('belegFormCard').style.display = kat.unter.length ? 'none' : 'block';
+  document.getElementById('fotoCard').style.display      = 'none';
   // Render Unterkategorien
-  if (!isFahrt && kat.unter.length) {
+  if (kat.unter.length) {
     document.getElementById('ukatList').innerHTML = kat.unter.map(u =>
       `<button class="ukat-item" id="ukat-${u.id}" onclick="selectUkat('${u.id}')">${u.icon} ${u.label}</button>`
     ).join('');
@@ -2564,7 +2554,7 @@ function selectUkat(ukatId) {
 function getKatLabel() {
   if (!_selectedHkat) return '';
   const hkat = KATEGORIEN[_selectedHkat];
-  if (_selectedHkat === 'fahrtenbuch') return hkat.label;
+
   if (!_selectedUkat) return hkat.label;
   const ukat = hkat.unter.find(u => u.id === _selectedUkat);
   return ukat ? `${hkat.label} › ${ukat.label}` : hkat.label;
@@ -2573,7 +2563,7 @@ function getKatLabel() {
 function getKatIcon() {
   if (!_selectedHkat) return '📋';
   const hkat = KATEGORIEN[_selectedHkat];
-  if (_selectedHkat === 'fahrtenbuch') return '📊';
+
   if (!_selectedUkat) return hkat.icon;
   const ukat = hkat.unter.find(u => u.id === _selectedUkat);
   return ukat ? ukat.icon : hkat.icon;
