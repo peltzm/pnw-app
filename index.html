@@ -112,6 +112,11 @@
 
   /* Touch optimizations */
   input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  @keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0 rgba(45,106,79,0.5); }
+    70%  { box-shadow: 0 0 0 10px rgba(45,106,79,0); }
+    100% { box-shadow: 0 0 0 0 rgba(45,106,79,0); }
+  }
   input[type="date"] { -webkit-appearance: none; appearance: none; }
   select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
   .nav-item { min-height: 44px; }
@@ -1514,6 +1519,17 @@ async function loadDraft(id) {
       // GF-Modus: öffnet finalen Prüf-Link
       goTo(1);
       activateSonjaMode();
+      // ?direct_approve=1 → direkt zu Seite 6 und Freigabe-Button hervorheben
+      if (_params.get('direct_approve') === '1') {
+        setTimeout(() => {
+          goTo(6);
+          const approveBtn = document.querySelector('button[onclick="approveReport()"]');
+          if (approveBtn) {
+            approveBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            approveBtn.style.animation = 'pulse-green 1s ease 3';
+          }
+        }, 600);
+      }
       window.scrollTo(0,0);
     } else if (isReviewLink && isTLUser()) {
       // TL-Prüfmodus
@@ -2161,13 +2177,9 @@ async function sendApprovalEmail(listItemId, data, filename) {
 
   ${hpgWarningHtml}
 
-  <div style="margin-bottom: 24px; display:flex; gap:12px; flex-wrap:wrap;">
-    <a href="${appUrl}" style="display: inline-block; background: #7b3f1e; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-      Bericht prüfen &amp; freigeben →
-    </a>
-    <a href="${docUrl}" style="display: inline-block; background: #0078d4; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-      Dokument in SharePoint öffnen →
-    </a>
+  <div style="margin-bottom:24px;">
+    <a href="${appUrl}" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #7b3f1e; color:#7b3f1e; background:white; margin-bottom:10px;">Bericht prüfen &amp; freigeben →</a>
+    <a href="${docUrl}" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #0078d4; color:#0078d4; background:white;">Dokument in SharePoint öffnen →</a>
   </div>
 
   <p style="color: #666; font-size: 13px; margin-bottom: 24px;">
@@ -2243,7 +2255,7 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
     <tr><td style="padding: 8px 0; color: #666;">Jugendamt</td><td style="padding: 8px 0;">${escHtml(data.Jugendamt || '—')}</td></tr>
     <tr><td style="padding: 8px 0; color: #666;">Dateiname</td><td style="padding: 8px 0; font-family: monospace; font-size: 13px;">${escHtml(pdfName)}</td></tr>
   </table>
-  ${pdfUrl ? `<p><a href="${pdfUrl}" style="display: inline-block; background: #2e7d32; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Finales PDF öffnen →</a></p>` : `<p style="color:#888;">Das PDF liegt im SharePoint-Ordner ${escHtml(CONFIG.outputFolder)}.</p>`}
+  ${pdfUrl ? `<p><a href="${pdfUrl}" style="display:block; max-width:260px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2e7d32; color:#2e7d32; background:white;">Finales PDF öffnen →</a></p>` : `<p style="color:#888;">Das PDF liegt im SharePoint-Ordner ${escHtml(CONFIG.outputFolder)}.</p>`}
 </body></html>` },
       toRecipients: (() => {
         // An Sonja + alle TL Ambulant + einreichende Fachkraft
@@ -2651,9 +2663,10 @@ async function tlFreigebenAnSonja() {
       + '<tr><td style="padding:8px 0; color:#666;">Geprüft von</td><td style="padding:8px 0;">' + escHtml(tlName) + '</td></tr>'
       + '</table>'
       + hpgWarning
-      + '<div style="margin-bottom:24px; display:flex; gap:12px; flex-wrap:wrap;">'
-      + '<a href="' + sonjaUrl + '" style="display:inline-block; background:#7b3f1e; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht prüfen &amp; bearbeiten →</a>'
-      + '<a href="' + docUrl + '" style="display:inline-block; background:#0078d4; color:white; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">Dokument in SharePoint öffnen →</a>'
+      + '<div style="margin-bottom:24px;">'
+      + '<a href="' + sonjaUrl + '?direct_approve=1" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2d6a4f; color:#2d6a4f; background:white; margin-bottom:10px;">✓ Final freigeben &amp; PDF erstellen →</a>'
+      + '<a href="' + sonjaUrl + '" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #7b3f1e; color:#7b3f1e; background:white; margin-bottom:10px;">Bericht prüfen &amp; bearbeiten →</a>'
+      + '<a href="' + docUrl + '" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #0078d4; color:#0078d4; background:white;">Dokument in SharePoint öffnen →</a>'
       + '</div>'
       + '<p style="color:#666; font-size:13px; margin-bottom:24px;">Alle Berichte im Überblick: <a href="' + folderUrl + '" style="color:#0078d4;">Ordner in SharePoint öffnen →</a></p>'
       + '<p style="color:#888; font-size:13px; border-top:1px solid #eee; padding-top:16px;">Nach der Prüfung können Sie den Bericht in der App final freigeben — dabei wird automatisch ein PDF erstellt und alle Beteiligten benachrichtigt.</p>'
