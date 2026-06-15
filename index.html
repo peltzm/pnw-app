@@ -164,21 +164,21 @@
       <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem 1.25rem; margin-bottom:1.5rem;">
         <div style="font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.75rem;">Berichtstyp wählen</div>
         <div class="bt-grid">
-          <div onclick="selectBerichtstyp('verlauf')" id="bt_verlauf" style="padding:10px; border:2px solid var(--accent); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--accent-light);">
+          <div onclick="selectBerichtstyp('verlauf')" id="bt_verlauf" style="padding:10px; border:2px solid var(--accent); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--accent-light); transition:all 0.15s; min-height:44px; display:flex; align-items:center; justify-content:center;" onmouseover="if(currentBerichtstyp!=='verlauf'){this.style.borderColor='var(--accent-mid)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='verlauf'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:600; color:var(--accent);">Verlaufsbericht</div>
           </div>
-          <div onclick="selectBerichtstyp('abschluss')" id="bt_abschluss" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface);">
+          <div onclick="selectBerichtstyp('abschluss')" id="bt_abschluss" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s; min-height:44px; display:flex; align-items:center; justify-content:center;" onmouseover="if(currentBerichtstyp!=='abschluss'){this.style.borderColor='var(--accent-mid)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='abschluss'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Abschlussbericht</div>
           </div>
-          <div onclick="selectBerichtstyp('clearing')" id="bt_clearing" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface);">
+          <div onclick="selectBerichtstyp('clearing')" id="bt_clearing" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s; min-height:44px; display:flex; align-items:center; justify-content:center;" onmouseover="if(currentBerichtstyp!=='clearing'){this.style.borderColor='var(--accent-mid)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='clearing'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Clearingbericht</div>
           </div>
-          <div onclick="selectBerichtstyp('stationaer')" id="bt_stationaer" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface);">
+          <div onclick="selectBerichtstyp('stationaer')" id="bt_stationaer" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s; min-height:44px; display:flex; align-items:center; justify-content:center;" onmouseover="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--accent-mid)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">VB stationär</div>
           </div>
-          <div style="padding:10px; border:1px dashed var(--border); border-radius:var(--radius); text-align:center; background:var(--bg); cursor:default; opacity:0.6; position:relative;">
+          <div style="padding:10px; border:1px dashed var(--border); border-radius:var(--radius); text-align:center; background:var(--bg); cursor:default; opacity:0.55; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Monatsbericht</div>
-            <div style="font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-top:3px; background:var(--border); border-radius:20px; padding:1px 6px; display:inline-block;">Demnächst</div>
+            <div style="font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; background:var(--border); border-radius:20px; padding:1px 6px; display:inline-block;">Demnächst</div>
           </div>
         </div>
       </div>
@@ -350,7 +350,7 @@
           </div>
 
           <div id="extraKinderContainer"></div>
-          <div style="margin-top:6px;">
+          <div style="margin-top:6px;" id="btnAddExtraKindWrap">
             <button onclick="addExtraKind()" id="btnAddExtraKind" style="font-size:11px; color:var(--accent-mid); background:none; border:1px dashed var(--accent-mid); border-radius:4px; padding:4px 12px; cursor:pointer;">+ Kind hinzufügen</button>
           </div>
         </div>
@@ -359,16 +359,18 @@
           <div class="field-grid triple">
             <div class="field"><label>Vorname</label><input type="text" id="Sorg_Vorname"></div>
             <div class="field"><label>Familienname</label><input type="text" id="Sorg_Familienname" oninput="this.value=this.value.toUpperCase()"></div>
-            <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg_Beziehung"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
+            <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg_Beziehung"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option><option>Jugendamt</option></select></div>
           </div>
-          <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:8px;">
-            <input type="checkbox" id="Sorg_SameAddr" checked onchange="toggleSorgSameAddr()" style="width:14px; height:14px; cursor:pointer;">
-            Anschrift wie Kind 1
-          </label>
-          <div class="field-grid triple">
-            <div class="field"><label>Geburtsdatum</label><input type="date" id="Sorg_Geburtsdatum"></div>
-            <div class="field"><label>Straße + Nr.</label><input type="text" id="Sorg_Strasse"></div>
-            <div class="field"><label>PLZ + Ort</label><input type="text" id="Sorg_PLZ_Ort"></div>
+          <div id="sorgAddrBlock">
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:8px;">
+              <input type="checkbox" id="Sorg_SameAddr" checked onchange="toggleSorgSameAddr()" style="width:14px; height:14px; cursor:pointer;">
+              Anschrift wie Kind 1
+            </label>
+            <div class="field-grid triple">
+              <div class="field"><label>Geburtsdatum</label><input type="date" id="Sorg_Geburtsdatum"></div>
+              <div class="field"><label>Straße + Nr.</label><input type="text" id="Sorg_Strasse"></div>
+              <div class="field"><label>PLZ + Ort</label><input type="text" id="Sorg_PLZ_Ort"></div>
+            </div>
           </div>
           <div id="extraSorgContainer"></div>
           <div style="margin-top:6px;">
@@ -417,7 +419,7 @@
           <div id="unterschriftFachkraefte"></div>
         </div>
         </div>
-        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(4)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(6)">Zur Übersicht →</button></div>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(currentBerichtstyp==='stationaer'?3:4)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(6)">Zur Übersicht →</button></div>
       </div>
 
       <!-- S6 -->
@@ -625,7 +627,9 @@ function showApp() {
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 // "Weiter"-Navigation: Seite wechseln und Stand still als Entwurf sichern
 function goToNext(n) {
-  goTo(n);
+  // Bei stationaer S4 (Hilfeplanziele) überspringen
+  const skip = (currentBerichtstyp === 'stationaer' && n === 4) ? 5 : n;
+  goTo(skip);
   autoSaveDraft();
 }
 
@@ -1240,11 +1244,17 @@ function selectBerichtstyp(typ) {
       el.style.background = 'var(--accent-light)';
       el.querySelector('div').style.color = 'var(--accent)';
       el.querySelector('div').style.fontWeight = '600';
+      // Hover-Handler für aktiven Button deaktivieren
+      el.onmouseover = null;
+      el.onmouseout = null;
     } else {
       el.style.border = '1px solid var(--border)';
       el.style.background = 'var(--surface)';
       el.querySelector('div').style.color = 'var(--text-muted)';
       el.querySelector('div').style.fontWeight = '500';
+      // Hover-Handler für inaktive Buttons setzen
+      el.onmouseover = () => { el.style.borderColor = 'var(--accent-mid)'; el.style.background = 'var(--accent-light)'; };
+      el.onmouseout  = () => { el.style.borderColor = 'var(--border)';     el.style.background = 'var(--surface)'; };
     }
   });
   // Update template path in config
@@ -1262,6 +1272,12 @@ function selectBerichtstyp(typ) {
   // Einrichtungsfeld nur bei stationaer anzeigen
   const einrRow = document.getElementById('einrichtungRow');
   if (einrRow) einrRow.style.display = (typ === 'stationaer') ? '' : 'none';
+  // Kind hinzufügen nur bei nicht-stationaer
+  const btnKindWrap = document.getElementById('btnAddExtraKindWrap');
+  if (btnKindWrap) btnKindWrap.style.display = (typ === 'stationaer') ? 'none' : '';
+  // Sorgeberechtigten-Adressblock nur bei nicht-stationaer
+  const sorgAddr = document.getElementById('sorgAddrBlock');
+  if (sorgAddr) sorgAddr.style.display = (typ === 'stationaer') ? 'none' : '';
   // Force rebuild of dynamic sections on next visit (type changed)
   ['s3_content','s4_content','s5_content'].forEach(id => {
     const el = document.getElementById(id);
