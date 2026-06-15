@@ -42,7 +42,7 @@
   .field-grid.full { grid-template-columns: 1fr; }
   .field-grid.triple { grid-template-columns: 1fr 1fr 1fr; }
   .field-grid.sig-triple { grid-template-columns: 1fr 1fr 1fr; }
-  .bt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .bt-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
   .field input, .field select, .field textarea { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 13px; color: var(--text); background: white; outline: none; font-family: inherit; transition: border-color 0.12s; width: 100%; }
@@ -173,6 +173,13 @@
           <div onclick="selectBerichtstyp('clearing')" id="bt_clearing" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface);">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Clearingbericht</div>
           </div>
+          <div onclick="selectBerichtstyp('stationaer')" id="bt_stationaer" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface);">
+            <div style="font-size:12px; font-weight:500; color:var(--text-muted);">VB stationär</div>
+          </div>
+          <div style="padding:10px; border:1px dashed var(--border); border-radius:var(--radius); text-align:center; background:var(--bg); cursor:default; opacity:0.6; position:relative;">
+            <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Monatsbericht</div>
+            <div style="font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-top:3px; background:var(--border); border-radius:20px; padding:1px 6px; display:inline-block;">Demnächst</div>
+          </div>
         </div>
       </div>
       <div class="start-grid" id="startGrid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
@@ -268,6 +275,7 @@
                 <option value="§ 27 (2) SGB VIII - Clearing">Clearing - § 27 (2) SGB VIII</option>
                 <option value="§ 27 (3) SGB VIII - Aufsuchende Familientherapie (AFT)">Aufsuchende Familientherapie (AFT) - § 27 (3) SGB VIII</option>
                 <option value="§ 27 SGB VIII - Heimerziehung als sonstige betreute Wohnform">Heimerziehung als sonstige betreute Wohnform - § 27 SGB VIII</option>
+                <option value="§ 34 SGB VIII - Heimerziehung">Heimerziehung - § 34 SGB VIII</option>
                 <option value="§ 27 SGB VIII - Schnelle Hilfe">Schnelle Hilfe - § 27 SGB VIII</option>
                 <option value="§ 30 SGB VIII - Erziehungsbeistandschaft">Erziehungsbeistandschaft - § 30 SGB VIII</option>
                 <option value="§ 31 SGB VIII - Sozialpädagogische Familienhilfe">Sozialpädagogische Familienhilfe - § 31 SGB VIII</option>
@@ -282,6 +290,13 @@
           <div class="field-grid">
             <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Name Sachbearbeiter*in"></div>
             <div class="field"><label>Fachkraft 1 (Auswahlliste)</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
+          </div>
+          <div class="field-grid" id="einrichtungRow" style="display:none;">
+            <div class="field"><label>Einrichtung</label>
+              <select id="Einrichtung">
+                <option value="Nordstern">Nordstern (Wolnzach)</option>
+              </select>
+            </div>
           </div>
           <div id="extraFachkraefteContainer" style="margin-bottom:4px;"></div>
           <div style="margin-bottom:12px;">
@@ -701,7 +716,7 @@ function goTo(n) {
 }
 
 function updateSectionTitles() {
-  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'};
+  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'};
   const typ = labels[currentBerichtstyp] || 'Verlaufsbericht';
   const staticTitles = {
     's1_title': 'Stammdaten',
@@ -787,7 +802,9 @@ function collectData() {
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift',
     'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
-    'Bericht_Besprochen','Bericht_Besprochen_Datum'];
+    'Bericht_Besprochen','Bericht_Besprochen_Datum',
+    'Einrichtung','Ressourcen','Risiken',
+    'VBS_Gesundheit','VBS_Psychologie','VBS_Soziale_Teilhabe','VBS_Sprache_Integration','VBS_Haushalt','VBS_Berufliche_Perspektive'];
   const data = {};
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
   // Collect extra Kinder and Sorgeberechtigte
@@ -1024,7 +1041,7 @@ async function downloadLocal() {
     const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
     const _nach = data.Kind_Familienname || 'Unbekannt';
     const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
-    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
+    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
     const name = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}.docx`;
     const blob = new Blob([filled], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
@@ -1055,7 +1072,7 @@ async function uploadToSharePoint() {
     const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
     const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
     const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
+    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
     // Version aufsteigend: bei jeder Freigabeanfrage +1 (erst nach erfolgreichem Upload übernommen)
     const newVersion = (currentVersion || 0) + 1;
     const name = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${newVersion}.docx`;
@@ -1108,7 +1125,8 @@ function startNew() {
   CONFIG.templatePath = {
     verlauf: '/Templates/Verlaufsbericht_Template.docx',
     abschluss: '/Templates/Abschlussbericht_Template.docx',
-    clearing: '/Templates/Clearingbericht_Template.docx'
+    clearing: '/Templates/Clearingbericht_Template.docx',
+    stationaer: '/Templates/Verlaufsbericht-Stationaer_Template.docx'
   }[currentBerichtstyp];
   showMainLayout();
   buildDynamicSections(true);
@@ -1198,6 +1216,12 @@ function applyHilfeartPreset(typ) {
     el.disabled = true;
     el.style.background = 'var(--bg)';
     el.style.cursor = 'not-allowed';
+  } else if (typ === 'stationaer') {
+    const opt = Array.from(el.options).find(o => o.value.includes('§ 27 SGB VIII - Heimerziehung'));
+    if (opt) el.value = opt.value;
+    el.disabled = false;
+    el.style.background = '';
+    el.style.cursor = '';
   } else {
     el.disabled = false;
     el.style.background = '';
@@ -1208,7 +1232,7 @@ function applyHilfeartPreset(typ) {
 function selectBerichtstyp(typ) {
   currentBerichtstyp = typ;
   applyHilfeartPreset(typ);
-  ['verlauf','abschluss','clearing'].forEach(t => {
+  ['verlauf','abschluss','clearing','stationaer'].forEach(t => {
     const el = document.getElementById('bt_' + t);
     if (!el) return;
     if (t === typ) {
@@ -1227,13 +1251,17 @@ function selectBerichtstyp(typ) {
   const paths = {
     verlauf: '/Templates/Verlaufsbericht_Template.docx',
     abschluss: '/Templates/Abschlussbericht_Template.docx',
-    clearing: '/Templates/Clearingbericht_Template.docx'
+    clearing: '/Templates/Clearingbericht_Template.docx',
+    stationaer: '/Templates/Verlaufsbericht-Stationaer_Template.docx'
   };
   CONFIG.templatePath = paths[typ];
-  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht'};
+  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'};
   const badge = document.getElementById('berichtstypBadge');
   if (badge) badge.textContent = labels[typ];
   updateSectionTitles();
+  // Einrichtungsfeld nur bei stationaer anzeigen
+  const einrRow = document.getElementById('einrichtungRow');
+  if (einrRow) einrRow.style.display = (typ === 'stationaer') ? '' : 'none';
   // Force rebuild of dynamic sections on next visit (type changed)
   ['s3_content','s4_content','s5_content'].forEach(id => {
     const el = document.getElementById(id);
@@ -1550,7 +1578,9 @@ function resetForm() {
     'Aktuelle_Lebenssituation','Familiensystem','Entwicklung_Kind','Besondere_Vorkommnisse','Arbeitsbeziehung','Stellungnahme',
     'Fachliche_Einschaetzung','Ort','Datum_Unterschrift',
     'Sorg_Vorname','Sorg_Familienname','Sorg_Beziehung','Sorg_Geburtsdatum','Sorg_Strasse','Sorg_PLZ_Ort','Weitere_Kinder','Leistungserbringer',
-    'Bericht_Besprochen','Bericht_Besprochen_Datum'];
+    'Bericht_Besprochen','Bericht_Besprochen_Datum',
+    'Einrichtung','Ressourcen','Risiken',
+    'VBS_Gesundheit','VBS_Psychologie','VBS_Soziale_Teilhabe','VBS_Sprache_Integration','VBS_Haushalt','VBS_Berufliche_Perspektive'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) { if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = id === 'Ort' ? 'Wolnzach' : ''; }
@@ -1560,7 +1590,8 @@ function resetForm() {
    'Arbeitsbeziehung','Stellungnahme','Fachliche_Einschaetzung',
    'Aktuelle_Situation','Verlauf_Massnahme','Ausgangssituation','Familienkonstellation',
    'Rahmenbedingungen','Ressourcen','Risiken','Ergebnisse_Clearing',
-   'Zielsetzung_Clearing','Zusammenfassung_Ausblick','Anhang_Methodik'].forEach(id => {
+   'Zielsetzung_Clearing','Zusammenfassung_Ausblick','Anhang_Methodik',
+   'VBS_Gesundheit','VBS_Psychologie','VBS_Soziale_Teilhabe','VBS_Sprache_Integration','VBS_Haushalt','VBS_Berufliche_Perspektive'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -1742,7 +1773,7 @@ async function saveToList(data, existingId = null) {
       const _mm = _d.length >= 7 ? _d.substring(5,7) : '00';
       const _nach = data.Kind_Familienname || 'Unbekannt';
       const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
-      const _pre = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[data._berichtstyp || currentBerichtstyp] || 'VB';
+      const _pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[data._berichtstyp || currentBerichtstyp] || 'VB';
       return `${_pre}_${_nach}_${_vor2}_${_jj}${_mm}`;
     })(),
     Eingereicht_Von: data._eingereichtVon || currentEingereichtVon || currentAccount?.username || '',
@@ -1816,7 +1847,7 @@ function isUserInvolvedInItem(item) {
 function _btBadge(item) {
   let bt = '';
   try { bt = (JSON.parse(item.FormularDaten || '{}')._berichtstyp) || ''; } catch(e) {}
-  const pre = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[bt] || '';
+  const pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || '';
   return pre ? `<span style="display:inline-block; font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-light); border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:middle;">${pre}</span>` : '';
 }
 
@@ -2099,7 +2130,7 @@ function getFalleitungMail() {
 
 async function sendApprovalEmail(listItemId, data, filename) {
   const token = await getToken();
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[currentBerichtstyp] || 'Bericht';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   const fachkraft = data.Fachkraft_NeueWege || currentAccount?.name || '';
   const jugendamt = data.Jugendamt || '';
@@ -2220,7 +2251,7 @@ async function sendApprovalEmail(listItemId, data, filename) {
 
 // Fertigstellungs-Mail an info@ nach finaler Freigabe + PDF-Erstellung
 async function sendCompletionEmail(token, driveId, pdfName, data) {
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[currentBerichtstyp] || 'Bericht';
   const nachname = data.Kind_Familienname || 'Unbekannt';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // webUrl des finalen PDFs per Graph ermitteln
@@ -2290,7 +2321,7 @@ async function approveReport() {
     const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
     const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
     const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
+    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
     const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
     
     const templateBytes = await fetchTemplate();
@@ -2506,7 +2537,7 @@ function renderStatusBerichte() {
     'Abgelehnt':      '#9b1c1c'
   }[s] || 'var(--text-muted)');
 
-  const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL'}[bt] || bt || '');
+  const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || bt || '');
 
   const rows = items.map(item => {
     const itemId = item._itemId || item.ID;
@@ -2593,7 +2624,7 @@ async function tlFreigebenAnSonja() {
 
     // Mail an Sonja
     const token = await getToken();
-    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[currentBerichtstyp] || 'Bericht';
+    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[currentBerichtstyp] || 'Bericht';
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
     const jugendamt = data.Jugendamt || '';
     const sonjaUrl = `${APP_BASE_URL}?sonja=${currentListId}&typ=${currentBerichtstyp}`;
@@ -2609,7 +2640,7 @@ async function tlFreigebenAnSonja() {
       const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
       const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
       const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-      const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL'}[currentBerichtstyp] || 'VB';
+      const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
       const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
       const fileResp = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}`,
@@ -3226,6 +3257,33 @@ const SECTION_TEMPLATES = {
         { id: 'Fachliche_Einschaetzung', label: 'Fachliche Einschätzung', placeholder: 'Abschließende Bewertung...' },
       ]
     }
+  },
+  stationaer: {
+    s3: {
+      title: 'Verlauf der Hilfe — stationär',
+      sub: 'Fachliche Beschreibung gemäß Berichtsstruktur',
+      fields: [
+        { id: 'Aktuelle_Lebenssituation', label: '1 | Beschreibung der aktuellen Lebenssituation', placeholder: 'Aktuelle Lebenssituation, Wohnsituation, Grundversorgung...' },
+        { id: 'VBS_Gesundheit', label: '2 | Gesundheitliche Versorgung', placeholder: 'Medizinische Versorgung, Arzttermine, Medikamente, Gesundheitszustand...' },
+        { id: 'VBS_Psychologie', label: '3 | Psychologische Begleitung', placeholder: 'Therapeutische Maßnahmen, psychische Stabilität, Begleitangebote...' },
+        { id: 'VBS_Soziale_Teilhabe', label: '4 | Soziale Teilhabe und Engagement', placeholder: 'Freizeitgestaltung, Peer-Kontakte, soziales Netzwerk, Gruppenangebote...' },
+        { id: 'VBS_Sprache_Integration', label: '5 | Deutsche Sprache und Integration', placeholder: 'Sprachkenntnisse, Sprachkurse, schulische/sprachliche Förderung...' },
+        { id: 'VBS_Haushalt', label: '6 | Haushalt und Selbstständigkeit', placeholder: 'Alltagskompetenzen, Ordnung, Körperhygiene, Eigenverantwortung...' },
+        { id: 'VBS_Berufliche_Perspektive', label: '7 | Berufliche Perspektive', placeholder: 'Schule, Ausbildung, Praktikum, berufliche Orientierung...' },
+      ]
+    },
+    s4: {
+      title: 'Hilfeplanziele',
+      sub: 'Einschätzung zur Zielerreichung und des weiteren Hilfebedarfs anhand der in der Hilfeplanung festgelegten Teilziele',
+      hasZiele: true
+    },
+    s5: {
+      title: 'Perspektive & Empfehlung',
+      sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
+      fields: [
+        { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
+      ]
+    }
   }
 };
 
@@ -3244,7 +3302,7 @@ function buildDynamicSections(force = false) {
   
   // Build S3
   const s3 = tpl.s3;
-  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht'}[typ] || typ;
+  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'VB stationär'}[typ] || typ;
   const _s3t = document.getElementById('s3_title'); if(_s3t) _s3t.textContent = s3.title + ' — ' + _typLabel;
   const _s3s = document.getElementById('s3_sub'); if(_s3s) _s3s.textContent = s3.sub;
   let s3html = '';
@@ -3276,6 +3334,19 @@ function buildDynamicSections(force = false) {
       </div></div></div>`;
   });
   if(s3c) s3c.innerHTML = s3html;
+  // Ressourcen/Risiken nach den Inhaltsbereichen (nur stationaer)
+  if (typ === 'stationaer') {
+    s3c.innerHTML += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:4px;">
+      <div class="card"><div class="card-title">Ressourcen</div>
+        <div class="field-grid full"><div class="field">
+          <textarea id="Ressourcen" style="min-height:90px;" placeholder="Stärken, unterstützende Faktoren..."></textarea>
+        </div></div></div>
+      <div class="card"><div class="card-title">Risiken</div>
+        <div class="field-grid full"><div class="field">
+          <textarea id="Risiken" style="min-height:90px;" placeholder="Belastungen, Gefährdungsaspekte..."></textarea>
+        </div></div></div>
+    </div>`;
+  }
   
   // Build S4
   const s4 = tpl.s4;
@@ -3324,7 +3395,8 @@ function buildDynamicSections(force = false) {
     // Besprochen-Abfrage: beim Verlaufsbericht unter der Stellungnahme-Box,
     // beim Abschlussbericht unter "Fachliche Einschätzung und Empfehlung"
     if ((typ === 'verlauf' && f.id === 'Stellungnahme') ||
-        (typ === 'abschluss' && f.id === 'Fachliche_Einschaetzung')) {
+        (typ === 'abschluss' && f.id === 'Fachliche_Einschaetzung') ||
+        (typ === 'stationaer' && f.id === 'Fachliche_Einschaetzung')) {
       s5html += `<div class="card"><div class="card-title">Bericht wurde mit Hilfeempfänger besprochen</div>
       <div class="field-grid">
         <div class="field"><label>Besprochen? (Auswahlliste)</label>
