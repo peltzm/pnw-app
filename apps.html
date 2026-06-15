@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffffff">
+<title>Anwendungen — Praxis NeueWege</title>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --success:#2d6a4f; --success-bg:#eaf4ee;
+  --radius:8px; --radius-lg:12px;
+  --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
+
+/* Header */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+
+/* Hero */
+.hero{text-align:center;padding:40px 20px 28px}
+.hero img{height:72px;width:auto;margin-bottom:16px}
+.hero h1{font-size:20px;font-weight:600;color:var(--text);margin-bottom:6px}
+.hero p{font-size:13px;color:var(--text-muted);max-width:320px;margin:0 auto;line-height:1.6}
+
+/* Section label */
+.slabel{font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.08em;padding:14px 16px 6px}
+
+/* App grid */
+.app-grid{display:grid;grid-template-columns:1fr;gap:0;padding:0 12px 8px}
+@media(min-width:540px){.app-grid{grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 12px}}
+@media(min-width:800px){.app-grid{grid-template-columns:1fr 1fr 1fr}}
+
+/* App card */
+.app-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;display:flex;align-items:stretch;cursor:pointer;overflow:hidden;text-decoration:none;color:inherit;transition:border-color .12s,box-shadow .12s;-webkit-tap-highlight-color:transparent}
+@media(min-width:540px){.app-card{margin-bottom:0;flex-direction:column}}
+.app-card:active,.app-card:hover{border-color:var(--accent-mid);box-shadow:0 2px 12px rgba(123,63,30,.12)}
+
+/* Card side (mobile icon column) */
+.card-side{width:64px;flex-shrink:0;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:28px}
+@media(min-width:540px){.card-side{width:100%;height:64px;border-radius:0;border-bottom:1px solid var(--border)}}
+
+/* Card body */
+.card-body{flex:1;padding:14px 14px 12px}
+@media(min-width:540px){.card-body{padding:14px 16px 16px}}
+.card-name{font-size:15px;font-weight:600;color:var(--text);margin-bottom:3px}
+.card-desc{font-size:12px;color:var(--text-muted);line-height:1.5}
+
+/* Card footer / arrow (mobile) */
+.card-arrow{width:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:18px}
+@media(min-width:540px){.card-arrow{display:none}}
+.card-link{display:none}
+@media(min-width:540px){
+  .card-link{display:inline-flex;align-items:center;gap:4px;margin-top:12px;font-size:12px;font-weight:500;color:var(--accent);border:1px solid var(--accent);border-radius:var(--radius);padding:6px 12px;transition:background .12s}
+  .app-card:hover .card-link{background:var(--accent-light)}
+}
+
+/* Soon cards */
+.app-card.soon{opacity:.5;pointer-events:none}
+.soon-pill{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-mid);background:var(--accent-light);border:1px solid #e8c4a8;border-radius:4px;padding:1px 7px;margin-top:6px}
+
+/* Divider */
+.divider{margin:8px 12px 0;border:none;border-top:1px solid var(--border)}
+
+/* Footer */
+.page-footer{text-align:center;padding:24px 16px;font-size:11px;color:var(--text-hint);border-top:1px solid var(--border);margin-top:16px}
+.page-footer a{color:var(--accent-mid);text-decoration:none}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <span>Anwendungen</span>
+  </div>
+</header>
+
+<div class="hero">
+  <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+  <h1>Interne Anwendungen</h1>
+  <p>Melden Sie sich mit Ihrem Microsoft 365-Konto an, um eine Anwendung zu starten.</p>
+</div>
+
+<div class="slabel">Verfügbar</div>
+
+<div class="app-grid">
+
+  <a class="app-card" href="https://peltzm.github.io/pnw-app/sozialraum.html">
+    <div class="card-side">🗺️</div>
+    <div class="card-body">
+      <div class="card-name">Sozialraumangebote</div>
+      <div class="card-desc">Regionale Angebote in den Versorgungsregionen finden, pflegen und ergänzen.</div>
+      <div class="card-link">Öffnen →</div>
+    </div>
+    <div class="card-arrow">›</div>
+  </a>
+
+  <a class="app-card" href="https://peltzm.github.io/pnw-app/index.html">
+    <div class="card-side">📄</div>
+    <div class="card-body">
+      <div class="card-name">Berichtsgenerator</div>
+      <div class="card-desc">Verlaufsberichte und Förderpläne erstellen und in SharePoint speichern.</div>
+      <div class="card-link">Öffnen →</div>
+    </div>
+    <div class="card-arrow">›</div>
+  </a>
+
+  <a class="app-card" href="https://peltzm.github.io/pnw-app/spesenabrechnung.html">
+    <div class="card-side">🧾</div>
+    <div class="card-body">
+      <div class="card-name">Spesenabrechnung</div>
+      <div class="card-desc">Fahrtkosten und Belege erfassen, scannen und zur Genehmigung einreichen.</div>
+      <div class="card-link">Öffnen →</div>
+    </div>
+    <div class="card-arrow">›</div>
+  </a>
+
+</div>
+
+<hr class="divider">
+<div class="slabel">Demnächst</div>
+
+<div class="app-grid">
+
+  <div class="app-card soon">
+    <div class="card-side">👥</div>
+    <div class="card-body">
+      <div class="card-name">Dienstplanung</div>
+      <div class="card-desc">Schichten und Einsätze planen und koordinieren.</div>
+      <span class="soon-pill">In Entwicklung</span>
+    </div>
+  </div>
+
+  <div class="app-card soon">
+    <div class="card-side">🗂️</div>
+    <div class="card-body">
+      <div class="card-name">Personalakte</div>
+      <div class="card-desc">Mitarbeiterdaten und Dokumente zentral verwalten.</div>
+      <span class="soon-pill">In Entwicklung</span>
+    </div>
+  </div>
+
+  <div class="app-card soon">
+    <div class="card-side">💶</div>
+    <div class="card-body">
+      <div class="card-name">Abrechnung</div>
+      <div class="card-desc">Fachleistungsstunden erfassen und mit den Jugendämtern abrechnen.</div>
+      <span class="soon-pill">In Entwicklung</span>
+    </div>
+  </div>
+
+</div>
+
+<footer class="page-footer">
+  Praxis NeueWege · <a href="https://www.praxisneuewege.de">praxisneuewege.de</a>
+</footer>
+
+</body>
+</html>
