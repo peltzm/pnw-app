@@ -521,7 +521,7 @@ async function initMsal() {
       authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
       redirectUri: CONFIG.redirectUri
     },
-    cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: true }
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
