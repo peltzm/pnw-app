@@ -1099,9 +1099,11 @@ async function uploadToSharePoint() {
     try {
       const emailOk = await sendApprovalEmail(savedId, collectData(), name);
       // Empfänger für die Anzeige: alle TL Ambulant
-      const _empfaenger = _tlMembers.length > 0
-        ? 'alle TL Ambulant (' + _tlMembers.map(m => m.displayName || m.mail).join(', ') + ')'
-        : (getFalleitungMail() || 'die Teamleitung');
+      const freigeber = (currentBerichtstyp === 'stationaer') ? _stationaerFreigeber : _tlMembers;
+      const _empfaenger = freigeber.length > 0
+        ? (currentBerichtstyp === 'stationaer' ? 'Stationär-Freigabe' : 'alle TL Ambulant') +
+          ' (' + freigeber.map(m => m.displayName || m.mail).join(', ') + ')'
+        : 'Freigabe-Team';
       if (emailOk) {
         setStatus('done', `✓ Hochgeladen: ${name} — Freigabeanfrage wurde an ${_empfaenger} gesendet.`);
       } else {
@@ -1156,7 +1158,9 @@ function isTLUser() {
   if (isAdmin()) return true;
   const mail = (currentAccount?.username || '').toLowerCase();
   const name = currentAccount?.name || '';
-  return _tlMembers.some(m => (m.mail || '').toLowerCase() === mail || m.displayName === name);
+  if (_tlMembers.some(m => (m.mail || '').toLowerCase() === mail || m.displayName === name)) return true;
+  if (_stationaerFreigeber.some(m => (m.mail || '').toLowerCase() === mail || m.displayName === name)) return true;
+  return false;
 }
 
 async function saveEntwurf() {
@@ -2235,10 +2239,11 @@ async function sendApprovalEmail(listItemId, data, filename) {
       subject: `[Freigabe] ${berichtstyp}: ${kind} – ${jugendamt}`,
       body: { contentType: 'HTML', content: emailBody },
       toRecipients: (() => {
-        // An alle TL Ambulant senden
-        const tlMails = _tlMembers.map(m => m.mail).filter(Boolean);
-        if (tlMails.length > 0) return tlMails.map(address => ({ emailAddress: { address } }));
-        // Fallback: ausgewählter TL + Markus
+        // Bei stationaer: Jessica Hermann + Kilian Freundl; sonst alle TL Ambulant
+        const freigeber = (currentBerichtstyp === 'stationaer') ? _stationaerFreigeber : _tlMembers;
+        const mails = freigeber.map(m => m.mail).filter(Boolean);
+        if (mails.length > 0) return mails.map(address => ({ emailAddress: { address } }));
+        // Fallback
         return [
           { emailAddress: { address: getFalleitungMail() || 'markus.peltz@praxisneuewege.de' } },
           { emailAddress: { address: 'markus.peltz@praxisneuewege.de' } }
@@ -2955,6 +2960,7 @@ async function saveCommentsDraft() {
 
 let _teamMembers = [];
 let _tlMembers = [];
+let _stationaerFreigeber = [];
 let _extraFachkraftCount = 0;
 
 async function loadGroupMembers() {
@@ -3005,6 +3011,34 @@ async function loadGroupMembers() {
     
     _teamMembers = await getMembers(teamId);
     _tlMembers = await getMembers(tlId);
+
+    // Stationär-Freigeber: Jessica Hermann + Kilian Freundl via Graph
+    const stationaerNames = ['Jessica Hermann', 'Kilian Freundl'];
+    const stationaerFallback = [
+      { displayName: 'Jessica Hermann', mail: 'jessica.hermann@praxisneuewege.de' },
+      { displayName: 'Kilian Freundl',  mail: 'kilian.freundl@praxisneuewege.de'  }
+    ];
+    try {
+      const sfResults = await Promise.all(stationaerNames.map(async name => {
+        const r = await fetch(
+          `https://graph.microsoft.com/v1.0/users?$filter=displayName eq '${encodeURIComponent(name)}'&$select=id,displayName,mail`,
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        const d = await r.json();
+        return d.value?.[0] || null;
+      }));
+      _stationaerFreigeber = sfResults.filter(Boolean);
+      // Fallback für nicht gefundene Einträge
+      if (_stationaerFreigeber.length === 0) _stationaerFreigeber = stationaerFallback;
+      else {
+        stationaerFallback.forEach(fb => {
+          if (!_stationaerFreigeber.find(m => m.displayName === fb.displayName))
+            _stationaerFreigeber.push(fb);
+        });
+      }
+    } catch(e) {
+      _stationaerFreigeber = stationaerFallback;
+    }
     
     // Sort by display name (Lastname, Firstname format)
     const sortName = m => {
@@ -3082,6 +3116,13 @@ async function loadGroupMembers() {
       {displayName:'Peltz Sonja', mail:'sonja.peltz@praxisneuewege.de'},
       {displayName:'Schneider Jörg', mail:'joerg.schneider@praxisneuewege.de'}
     ];
+    // Stationaer-Freigeber fallback
+    if (_stationaerFreigeber.length === 0) {
+      _stationaerFreigeber = [
+        { displayName: 'Jessica Hermann', mail: 'jessica.hermann@praxisneuewege.de' },
+        { displayName: 'Kilian Freundl',  mail: 'kilian.freundl@praxisneuewege.de'  }
+      ];
+    }
     const flSelect = document.getElementById('Fallleitung');
     if (flSelect) {
       flSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
