@@ -760,7 +760,7 @@ function addZiel() {
     </div>
     ${currentBerichtstyp === 'abschluss' ? '' : `<div class="field-grid full" style="margin-bottom:8px;">
       <div class="field"><label>Methoden & Maßnahmen</label>
-        <input type="text" id="Ziel_${n}_Methoden" placeholder="z.B. Reflexionsgespräche, Netzwerkarbeit">
+        <textarea id="Ziel_${n}_Methoden" placeholder="z.B. Reflexionsgespräche, Netzwerkarbeit" style="min-height:72px;"></textarea>
       </div>
     </div>`}
     <div class="field-grid full">
