@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v5ae4cf5</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -339,9 +339,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 <div id="screen-home" class="screen active">
   <div class="month-strip">
     <select id="monatSelect" onchange="ladeMonat(this.value)">
-      <option value="2026-04">April 2026</option>
-      <option value="2026-05">Mai 2026</option>
-      <option value="2026-06" selected>Juni 2026</option>
+      <!-- wird per initMonatSelect() dynamisch befüllt -->
     </select>
     <div>
       <div class="mt-amt" id="homeTotal">—</div>
@@ -765,7 +763,7 @@ let msalInstance = null, currentAccount = null, accessToken = null;
 let _graphSiteId = null, _graphListId = null, _graphDriveId = null;
 let _tlMembers = [], _teamMembers = [];
 let _groupLoadPromise = Promise.resolve();
-let _currentMonat = '2026-06';   // YYYY-MM
+let _currentMonat = '';   // wird per initMonatSelect() gesetzt
 let _currentBelegId = null;      // für Edit-Sheet
 let _currentReviewId = null;     // für TL-Review-Sheet
 let _uploadedPhotos = [];        // { name, dataUrl, uploaded }
@@ -2738,6 +2736,28 @@ document.querySelectorAll('.sheet-overlay, .modal-overlay').forEach(el => {
   el.addEventListener('click', function(e) { if (e.target===this) this.classList.remove('open'); });
 });
 
+function initMonatSelect() {
+  const sel  = document.getElementById('monatSelect');
+  const MONATE_DE = ['Januar','Februar','März','April','Mai','Juni',
+                     'Juli','August','September','Oktober','November','Dezember'];
+  const now  = new Date();
+  const opts = [];
+  // Aktuellen Monat + 11 zurückliegende Monate anbieten (1 Jahr)
+  for (let i = 11; i >= 0; i--) {
+    const d    = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const val  = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label= `${MONATE_DE[d.getMonth()]} ${d.getFullYear()}`;
+    opts.push(`<option value="${val}"${i===0?' selected':''}>${label}</option>`);
+  }
+  sel.innerHTML = opts.join('');
+  // _currentMonat auf aktuellen Monat setzen
+  const cur = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  _currentMonat = cur;
+  // spMonat-Anzeige aktualisieren
+  const spM = document.getElementById('spMonat');
+  if (spM) spM.textContent = cur;
+}
+
 function ladeMonat(val) { _currentMonat = val; ladeMonatsdaten(); }
 
 let _toastTimer;
@@ -2856,6 +2876,7 @@ async function showApp() {
   document.getElementById('spMonat').textContent = _currentMonat;
   _groupLoadPromise = loadGroupMembers();
   _groupLoadPromise.catch(e => console.warn('Group load failed:', e));
+  initMonatSelect();   // Monate dynamisch befüllen + _currentMonat setzen
   // URL-Parameter prüfen: ?review=MONAT:MAIL oder ?edit=MONAT:MAIL
   setTimeout(() => handleReviewLink(), 600);
   ladeMonatsdaten();
