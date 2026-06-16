@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v7a5616d</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -364,7 +364,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 
   <div style="padding:14px 16px 6px">
     <div class="slabel" style="padding:0;margin-bottom:10px">Belege</div>
-    <button onclick="showScreen('erfassen')" style="display:flex;align-items:center;justify-content:center;gap:5px;background:var(--surface);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;min-height:40px;width:100%"><span style="font-size:17px;line-height:1">+</span> Neuer Beleg</button>
+    <button id="neuBelegBtn" onclick="goErfassen()" style="display:flex;align-items:center;justify-content:center;gap:5px;background:var(--surface);color:var(--accent);border:1px solid var(--accent);border-radius:20px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;min-height:40px;width:100%"><span style="font-size:17px;line-height:1">+</span> Neuer Beleg</button>
   </div>
   <div id="belegList">
     <div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Wird geladen…</div>
@@ -634,7 +634,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
 <!-- Bottom Nav — 5 Tabs -->
 <div class="bottom-nav">
   <button class="nav-btn active" id="nav-home"        onclick="showScreen('home')"><span class="ni">🏠</span>Übersicht</button>
-  <button class="nav-btn"        id="nav-erfassen"    onclick="showScreen('erfassen')"><span class="ni">📷</span>Erfassen</button>
+  <button class="nav-btn"        id="nav-erfassen"    onclick="goErfassen()"><span class="ni">📷</span>Erfassen</button>
   <button class="nav-btn"        id="nav-fahrtenbuch" onclick="showScreen('fahrtenbuch')"><span class="ni">🚗</span>Fahrtenbuch</button>
   <button class="nav-btn"        id="nav-abschluss"   onclick="showScreen('abschluss')"><span class="ni">📋</span>Abschluss</button>
   <button class="nav-btn"        id="nav-teamleiter"  onclick="showScreen('teamleiter')"><span class="ni">✅</span>Team<span class="nav-badge" id="tlBadge" style="display:none">0</span></button>
@@ -764,6 +764,7 @@ let _graphSiteId = null, _graphListId = null, _graphDriveId = null;
 let _tlMembers = [], _teamMembers = [];
 let _groupLoadPromise = Promise.resolve();
 let _currentMonat = '';   // wird per initMonatSelect() gesetzt
+let _isGenehmigt  = false; // aktueller Monat wurde genehmigt + ausgezahlt
 let _currentBelegId = null;      // für Edit-Sheet
 let _currentReviewId = null;     // für TL-Review-Sheet
 let _uploadedPhotos = [];        // { name, dataUrl, uploaded }
@@ -1072,8 +1073,39 @@ function renderHome(belege) {
   const total = fahrtBetrag + sonstBetrag;
 
   document.getElementById('homeTotal').textContent = fmt(total);
-  const status = belege.find(b => b.Status === 'Eingereicht') ? 'Eingereicht' : belege.find(b => b.Status === 'Genehmigt') ? 'Genehmigt' : 'Entwurf';
-  document.getElementById('homeSub').textContent = `${regular.length + (fahrt ? 1 : 0)} Positionen · ${status}`;
+  const status = belege.find(b => b.Status === 'Genehmigt') ? 'Genehmigt'
+               : belege.find(b => b.Status === 'Eingereicht') ? 'Eingereicht' : 'Entwurf';
+  _isGenehmigt = (status === 'Genehmigt');
+  document.getElementById('homeSub').textContent = `${regular.length + (fahrt ? 1 : 0)} Positionen · ${_isGenehmigt ? '✓ Genehmigt & Ausgezahlt' : status}`;
+
+  // Genehmigt-Banner ein-/ausblenden
+  let banner = document.getElementById('genehmigtBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'genehmigtBanner';
+    banner.style.cssText = 'margin:10px 16px 0;padding:10px 14px;background:#f0faf0;border:1px solid #7bb87b;border-radius:8px;font-size:12px;color:#2d6a2d;display:flex;align-items:center;gap:8px';
+    document.getElementById('homeStatus').after(banner);
+  }
+  if (_isGenehmigt) {
+    banner.style.display = 'flex';
+    banner.innerHTML = '✅ <span>Dieser Monat wurde <strong>genehmigt und ausgezahlt</strong>. Nachträge bitte im aktuellen Monat mit Hinweis in der Notiz erfassen.</span>';
+  } else {
+    banner.style.display = 'none';
+  }
+
+  // Neuer-Beleg Button anpassen
+  const neuBelegBtn = document.getElementById('neuBelegBtn');
+  if (neuBelegBtn) {
+    if (_isGenehmigt) {
+      neuBelegBtn.style.opacity = '0.45';
+      neuBelegBtn.style.cursor  = 'default';
+      neuBelegBtn.title = 'Monat genehmigt — Nachträge im aktuellen Monat erfassen';
+    } else {
+      neuBelegBtn.style.opacity = '';
+      neuBelegBtn.style.cursor  = '';
+      neuBelegBtn.title = '';
+    }
+  }
   document.getElementById('statFahrt').textContent = fahrt ? fmt(fahrtBetrag) : '—';
   document.getElementById('statFahrtSub').textContent = fahrt ? `${fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten).gesamtKm + ' km' : ''} · Fahrtenbuch ✓` : 'Nicht hochgeladen';
   document.getElementById('statSonst').textContent = fmt(sonstBetrag);
@@ -2503,6 +2535,17 @@ async function addPhotoToExisting(belegId) {
 // ══════════════════════════════════════════════════════════════════
 // UI HELPERS
 // ══════════════════════════════════════════════════════════════════
+function goErfassen() {
+  if (_isGenehmigt) {
+    if (!confirm(
+      'Dieser Monat wurde bereits genehmigt und ausgezahlt.\n\n' +
+      'Nachträge bitte im aktuellen Monat erfassen und in der Notiz vermerken (z.B. „Nachtrag ' + fmtMonat(_currentMonat) + '").\n\n' +
+      'Trotzdem fortfahren?'
+    )) return;
+  }
+  showScreen('erfassen');
+}
+
 function showScreen(name) {
   ['home','erfassen','abschluss','teamleiter','fahrtenbuch'].forEach(s => {
     document.getElementById('screen-'+s).classList.toggle('active', s===name);
