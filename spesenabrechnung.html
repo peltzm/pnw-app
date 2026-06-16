@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v2dc0d31</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -516,12 +516,12 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
   </div>
 
   <div class="card">
-    <div class="card-title">Einreichung an Teamleiter</div>
+    <div class="card-title">Einreichung an Geschäftsführung</div>
     <div class="field">
-      <label>Teamleiter / Prüfer *</label>
-      <select id="selTeamleiter" onchange="updateEinreichenState()">
-        <option value="">— wird geladen —</option>
-      </select>
+      <label>Empfängerin</label>
+      <div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px">
+        👩‍💼 <strong>Sonja Peltz</strong> <span style="font-size:12px;color:var(--text-muted)">· sonja.peltz@praxisneuewege.de</span>
+      </div>
     </div>
     <div class="field">
       <label>Anmerkung (optional)</label>
@@ -912,15 +912,7 @@ async function loadGroupMembers() {
   const myMail = (currentAccount?.username || '').toLowerCase();
   const myName = (currentAccount?.name || '').toLowerCase();
   _isTL = _tlMembers.some(m => (m.mail || '').toLowerCase() === myMail || (m.displayName || '').toLowerCase() === myName);
-  // Populate TL select
-  const sel = document.getElementById('selTeamleiter');
-  sel.innerHTML = '<option value="">— bitte wählen —</option>';
-  _tlMembers.forEach(m => {
-    const opt = document.createElement('option');
-    opt.value = m.mail || m.displayName;
-    opt.textContent = m.displayName;
-    sel.appendChild(opt);
-  });
+  // TL-Select entfällt — Empfängerin ist fest Sonja Peltz
   // Populate Klient Fälle — load from SharePoint list or use static
   ladeKlientVorschlaege();
   // Show TL tab badge
@@ -1859,8 +1851,7 @@ async function ladeArchiv() {
 // EINREICHEN
 // ══════════════════════════════════════════════════════════════════
 async function einreichen() {
-  const tl = document.getElementById('selTeamleiter').value;
-  if (!tl) { showToast('Bitte Teamleiter wählen'); return; }
+  const tl = 'sonja.peltz@praxisneuewege.de';  // Geschäftsführung — fest
   const btn = document.getElementById('btnEinreichen');
   btn.disabled = true; btn.textContent = '📨 Wird eingereicht…';
   setStatus('abschlussStatus', 'uploading', 'Abrechnung wird eingereicht…');
@@ -1884,7 +1875,7 @@ async function einreichen() {
     const reviewUrl = `${CFG.redirectUri}?review=${_currentMonat}:${fachkraftMail}`;
     const html = `<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
       <div style="border-left:4px solid #7b3f1e;padding-left:16px;margin-bottom:24px">
-        <h2 style="color:#7b3f1e;margin:0 0 4px">Spesenabrechnung zur Prüfung</h2>
+        <h2 style="color:#7b3f1e;margin:0 0 4px">Spesenabrechnung zur Freigabe</h2>
         <p style="margin:0;color:#666">Praxis NeueWege — Spesenabrechnung</p>
       </div>
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
@@ -2762,12 +2753,10 @@ function updateEinreichenState() {
   if (!btn) return;
   const boxes = document.querySelectorAll('.checklist .check-box');
   const allChecked = boxes.length > 0 && Array.from(boxes).every(b => b.classList.contains('on'));
-  const tlGewaehlt = !!document.getElementById('selTeamleiter')?.value;
-  const ok = allChecked && tlGewaehlt;
-  btn.disabled = !ok;
-  btn.style.opacity = ok ? '1' : '.45';
-  btn.style.cursor = ok ? 'pointer' : 'not-allowed';
-  btn.title = ok ? '' : 'Bitte alle Punkte abhaken und einen Teamleiter wählen';
+  btn.disabled = !allChecked;
+  btn.style.opacity = allChecked ? '1' : '.45';
+  btn.style.cursor = allChecked ? 'pointer' : 'not-allowed';
+  btn.title = allChecked ? '' : 'Bitte alle Punkte der Checkliste abhaken';
 }
 
 function openSheet(id)  { document.getElementById(id).classList.add('open'); }
