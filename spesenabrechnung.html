@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">vc83df59</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -453,7 +453,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
       <div class="field">
         <label>Datum *</label>
         <input type="date" id="fDatum" onchange="checkBelegDatum(this.value)">
-        <div id="datumWarnHint" style="display:none;margin-top:5px;padding:7px 10px;background:#fff8e1;border:1px solid #f9a825;border-radius:6px;font-size:11px;color:#795548;line-height:1.4"></div>
+        <div id="datumWarnHint" style="display:none;margin-top:5px;padding:7px 10px;background:#ffebee;border:1px solid #e53935;border-radius:6px;font-size:11px;color:#b71c1c;line-height:1.4"></div>
       </div>
       <div class="field">
         <label>Betrag (€) *</label>
@@ -1871,7 +1871,7 @@ async function ladeAbschluss() {
       document.getElementById('sumTable').after(alterHinweis);
     }
     if (alteBelege.length > 0) {
-      alterHinweis.style.cssText = 'margin:8px 0 0;padding:9px 12px;background:#fff8e1;border:1px solid #f9a825;border-radius:8px;font-size:12px;color:#795548';
+      alterHinweis.style.cssText = 'margin:8px 0 0;padding:9px 12px;background:#ffebee;border:1px solid #e53935;border-radius:8px;font-size:12px;color:#b71c1c';
       alterHinweis.innerHTML = `⚠️ <strong>${alteBelege.length} Beleg${alteBelege.length>1?'e':''}</strong> mit älterem Belegdatum enthalten. Bitte bei Einreichung in der Anmerkung vermerken.`;
     } else {
       alterHinweis.style.display = 'none';
@@ -2914,9 +2914,8 @@ function checkBelegDatum(val) {
   if (!warn) return;
   if (diffMonate >= 2) {
     warn.style.display = 'block';
-    warn.innerHTML = diffMonate >= 3
-      ? `⚠️ <strong>Beleg vom ${belegDatum.toLocaleDateString('de-DE')}</strong> — älter als 2 Monate. Bitte klären ob noch abrechenbar.`
-      : `ℹ️ Beleg vom Vorvormonat — prüfe ob noch im aktuellen Abrechnungslauf möglich.`;
+    warn.style.cssText = 'display:block;margin-top:5px;padding:7px 10px;background:#ffebee;border:1px solid #e53935;border-radius:6px;font-size:11px;color:#b71c1c;line-height:1.4';
+    warn.innerHTML = `⚠️ <strong>Beleg vom ${belegDatum.toLocaleDateString('de-DE')}</strong> — Evtl. nicht abrechenbar da älter als 2 Monate, wird im Einzelfall entschieden.`;
   } else {
     warn.style.display = 'none';
   }
