@@ -1344,7 +1344,11 @@ async function copyStammdaten(id) {
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
     currentListId = null; // new report
+    // Berichtstyp setzen BEVOR resetForm, damit buildDynamicSections die richtigen Felder erzeugt
+    if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
     resetForm();
+    // Dynamische Sections aufbauen, damit alle Felder (S3–S5) im DOM existieren
+    buildDynamicSections(true);
     // Copy only Stammdaten fields
     // Copy ALL fields from existing report
     // Restore extra Kinder
@@ -1469,12 +1473,13 @@ async function loadDraft(id) {
     if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
     // Show mainLayout first so DOM elements exist
     showMainLayout();
-    // Build dynamic sections FIRST so fields exist in DOM
-    buildDynamicSections(true);
+    // resetForm FIRST (löscht alte Werte), dann buildDynamicSections (baut Felder für den Berichtstyp auf)
+    // Reihenfolge wichtig: resetForm setzt dataset.builtFor='', buildDynamicSections füllt es neu
     resetForm();
-    // resetForm() setzt currentListId auf null — hier wieder auf den geladenen Entwurf setzen,
-    // damit beim Speichern aktualisiert statt dupliziert wird
+    // resetForm() setzt currentListId auf null — hier wieder auf den geladenen Entwurf setzen
     currentListId = id;
+    // Jetzt dynamic sections aufbauen — NACH resetForm, damit builtFor korrekt gesetzt wird
+    buildDynamicSections(true);
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
     currentAssignedReviewer = item.Assigned_Reviewer || data._assignedReviewer || '';
@@ -3463,10 +3468,9 @@ function buildDynamicSections(force = false) {
         <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
   });
-  if(s3c) s3c.innerHTML = s3html;
-  // Ressourcen/Risiken nach den Inhaltsbereichen (nur stationaer)
+  // Ressourcen/Risiken als Teil von s3html (nicht per innerHTML += um DOM-Reset nach Befüllung zu vermeiden)
   if (typ === 'stationaer') {
-    s3c.innerHTML += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:4px;">
+    s3html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:4px;">
       <div class="card"><div class="card-title">Ressourcen</div>
         <div class="field-grid full"><div class="field">
           <textarea id="Ressourcen" style="min-height:90px;" placeholder="Stärken, unterstützende Faktoren..."></textarea>
@@ -3477,6 +3481,7 @@ function buildDynamicSections(force = false) {
         </div></div></div>
     </div>`;
   }
+  if(s3c) s3c.innerHTML = s3html;
   
   // Build S4
   const s4 = tpl.s4;
