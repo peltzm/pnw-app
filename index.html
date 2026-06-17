@@ -3400,9 +3400,11 @@ function buildDynamicSections(force = false) {
   const s4c = document.getElementById('s4_content');
   if (!s3c || !s4c) return; // sections not in DOM yet, skip
   // Don't rebuild if already built for this type (preserves user input)
-  if (!force && s3c.dataset.builtFor === typ && s3c.innerHTML.trim() 
-      && s4c.innerHTML.trim()) return;
+  // Note: s4c may legitimately be empty (stationaer has no S4 fields/ziele) — use builtFor marker, not innerHTML
+  if (!force && s3c.dataset.builtFor === typ && s4c.dataset.builtFor === typ
+      && s3c.innerHTML.trim()) return;
   s3c.dataset.builtFor = typ;
+  s4c.dataset.builtFor = typ;
   
   // Build S3
   const s3 = tpl.s3;
