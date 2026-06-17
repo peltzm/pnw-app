@@ -319,7 +319,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">vad785cb</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v6c77605</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -646,7 +646,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     </div>
     <div class="sheet-body" id="belegSheetBody"></div>
     <div class="sheet-footer">
-      <button onclick="loescheBeleg()" style="font-size:14px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:none;border:1px solid var(--error);color:var(--error);border-radius:var(--radius);cursor:pointer">×</button>
+      <button id="btnLoescheBeleg" onclick="loescheBeleg()" style="font-size:14px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:none;border:1px solid var(--error);color:var(--error);border-radius:var(--radius);cursor:pointer">×</button>
       <button class="btn btn-primary" style="flex:1" onclick="updateBeleg()">Speichern</button>
     </div>
   </div>
@@ -759,6 +759,7 @@ let _tlMembers = [], _teamMembers = [];
 let _groupLoadPromise = Promise.resolve();
 let _currentMonat = '';   // wird per initMonatSelect() gesetzt
 let _isGenehmigt  = false; // aktueller Monat wurde genehmigt + ausgezahlt
+let _cachedBelege = [];   // alle Belege des aktuellen Monats — für Lösch-Sperre
 let _currentBelegId = null;      // für Edit-Sheet
 let _currentReviewId = null;     // für TL-Review-Sheet
 let _uploadedPhotos = [];        // { name, dataUrl, uploaded }
@@ -1038,6 +1039,7 @@ async function ladeMonatsdaten() {
 }
 
 function renderHome(belege) {
+  _cachedBelege = belege; // für Lösch-Sperre
   // Separate Fahrtenbuch from regular belege — nur das neueste Fahrtenbuch behalten
   const fahrtBelege = belege.filter(b => b.Kategorie === 'fahrtenbuch')
     .sort((a, b) => parseInt(b.id) - parseInt(a.id)); // neuestes zuerst (höchste SharePoint-ID)
@@ -1198,6 +1200,31 @@ async function openBelegSheet(id) {
     if (b.Klient && b.Klient !== 'kein Klient') {
       ladeKlientVorschlaegeInto('edKlient', true);
     }
+    // Lösch-Button + Bearbeiten sperren wenn abgerechnet
+    const belegStatus = b.Status || '';
+    const istAbgerechnet = belegStatus === 'Eingereicht' || belegStatus === 'Genehmigt';
+    const loeschBtn = document.getElementById('btnLoescheBeleg');
+    if (loeschBtn) {
+      loeschBtn.style.opacity   = istAbgerechnet ? '0.3' : '1';
+      loeschBtn.style.cursor    = istAbgerechnet ? 'not-allowed' : 'pointer';
+      loeschBtn.title           = istAbgerechnet ? 'Abgerechnete Belege können nicht gelöscht werden' : 'Beleg löschen';
+    }
+    // Bearbeitungsfelder sperren
+    ['edDatum','edBetrag','edHaendler','edBeschreibung','edKat','edUnterkat','edKlient'].forEach(fid => {
+      const el = document.getElementById(fid);
+      if (el) el.disabled = istAbgerechnet;
+    });
+    if (istAbgerechnet) {
+      const footer = document.querySelector('#belegSheet .sheet-footer');
+      if (footer) {
+        const hint = document.createElement('div');
+        hint.style.cssText = 'font-size:11px;color:var(--text-muted);text-align:center;padding:4px 0 0;width:100%';
+        hint.textContent = belegStatus === 'Genehmigt' ? '✓ Genehmigt — nicht bearbeitbar' : '📨 Eingereicht — nicht bearbeitbar';
+        if (!footer.querySelector('.locked-hint')) { hint.classList.add('locked-hint'); footer.prepend(hint); }
+      }
+    } else {
+      document.querySelector('#belegSheet .sheet-footer .locked-hint')?.remove();
+    }
   } catch(e) {
     document.getElementById('belegSheetBody').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   }
@@ -1242,6 +1269,12 @@ async function updateBeleg() {
 }
 
 async function schnellLoeschen(id) {
+  // Status des Belegs prüfen — abgerechnete Belege dürfen nicht gelöscht werden
+  const beleg = (_cachedBelege || []).find(b => String(b.id) === String(id));
+  if (beleg && (beleg.Status === 'Eingereicht' || beleg.Status === 'Genehmigt')) {
+    showToast('⛔ Abgerechnete Belege können nicht gelöscht werden');
+    return;
+  }
   if (!confirm('Beleg löschen?')) return;
   try {
     const token = await getToken();
@@ -1283,7 +1316,15 @@ async function belegFotoAnsehen(id) {
 }
 
 async function loescheBeleg() {
-  if (!_currentBelegId || !confirm('Beleg wirklich löschen?')) return;
+  if (!_currentBelegId) return;
+  // Status prüfen — abgerechnete Belege dürfen nicht gelöscht werden
+  const beleg = (_cachedBelege || []).find(b => String(b.id) === String(_currentBelegId));
+  const status = beleg?.Status || _currentBeleg?.Status || '';
+  if (status === 'Eingereicht' || status === 'Genehmigt') {
+    showToast('⛔ Abgerechnete Belege können nicht gelöscht werden');
+    return;
+  }
+  if (!confirm('Beleg wirklich löschen?')) return;
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
@@ -1741,6 +1782,13 @@ function resetFahrtUpload() {
 
 async function loescheFahrtenbuch() {
   if (!_fahrtDaten?.id) { resetFahrtUpload(); return; }
+  // Abgerechnetes Fahrtenbuch darf nicht gelöscht werden
+  const fahrtBeleg = (_cachedBelege || []).find(b => String(b.id) === String(_fahrtDaten.id));
+  const fahrtStatus = fahrtBeleg?.Status || '';
+  if (fahrtStatus === 'Eingereicht' || fahrtStatus === 'Genehmigt') {
+    showToast('⛔ Abgerechnetes Fahrtenbuch kann nicht gelöscht werden');
+    return;
+  }
   if (!confirm('Fahrtenbuch wirklich löschen?')) return;
   try {
     const token = await getToken();
