@@ -1373,8 +1373,8 @@ function generatePDF(formId){
     doc.text('Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt',ML,PH-10);
     doc.text(`Formular ${code}-31 · 0${p} / 0${tot} · Stand: 06/2026`,PW-MR,PH-10,{align:'right'});
   }
-  function eyebrow(t){doc.setFont(F,'normal');doc.setFontSize(7.5);doc.setTextColor(...ACC);doc.text(t,ML,y);y+=5;}
-  function mainTitle(t){doc.setFont(F,'bold');doc.setFontSize(22);doc.setTextColor(...ACC);doc.text(t,ML,y);y+=8;}
+  function eyebrow(t){doc.setFont(F,'normal');doc.setFontSize(7.5);doc.setTextColor(...ACC);doc.text(t,ML,y);y+=7;}
+  function mainTitle(t){doc.setFont(F,'bold');doc.setFontSize(22);doc.setTextColor(...ACC);doc.text(t,ML,y);y+=10;}
   function subtitle(t){doc.setFont(F,'normal');doc.setFontSize(8.5);doc.setTextColor(...MUTED);const l=doc.splitTextToSize(t,CW);doc.text(l,ML,y);y+=l.length*4+1;}
   function hRule(){doc.setDrawColor(...BRD);doc.setLineWidth(0.25);doc.line(ML,y,PW-MR,y);y+=5;}
   let secN=0;
@@ -1424,6 +1424,27 @@ function generatePDF(formId){
     y+=8;doc.setDrawColor(...BRD);doc.setLineWidth(0.35);doc.line(sx,y,sx+sw,y);y+=3;
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text(sub||lbl,sx,y);y+=8;
   }
+  // Two-column signature area: left=Ort/Datum field, right=signature pad
+  function sigArea2(ortDatum,sub,dataURL){
+    pageCheck(30);
+    const hw=(CW-8)/2;
+    // Left: Ort, Datum
+    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
+    doc.text('ORT, DATUM',ML,y);
+    doc.setFont(F,'bold');doc.setFontSize(10);doc.setTextColor(26,25,22);
+    doc.text(ortDatum||'',ML,y+4);
+    doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y+6,ML+hw,y+6);
+    // Right: Unterschrift label + sig image + line
+    const rx=ML+hw+8;
+    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
+    doc.text('UNTERSCHRIFT',rx,y);
+    if(dataURL&&dataURL.length>200){try{doc.addImage(dataURL,'PNG',rx,y+2,Math.min(hw*0.7,65),12);}catch(e){}}
+    doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(rx,y+16,rx+hw,y+16);
+    y+=20;
+    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
+    doc.text(sub||'Unterschrift Klient/in oder Sorgeberechtigte/r',rx,y);
+    y+=8;
+  }
   function noteBox(t){
     pageCheck(14);const lines=doc.splitTextToSize(t,CW-6);const bh=lines.length*4+6;
     doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.rect(ML,y,CW,bh);
@@ -1440,7 +1461,7 @@ function generatePDF(formId){
   }
 
   // ── PAGE 1 ──
-  drawPageHeader(formId);y=28;secN=0;
+  drawPageHeader(formId);y=32;secN=0;
 
   if(formId==='schweig'){
     const inst=(document.getElementById('s_inst')||{}).value||'—';
@@ -1453,8 +1474,7 @@ function generatePDF(formId){
     section('Widerruf','Diese Entbindungserklärung kann jederzeit schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO).');
     hRule();capsSection('ANGABEN & UNTERSCHRIFT');
     fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kd.name||'','Wohnort',((kd.plz||'')+' '+(kd.ort||'')).trim());
-    y+=4;fieldRow2('Ort, Datum',(kd.ort||'Nandlstadt')+', '+fmtDate(kd.datum||''),'','');
-    y-=7;sigBlock('Unterschrift','Unterschrift Klient/in oder Sorgeberechtigte/r',sigs['schweig'],(CW-6)/2,ML+(CW-6)/2+6);
+    sigArea2((kd.ort||'Nandlstadt')+', '+fmtDate(kd.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigs['schweig']);
   }
 
   else if(formId==='datenschutz'){
@@ -1482,8 +1502,7 @@ function generatePDF(formId){
     y+=2;noteBox('Mit Ihrer Unterschrift bestätigen Sie, dass Sie diese Datenschutzerklärung erhalten und die angekreuzten Einwilligungen erteilt haben.');
     y+=4;capsSection('ANGABEN & UNTERSCHRIFT');
     fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kd.name||'','Wohnort',((kd.plz||'')+' '+(kd.ort||'')).trim());
-    y+=4;fieldRow2('Ort, Datum',(kd.ort||'Nandlstadt')+', '+fmtDate(kd.datum||''),'UNTERSCHRIFT','');
-    y-=7;sigBlock('Unterschrift','Unterschrift Klient/in oder Sorgeberechtigte/r',sigs['datenschutz'],(CW-6)/2,ML+(CW-6)/2+6);
+    y+=4;sigArea2((kd.ort||'Nandlstadt')+', '+fmtDate(kd.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigs['datenschutz']);
   }
 
   else if(formId==='vollm'){
@@ -1516,7 +1535,7 @@ function generatePDF(formId){
       doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
       doc.text(vGebers[0]?.name||'',ML,y);doc.text(vGebers[1]?.name||'',ML+hw+6,y);
     } else {
-      sigBlock('Unterschrift','Unterschrift Vollmachtgeber/in',sigs['vollm']||sigs['vollm_0'],(CW-6)/2,ML+(CW-6)/2+6);
+      sigArea2((kd.ort||'')+', '+fmtDate(kd.datum||''),'Unterschrift Vollmachtgeber/in',sigs['vollm']||sigs['vollm_0']);
     }
   }
 
