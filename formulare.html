@@ -691,7 +691,8 @@ let accessToken    = null;
 
 // ── STATE ──
 let M365_USER = { displayName:'', email:'', jobTitle:'' };
-let M365_FK2_CANDIDATES = [];
+let M365_FK2_CANDIDATES = []; // alle Mitarbeiter aus Gruppe
+let M365_TL_MEMBERS    = []; // Teamleitung-Gruppe
 
 const selForms = new Set();
 let kd         = {};
@@ -714,55 +715,61 @@ const FL = {
   if(resp){ currentAccount=resp.account; accessToken=resp.accessToken; }
   else {
     const accounts=msalInstance.getAllAccounts();
-    if(accounts.length>0){ currentAccount=accounts[0]; }
+    if(accounts.length>0) currentAccount=accounts[0];
   }
   if(currentAccount){ await initApp(); }
   else { document.getElementById('loginScreen').style.display='flex'; }
 })();
 
 async function getToken(){
-  try {
+  try{
     const r=await msalInstance.acquireTokenSilent({scopes:SCOPES,account:currentAccount});
     accessToken=r.accessToken; return accessToken;
-  } catch(e){
+  }catch(e){
     await msalInstance.acquireTokenRedirect({scopes:SCOPES});
   }
 }
 
 async function graphGet(path){
   const token=await getToken();
-  const r=await fetch('https://graph.microsoft.com/v1.0'+path,{headers:{Authorization:'Bearer '+token}});
+  const r=await fetch('https://graph.microsoft.com/v1.0'+path,
+    {headers:{Authorization:'Bearer '+token}});
   if(!r.ok) throw new Error('Graph '+path+' → '+r.status);
   return r.json();
 }
 
-async function doLogin(){
-  await msalInstance.loginRedirect({scopes:SCOPES});
+// ── GRUPPEN LADEN (identisch zum Berichtsgenerator) ──
+async function getGroupIdByName(name){
+  try{
+    const d=await graphGet(`/groups?$filter=displayName eq '${encodeURIComponent(name)}'&$select=id,displayName`);
+    return (d.value&&d.value[0])?d.value[0].id:null;
+  }catch(e){return null;}
+}
+async function getGroupMembers(groupId){
+  if(!groupId) return [];
+  try{
+    const d=await graphGet(`/groups/${groupId}/members?$select=id,displayName,mail,userPrincipalName,jobTitle`);
+    return (d.value||[]).filter(m=>m.displayName||m.mail);
+  }catch(e){return [];}
 }
 
 async function initApp(){
-  try {
-    // Get own profile
-    const me = await graphGet('/me?$select=displayName,mail,userPrincipalName,jobTitle');
-    M365_USER = {
+  try{
+    // Eigenes Profil
+    const me=await graphGet('/me?$select=displayName,mail,userPrincipalName,jobTitle');
+    M365_USER={
       displayName: me.displayName||'',
       email:       me.mail||me.userPrincipalName||'',
       jobTitle:    me.jobTitle||''
     };
-    // Get colleagues from same domain (simple /users list, filter out self)
-    const domain=M365_USER.email.split('@')[1]||'praxisneuewege.de';
-    const users = await graphGet(`/users?$select=displayName,mail,userPrincipalName&$top=50&$filter=endswith(mail,'@${domain}') and id ne '${currentAccount.localAccountId}'`).catch(()=>({value:[]}));
-    M365_FK2_CANDIDATES = (users.value||[])
-      .filter(u=>u.displayName&&u.displayName!==M365_USER.displayName)
-      .map(u=>({displayName:u.displayName, email:u.mail||u.userPrincipalName}));
-  } catch(e){
-    console.warn('Graph /me failed, using account name:', e.message);
-    M365_USER = {
+  }catch(e){
+    M365_USER={
       displayName: currentAccount.name||currentAccount.username||'',
       email:       currentAccount.username||''
     };
   }
-  // Show app
+
+  // App sofort anzeigen — Gruppen laden im Hintergrund
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('fkScreen').classList.add('active');
   document.getElementById('fkUserName').textContent=M365_USER.displayName;
@@ -770,15 +777,54 @@ async function initApp(){
   document.getElementById('v_fk1').value=M365_USER.displayName;
   document.getElementById('s_vertr').value=M365_USER.displayName;
   document.getElementById('k_datum').value=new Date().toISOString().split('T')[0];
-  // Populate FK2 dropdown
-  const sel=document.getElementById('v_fk2_sel');
-  sel.innerHTML='<option value="">— optional —</option>';
-  M365_FK2_CANDIDATES.forEach(u=>{
-    const o=document.createElement('option');
-    o.value=u.displayName; o.textContent=u.displayName;
-    sel.appendChild(o);
-  });
   document.getElementById('loginError').style.display='none';
+
+  // Gruppen asynchron laden (wie Berichtsgenerator)
+  loadGroupMembers().catch(e=>console.warn('Gruppenlade-Fehler:',e));
+}
+
+async function loadGroupMembers(){
+  try{
+    const [fkGroupId, tlGroupId] = await Promise.all([
+      getGroupIdByName('Ambulante Familienhilfe'),
+      getGroupIdByName('TL-Ambulant')
+    ]);
+    const [fkMembers, tlMembers] = await Promise.all([
+      getGroupMembers(fkGroupId),
+      getGroupMembers(tlGroupId)
+    ]);
+    // Alle Mitarbeiter (FK-Gruppe + TL-Gruppe, dedupliziert, ohne eingeloggten User)
+    const allMembers = [...fkMembers, ...tlMembers].filter((m,i,arr)=>
+      arr.findIndex(x=>x.id===m.id)===i &&
+      (m.mail||m.userPrincipalName||'').toLowerCase() !== M365_USER.email.toLowerCase()
+    );
+    allMembers.sort((a,b)=>(a.displayName||'').localeCompare(b.displayName||'','de',{sensitivity:'base'}));
+    M365_FK2_CANDIDATES = allMembers.map(m=>({
+      displayName: m.displayName,
+      email:       m.mail||m.userPrincipalName||''
+    }));
+    M365_TL_MEMBERS = tlMembers.map(m=>({
+      displayName: m.displayName,
+      email:       m.mail||m.userPrincipalName||''
+    }));
+    // FK2-Dropdown befüllen
+    const sel=document.getElementById('v_fk2_sel');
+    if(sel){
+      sel.innerHTML='<option value="">— optional —</option>';
+      M365_FK2_CANDIDATES.forEach(u=>{
+        const o=document.createElement('option');
+        o.value=u.displayName; o.textContent=u.displayName;
+        sel.appendChild(o);
+      });
+    }
+    console.log(`Gruppen geladen: ${M365_FK2_CANDIDATES.length} Mitarbeiter, ${M365_TL_MEMBERS.length} TL`);
+  }catch(e){
+    console.warn('loadGroupMembers failed:',e.message);
+  }
+}
+
+async function doLogin(){
+  await msalInstance.loginRedirect({scopes:SCOPES});
 }
 
 function doLogout(){
