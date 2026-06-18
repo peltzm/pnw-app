@@ -1009,8 +1009,14 @@ function buildStep(fid,idx){
       <p style="color:var(--text-muted);font-size:13px;">Erteilte Einwilligungen können jederzeit ohne Angabe von Gründen schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO). Der Widerruf berührt nicht die Rechtmäßigkeit der bis dahin erfolgten Verarbeitung.</p>
     </div>
     <div class="klient-inputs">
-      <div class="klient-inputs-title">Pflicht­einwilligung</div>
-      <label class="kcheck"><input type="checkbox" id="ki_ds_basis"> <div><div class="kcheck-label">Ich habe die Datenschutzerklärung gelesen und stimme der Erhebung und Verarbeitung meiner personenbezogenen Daten zur Erfüllung der Hilfe zur Erziehung gem. ${d.sgb||'SGB VIII'} zu.</div><div class="kcheck-sub">Erforderlich für die Hilfedurchführung · Rechtsgrundlage: Art. 6 Abs. 1 lit. c) DSGVO, §§ 61 ff. SGB VIII</div></div></label>
+      <div class="klient-inputs-title" style="color:var(--success);">Pflicht­einwilligung</div>
+      <div class="toggle-row" style="background:var(--success-bg);border:1px solid #a7f3d0;border-radius:var(--radius);padding:14px;margin-top:4px;">
+        <div class="toggle-label">
+          <div class="toggle-label-main">Ich habe die Datenschutzerklärung gelesen und stimme der Erhebung und Verarbeitung meiner personenbezogenen Daten zur Erfüllung der Hilfe zur Erziehung gem. ${d.sgb||'SGB VIII'} zu.</div>
+          <div class="toggle-label-sub">Erforderlich für die Hilfedurchführung · Rechtsgrundlage: Art. 6 Abs. 1 lit. c) DSGVO, §§ 61 ff. SGB VIII</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="ki_ds_basis"><span class="toggle-slider"></span></label>
+      </div>
     </div>
     <div class="klient-inputs" style="margin-top:0;">
       <div class="klient-inputs-title">Optionale Einwilligungen — freiwillig, jederzeit widerrufbar</div>
