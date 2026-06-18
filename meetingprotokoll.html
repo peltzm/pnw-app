@@ -1501,6 +1501,11 @@ async function onEinrichtungChange(einrKey) {
   // Reload participants for new Einrichtung
   delete _groupCache[einrKey];
   await onThemaChange(S.thema);
+  // Reset base TOPs and inject bewohner for the new Einrichtung
+  const _themaForEinr = TYPES[S.type]?.themen[S.thema];
+  if (_themaForEinr) {
+    S.tops = _themaForEinr.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
+  }
   renderBewohnerCard();
 }
 
@@ -1897,6 +1902,8 @@ async function renderBewohnerCard() {
   const bewohner = await loadBewohner(einrKey);
   renderBewohnerGrid(bewohner);
   injectBewohnerTOPs(bewohner);
+  // Re-render TOPs if already visible
+  if (document.getElementById('s-tops')?.classList.contains('active')) renderTOPs();
 }
 
 function injectBewohnerTOPs(bewohner) {
