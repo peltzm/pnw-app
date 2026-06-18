@@ -311,53 +311,95 @@
     <!-- MAIN CONTENT -->
     <div class="main">
 
-      <!-- ══ S1: MEETING-TYP ══ -->
+      <!-- ══ S1: THEMA ══ -->
       <div class="section active" id="s-typ">
-        <div class="section-title">Meeting-Typ</div>
-        <div class="section-sub">Wählen Sie den Typ — Teilnehmerliste und SharePoint-Ablage werden automatisch gesetzt.</div>
+        <div class="section-title">Thema auswählen</div>
+        <div class="section-sub">Teilnehmerliste und SharePoint-Ablage werden automatisch gesetzt.</div>
         <div class="progress-bar"><div class="progress-fill" style="width:20%"></div></div>
 
         <div class="card">
-          <div class="card-title">Typ auswählen</div>
+          <div class="card-title">Teammeeting</div>
           <div class="type-grid" id="typeGrid">
-            <div class="type-tile selected" onclick="selectType('team',this)">
+            <div class="type-tile" onclick="selectThema('team','grossteam',this)">
               <div class="tile-icon">👥</div>
-              <div class="tile-label">Teammeeting</div>
-              <div class="tile-sub">Ambulantes Team</div>
+              <div class="tile-label">Großteam</div>
+              <div class="tile-sub">Gesamtes Team</div>
             </div>
-            <div class="type-tile" onclick="selectType('supervision',this)">
+            <div class="type-tile" onclick="selectThema('team','kleinteam',this)">
+              <div class="tile-icon">👤</div>
+              <div class="tile-label">Kleinteam</div>
+              <div class="tile-sub">Teilgruppe Ambulant</div>
+            </div>
+            <div class="type-tile" onclick="selectThema('team','supervision',this)">
               <div class="tile-icon">🔍</div>
               <div class="tile-label">Supervision</div>
               <div class="tile-sub">Fachliche Begleitung</div>
             </div>
-            <div class="type-tile" onclick="selectType('teilnehmer',this)">
-              <div class="tile-icon">🧑‍🤝‍🧑</div>
-              <div class="tile-label">Teilnehmerkonferenz</div>
-              <div class="tile-sub">Mit Klient / Jugendamt</div>
-            </div>
-            <div class="type-tile" onclick="selectType('nordstern',this)">
+            <div class="type-tile" onclick="selectThema('team','nordstern',this)">
               <div class="tile-icon">⭐</div>
-              <div class="tile-label">Team Nordstern</div>
-              <div class="tile-sub">Stationäre Gruppe</div>
-            </div>
-            <div class="type-tile" onclick="selectType('konferenz',this)">
-              <div class="tile-icon">🏛️</div>
-              <div class="tile-label">Konferenz Stationär</div>
-              <div class="tile-sub">Leitungsebene</div>
+              <div class="tile-label">Nordstern</div>
+              <div class="tile-sub">Stationäres Team</div>
             </div>
           </div>
         </div>
 
-        <div class="info-card" id="typeInfo">
-          <div class="info-row"><span class="info-label">Typ</span><span class="info-val" id="tInfoTyp">Teammeeting</span></div>
-          <div class="info-row"><span class="info-label">Standardteilnehmer</span><span class="info-val" id="tInfoTeiln">7 Personen</span></div>
-          <div class="info-row"><span class="info-label">SharePoint-Ablage</span><span class="info-val" id="tInfoSP">PNW › Protokolle › Teammeeting</span></div>
-          <div class="info-row"><span class="info-label">Freigabe durch</span><span class="info-val" id="tInfoTL">Teamleitung Ambulant</span></div>
+        <div class="card">
+          <div class="card-title">Teilnehmerkonferenz</div>
+          <div class="type-grid">
+            <div class="type-tile" onclick="selectThema('teilnehmer','hpg',this)">
+              <div class="tile-icon">📋</div>
+              <div class="tile-label">Hilfeplangespräch</div>
+              <div class="tile-sub">Mit Klient / JA</div>
+            </div>
+            <div class="type-tile" onclick="selectThema('teilnehmer','clearing',this)">
+              <div class="tile-icon">🔎</div>
+              <div class="tile-label">Clearing</div>
+              <div class="tile-sub">Situationsanalyse</div>
+            </div>
+            <div class="type-tile" onclick="selectThema('teilnehmer','abschluss',this)">
+              <div class="tile-icon">✅</div>
+              <div class="tile-label">Abschlussgespräch</div>
+              <div class="tile-sub">Hilfeende</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Nordstern</div>
+          <div class="type-grid">
+            <div class="type-tile" onclick="selectThema('nordstern','team',this)">
+              <div class="tile-icon">🏠</div>
+              <div class="tile-label">Teambesprechung</div>
+              <div class="tile-sub">Nordstern Gruppe</div>
+            </div>
+            <div class="type-tile" onclick="selectThema('nordstern','übergabe',this)">
+              <div class="tile-icon">🔄</div>
+              <div class="tile-label">Dienstübergabe</div>
+              <div class="tile-sub">Schichtübergabe</div>
+            </div>
+            <div class="type-tile" onclick="selectThema('konferenz','leitung',this)">
+              <div class="tile-icon">🏛️</div>
+              <div class="tile-label">Leitungskonferenz</div>
+              <div class="tile-sub">Stationäre Leitung</div>
+            </div>
+            <div class="type-tile" onclick="selectThema('konferenz','baustein',this)">
+              <div class="tile-icon">📐</div>
+              <div class="tile-label">Baustein / QM</div>
+              <div class="tile-sub">Qualitätsmanagement</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-card" id="typeInfo" style="display:none">
+          <div class="info-row"><span class="info-label">Thema</span><span class="info-val" id="tInfoTyp">—</span></div>
+          <div class="info-row"><span class="info-label">Standardteilnehmer</span><span class="info-val" id="tInfoTeiln">—</span></div>
+          <div class="info-row"><span class="info-label">SharePoint-Ablage</span><span class="info-val" id="tInfoSP">—</span></div>
+          <div class="info-row"><span class="info-label">Freigabe durch</span><span class="info-val" id="tInfoTL">—</span></div>
         </div>
 
         <div class="btn-row">
           <div></div>
-          <button class="btn btn-primary" onclick="goSection('s-meta');markDone(1)">Weiter →</button>
+          <button class="btn btn-primary" id="btnStep1Next" onclick="goSection('s-meta');markDone(1)" disabled>Weiter →</button>
         </div>
       </div>
 
@@ -395,14 +437,7 @@
               </select>
             </div>
           </div>
-          <div class="field-grid full">
-            <div class="field">
-              <label>Thema / Anlass</label>
-              <select id="fThema" onchange="onThemaChange(this.value)">
-                <option value="">— bitte auswählen —</option>
-              </select>
-            </div>
-          </div>
+
         </div>
 
         <div class="btn-row">
@@ -778,8 +813,6 @@ async function showApp() {
   document.getElementById('userBadge').style.display = 'flex';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
-  // Init with team type
-  selectType('team', document.querySelector('.type-tile.selected'));
 }
 
 /* ──────────────────────────────────────
@@ -1024,7 +1057,10 @@ function goSection(id) {
   document.getElementById(id).classList.add('active');
   const nid = sectionNav[id];
   if (nid) document.getElementById(nid).classList.add('active');
-  if (id === 's-teiln') renderParticipants();
+  if (id === 's-teiln') {
+    if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
+    else renderParticipants();
+  }
   if (id === 's-tops')  renderTOPs();
 }
 function goHome() {}
@@ -1034,30 +1070,36 @@ function markDone(n) {
 }
 
 /* ──────────────────────────────────────
-   MEETING TYPE
+   THEMA SELECTION (flat: type + thema in one click)
 ────────────────────────────────────── */
-function selectType(type, el) {
+function selectThema(type, themaKey, el) {
   document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('selected'));
   el.classList.add('selected');
-  S.type = type;
-  S.thema = null;
-  const cfg = TYPES[type];
-  // Populate Thema dropdown
-  const themaSel = document.getElementById('fThema');
-  if (themaSel) {
-    themaSel.innerHTML = '<option value="">— bitte auswählen —</option>';
-    Object.entries(cfg.themen).forEach(([key, t]) => {
-      const opt = document.createElement('option');
-      opt.value = key; opt.textContent = t.label;
-      themaSel.appendChild(opt);
-    });
-  }
-  document.getElementById('tInfoTyp').textContent = cfg.label;
-  document.getElementById('tInfoTeiln').textContent = '— (nach Thema-Auswahl)';
-  document.getElementById('tInfoSP').textContent = cfg.sp;
-  document.getElementById('tInfoTL').textContent = cfg.tl;
+  // Enable Weiter button
+  const btn = document.getElementById('btnStep1Next');
+  if (btn) btn.disabled = false;
+  // Set state
+  S.type  = type;
+  S.thema = themaKey;
+  const cfg   = TYPES[type];
+  const thema = cfg.themen[themaKey];
+  // Update info card
+  const infoCard = document.getElementById('typeInfo');
+  if (infoCard) infoCard.style.display = '';
+  document.getElementById('tInfoTyp').textContent   = cfg.label + ' · ' + thema.label;
+  document.getElementById('tInfoTeiln').textContent = '— (wird geladen)';
+  document.getElementById('tInfoSP').textContent    = cfg.sp;
+  document.getElementById('tInfoTL').textContent    = cfg.tl;
+  // Update mail/filename
+  const d = document.getElementById('fDatum')?.value || new Date().toISOString().slice(0,10);
+  const label = cfg.label + ' – ' + thema.label;
+  document.getElementById('fMailBetreff').value = 'Protokoll ' + label + ' vom ' + fmtDate(d);
+  document.getElementById('spPath').textContent = cfg.sp;
+  document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+  document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+  // Pre-init TOPs and reset participants
+  S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
-  S.tops = [];
 }
 
 async function onThemaChange(themaKey) {
@@ -1331,7 +1373,7 @@ function buildPreview() {
   const bis      = document.getElementById('fZeitBis')?.value || '';
   const ort      = document.getElementById('fOrt')?.value || '—';
   const proto    = document.getElementById('fProtokoll')?.value || '—';
-  const themaLbl = document.getElementById('fThema')?.options[document.getElementById('fThema')?.selectedIndex]?.text || '';
+  const themaLbl = S.thema && S.type ? (TYPES[S.type]?.themen[S.thema]?.label || '') : '';
   const next     = fmtDate(document.getElementById('fNextDatum')?.value || '');
   const nextZ    = document.getElementById('fNextZeit')?.value || '';
   const nextH    = document.getElementById('fNextHinweis')?.value || '';
