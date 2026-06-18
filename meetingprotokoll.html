@@ -240,6 +240,7 @@
     <span style="font-size:14px;font-weight:600;color:var(--text);margin-left:4px;">Meetingprotokoll</span>
   </div>
   <div class="user-badge" id="userBadge" style="display:none">
+    <span id="autoSaveIndicator" style="font-size:11px;color:var(--success);transition:opacity .5s;opacity:0;margin-right:8px;"></span>
     <div class="user-dot"></div>
     <span id="userName"></span>
     <button onclick="logout()" style="margin-left:8px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted);">Abmelden</button>
@@ -313,7 +314,10 @@
 
       <!-- ══ S1: THEMA ══ -->
       <div class="section active" id="s-typ">
-        <div class="section-title">Thema auswählen</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div class="section-title" style="margin:0">Thema auswählen</div>
+          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="showDraftPanel()">📂 Entwurf laden</button>
+        </div>
         <div class="section-sub">Teilnehmerliste und SharePoint-Ablage werden automatisch gesetzt.</div>
         <div class="progress-bar"><div class="progress-fill" style="width:20%"></div></div>
 
@@ -359,10 +363,15 @@
           <div class="info-row"><span class="info-label">Freigabe durch</span><span class="info-val" id="tInfoTL">—</span></div>
         </div>
 
-        <div class="btn-row">
-          <div></div>
-          <button class="btn btn-primary" id="btnStep1Next" onclick="goSection('s-meta');markDone(1)" disabled>Weiter →</button>
+        <div id="draftPanel" style="display:none;margin-top:1rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">📂 Gespeicherte Entwürfe</div>
+            <button onclick="document.getElementById('draftPanel').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-muted);">×</button>
+          </div>
+          <div id="draftListContent" style="font-size:13px;color:var(--text-muted);">Wird geladen…</div>
         </div>
+
+
       </div>
 
       <!-- ══ S2: METADATEN ══ -->
@@ -742,6 +751,13 @@ const SP_FOLDERS = {
   konferenz:  'Nordstern/Protokolle/Konferenz Stationaer',
 };
 
+// Draft management
+const DRAFT_LIST = 'Protokoll_Entwuerfe';
+let _currentDraftId = null;
+let _autoSaving = false;
+let _autoSaveTimer = null;
+let _graphListIdDraft = null;
+
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
@@ -793,6 +809,9 @@ async function showApp() {
   document.getElementById('userBadge').style.display = 'flex';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
+  // Auto-save on any input/change in the app
+  document.getElementById('appScreen').addEventListener('input',  scheduleAutoSave);
+  document.getElementById('appScreen').addEventListener('change', scheduleAutoSave);
 }
 
 /* ──────────────────────────────────────
@@ -1048,9 +1067,6 @@ function markDone(n) {
 function selectThema(type, themaKey, el) {
   document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('selected'));
   el.classList.add('selected');
-  // Enable Weiter button
-  const btn = document.getElementById('btnStep1Next');
-  if (btn) btn.disabled = false;
   // Set state
   S.type  = type;
   S.thema = themaKey;
@@ -1075,18 +1091,26 @@ function selectThema(type, themaKey, el) {
     S.einrichtung = 'nordstern';
     const einr = EINRICHTUNGEN.find(e => e.key === 'nordstern');
     document.getElementById('spPath').textContent = einr.sp;
-    document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
-    document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+    const _n1 = new Date(); const _y1 = String(_n1.getFullYear()).slice(-2); const _m1 = String(_n1.getMonth()+1).padStart(2,'0');
+    const _f1 = (cfg.label+' '+einr.label).replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')+'_'+_y1+_m1+'.pdf';
+    document.getElementById('spFile').textContent = _f1;
+    document.getElementById('fFileName').value    = _f1;
   } else {
     S.einrichtung = null;
     document.getElementById('spPath').textContent = cfg.sp;
-    document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
-    document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+    const _n2 = new Date(); const _y2 = String(_n2.getFullYear()).slice(-2); const _m2 = String(_n2.getMonth()+1).padStart(2,'0');
+    const _f2 = label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')+'_'+_y2+_m2+'.pdf';
+    document.getElementById('spFile').textContent = _f2;
+    document.getElementById('fFileName').value    = _f2;
   }
   document.getElementById('fMailBetreff').value = 'Protokoll ' + label + ' vom ' + fmtDate(d);
   // Pre-init TOPs and reset participants
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
+  _currentDraftId = null; // fresh draft
+  // Navigate directly to step 2
+  markDone(1);
+  goSection('s-meta');
 }
 
 async function onThemaChange(themaKey) {
@@ -1228,8 +1252,10 @@ async function onEinrichtungChange(einrKey) {
   if (thema) {
     const label = cfg.label + ' – ' + einr.label;
     document.getElementById('fMailBetreff').value = 'Protokoll ' + label + ' vom ' + fmtDate(d);
-    document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
-    document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+    const _ne = new Date(); const _ye = String(_ne.getFullYear()).slice(-2); const _me = String(_ne.getMonth()+1).padStart(2,'0');
+    const _fe = label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')+'_'+_ye+_me+'.pdf';
+    document.getElementById('spFile').textContent = _fe;
+    document.getElementById('fFileName').value    = _fe;
     document.getElementById('tInfoSP').textContent = einr.sp;
   }
   // Reload participants for new Einrichtung
@@ -1467,6 +1493,225 @@ function showToast(msg, type='info') {
   t.className = 'toast show ' + type;
   clearTimeout(_tTimer);
   _tTimer = setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+/* ──────────────────────────────────────
+   DRAFT AUTO-SAVE + LOAD (SharePoint List)
+────────────────────────────────────── */
+async function getDraftListId() {
+  if (_graphListIdDraft) return _graphListIdDraft;
+  const { siteId } = await getSiteAndDrive();
+  const token = await getToken();
+  const r = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/lists?$select=id,displayName,name&$top=200`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
+  const d = await r.json();
+  const found = (d.value || []).find(l =>
+    l.displayName === DRAFT_LIST || l.name === DRAFT_LIST
+  );
+  if (found) { _graphListIdDraft = found.id; return found.id; }
+  // Create the list if it doesn't exist
+  const cr = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/lists`,
+    { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: DRAFT_LIST, list: { template: 'genericList' } }) }
+  );
+  const cl = await cr.json();
+  _graphListIdDraft = cl.id;
+  return cl.id;
+}
+
+function collectDraftData() {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const cfg   = S.type  ? TYPES[S.type]  : null;
+  const thema = S.thema && cfg ? cfg.themen[S.thema] : null;
+  return {
+    type:        S.type  || '',
+    thema:       S.thema || '',
+    einrichtung: S.einrichtung || '',
+    label:       cfg && thema ? cfg.label + ' – ' + thema.label : '',
+    datum:       document.getElementById('fDatum')?.value       || '',
+    zeitVon:     document.getElementById('fZeitVon')?.value     || '',
+    zeitBis:     document.getElementById('fZeitBis')?.value     || '',
+    ort:         document.getElementById('fOrt')?.value         || '',
+    protokoll:   document.getElementById('fProtokoll')?.value   || '',
+    mailBetreff: document.getElementById('fMailBetreff')?.value || '',
+    fileName:    document.getElementById('fFileName')?.value    || '',
+    mailNote:    document.getElementById('fMailNote')?.value    || '',
+    approver:    document.getElementById('fApprover')?.value    || '',
+    nextDatum:   document.getElementById('fNextDatum')?.value   || '',
+    nextZeit:    document.getElementById('fNextZeit')?.value    || '',
+    nextHinweis: document.getElementById('fNextHinweis')?.value || '',
+    tops:        JSON.stringify(S.tops),
+    participants:JSON.stringify(S.participants.map(p => ({...p}))),
+    savedAt:     now.toISOString(),
+    savedBy:     currentAccount?.name || currentAccount?.username || '',
+  };
+}
+
+async function autoSaveDraft() {
+  if (_autoSaving) return;
+  if (!S.type || !S.thema) return; // nothing worth saving yet
+  _autoSaving = true;
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    const data   = collectDraftData();
+    const fields = {
+      Title:        data.label || 'Protokoll Entwurf',
+      ProtokollDaten: JSON.stringify(data),
+      Status:       'Entwurf',
+      Erstellt_Von: data.savedBy,
+    };
+    if (_currentDraftId) {
+      await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${_currentDraftId}/fields`,
+        { method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify(fields) }
+      );
+    } else {
+      const r = await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`,
+        { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields }) }
+      );
+      const item = await r.json();
+      _currentDraftId = item.id;
+    }
+    // Show subtle save indicator
+    const ind = document.getElementById('autoSaveIndicator');
+    if (ind) { ind.textContent = '✓ Entwurf gespeichert'; ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 2000); }
+  } catch(e) { console.warn('Auto-save failed:', e); }
+  finally { _autoSaving = false; }
+}
+
+function scheduleAutoSave() {
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(autoSaveDraft, 2000);
+}
+
+async function showDraftPanel() {
+  const panel = document.getElementById('draftPanel');
+  const content = document.getElementById('draftListContent');
+  panel.style.display = 'block';
+  content.innerHTML = '<span class="spin"></span> Wird geladen…';
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    const me = (currentAccount?.username || '').toLowerCase();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=50&$orderby=fields/Modified desc`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const d = await r.json();
+    const items = (d.value || []).filter(i =>
+      i.fields?.Status === 'Entwurf' &&
+      (i.fields?.Erstellt_Von || '').toLowerCase().includes(me.split('@')[0])
+    );
+    if (!items.length) {
+      content.innerHTML = '<div style="color:var(--text-muted);padding:.5rem 0;">Keine Entwürfe gefunden.</div>';
+      return;
+    }
+    content.innerHTML = items.map(it => {
+      const data = JSON.parse(it.fields?.ProtokollDaten || '{}');
+      const date = data.datum ? data.datum.split('-').reverse().join('.') : '—';
+      const saved = data.savedAt ? new Date(data.savedAt).toLocaleString('de-DE') : '—';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--text);">${data.label || 'Entwurf'}</div>
+          <div style="font-size:11px;color:var(--text-muted);">${date} · Gespeichert: ${saved}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-primary" style="padding:5px 12px;font-size:12px;" onclick="loadDraft('${it.id}')">Weiterbearbeiten</button>
+          <button class="btn-remove" onclick="deleteDraft('${it.id}',this)">Löschen</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    content.innerHTML = '<div style="color:var(--error);">Fehler beim Laden: ' + e.message + '</div>';
+  }
+}
+
+async function loadDraft(itemId) {
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}?expand=fields`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const item = await r.json();
+    const data = JSON.parse(item.fields?.ProtokollDaten || '{}');
+    _currentDraftId = itemId;
+    // Restore state
+    S.type        = data.type        || 'team';
+    S.thema       = data.thema       || null;
+    S.einrichtung = data.einrichtung || null;
+    S.tops        = JSON.parse(data.tops || '[]');
+    S.participants= JSON.parse(data.participants || '[]');
+    // Restore form fields after navigation
+    document.getElementById('draftPanel').style.display = 'none';
+    // Select matching tile
+    const tile = document.querySelector(`[onclick*="selectThema('${data.type}','${data.thema}'"]`);
+    if (tile) { document.querySelectorAll('.type-tile').forEach(t=>t.classList.remove('selected')); tile.classList.add('selected'); }
+    // Update info card
+    const cfg = S.type ? TYPES[S.type] : null;
+    const th  = cfg && S.thema ? cfg.themen[S.thema] : null;
+    if (cfg && th) {
+      const infoCard = document.getElementById('typeInfo');
+      if (infoCard) infoCard.style.display = '';
+      document.getElementById('tInfoTyp').textContent   = cfg.label + ' · ' + th.label;
+      document.getElementById('tInfoSP').textContent    = cfg.sp;
+      document.getElementById('tInfoTL').textContent    = cfg.tl;
+      document.getElementById('tInfoTeiln').textContent = S.participants.length + ' Personen';
+    }
+    // Go to step 2 and fill fields
+    markDone(1);
+    goSection('s-meta');
+    setTimeout(() => {
+      if (data.datum)       document.getElementById('fDatum').value       = data.datum;
+      if (data.zeitVon)     document.getElementById('fZeitVon').value     = data.zeitVon;
+      if (data.zeitBis)     document.getElementById('fZeitBis').value     = data.zeitBis;
+      if (data.ort)         document.getElementById('fOrt').value         = data.ort;
+      if (data.protokoll)   { const s=document.getElementById('fProtokoll'); if(s){ const o=document.createElement('option'); o.value=data.protokoll; o.textContent=data.protokoll; s.appendChild(o); s.value=data.protokoll; } }
+      if (data.mailBetreff) document.getElementById('fMailBetreff').value = data.mailBetreff;
+      if (data.fileName)    { document.getElementById('fFileName').value  = data.fileName; document.getElementById('spFile').textContent = data.fileName; }
+      if (data.mailNote)    document.getElementById('fMailNote').value    = data.mailNote;
+      if (data.approver)    { const a=document.getElementById('fApprover'); if(a) a.value=data.approver; }
+      if (data.nextDatum)   document.getElementById('fNextDatum').value   = data.nextDatum;
+      if (data.nextZeit)    document.getElementById('fNextZeit').value    = data.nextZeit;
+      if (data.nextHinweis) document.getElementById('fNextHinweis').value = data.nextHinweis;
+      if (data.einrichtung) {
+        const ef = document.getElementById('fEinrichtung');
+        if (ef) { ef.value = data.einrichtung; const ew=document.getElementById('fEinrichtungWrap'); if(ew) ew.style.display=''; }
+      }
+      renderParticipants();
+      renderTOPs();
+    }, 100);
+    showToast('Entwurf geladen', 'success');
+  } catch(e) {
+    showToast('Fehler beim Laden: ' + e.message, 'info');
+  }
+}
+
+async function deleteDraft(itemId, btn) {
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}`,
+      { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }
+    );
+    btn.closest('[style]').remove();
+    showToast('Entwurf gelöscht', 'success');
+  } catch(e) { showToast('Fehler: ' + e.message, 'info'); }
 }
 
 /* ──────────────────────────────────────
