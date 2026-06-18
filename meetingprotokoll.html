@@ -725,10 +725,11 @@ const CFG = {
 };
 
 // M365-Gruppenname → Protokoll-Typ-Schlüssel
+// For private groups, Graph $filter on displayName fails — use mail address instead
 const GROUP_MAP = {
-  allTeam:   'Ambulante Familienhilfe',
-  nordstern: 'Team Nordstern',
-  leitungNS: 'Leitungskonferenz Nordstern',
+  allTeam:   { name: 'Ambulante Familienhilfe',   mail: null },
+  nordstern: { name: 'Team Nordstern',             mail: 'nordsternteam@praxisneuewege.de' },
+  leitungNS: { name: 'Leitungskonferenz Nordstern', mail: null },
 };
 
 // Einrichtungen für stationäres Team
@@ -876,17 +877,33 @@ const _groupCache = {};
 async function loadGroupFromM365(groupKey) {
   if (_groupCache[groupKey]) return _groupCache[groupKey];
   const token = await getToken();
-  const groupName = GROUP_MAP[groupKey];
-  if (!groupName) return [];
+  const grpCfg = GROUP_MAP[groupKey];
+  if (!grpCfg) return [];
+  const groupName = grpCfg.name;
+  const groupMail = grpCfg.mail;
 
-  // 1. Find group ID by display name
-  // $filter requires ConsistencyLevel:eventual + $count=true on Graph
-  const gr = await fetch(
-    `https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${encodeURIComponent(groupName)}'&$select=id,displayName&$count=true`,
-    { headers: { Authorization: 'Bearer ' + token, 'ConsistencyLevel': 'eventual' } }
-  );
-  const gd = await gr.json();
-  const gid = gd.value?.[0]?.id;
+  let gid = null;
+
+  // 1a. If mail address known, use it (works for private groups too)
+  if (groupMail) {
+    const mr = await fetch(
+      `https://graph.microsoft.com/v1.0/groups?$filter=mail eq '${encodeURIComponent(groupMail)}'&$select=id,displayName`,
+      { headers: { Authorization: 'Bearer ' + token, 'ConsistencyLevel': 'eventual', 'Prefer': 'return=minimal' } }
+    );
+    const md = await mr.json();
+    gid = md.value?.[0]?.id;
+  }
+
+  // 1b. Fallback: search by display name (works for public groups)
+  if (!gid) {
+    const gr = await fetch(
+      `https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${encodeURIComponent(groupName)}'&$select=id,displayName&$count=true`,
+      { headers: { Authorization: 'Bearer ' + token, 'ConsistencyLevel': 'eventual' } }
+    );
+    const gd = await gr.json();
+    gid = gd.value?.[0]?.id;
+  }
+
   if (!gid) {
     console.warn(`Gruppe '${groupName}' nicht gefunden`);
     return [];
