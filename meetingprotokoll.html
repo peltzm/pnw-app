@@ -878,9 +878,10 @@ async function loadGroupFromM365(groupKey) {
   if (!groupName) return [];
 
   // 1. Find group ID by display name
+  // $filter requires ConsistencyLevel:eventual + $count=true on Graph
   const gr = await fetch(
-    `https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${encodeURIComponent(groupName)}'&$select=id,displayName`,
-    { headers: { Authorization: 'Bearer ' + token } }
+    `https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${encodeURIComponent(groupName)}'&$select=id,displayName&$count=true`,
+    { headers: { Authorization: 'Bearer ' + token, 'ConsistencyLevel': 'eventual' } }
   );
   const gd = await gr.json();
   const gid = gd.value?.[0]?.id;
@@ -891,7 +892,7 @@ async function loadGroupFromM365(groupKey) {
 
   // 2. Get members
   const mr = await fetch(
-    `https://graph.microsoft.com/v1.0/groups/${gid}/members?$select=id,displayName,mail,jobTitle&$top=100`,
+    `https://graph.microsoft.com/v1.0/groups/${gid}/members?$select=id,displayName,mail,userPrincipalName,jobTitle&$top=100`,
     { headers: { Authorization: 'Bearer ' + token } }
   );
   const md = await mr.json();
@@ -900,8 +901,8 @@ async function loadGroupFromM365(groupKey) {
     .map(m => ({
       name: abbrevName(m.displayName),
       fullName: m.displayName,
-      mail: m.mail || '',
-      role: m.jobTitle || groupName,
+      mail: (m.mail || m.userPrincipalName || '').toLowerCase(),
+      role: m.jobTitle || '',
       ini:  initials(m.displayName),
       scribe: true,
     }))
@@ -1152,7 +1153,8 @@ async function populateScribeSelect() {
     opt.textContent = display + (p.role ? ' (' + p.role + ')' : '');
 
     // Match logged-in user by email or display name
-    const isMe = (p.mail && p.mail.toLowerCase() === me) ||
+    const pMail = (p.mail || '').toLowerCase();
+    const isMe = (pMail && (pMail === me || pMail === me.split('@')[0] + '@' + me.split('@')[1])) ||
                  (p.fullName || p.name).toLowerCase() === myName ||
                  abbrevName(p.fullName || p.name).toLowerCase() === myName;
     if (isMe && !defaultSet) {
