@@ -1002,6 +1002,12 @@ function abbrevName(name) {
   if (parts.length < 2) return name;
   return parts[0][0].toUpperCase() + '. ' + parts.slice(1).join(' ');
 }
+// "Akras, Yamin Ahmad" → "Yamin A." (Vorname + erster Buchstabe Nachname)
+function bewohnerDisplay(nn, vn) {
+  if (!nn) return vn || '—';
+  return vn + ' ' + nn[0].toUpperCase() + '.';
+}
+
 // "Markus Peltz" → "Peltz, Markus"
 function lastFirst(name) {
   if (!name) return name;
@@ -1609,7 +1615,7 @@ function buildPreview() {
   const nextH    = document.getElementById('fNextHinweis')?.value || '';
   const pres     = S.participants.filter(p => p.present).map(p => p.name).join(', ') || '—';
   const abw      = S.participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
-  const bewohnerAnwesend = getSelectedBewohner().map(b => b.nn + ', ' + b.vn).join(', ') || null;
+  const bewohnerAnwesend = getSelectedBewohner().map(b => bewohnerDisplay(b.nn, b.vn)).join(', ') || null;
   const approverSel = document.getElementById('fApprover');
   const approver = approverSel?.options[approverSel.selectedIndex]?.text || '—';
 
@@ -1699,12 +1705,24 @@ let _bewohnerListId = null;
 // Default Bewohner für Nordstern
 const BEWOHNER_DEFAULT = {
   nordstern: [
-    { nn: 'Akras',    vn: 'Yamin Ahmad'     },
-    { nn: 'Bordiuh',  vn: 'Volodymyr'       },
-    { nn: 'Diallo',   vn: 'Abdoulaye'       },
-    { nn: 'El Ahmad', vn: 'Mohammed'        },
-    { nn: 'Ishaqi',   vn: 'Ali Reza'        },
-    { nn: 'Mamozai',  vn: 'Mohammad Mozamel'},
+    { nn: 'Akras',    vn: 'Yamin Ahmad'      },
+    { nn: 'Bordiuh',  vn: 'Volodymyr'        },
+    { nn: 'Diallo',   vn: 'Abdoulaye'        },
+    { nn: 'El Ahmad', vn: 'Mohammed'         },
+    { nn: 'Ishaqi',   vn: 'Ali Reza'         },
+    { nn: 'Mamozai',  vn: 'Mohammad Mozamel' },
+  ],
+  suedpol: [
+    { nn: 'Mustermann', vn: 'Max'      },
+    { nn: 'Musterfrau', vn: 'Erika'    },
+  ],
+  safeharbor: [
+    { nn: 'Mustermann', vn: 'Max'      },
+    { nn: 'Musterfrau', vn: 'Erika'    },
+  ],
+  jwg: [
+    { nn: 'Mustermann', vn: 'Max'      },
+    { nn: 'Musterfrau', vn: 'Erika'    },
   ],
 };
 
@@ -1765,9 +1783,26 @@ async function renderBewohnerCard() {
   if (!thema?.bewohner) { card.style.display = 'none'; return; }
   card.style.display = '';
   const einrKey = S.einrichtung || 'nordstern';
-  const einr = (EINRICHTUNGEN_KONFERENZ || EINRICHTUNGEN).find(e => e.key === einrKey);
   const bewohner = await loadBewohner(einrKey);
   renderBewohnerGrid(bewohner);
+  injectBewohnerTOPs(bewohner);
+}
+
+function injectBewohnerTOPs(bewohner) {
+  // Replace or append bewohner-generated TOPs at end of S.tops
+  // Remove any previously injected bewohner-TOPs (marked with _bewohner flag)
+  S.tops = S.tops.filter(t => !t._bewohner);
+  const active = (bewohner || []).filter(b => b.present !== false);
+  active.forEach(b => {
+    S.tops.push({
+      id: ++S.topId,
+      title: bewohnerDisplay(b.nn, b.vn),
+      text: '', type: 'info', owner: '', frist: '',
+      _bewohner: true,
+    });
+  });
+  // Re-render TOPs if already on that page
+  if (document.getElementById('s-tops')?.classList.contains('active')) renderTOPs();
 }
 
 function renderBewohnerGrid(bewohner) {
@@ -1783,8 +1818,9 @@ function renderBewohnerGrid(bewohner) {
       _bewohnerCache[einrKey][i].present = !(_bewohnerCache[einrKey][i].present !== false);
       renderBewohnerGrid(_bewohnerCache[einrKey]);
       updateBewohnerCount(_bewohnerCache[einrKey]);
+      injectBewohnerTOPs(_bewohnerCache[einrKey]);
     };
-    item.innerHTML = `<div class="p-cb"><span class="p-cb-check" style="color:white;">${b.present !== false ? '✓' : ''}</span></div><span class="p-name">${b.nn}, ${b.vn.split(' ')[0]}</span>`;
+    item.innerHTML = `<div class="p-cb"><span class="p-cb-check" style="color:white;">${b.present !== false ? '✓' : ''}</span></div><span class="p-name">${bewohnerDisplay(b.nn, b.vn)}</span>`;
     grid.appendChild(item);
   });
   updateBewohnerCount(bewohner);
@@ -1808,6 +1844,7 @@ function toggleAllBewohner() {
   const allP = list.every(b => b.present !== false);
   list.forEach(b => b.present = !allP);
   renderBewohnerGrid(list);
+  injectBewohnerTOPs(list);
 }
 
 function openBewohnerModal() {
@@ -1825,7 +1862,7 @@ function renderBewohnerListEdit(einrKey) {
   if (!list.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Noch keine Bewohner eingetragen.</div>'; return; }
   el.innerHTML = list.map((b, i) => `
     <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
-      <span style="flex:1;font-size:13px;">${b.nn}, ${b.vn}</span>
+      <span style="flex:1;font-size:13px;">${b.vn} ${b.nn}</span>
       <button class="btn-remove" onclick="removeBewohnerItem('${einrKey}',${i})">Entfernen</button>
     </div>`).join('');
 }
