@@ -1188,7 +1188,19 @@ function goSection(id) {
     else renderParticipants();
     renderBewohnerCard();
   }
-  if (id === 's-tops')      renderTOPs();
+  if (id === 's-tops') {
+    const _thema = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
+    if (_thema?.bewohner) {
+      // Load bewohner first, inject TOPs, then render
+      const _einrKey = S.einrichtung || 'nordstern';
+      loadBewohner(_einrKey).then(bew => {
+        injectBewohnerTOPs(bew);
+        renderTOPs();
+      });
+    } else {
+      renderTOPs();
+    }
+  }
   if (id === 's-freigabe')  populateApproverSelect();
 }
 function goHome() {}
