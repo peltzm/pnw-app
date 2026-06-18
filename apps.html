@@ -129,6 +129,23 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
 
 /* Soon */
 .app-card.soon{opacity:.42;pointer-events:none}
+
+/* Beta banner */
+.app-card.beta{position:relative;overflow:hidden;}
+.app-card.beta::after{
+  content:'BETA';
+  position:absolute;
+  top:10px;right:-20px;
+  width:80px;
+  text-align:center;
+  font-size:8.5px;font-weight:700;letter-spacing:.08em;
+  color:#fff;
+  background:var(--accent);
+  padding:3px 0;
+  transform:rotate(35deg);
+  box-shadow:0 1px 4px rgba(0,0,0,.18);
+  pointer-events:none;
+}
 .soon-pill{
   font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
   color:var(--accent-mid);background:var(--accent-light);
@@ -209,7 +226,7 @@ body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Ar
       <div class="card-desc">Belege erfassen und einreichen</div>
     </a>
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/formulare.html">
+    <a class="app-card beta" href="https://apps.praxisneuewege.de/formulare.html">
       <div class="card-icon">🧭</div>
       <div class="card-name">Formulare</div>
       <div class="card-desc">Klientenformulare digital erfassen und unterzeichnen</div>
