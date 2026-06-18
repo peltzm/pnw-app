@@ -335,48 +335,22 @@
               <div class="tile-label">Supervision</div>
               <div class="tile-sub">Fachliche Begleitung</div>
             </div>
-            <div class="type-tile" onclick="selectThema('team','nordstern',this)">
-              <div class="tile-icon">⭐</div>
-              <div class="tile-label">Nordstern</div>
-              <div class="tile-sub">Stationäres Team</div>
+            <div class="type-tile" onclick="selectThema('team','leitung',this)">
+              <div class="tile-icon">🎯</div>
+              <div class="tile-label">Leitungsteam</div>
+              <div class="tile-sub">TL + Leitung</div>
             </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Teilnehmerkonferenz</div>
-          <div class="type-grid">
-            <div class="type-tile" onclick="selectThema('teilnehmer','hpg',this)">
-              <div class="tile-icon">📋</div>
-              <div class="tile-label">Hilfeplangespräch</div>
-              <div class="tile-sub">Mit Klient / JA</div>
-            </div>
-            <div class="type-tile" onclick="selectThema('teilnehmer','clearing',this)">
-              <div class="tile-icon">🔎</div>
-              <div class="tile-label">Clearing</div>
-              <div class="tile-sub">Situationsanalyse</div>
-            </div>
-            <div class="type-tile" onclick="selectThema('teilnehmer','abschluss',this)">
-              <div class="tile-icon">✅</div>
-              <div class="tile-label">Abschlussgespräch</div>
-              <div class="tile-sub">Hilfeende</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Nordstern</div>
-          <div class="type-grid">
-            <div class="type-tile" onclick="selectThema('nordstern','team',this)">
+            <div class="type-tile" onclick="selectThema('team','stationaer',this)">
               <div class="tile-icon">🏠</div>
-              <div class="tile-label">Teambesprechung</div>
-              <div class="tile-sub">Nordstern Gruppe</div>
+              <div class="tile-label">Stationäres Team</div>
+              <div class="tile-sub">JWG / Einrichtung</div>
             </div>
-            <div class="type-tile" onclick="selectThema('nordstern','übergabe',this)">
-              <div class="tile-icon">🔄</div>
-              <div class="tile-label">Dienstübergabe</div>
-              <div class="tile-sub">Schichtübergabe</div>
-            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Konferenz Stationär</div>
+          <div class="type-grid">
             <div class="type-tile" onclick="selectThema('konferenz','leitung',this)">
               <div class="tile-icon">🏛️</div>
               <div class="tile-label">Leitungskonferenz</div>
@@ -434,6 +408,17 @@
               <label>Protokollführer/in</label>
               <select id="fProtokoll">
                 <option value="">— bitte auswählen —</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-grid full" id="fEinrichtungWrap" style="display:none">
+            <div class="field">
+              <label>Einrichtung</label>
+              <select id="fEinrichtung" onchange="onEinrichtungChange(this.value)">
+                <option value="nordstern">Nordstern</option>
+                <option value="suedpol">Südpol</option>
+                <option value="safeharbor">Safe Harbor</option>
+                <option value="jwg">JWG Stationär</option>
               </select>
             </div>
           </div>
@@ -747,11 +732,18 @@ const CFG = {
 
 // M365-Gruppenname → Protokoll-Typ-Schlüssel
 const GROUP_MAP = {
-  allTeam:    'Ambulante Familienhilfe',   // alle Mitarbeitenden ambulant + NS
-  nordstern:  'Team Nordstern',
+  allTeam:    'Ambulante Familienhilfe',
   leitungNS:  'Leitungskonferenz Nordstern',
-  supervision:'Supervision Ambulant',
+  // leitung and stationaer are built statically (see M365_FALLBACK)
 };
+
+// Einrichtungen für stationäres Team
+const EINRICHTUNGEN = [
+  { key: 'nordstern',   label: 'Nordstern',    group: 'nordstern',   sp: 'Nordstern › Protokolle › Teambesprechung' },
+  { key: 'suedpol',     label: 'Südpol',        group: 'suedpol',     sp: 'Südpol › Protokolle › Teambesprechung' },
+  { key: 'safeharbor',  label: 'Safe Harbor',   group: 'safeharbor',  sp: 'Safe Harbor › Protokolle › Teambesprechung' },
+  { key: 'jwg',         label: 'JWG Stationär', group: 'jwg',         sp: 'JWG › Protokolle › Teambesprechung' },
+];
 
 // SharePoint-Dokumentbibliotheken je Protokolltyp
 const SP_FOLDERS = {
@@ -971,6 +963,25 @@ const M365_FALLBACK = {
     {name:'Tim Berger',             role:'Fachkraft',    ini:'TB', scribe:false, mail:'tim.berger@praxisneuewege.de'},
     {name:'Monika Braun',           role:'Fachkraft',    ini:'MB', scribe:false, mail:'monika.braun@praxisneuewege.de'},
   ],
+  // Leitungsteam: TL Ambulant + COTO
+  leitung: [
+    {name:'Markus Peltz',    role:'COTO',         ini:'MP', scribe:true, mail:'markus.peltz@praxisneuewege.de'},
+    {name:'Jörg Schneider',  role:'TL Ambulant',  ini:'JS', scribe:true, mail:'joerg.schneider@praxisneuewege.de'},
+    {name:'Nadine Grund',    role:'TL Ambulant',  ini:'NG', scribe:true, mail:'nadine.grund@praxisneuewege.de'},
+    {name:'Laura Meier',     role:'TL Nordstern', ini:'LM', scribe:true, mail:'laura.meier@praxisneuewege.de'},
+  ],
+  // Stationäres Team Nordstern (default, überschrieben bei anderer Einrichtung)
+  nordstern: [
+    {name:'Laura Meier',      role:'TL Nordstern', ini:'LM', scribe:true,  mail:'laura.meier@praxisneuewege.de'},
+    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true,  mail:'jessica.herrmann@praxisneuewege.de'},
+    {name:'Kilian Freundl',   role:'Fachkraft NS', ini:'KF', scribe:false, mail:'kilian.freundl@praxisneuewege.de'},
+    {name:'Anna Wolf',        role:'Fachkraft NS', ini:'AW', scribe:false, mail:'anna.wolf@praxisneuewege.de'},
+    {name:'Felix Roth',       role:'Fachkraft NS', ini:'FR', scribe:false, mail:'felix.roth@praxisneuewege.de'},
+  ],
+  // Andere Einrichtungen: Fallback leer (werden aus M365-Gruppen geladen)
+  suedpol:    [],
+  safeharbor: [],
+  jwg:        [],
 };
 
 /* ──────────────────────────────────────
@@ -982,38 +993,12 @@ const TYPES = {
     sp: 'PNW › Intranet › Protokolle › Teammeeting',
     tl: 'Teamleitung Ambulant',
     themen: {
-      grossteam:  { label: 'Großteam',   group: 'allTeam',    tops: ['Rückblick', 'Aktuelle Fälle', 'Organisatorisches', 'Termine', 'Diverses'] },
-      kleinteam:  { label: 'Kleinteam',  group: 'allTeam',    tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
-      supervision:{ label: 'Supervision',group: 'allTeam',    tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
-      nordstern:  { label: 'Nordstern',  group: 'nordstern',  tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
-    },
-  },
-  supervision: {
-    label: 'Supervision', icon: '🔍',
-    sp: 'PNW › Intranet › Protokolle › Supervision',
-    tl: 'Teamleitung Ambulant',
-    themen: {
-      ambulant:  { label: 'Ambulant',  group: 'allTeam',     tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
-      nordstern: { label: 'Nordstern', group: 'nordstern',   tops: ['Falleinbringung', 'Reflexion', 'Handlungsempfehlungen'] },
-    },
-  },
-  teilnehmer: {
-    label: 'Teilnehmerkonferenz', icon: '🧑‍🤝‍🧑',
-    sp: 'PNW › Intranet › Protokolle › Teilnehmerkonferenzen',
-    tl: 'Teamleitung Ambulant',
-    themen: {
-      hpg:      { label: 'Hilfeplangespräch',  group: null, tops: ['Begrüßung', 'Aktueller Stand', 'Zielerreichung', 'Weiteres Vorgehen', 'Nächster Termin'] },
-      clearing: { label: 'Clearing',           group: null, tops: ['Anlass', 'Situationsanalyse', 'Empfehlung', 'Weiteres Vorgehen'] },
-      abschluss:{ label: 'Abschlussgespräch',  group: null, tops: ['Rückblick', 'Zielerreichung', 'Abschluss', 'Empfehlungen'] },
-    },
-  },
-  nordstern: {
-    label: 'Team Nordstern', icon: '⭐',
-    sp: 'Nordstern › Protokolle › Teambesprechung',
-    tl: 'Teamleitung Nordstern',
-    themen: {
-      team:    { label: 'Teambesprechung', group: 'nordstern', tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
-      übergabe:{ label: 'Dienstübergabe',  group: 'nordstern', tops: ['Aktuelles', 'Bewohner/innen', 'Offene Punkte'] },
+      grossteam:  { label: 'Großteam',       group: 'allTeam',    tops: ['Rückblick', 'Aktuelle Fälle', 'Organisatorisches', 'Termine', 'Diverses'] },
+      kleinteam:  { label: 'Kleinteam',      group: 'allTeam',    tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
+      supervision:{ label: 'Supervision',    group: 'allTeam',    tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
+      leitung:    { label: 'Leitungsteam',   group: 'leitung',    tops: ['Rückblick', 'Aktuelle Themen', 'Personalthemen', 'Organisatorisches', 'Diverses'] },
+      stationaer: { label: 'Stationäres Team', group: 'stationaer', einrichtung: true,
+                    tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
     },
   },
   konferenz: {
@@ -1033,6 +1018,7 @@ const TYPES = {
 const S = {
   type: 'team',
   thema: null,
+  einrichtung: null,
   participants: [],
   tops: [],
   topId: 0,
@@ -1093,10 +1079,24 @@ function selectThema(type, themaKey, el) {
   // Update mail/filename
   const d = document.getElementById('fDatum')?.value || new Date().toISOString().slice(0,10);
   const label = cfg.label + ' – ' + thema.label;
+  // Show/hide Einrichtung selector
+  const einrWrap = document.getElementById('fEinrichtungWrap');
+  if (einrWrap) einrWrap.style.display = thema.einrichtung ? '' : 'none';
+  if (thema.einrichtung) {
+    // Set SP path from default Einrichtung (Nordstern)
+    document.getElementById('fEinrichtung').value = 'nordstern';
+    S.einrichtung = 'nordstern';
+    const einr = EINRICHTUNGEN.find(e => e.key === 'nordstern');
+    document.getElementById('spPath').textContent = einr.sp;
+    document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+    document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+  } else {
+    S.einrichtung = null;
+    document.getElementById('spPath').textContent = cfg.sp;
+    document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+    document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+  }
   document.getElementById('fMailBetreff').value = 'Protokoll ' + label + ' vom ' + fmtDate(d);
-  document.getElementById('spPath').textContent = cfg.sp;
-  document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
-  document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
   // Pre-init TOPs and reset participants
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
@@ -1114,18 +1114,22 @@ async function onThemaChange(themaKey) {
 
   // Load from M365 (with fallback)
   let members = [];
+  // Resolve group key: stationaer uses current einrichtung
+  const groupKey = thema.einrichtung ? (S.einrichtung || 'nordstern') : thema.group;
   try {
-    if (thema.group === 'allTeam') {
+    if (groupKey === 'allTeam') {
       members = await loadAllTeam();
-    } else if (thema.group) {
-      members = await loadGroupFromM365(thema.group);
+    } else if (groupKey === 'leitung') {
+      members = M365_FALLBACK.leitung; // static for now
+    } else if (groupKey) {
+      members = await loadGroupFromM365(groupKey);
     }
   } catch(e) {
     console.warn('M365 group load failed, using fallback:', e);
   }
   // Fallback to static if M365 returned nothing
-  if (!members.length && thema.group && M365_FALLBACK[thema.group]) {
-    members = M365_FALLBACK[thema.group];
+  if (!members.length && groupKey && M365_FALLBACK[groupKey]) {
+    members = M365_FALLBACK[groupKey];
   }
 
   S.participants = members.map(p => ({ ...p, present: true }));
@@ -1222,6 +1226,27 @@ function toggleAll() {
 async function reloadM365() {
   if (!S.thema) { showToast('Bitte zuerst Thema/Anlass auswählen.', 'info'); return; }
   delete _groupCache[TYPES[S.type].themen[S.thema].group];
+  await onThemaChange(S.thema);
+}
+
+async function onEinrichtungChange(einrKey) {
+  S.einrichtung = einrKey;
+  const einr = EINRICHTUNGEN.find(e => e.key === einrKey);
+  if (!einr) return;
+  // Update SP path
+  document.getElementById('spPath').textContent = einr.sp;
+  const d = document.getElementById('fDatum')?.value || new Date().toISOString().slice(0,10);
+  const cfg   = TYPES[S.type];
+  const thema = cfg?.themen[S.thema];
+  if (thema) {
+    const label = cfg.label + ' – ' + einr.label;
+    document.getElementById('fMailBetreff').value = 'Protokoll ' + label + ' vom ' + fmtDate(d);
+    document.getElementById('spFile').textContent = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+    document.getElementById('fFileName').value    = 'Protokoll_' + label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_') + '_' + d + '.pdf';
+    document.getElementById('tInfoSP').textContent = einr.sp;
+  }
+  // Reload participants for new Einrichtung
+  delete _groupCache[einrKey];
   await onThemaChange(S.thema);
 }
 
