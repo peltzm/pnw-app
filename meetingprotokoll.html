@@ -466,6 +466,22 @@
           </div>
         </div>
 
+        <!-- Bewohner (nur Wohngruppen Konferenz) -->
+        <div class="card" id="bewohnerCard" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+            <div class="card-title" style="margin:0">Bewohner/innen</div>
+            <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="openBewohnerModal()">✏️ Verwalten</button>
+          </div>
+          <div style="display:flex;align-items:center;margin-bottom:8px;">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text-muted);" onclick="toggleAllBewohner()">
+              <div class="p-cb" id="allBewohnerCb" style="cursor:pointer;background:var(--accent);border-color:var(--accent);"><span class="p-cb-check" style="color:white;">✓</span></div>
+              Alle
+            </label>
+          </div>
+          <div class="p-grid" id="bewohnerGrid"></div>
+          <div class="p-count-bar" id="bewohnerCountBar" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;"></div>
+        </div>
+
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="goSection('s-meta')">← Zurück</button>
           <button class="btn btn-primary" onclick="goSection('s-tops');markDone(3)">Weiter →</button>
@@ -704,6 +720,24 @@
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalApproval')">Abbrechen</button>
       <button class="btn btn-primary" onclick="confirmApproval()">📨 Anfrage senden</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Bewohner verwalten -->
+<div class="modal-bg" id="modalBewohner">
+  <div class="modal" style="max-width:560px;">
+    <h3>Bewohner/innen verwalten</h3>
+    <p id="bewohnerModalSub" style="margin-bottom:1rem;">Einrichtung: <strong id="bewohnerEinrLabel">—</strong></p>
+    <div id="bewohnerListEdit" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;margin-bottom:1rem;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:1rem;">
+      <input type="text" id="newBewohnerNN" placeholder="Nachname" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+      <input type="text" id="newBewohnerVN" placeholder="Vorname" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+      <button class="btn btn-primary" style="padding:7px 14px;" onclick="addBewohner()">+ Hinzufügen</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalBewohner')">Abbrechen</button>
+      <button class="btn btn-success" onclick="saveBewohner()">💾 Speichern</button>
     </div>
   </div>
 </div>
@@ -1056,7 +1090,7 @@ const TYPES = {
     sp: 'Nordstern › Protokolle › Konferenz Stationär',
     tl: 'COTO / Pädagogische Leitung',
     themen: {
-      leitung: { label: 'Wohngruppen Konferenz', group: 'leitungNS', einrichtung: true, tops: ['Belegungsplanung', 'Personal & Dienstplan', 'Finanzen', 'Qualitätssicherung', 'Sonstiges'] },
+      leitung: { label: 'Wohngruppen Konferenz', group: 'leitungNS', einrichtung: true, bewohner: true, tops: ['Belegungsplanung', 'Personal & Dienstplan', 'Finanzen', 'Qualitätssicherung', 'Sonstiges'] },
     },
   },
 
@@ -1146,6 +1180,7 @@ function goSection(id) {
   if (id === 's-teiln') {
     if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
     else renderParticipants();
+    renderBewohnerCard();
   }
   if (id === 's-tops')      renderTOPs();
   if (id === 's-freigabe')  populateApproverSelect();
@@ -1414,6 +1449,7 @@ async function onEinrichtungChange(einrKey) {
   // Reload participants for new Einrichtung
   delete _groupCache[einrKey];
   await onThemaChange(S.thema);
+  renderBewohnerCard();
 }
 
 function addGuest() {
@@ -1573,6 +1609,7 @@ function buildPreview() {
   const nextH    = document.getElementById('fNextHinweis')?.value || '';
   const pres     = S.participants.filter(p => p.present).map(p => p.name).join(', ') || '—';
   const abw      = S.participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
+  const bewohnerAnwesend = getSelectedBewohner().map(b => b.nn + ', ' + b.vn).join(', ') || null;
   const approverSel = document.getElementById('fApprover');
   const approver = approverSel?.options[approverSel.selectedIndex]?.text || '—';
 
@@ -1614,6 +1651,7 @@ function buildPreview() {
       <table class="mt">
         <tr><td>Anwesend</td><td>${pres}</td></tr>
         <tr><td>Abwesend</td><td>${abw}</td></tr>
+        ${bewohnerAnwesend ? `<tr><td>Bewohner/innen</td><td>${bewohnerAnwesend}</td></tr>` : ''}
       </table>
       <div class="sh">Protokoll</div>
       ${topsHtml}
@@ -1649,6 +1687,204 @@ function showToast(msg, type='info') {
   t.className = 'toast show ' + type;
   clearTimeout(_tTimer);
   _tTimer = setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+/* ──────────────────────────────────────
+   BEWOHNER (per Einrichtung, SP-gespeichert)
+────────────────────────────────────── */
+const BEWOHNER_LIST = 'Protokoll_Bewohner';
+let _bewohnerCache  = {};  // einrichtungKey → [{nn, vn, present}]
+let _bewohnerListId = null;
+
+// Default Bewohner für Nordstern
+const BEWOHNER_DEFAULT = {
+  nordstern: [
+    { nn: 'Akras',    vn: 'Yamin Ahmad'     },
+    { nn: 'Bordiuh',  vn: 'Volodymyr'       },
+    { nn: 'Diallo',   vn: 'Abdoulaye'       },
+    { nn: 'El Ahmad', vn: 'Mohammed'        },
+    { nn: 'Ishaqi',   vn: 'Ali Reza'        },
+    { nn: 'Mamozai',  vn: 'Mohammad Mozamel'},
+  ],
+};
+
+async function getBewohnerListId() {
+  if (_bewohnerListId) return _bewohnerListId;
+  const { siteId } = await getSiteAndDrive();
+  const token = await getToken();
+  const r = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/lists?$select=id,displayName,name&$top=200`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
+  const d = await r.json();
+  const found = (d.value || []).find(l => l.displayName === BEWOHNER_LIST || l.name === BEWOHNER_LIST);
+  if (found) { _bewohnerListId = found.id; return found.id; }
+  // Create list
+  const cr = await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${siteId}/lists`,
+    { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: BEWOHNER_LIST, list: { template: 'genericList' } }) }
+  );
+  const cl = await cr.json();
+  _bewohnerListId = cl.id;
+  return cl.id;
+}
+
+async function loadBewohner(einrKey) {
+  if (_bewohnerCache[einrKey]) return _bewohnerCache[einrKey];
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getBewohnerListId();
+    const token  = await getToken();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$filter=fields/Einrichtung eq '${einrKey}'&$top=100`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const d = await r.json();
+    if (d.value && d.value.length) {
+      const items = d.value.map(i => ({
+        id:  i.id,
+        nn:  i.fields?.Nachname  || '',
+        vn:  i.fields?.Vorname   || '',
+        present: true,
+      })).sort((a,b) => a.nn.localeCompare(b.nn, 'de'));
+      _bewohnerCache[einrKey] = items;
+      return items;
+    }
+  } catch(e) { console.warn('Bewohner load failed:', e); }
+  // Fallback to defaults for nordstern, empty for others
+  const defaults = (BEWOHNER_DEFAULT[einrKey] || []).map(b => ({ ...b, present: true }));
+  _bewohnerCache[einrKey] = defaults;
+  return defaults;
+}
+
+async function renderBewohnerCard() {
+  const thema = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
+  const card = document.getElementById('bewohnerCard');
+  if (!card) return;
+  if (!thema?.bewohner) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const einrKey = S.einrichtung || 'nordstern';
+  const einr = (EINRICHTUNGEN_KONFERENZ || EINRICHTUNGEN).find(e => e.key === einrKey);
+  const bewohner = await loadBewohner(einrKey);
+  renderBewohnerGrid(bewohner);
+}
+
+function renderBewohnerGrid(bewohner) {
+  const grid = document.getElementById('bewohnerGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const einrKey = S.einrichtung || 'nordstern';
+  bewohner.forEach((b, i) => {
+    const item = document.createElement('div');
+    item.className = `p-item ${b.present !== false ? 'present' : 'absent'}`;
+    item.title = b.vn;
+    item.onclick = () => {
+      _bewohnerCache[einrKey][i].present = !(_bewohnerCache[einrKey][i].present !== false);
+      renderBewohnerGrid(_bewohnerCache[einrKey]);
+      updateBewohnerCount(_bewohnerCache[einrKey]);
+    };
+    item.innerHTML = `<div class="p-cb"><span class="p-cb-check" style="color:white;">${b.present !== false ? '✓' : ''}</span></div><span class="p-name">${b.nn}, ${b.vn.split(' ')[0]}</span>`;
+    grid.appendChild(item);
+  });
+  updateBewohnerCount(bewohner);
+  // Sync "Alle" checkbox
+  const allPresent = bewohner.every(b => b.present !== false);
+  const cb = document.getElementById('allBewohnerCb');
+  if (cb) { cb.style.background = allPresent ? 'var(--accent)' : 'white'; cb.style.borderColor = allPresent ? 'var(--accent)' : 'var(--border-strong)'; }
+}
+
+function updateBewohnerCount(bewohner) {
+  const bar = document.getElementById('bewohnerCountBar');
+  if (!bar) return;
+  const p = bewohner.filter(b => b.present !== false).length;
+  const a = bewohner.length - p;
+  bar.innerHTML = `<span>${bewohner.length} Bewohner/innen</span><span><span class="p-count-anwesend">${p} anwesend</span>&nbsp;·&nbsp;<span class="p-count-abwesend">${a} abwesend</span></span>`;
+}
+
+function toggleAllBewohner() {
+  const einrKey = S.einrichtung || 'nordstern';
+  const list = _bewohnerCache[einrKey] || [];
+  const allP = list.every(b => b.present !== false);
+  list.forEach(b => b.present = !allP);
+  renderBewohnerGrid(list);
+}
+
+function openBewohnerModal() {
+  const einrKey = S.einrichtung || 'nordstern';
+  const einr = [...(EINRICHTUNGEN_KONFERENZ||[]), ...(EINRICHTUNGEN||[])].find(e => e.key === einrKey);
+  document.getElementById('bewohnerEinrLabel').textContent = einr?.label || einrKey;
+  renderBewohnerListEdit(einrKey);
+  openModal('modalBewohner');
+}
+
+function renderBewohnerListEdit(einrKey) {
+  const list  = _bewohnerCache[einrKey] || [];
+  const el    = document.getElementById('bewohnerListEdit');
+  if (!el) return;
+  if (!list.length) { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Noch keine Bewohner eingetragen.</div>'; return; }
+  el.innerHTML = list.map((b, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span style="flex:1;font-size:13px;">${b.nn}, ${b.vn}</span>
+      <button class="btn-remove" onclick="removeBewohnerItem('${einrKey}',${i})">Entfernen</button>
+    </div>`).join('');
+}
+
+function removeBewohnerItem(einrKey, idx) {
+  if (!_bewohnerCache[einrKey]) return;
+  _bewohnerCache[einrKey].splice(idx, 1);
+  renderBewohnerListEdit(einrKey);
+}
+
+function addBewohner() {
+  const nn = document.getElementById('newBewohnerNN').value.trim();
+  const vn = document.getElementById('newBewohnerVN').value.trim();
+  if (!nn || !vn) { showToast('Bitte Nachname und Vorname eingeben.', 'info'); return; }
+  const einrKey = S.einrichtung || 'nordstern';
+  if (!_bewohnerCache[einrKey]) _bewohnerCache[einrKey] = [];
+  _bewohnerCache[einrKey].push({ nn, vn, present: true });
+  _bewohnerCache[einrKey].sort((a, b) => a.nn.localeCompare(b.nn, 'de'));
+  document.getElementById('newBewohnerNN').value = '';
+  document.getElementById('newBewohnerVN').value = '';
+  renderBewohnerListEdit(einrKey);
+}
+
+async function saveBewohner() {
+  const einrKey = S.einrichtung || 'nordstern';
+  const list = _bewohnerCache[einrKey] || [];
+  closeModal('modalBewohner');
+  showToast('Bewohner werden gespeichert…', 'info');
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getBewohnerListId();
+    const token  = await getToken();
+    // Delete existing items for this Einrichtung
+    const existing = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$filter=fields/Einrichtung eq '${einrKey}'&$top=100`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const ed = await existing.json();
+    await Promise.all((ed.value || []).map(item =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${item.id}`,
+        { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } })
+    ));
+    // Insert updated list
+    await Promise.all(list.map(b =>
+      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`,
+        { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { Title: b.nn + ', ' + b.vn, Nachname: b.nn, Vorname: b.vn, Einrichtung: einrKey } }) })
+    ));
+    showToast('Bewohner gespeichert ✓', 'success');
+    renderBewohnerGrid(list);
+  } catch(e) {
+    showToast('Fehler beim Speichern: ' + e.message, 'info');
+  }
+}
+
+// Collect Bewohner for protocol output
+function getSelectedBewohner() {
+  const einrKey = S.einrichtung || 'nordstern';
+  return (_bewohnerCache[einrKey] || []).filter(b => b.present !== false);
 }
 
 /* ──────────────────────────────────────
