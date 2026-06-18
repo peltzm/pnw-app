@@ -1191,12 +1191,17 @@ function goSection(id) {
   if (id === 's-tops') {
     const _thema = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
     if (_thema?.bewohner) {
-      // Load bewohner first, inject TOPs, then render
       const _einrKey = S.einrichtung || 'nordstern';
-      loadBewohner(_einrKey).then(bew => {
-        injectBewohnerTOPs(bew);
+      // Use cache if available (synchronous), otherwise load
+      if (_bewohnerCache[_einrKey]) {
+        injectBewohnerTOPs(_bewohnerCache[_einrKey]);
         renderTOPs();
-      });
+      } else {
+        loadBewohner(_einrKey).then(bew => {
+          injectBewohnerTOPs(bew);
+          renderTOPs();
+        });
+      }
     } else {
       renderTOPs();
     }
@@ -1257,6 +1262,11 @@ function selectThema(type, themaKey, el) {
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
   _currentDraftId = null; // fresh draft
+  // Pre-load bewohner TOPs if applicable (async, cached)
+  if (thema.bewohner) {
+    const _ek = S.einrichtung || 'nordstern';
+    loadBewohner(_ek).then(bew => injectBewohnerTOPs(bew));
+  }
   // Navigate directly to step 2
   markDone(1);
   goSection('s-meta');
@@ -1365,8 +1375,16 @@ async function onThemaChange(themaKey) {
   // Populate Protokollführer — always from Ambulante Familienhilfe, default = logged-in user
   await populateScribeSelect();
 
-  // TOPs
+  // TOPs — base tops first, then bewohner appended async
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
+  // Immediately inject bewohner TOPs if this thema requires it (uses cache if available)
+  if (thema.bewohner) {
+    loadBewohner(groupKey).then(bew => {
+      injectBewohnerTOPs(bew);
+      // Re-render TOPs if already on that page
+      if (document.getElementById('s-tops')?.classList.contains('active')) renderTOPs();
+    });
+  }
 
   // Info card
   document.getElementById('tInfoTeiln').textContent = S.participants.length + ' Personen (' + thema.label + ')';
