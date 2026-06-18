@@ -645,7 +645,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
       <div class="done-card">
         <div class="done-icon">✅</div>
         <div style="font-size:20px;font-weight:700;margin-bottom:8px;">Alle Formulare unterzeichnet</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:1.5rem;">Der Klient hat alle Formulare gelesen und unterschrieben. PDFs können jetzt generiert und versendet werden.</div>
+
         <!-- Hidden SP path for PDF metadata only -->
         <input type="hidden" id="done_sp_hidden">
         <div class="card" style="text-align:left;margin-bottom:1.25rem;">
@@ -952,9 +952,10 @@ function startKlientMode(){
     div.innerHTML=buildStep(fid,i);
     reader.appendChild(div);
   });
-  klSteps.forEach((fid,i)=>setupPad(fid,i));
   document.getElementById('fkScreen').classList.remove('active');
   document.getElementById('klientScreen').classList.add('active');
+  // Init only the first (active) step pad AFTER screen is visible so BoundingClientRect is correct
+  requestAnimationFrame(()=>setupPad(klSteps[0]));
   updateNav();
 }
 
@@ -1083,11 +1084,6 @@ function buildStep(fid,idx){
     </div>
 
     <div class="klient-inputs">
-      <div class="klient-inputs-title">Hilfeempfänger (von Fachkraft vorausgefüllt)</div>
-      <div class="kf"><label>Name *</label><input type="text" id="ki_k_name" value="${d.name}" readonly></div>
-      <div class="kf"><label>Geburtsdatum</label><input type="text" id="ki_k_geb" value="${d.geb||''}" readonly></div>
-      <div class="kf"><label>Adresse</label><input type="text" id="ki_k_adr" value="${((d.str||'')+(d.plz?' · ':'')+((d.plz||'')+' '+(d.ort||'')).trim()).trim()}" readonly></div>
-      <div class="kf"><label>Telefonnummer</label><input type="text" id="ki_k_tel" value="${d.tel||''}" readonly></div>
       <div class="kf"><label>Krankenkasse</label><input type="text" id="ki_k_kk" placeholder="z.B. AOK Bayern"></div>
     </div>
 
