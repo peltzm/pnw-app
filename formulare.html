@@ -832,8 +832,9 @@ function doLogout(){
 }
 function abortKlientMode(){
   if(!confirm('Wirklich abbrechen?\n\nAlle bisherigen Unterschriften gehen verloren.')){return;}
-  // Clear all signatures
+  // Clear signatures AND pad registry so they re-initialize next time
   Object.keys(sigs).forEach(k=>delete sigs[k]);
+  Object.keys(pads).forEach(k=>delete pads[k]);
   // Return to FK mode, Übergabe panel
   document.getElementById('klientScreen').classList.remove('active');
   document.getElementById('fkScreen').classList.add('active');
@@ -941,6 +942,7 @@ function startKlientMode(){
   klSteps=[...selForms];
   klCurrent=0;
   Object.keys(sigs).forEach(k=>delete sigs[k]);
+  Object.keys(pads).forEach(k=>delete pads[k]); // Reset pads so _initPad runs fresh
   const reader=document.getElementById('formReader');
   reader.innerHTML='';
   klSteps.forEach((fid,i)=>{
