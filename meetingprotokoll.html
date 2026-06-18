@@ -1661,7 +1661,7 @@ async function executePublish() {
 
     const present = S.participants.filter(p => p.present).map(p => p.name).join(', ');
     const absent  = S.participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
-    const topsText = S.tops.map((t,i) => `${i+1}. ${t.title}\n${t.text || '(kein Text)'}${t.owner ? '\nVerantwortlich: ' + t.owner : ''}${t.frist ? ' | Frist: ' + fmtDate(t.frist) : ''}`).join('\n\n');
+    const topsText = S.tops.map((t,i) => `${i+1}. ${t.title}\n${t.text || '(kein Text)'}${t.frist ? ' | Frist: ' + fmtDate(t.frist) : ''}`).join('\n\n');
 
     const docContent = `MEETINGPROTOKOLL\n${'='.repeat(60)}\nTyp: ${label}\nDatum: ${fmtDate(datum)}\nZeit: ${von} – ${bis} Uhr\nOrt: ${ort}\nProtokollführung: ${proto}\n${'='.repeat(60)}\n\nTEILNEHMER\nAnwesend: ${present}\nAbwesend: ${absent}\n\nINHALT\n${topsText}\n\n${'='.repeat(60)}\nErstellt: ${new Date().toLocaleString('de-DE')}\n`;
 
@@ -1737,7 +1737,6 @@ function buildPreview() {
         ${t.type==='aufgabe'  ?'<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:1px 6px;border-radius:3px;margin-left:6px;">AUFGABE</span>':''}
       </h4>
       <p>${t.text || '<em style="color:#bbb">Kein Text eingetragen</em>'}</p>
-      ${t.owner?`<p style="font-size:11px;color:#6b6860;margin-top:4px;">👤 ${t.owner}${t.frist?' · Frist: '+fmtDate(t.frist):''}</p>`:''}
       ${t.type==='beschluss'?`<div class="beschluss-box">📌 Beschlossen</div>`:''}
     </div>`).join('') : '<p style="color:#bbb;font-size:12px;">Keine TOPs erfasst</p>';
 
