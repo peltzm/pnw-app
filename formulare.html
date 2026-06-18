@@ -970,7 +970,7 @@ function buildStep(fid,idx){
     html+=`
     <div class="form-text-box">
       <h2>Erklärung zur Entbindung der Schweigepflicht</h2>
-      <div class="subtitle">Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt</div>
+      <div class="subtitle">Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt</div>
       <p>Ich/Wir gebe/n hiermit das Einverständnis, dass <strong>${vertr}</strong> gemäß ihres/seines Auftrages nach <strong>${d.sgb||'§ SGB VIII'}</strong> als Mitarbeiter/in der Praxis NeueWege sowie Mitarbeiter/innen im Rahmen der Vertretung</p>
       <p>alle zur gezielten Unterstützung und Förderung unserer Familie erforderlichen Daten mündlicher und schriftlicher Art von der unten genannten Institution einholen dürfen. Ich/Wir entbinde/n schweigepflichtige Personen, die am Hilfeverfahren beteiligt sind, von ihrer Schweigepflicht und stimme/n der Verwendung von deren Auskünften zu.</p>
       <p>Ich/Wir erkläre/n mich/uns damit einverstanden, dass die Fachkraft von Praxis NeueWege berechtigt ist, alle erforderlichen Auskünfte (Gutachten, Untersuchungsergebnisse, Diagnosen, Therapiepläne etc.) mündlicher und schriftlicher Art an die unten genannte Institution zu übermitteln.</p>
@@ -992,9 +992,9 @@ function buildStep(fid,idx){
     html+=`
     <div class="form-text-box">
       <h2>Datenschutzerklärung</h2>
-      <div class="subtitle">Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt · zwischen PNW und Familie <strong>${d.nn||'___'}</strong></div>
+      <div class="subtitle">Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt · zwischen PNW und Familie <strong>${d.nn||'___'}</strong></div>
       <h3>1. Verantwortliche Stelle (Art. 13 DSGVO)</h3>
-      <p>Praxis NeueWege – Sonja Peltz, Hausmehring 19½, 85405 Nandlstadt<br>Tel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de</p>
+      <p>Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt<br>Tel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de</p>
       <h3>2. Zweck &amp; Rechtsgrundlage der Datenverarbeitung</h3>
       <p>Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach <strong>${d.sgb||'§§ 27 ff. SGB VIII'}</strong> durch das Jugendamt <strong>${d.ja||'___'}</strong>. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).</p>
       <h3>3. Erhobene Datenkategorien</h3>
@@ -1050,7 +1050,7 @@ function buildStep(fid,idx){
     html+=`
     <div class="form-text-box">
       <h2>Vollmacht über Angelegenheiten der elterlichen Sorge</h2>
-      <div class="subtitle">Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt</div>
+      <div class="subtitle">Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt</div>
       ${vGebers.length>1?'<p>Wir, die unterzeichnenden Sorgeberechtigten,</p>':'<p>Ich, die/der unterzeichnende Sorgeberechtigte,</p>'}
       ${vGeberHtml}
       <p>${vGebers.length>1?'sind Mitinhaber/innen':'bin Mitinhaber/in'} der elterlichen Sorge für das Kind</p>
@@ -1450,7 +1450,7 @@ async function mockSend(){
   const famEmail=document.getElementById('done_fam_email').value;
   const fkFirst=M365_USER.displayName.split(' ')[0]||M365_USER.displayName;
   const fkBody=`<p>Hallo ${fkFirst},</p><p>anbei die von ${kd.name||'dem Klienten'} heute digital unterzeichneten Formulare:</p><ul>${filesHtml}</ul><p><strong>Bitte lege die beigefügten PDFs manuell in Kilanka ab.</strong></p><hr style="border:none;border-top:1px solid #e2dfd8;margin:16px 0;"><p style="font-size:12px;color:#6b6860;">Praxis NeueWege · Formulare-App<br>Erstellt am ${kd.datum||new Date().toLocaleDateString('de-DE')} · ${kd.sgb||''} · ${kd.ja||''}</p>`;
-  const famBody=`<p>Guten Tag,</p><p>anbei Ihre heute unterzeichneten Dokumente ${kd.sgb?'zur Hilfe zur Erziehung ('+kd.sgb+')':''} als PDF zur persönlichen Ablage.</p><ul>${filesHtml}</ul><p>Bei Fragen wenden Sie sich bitte an Ihre Fachkraft <strong>${M365_USER.displayName}</strong>.</p><hr style="border:none;border-top:1px solid #e2dfd8;margin:16px 0;"><p style="font-size:12px;color:#6b6860;">Praxis NeueWege – Sonja Peltz<br>Hausmehring 19½ · 85405 Nandlstadt<br>Tel.: +49 173 2875 212 · info@praxisneuewege.de</p>`;
+  const famBody=`<p>Guten Tag,</p><p>anbei Ihre heute unterzeichneten Dokumente ${kd.sgb?'zur Hilfe zur Erziehung ('+kd.sgb+')':''} als PDF zur persönlichen Ablage.</p><ul>${filesHtml}</ul><p>Bei Fragen wenden Sie sich bitte an Ihre Fachkraft <strong>${M365_USER.displayName}</strong>.</p><hr style="border:none;border-top:1px solid #e2dfd8;margin:16px 0;"><p style="font-size:12px;color:#6b6860;">Praxis NeueWege<br>Hausmehring 19½ · 85405 Nandlstadt<br>Tel.: +49 173 2875 212 · info@praxisneuewege.de</p>`;
   try{
     await sendMailWithAttachments(fkEmail,`Unterzeichnete Formulare – ${kd.name||'Klient'}`,fkBody,pdfAttachments);
     if(famEmail) await sendMailWithAttachments(famEmail,'Ihre Formulare – Praxis NeueWege',famBody,pdfAttachments);
@@ -1493,7 +1493,7 @@ function generatePDF(formId){
     const code=CODES[fid]||'XX';
     doc.setDrawColor(...BRD);doc.setLineWidth(0.25);doc.line(ML,PH-14,PW-MR,PH-14);
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
-    doc.text('Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt',ML,PH-10);
+    doc.text('Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt',ML,PH-10);
     doc.text(`Formular ${code}-31 · 0${p} / 0${tot} · Stand: 06/2026`,PW-MR,PH-10,{align:'right'});
   }
   function eyebrow(t){doc.setFont(F,'normal');doc.setFontSize(7.5);doc.setTextColor(...ACC);doc.text(t,ML,y);y+=9;}
@@ -1590,7 +1590,7 @@ function generatePDF(formId){
     const inst=(document.getElementById('s_inst')||{}).value||'—';
     const vertr=(document.getElementById('s_vertr')||{}).value||kd.fk||'';
     eyebrow('EINWILLIGUNG & ENTBINDUNG');mainTitle('Schweigepflichtsentbindung');
-    subtitle(`Zwischen der Praxis NeueWege – Sonja Peltz, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kd.nn||''}.`);
+    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kd.nn||''}.`);
     hRule();highlightSection('BETROFFENE INSTITUTION',inst);
     section('Inhalt der Entbindung',`Ich/Wir gebe/n ${vertr} gemäß ${kd.sgb||'§ SGB VIII'} als Mitarbeiter/in der Praxis NeueWege die Erlaubnis, alle zur gezielten Unterstützung erforderlichen Daten (Gutachten, Diagnosen, Therapiepläne etc.) von der oben genannten Institution einzuholen und zu übermitteln.`);
     section('Hinweis Schweigepflicht','Ich/Wir wurde/n über die gesetzliche Schweigepflicht gem. § 203 StGB und § 65 SGB VIII umfassend unterrichtet. Die Daten dürfen anderen Stellen nur unter den Voraussetzungen der §§ 61–68 SGB VIII sowie §§ 67–85a SGB X übermittelt werden.');
@@ -1602,9 +1602,9 @@ function generatePDF(formId){
 
   else if(formId==='datenschutz'){
     eyebrow('INFORMATION & EINWILLIGUNG');mainTitle('Datenschutzerklärung');
-    subtitle(`Zwischen der Praxis NeueWege – Sonja Peltz, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kd.nn||''}.`);
+    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kd.nn||''}.`);
     hRule();
-    highlightSection('1 · VERANTWORTLICHE STELLE (ART. 13 DSGVO)','Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt\nTel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de');
+    highlightSection('1 · VERANTWORTLICHE STELLE (ART. 13 DSGVO)','Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt\nTel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de');
     section('Zweck und Rechtsgrundlage der Datenverarbeitung',`Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach ${kd.sgb||'SGB VIII'} durch das ${kd.ja||''}. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).`);
     section('Erhobene Datenkategorien','Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne).');
     section('Speicherdauer','Ihre Daten werden bis zum Ablauf der gesetzlichen Aufbewahrungsfristen (§ 63 SGB VIII; i.d.R. 10 Jahre nach Hilfeende) gespeichert.');
@@ -1635,7 +1635,7 @@ function generatePDF(formId){
     const vFk1=(document.getElementById('v_fk1')||{}).value||kd.fk||'';
     const vFk2=(document.getElementById('v_fk2_sel')||{}).value||'';
     eyebrow('VOLLMACHT & BEVOLLMÄCHTIGUNG');mainTitle('Vollmacht Sorgerecht');
-    subtitle('Praxis NeueWege – Sonja Peltz, Hausmehring 19½, 85405 Nandlstadt.');
+    subtitle('Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt.');
     hRule();capsSection('VOLLMACHTGEBER/IN');
     vGebers.forEach((vg,i)=>fieldRow2(`Name${vGebers.length>1?' '+(i+1):''}`,vg.name||'','Wohnort',vg.ort||''));
     y+=2;capsSection('BEVOLLMÄCHTIGTE FACHKRÄFTE');
