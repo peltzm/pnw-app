@@ -1593,10 +1593,7 @@ function renderTOPs() {
         <button class="btn-remove" onclick="S.tops.splice(${i},1);renderTOPs()">Entfernen</button>
       </div>
       <textarea placeholder="Protokolltext …" style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;min-height:70px;background:white;outline:none;" onchange="S.tops[${i}].text=this.value">${top.text}</textarea>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <input type="text" placeholder="Verantwortlich" value="${top.owner}" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:12px;font-family:inherit;" onchange="S.tops[${i}].owner=this.value">
-        <input type="date" value="${top.frist}" style="width:140px;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:12px;font-family:inherit;" onchange="S.tops[${i}].frist=this.value">
-      </div>
+      
       ${top.type==='beschluss' ? '<div class="beschluss-row">📌 Als Beschluss gekennzeichnet</div>' : ''}
       ${top.type==='aufgabe'   ? '<div class="beschluss-row" style="border-left-color:var(--success);color:var(--success);background:var(--success-bg);">✅ Als Aufgabe gekennzeichnet</div>' : ''}`;
     list.appendChild(el);
