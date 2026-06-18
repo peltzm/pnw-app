@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meetingprotokoll — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
+    --text: #1a1916; --text-muted: #6b6860; --text-hint: #a09e99;
+    --accent: #7b3f1e; --accent-light: #f5ede7; --accent-mid: #c47848;
+    --success: #2d6a4f; --success-bg: #eaf4ee;
+    --error: #9b1c1c; --error-bg: #fef2f2;
+    --info-bg: #eff6ff; --info: #1d4ed8;
+    --warn-bg: #fffbeb; --warn: #92400e;
+    --radius: 8px; --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+  /* ── HEADER ── */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .header-brand { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+  .user-badge { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+  .user-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-mid); }
+
+  /* ── LAYOUT ── */
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 56px); }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 1.5rem 0; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto; }
+  .main { padding: 2rem; max-width: 800px; }
+
+  /* ── SIDEBAR NAV ── */
+  .nav-section { padding: 0 1rem 0.5rem; font-size: 10px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 1rem; }
+  .nav-section:first-child { margin-top: 0; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 1rem; font-size: 13px; color: var(--text-muted); cursor: pointer; border-left: 2px solid transparent; transition: all 0.12s; min-height: 44px; }
+  .nav-item:hover { background: var(--bg); color: var(--text); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-light); font-weight: 500; }
+  .nav-num { width: 20px; height: 20px; border-radius: 50%; background: var(--border); font-size: 10px; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .nav-item.active .nav-num { background: var(--accent); color: white; }
+  .nav-item.done .nav-num { background: var(--success); color: white; }
+  .nav-divider { height: 1px; background: var(--border); margin: 0.75rem 1rem; }
+
+  /* ── SECTIONS ── */
+  .section { display: none; }
+  .section.active { display: block; }
+  .section-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .section-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; }
+
+  /* ── CARDS ── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
+
+  /* ── FORM ── */
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .field-grid.full { grid-template-columns: 1fr; }
+  .field-grid.triple { grid-template-columns: 1fr 1fr 1fr; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .field input, .field select, .field textarea {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 8px 10px; font-size: 13px; color: var(--text);
+    background: white; outline: none; font-family: inherit;
+    transition: border-color 0.12s; width: 100%;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent-mid); }
+  .field textarea { min-height: 80px; resize: vertical; }
+  select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+  input[type="date"] { -webkit-appearance: none; appearance: none; }
+
+  /* ── MEETING TYPE TILES ── */
+  .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .type-tile {
+    border: 2px solid var(--border); border-radius: var(--radius-lg);
+    padding: 1rem 0.75rem; cursor: pointer; text-align: center;
+    background: var(--surface); transition: all 0.12s;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .type-tile:hover { border-color: var(--accent-mid); background: var(--accent-light); }
+  .type-tile.selected { border-color: var(--accent); background: var(--accent-light); }
+  .tile-icon { font-size: 24px; }
+  .tile-label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .tile-sub { font-size: 11px; color: var(--text-muted); }
+
+  /* ── PARTICIPANT GRID ── */
+  .p-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .p-item {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 8px; border-radius: var(--radius);
+    background: var(--bg); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.1s; min-width: 0;
+  }
+  .p-item:hover { border-color: var(--accent-mid); background: var(--accent-light); }
+  .p-item.present { border-color: #a7d7b8; background: var(--success-bg); }
+  .p-item.absent  { border-color: var(--border); background: var(--bg); opacity: .5; }
+  .p-cb { width: 15px; height: 15px; border: 1.5px solid var(--border-strong); border-radius: 3px; background: white; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
+  .p-item.present .p-cb { background: var(--accent); border-color: var(--accent); }
+  .p-cb-check { color: white; font-size: 9px; font-weight: 700; line-height: 1; }
+  .p-name { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .p-item.absent .p-name { color: var(--text-muted); }
+  .p-count-bar { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+  .p-count-anwesend { color: var(--success); font-weight: 600; }
+  .p-count-abwesend { color: var(--error); font-weight: 600; }
+  @media (max-width: 1024px) { .p-grid { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 640px)  { .p-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ── TOPs ── */
+  .top-block { border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 0.75rem; background: var(--bg); }
+  .top-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .top-num { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: white; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .top-title-in { flex: 1; border: none; background: transparent; font-size: 13px; font-weight: 600; color: var(--text); outline: none; font-family: inherit; }
+  .top-title-in:focus { border-bottom: 1px solid var(--accent-mid); }
+  .top-type-sel { font-size: 11px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 4px; background: white; color: var(--text-muted); font-family: inherit; }
+  .btn-remove { font-size: 11px; color: var(--error); background: none; border: 1px solid currentColor; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+  .beschluss-row { margin-top: 8px; padding: 6px 10px; background: var(--warn-bg); border-left: 3px solid var(--accent-mid); border-radius: 0 4px 4px 0; font-size: 12px; color: var(--warn); font-weight: 500; }
+
+  /* ── APPROVAL ── */
+  .approval-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; }
+  .status-indicator { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .s-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .s-dot.draft   { background: var(--text-hint); }
+  .s-dot.pending { background: #d97706; }
+  .s-dot.done    { background: var(--success); }
+
+  /* ── STATUS PILLS ── */
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .pill-draft    { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+  .pill-pending  { background: var(--warn-bg); color: var(--warn); border: 1px solid #fde68a; }
+  .pill-approved { background: var(--success-bg); color: var(--success); border: 1px solid #a7d7b8; }
+  .pill-sent     { background: var(--info-bg); color: var(--info); border: 1px solid #bfdbfe; }
+
+  /* ── BUTTONS ── */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.12s; border: none; font-family: inherit; }
+  .btn-primary   { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #6a3418; }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-secondary { background: white; color: var(--text); border: 1px solid var(--border-strong); }
+  .btn-secondary:hover { background: var(--bg); }
+  .btn-success   { background: var(--success); color: white; }
+  .btn-success:hover { background: #245a41; }
+  .btn-add { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent-mid); background: none; border: 1px dashed var(--accent-mid); border-radius: var(--radius); padding: 6px 14px; cursor: pointer; font-family: inherit; }
+  .btn-add:hover { background: var(--accent-light); }
+  .btn-row { display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem; gap: 10px; }
+  .btn-row-right { display: flex; gap: 8px; }
+
+  /* ── ALERTS ── */
+  .alert { border-radius: var(--radius); padding: 10px 14px; font-size: 12px; line-height: 1.5; margin-bottom: 1rem; }
+  .alert-info    { background: var(--info-bg);    color: var(--info);    border: 1px solid #bfdbfe; }
+  .alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #a7d7b0; }
+  .alert-error   { background: var(--error-bg);   color: var(--error);   border: 1px solid #fecaca; }
+  .alert-warn    { background: var(--warn-bg);     color: var(--warn);    border: 1px solid #fde68a; }
+
+  /* ── LOGIN ── */
+  .login-screen { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 56px); }
+  .login-card { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem; max-width: 400px; width: 100%; text-align: center; }
+  .login-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .login-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.6; }
+
+  /* ── TABLE ── */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+  .data-table td { padding: 11px 12px; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--bg); }
+
+  /* ── MODAL ── */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 200; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .modal-bg.show { opacity: 1; pointer-events: all; }
+  .modal { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; max-width: 500px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,.15); transform: translateY(8px); transition: transform .2s; }
+  .modal-bg.show .modal { transform: translateY(0); }
+  .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .modal p  { font-size: 13px; color: var(--text-muted); margin-bottom: 1.25rem; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.25rem; }
+
+  /* ── PROGRESS BAR ── */
+  .progress-bar { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent-mid); border-radius: 2px; transition: width .3s; }
+
+  /* ── TOAST ── */
+  .toast { position: fixed; top: 68px; right: 1.5rem; background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 300; transform: translateX(120%); transition: transform .25s; }
+  .toast.show { transform: translateX(0); }
+  .toast.success { border-color: #a7d7b8; }
+  .toast.info    { border-color: #bfdbfe; }
+
+  /* ── INFO ROW ── */
+  .info-card { background: var(--accent-light); border: 1px solid #e8c4a8; border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  .info-row  { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid #e8c4a8; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: var(--text-muted); }
+  .info-val   { color: var(--accent); font-weight: 500; }
+
+  /* ── DOCUMENT PREVIEW ── */
+  .doc-preview { background: white; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem 3rem; font-size: 12px; line-height: 1.7; color: #1a1916; }
+  .doc-preview .dh { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 3px solid var(--accent); }
+  .doc-preview .dh-left h2 { font-size: 18px; font-weight: 700; color: var(--accent); }
+  .doc-preview .dh-left p  { font-size: 11px; color: var(--text-muted); }
+  .doc-preview .dh-right   { text-align: right; font-size: 11px; color: var(--text-muted); }
+  .doc-preview .sh { background: var(--accent); color: white; padding: 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; border-radius: 3px; margin: 1rem 0 0.6rem; display: inline-block; }
+  .doc-preview table.mt { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; }
+  .doc-preview table.mt td { padding: 4px 8px; border: 1px solid var(--border); font-size: 12px; }
+  .doc-preview table.mt td:first-child { background: var(--bg); font-weight: 500; width: 150px; }
+  .doc-preview .top-row { margin-bottom: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); }
+  .doc-preview .top-row h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .doc-preview .top-row p  { font-size: 12px; color: var(--text-muted); }
+  .doc-preview .beschluss-box { background: var(--warn-bg); border-left: 3px solid var(--accent-mid); padding: 5px 10px; font-size: 11px; color: var(--warn); margin-top: 6px; }
+  .doc-preview .sig { display: flex; gap: 3rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .doc-preview .sig-block { flex: 1; }
+  .doc-preview .sig-line  { border-bottom: 1px solid #aaa; height: 30px; margin-bottom: 4px; }
+  .doc-preview .sig-label { font-size: 10px; color: var(--text-muted); }
+
+  /* ── LOADER ── */
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent-mid); border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1024px) {
+    .layout { grid-template-columns: 56px 1fr; }
+    .nav-item span:not(.nav-num) { display: none; }
+    .nav-section { display: none; }
+    .nav-item { justify-content: center; padding: 10px; }
+    .nav-item.active { border-left: none; border-bottom: 2px solid var(--accent); }
+    .type-grid { grid-template-columns: 1fr 1fr; }
+    .main { padding: 1.25rem; }
+  }
+  @media (max-width: 640px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .field-grid, .field-grid.triple { grid-template-columns: 1fr; }
+    .type-grid { grid-template-columns: 1fr 1fr; }
+  }
+  input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-brand" onclick="goHome()">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:30px;width:auto;" alt="Praxis NeueWege">
+    <span style="font-size:14px;font-weight:600;color:var(--text);margin-left:4px;">Meetingprotokoll</span>
+  </div>
+  <div class="user-badge" id="userBadge" style="display:none">
+    <div class="user-dot"></div>
+    <span id="userName"></span>
+    <button onclick="logout()" style="margin-left:8px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted);">Abmelden</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"><span id="toastIcon">✓</span> <span id="toastMsg"></span></div>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:56px;width:auto;margin-bottom:1.5rem;" alt="Praxis NeueWege">
+    <div class="login-title">Meetingprotokoll</div>
+    <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Protokolle zu erstellen und in SharePoint abzulegen.</div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="login()">
+      <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <div class="alert alert-info" style="margin-top:1rem;text-align:left;">
+      <strong>Prototyp</strong> — MSAL-Integration und SharePoint-Anbindung werden in der Produktionsversion aktiviert. Jetzt mit Demo-Daten arbeiten.
+    </div>
+    <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:10px;" onclick="demoLogin()">Demo-Modus starten</button>
+    <div id="loginError" class="alert alert-error" style="display:none;margin-top:1rem;text-align:left;"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen" style="display:none">
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="nav-section">Neues Protokoll</div>
+      <div class="nav-item done" id="n1" onclick="goSection('s-typ')">
+        <span class="nav-num" id="nn1">1</span>
+        <span>Meeting-Typ</span>
+      </div>
+      <div class="nav-item" id="n2" onclick="goSection('s-meta')">
+        <span class="nav-num" id="nn2">2</span>
+        <span>Details</span>
+      </div>
+      <div class="nav-item" id="n3" onclick="goSection('s-teiln')">
+        <span class="nav-num" id="nn3">3</span>
+        <span>Teilnehmer</span>
+      </div>
+      <div class="nav-item" id="n4" onclick="goSection('s-tops')">
+        <span class="nav-num" id="nn4">4</span>
+        <span>Inhalte</span>
+      </div>
+      <div class="nav-item" id="n5" onclick="goSection('s-freigabe')">
+        <span class="nav-num" id="nn5">5</span>
+        <span>Freigabe</span>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-section">Verwaltung</div>
+      <div class="nav-item" id="n-offen" onclick="goSection('s-offen')">
+        <span style="font-size:14px;">⏳</span>
+        <span>Zur Freigabe</span>
+        <span id="pendingBadge" style="margin-left:auto;background:var(--accent);color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;display:none;">2</span>
+      </div>
+      <div class="nav-item" id="n-archiv" onclick="goSection('s-archiv')">
+        <span style="font-size:14px;">📁</span>
+        <span>Archiv</span>
+      </div>
+      <div class="nav-item" id="n-vorschau" onclick="goSection('s-vorschau');buildPreview()">
+        <span style="font-size:14px;">📄</span>
+        <span>Vorschau</span>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main">
+
+      <!-- ══ S1: MEETING-TYP ══ -->
+      <div class="section active" id="s-typ">
+        <div class="section-title">Meeting-Typ</div>
+        <div class="section-sub">Wählen Sie den Typ — Teilnehmerliste und SharePoint-Ablage werden automatisch gesetzt.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:20%"></div></div>
+
+        <div class="card">
+          <div class="card-title">Typ auswählen</div>
+          <div class="type-grid" id="typeGrid">
+            <div class="type-tile selected" onclick="selectType('team',this)">
+              <div class="tile-icon">👥</div>
+              <div class="tile-label">Teammeeting</div>
+              <div class="tile-sub">Ambulantes Team</div>
+            </div>
+            <div class="type-tile" onclick="selectType('supervision',this)">
+              <div class="tile-icon">🔍</div>
+              <div class="tile-label">Supervision</div>
+              <div class="tile-sub">Fachliche Begleitung</div>
+            </div>
+            <div class="type-tile" onclick="selectType('teilnehmer',this)">
+              <div class="tile-icon">🧑‍🤝‍🧑</div>
+              <div class="tile-label">Teilnehmerkonferenz</div>
+              <div class="tile-sub">Mit Klient / Jugendamt</div>
+            </div>
+            <div class="type-tile" onclick="selectType('nordstern',this)">
+              <div class="tile-icon">⭐</div>
+              <div class="tile-label">Team Nordstern</div>
+              <div class="tile-sub">Stationäre Gruppe</div>
+            </div>
+            <div class="type-tile" onclick="selectType('konferenz',this)">
+              <div class="tile-icon">🏛️</div>
+              <div class="tile-label">Konferenz Stationär</div>
+              <div class="tile-sub">Leitungsebene</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-card" id="typeInfo">
+          <div class="info-row"><span class="info-label">Typ</span><span class="info-val" id="tInfoTyp">Teammeeting</span></div>
+          <div class="info-row"><span class="info-label">Standardteilnehmer</span><span class="info-val" id="tInfoTeiln">7 Personen</span></div>
+          <div class="info-row"><span class="info-label">SharePoint-Ablage</span><span class="info-val" id="tInfoSP">PNW › Protokolle › Teammeeting</span></div>
+          <div class="info-row"><span class="info-label">Freigabe durch</span><span class="info-val" id="tInfoTL">Teamleitung Ambulant</span></div>
+        </div>
+
+        <div class="btn-row">
+          <div></div>
+          <button class="btn btn-primary" onclick="goSection('s-meta');markDone(1)">Weiter →</button>
+        </div>
+      </div>
+
+      <!-- ══ S2: METADATEN ══ -->
+      <div class="section" id="s-meta">
+        <div class="section-title">Meeting-Details</div>
+        <div class="section-sub">Datum, Ort und Protokollführung eintragen.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:40%"></div></div>
+
+        <div class="card">
+          <div class="card-title">Rahmendaten</div>
+          <div class="field-grid triple">
+            <div class="field">
+              <label>Datum</label>
+              <input type="date" id="fDatum">
+            </div>
+            <div class="field">
+              <label>Von</label>
+              <input type="time" id="fZeitVon" value="09:00">
+            </div>
+            <div class="field">
+              <label>Bis</label>
+              <input type="time" id="fZeitBis" value="10:00">
+            </div>
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label>Ort / Raum</label>
+              <input type="text" id="fOrt" placeholder="z. B. Büro Pfaffenhofen, Online (Teams)">
+            </div>
+            <div class="field">
+              <label>Protokollführer/in</label>
+              <select id="fProtokoll">
+                <option value="">— bitte auswählen —</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Thema / Anlass</label>
+              <select id="fThema" onchange="onThemaChange(this.value)">
+                <option value="">— bitte auswählen —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="goSection('s-typ')">← Zurück</button>
+          <button class="btn btn-primary" onclick="goSection('s-teiln');markDone(2)">Weiter →</button>
+        </div>
+      </div>
+
+      <!-- ══ S3: TEILNEHMER ══ -->
+      <div class="section" id="s-teiln">
+        <div class="section-title">Teilnehmer</div>
+        <div class="section-sub" id="teilnSub">Aus M365-Gruppe geladen · Anwesenheit mit Klick eintragen</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:60%"></div></div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+            <div class="card-title" style="margin:0">Eingeladene Personen</div>
+            <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="reloadM365()">
+              <span id="m365Spin"></span> Aus M365 laden
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text-muted);" onclick="toggleAll()">
+              <div class="p-cb" id="allCb" style="cursor:pointer;"><span class="p-cb-check" id="allCbCheck">✓</span></div>
+              Alle
+            </label>
+          </div>
+          <div class="p-grid" id="participantGrid"></div>
+
+          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+            <button class="btn-add" onclick="addGuest()">+ Externen Gast hinzufügen</button>
+            <div id="guestArea" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="goSection('s-meta')">← Zurück</button>
+          <button class="btn btn-primary" onclick="goSection('s-tops');markDone(3)">Weiter →</button>
+        </div>
+      </div>
+
+      <!-- ══ S4: TOPs / INHALTE ══ -->
+      <div class="section" id="s-tops">
+        <div class="section-title">Tagesordnung & Inhalte</div>
+        <div class="section-sub">Protokolltext, Beschlüsse und Aufgaben je Tagesordnungspunkt.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:80%"></div></div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+            <div class="card-title" style="margin:0">Tagesordnungspunkte</div>
+            <button class="btn-add" onclick="addTOP()">+ TOP hinzufügen</button>
+          </div>
+          <div id="topsList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Nächster Termin</div>
+          <div class="field-grid">
+            <div class="field">
+              <label>Datum</label>
+              <input type="date" id="fNextDatum">
+            </div>
+            <div class="field">
+              <label>Uhrzeit</label>
+              <input type="time" id="fNextZeit" value="09:00">
+            </div>
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Hinweis <span style="font-weight:400;color:var(--text-hint)">(optional)</span></label>
+              <input type="text" id="fNextHinweis" placeholder="z. B. Fallbesprechungen vorbereiten …">
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <div class="btn-row-right">
+            <button class="btn btn-secondary" onclick="goSection('s-teiln')">← Zurück</button>
+            <button class="btn btn-secondary" onclick="saveDraft()">💾 Entwurf</button>
+          </div>
+          <button class="btn btn-primary" onclick="goSection('s-freigabe');markDone(4)">Zur Freigabe →</button>
+        </div>
+      </div>
+
+      <!-- ══ S5: FREIGABE ══ -->
+      <div class="section" id="s-freigabe">
+        <div class="section-title">Freigabe & Versand</div>
+        <div class="section-sub">Teamleitung auswählen · Nach Freigabe automatischer Versand und SharePoint-Ablage.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+
+        <div class="card">
+          <div class="card-title">Freigabe durch Teamleitung</div>
+          <div class="approval-card">
+            <div class="field-grid full">
+              <div class="field">
+                <label>Zuständige Teamleitung</label>
+                <select id="fApprover">
+                  <option value="">— bitte auswählen —</option>
+                  <option value="mp">Markus Peltz (COTO)</option>
+                  <option value="js">Jörg Schneider (TL Ambulant)</option>
+                  <option value="ng">Nadine Grund (TL Ambulant)</option>
+                  <option value="lm">Laura Meier (TL Nordstern)</option>
+                  <option value="jh">Jessica Herrmann (TL Nordstern)</option>
+                  <option value="kf">Kilian Freundl (TL Nordstern)</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
+              <div class="status-indicator">
+                <div class="s-dot draft" id="sDot"></div>
+                <span id="sText" style="font-size:13px;color:var(--text-muted);">Wartet auf Freigabe-Anfrage</span>
+              </div>
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;" onclick="requestApproval()" id="btnReqApproval">
+                📨 Anfrage senden
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Mailversand nach Freigabe</div>
+          <div class="alert alert-info" style="margin-bottom:1rem;">
+            Nach Freigabe erhalten alle eingeladenen Teilnehmer automatisch eine E-Mail mit dem Link zur SharePoint-Ablage.
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Betreff</label>
+              <input type="text" id="fMailBetreff">
+            </div>
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Anmerkung <span style="font-weight:400;color:var(--text-hint)">(optional)</span></label>
+              <textarea id="fMailNote" placeholder="Optionale Nachricht an die Empfänger …" style="min-height:60px;"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">SharePoint-Ablage</div>
+          <div class="info-card" style="margin-bottom:1rem;">
+            <div class="info-row"><span class="info-label">Bibliothek</span><span class="info-val" id="spPath">—</span></div>
+            <div class="info-row"><span class="info-label">Dateiname</span><span class="info-val" id="spFile">—</span></div>
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Dateiname anpassen</label>
+              <input type="text" id="fFileName">
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <div class="btn-row-right">
+            <button class="btn btn-secondary" onclick="goSection('s-tops')">← Zurück</button>
+            <button class="btn btn-secondary" onclick="goSection('s-vorschau');buildPreview()">👁️ Vorschau</button>
+          </div>
+          <button class="btn btn-success" onclick="confirmPublish()">🚀 Freigeben & Versenden</button>
+        </div>
+      </div>
+
+      <!-- ══ OFFEN ══ -->
+      <div class="section" id="s-offen">
+        <div class="section-title">Zur Freigabe</div>
+        <div class="section-sub">Protokolle, die auf Ihre Genehmigung warten.</div>
+
+        <div class="card">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Datum</th><th>Typ</th><th>Erstellt von</th><th>Status</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="offenBody">
+              <tr>
+                <td>12.06.2025</td>
+                <td>👥 Teammeeting</td>
+                <td>Nadine Grund</td>
+                <td><span class="pill pill-pending">⏳ Ausstehend</span></td>
+                <td style="display:flex;gap:6px;">
+                  <button class="btn btn-success" style="padding:5px 12px;font-size:12px;" onclick="approveRow(this)">✓ Freigeben</button>
+                  <button class="btn-remove" onclick="rejectRow(this)">✗ Ablehnen</button>
+                </td>
+              </tr>
+              <tr>
+                <td>10.06.2025</td>
+                <td>⭐ Team Nordstern</td>
+                <td>Jessica Herrmann</td>
+                <td><span class="pill pill-pending">⏳ Ausstehend</span></td>
+                <td style="display:flex;gap:6px;">
+                  <button class="btn btn-success" style="padding:5px 12px;font-size:12px;" onclick="approveRow(this)">✓ Freigeben</button>
+                  <button class="btn-remove" onclick="rejectRow(this)">✗ Ablehnen</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ ARCHIV ══ -->
+      <div class="section" id="s-archiv">
+        <div class="section-title">Protokoll-Archiv</div>
+        <div class="section-sub">Alle freigegebenen und versendeten Protokolle.</div>
+
+        <div class="card">
+          <div style="display:flex;gap:10px;margin-bottom:1rem;">
+            <input type="text" placeholder="🔍 Suchen …" style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;outline:none;flex:1;font-family:inherit;">
+            <select style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;color:var(--text);background:white;font-family:inherit;min-width:160px;">
+              <option>Alle Typen</option>
+              <option>Teammeeting</option>
+              <option>Supervision</option>
+              <option>Team Nordstern</option>
+              <option>Konferenz Stationär</option>
+              <option>Teilnehmerkonferenz</option>
+            </select>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr><th>Datum</th><th>Typ</th><th>Thema</th><th>Teiln.</th><th>Freigabe</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>05.06.2025</td><td>👥 Teammeeting</td><td>Wochenbesprechung KW 23</td><td>8</td><td>M. Peltz</td>
+                <td><span class="pill pill-sent">✉ Versendet</span></td>
+                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
+              </tr>
+              <tr>
+                <td>28.05.2025</td><td>⭐ Team Nordstern</td><td>Fallreflexion Gruppe</td><td>5</td><td>L. Meier</td>
+                <td><span class="pill pill-sent">✉ Versendet</span></td>
+                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
+              </tr>
+              <tr>
+                <td>20.05.2025</td><td>🏛️ Konferenz Stationär</td><td>Belegungsplanung Juni</td><td>3</td><td>M. Peltz</td>
+                <td><span class="pill pill-sent">✉ Versendet</span></td>
+                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
+              </tr>
+              <tr>
+                <td>14.05.2025</td><td>🔍 Supervision</td><td>Fallsupervision Ambulant</td><td>6</td><td>J. Schneider</td>
+                <td><span class="pill pill-approved">✓ Freigegeben</span></td>
+                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
+              </tr>
+              <tr>
+                <td>07.05.2025</td><td>🧑‍🤝‍🧑 Teilnehmerkonferenz</td><td>Hilfeplangespräch</td><td>4</td><td>N. Grund</td>
+                <td><span class="pill pill-sent">✉ Versendet</span></td>
+                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ VORSCHAU ══ -->
+      <div class="section" id="s-vorschau">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
+          <div>
+            <div class="section-title">Dokument-Vorschau</div>
+            <div class="section-sub">So sieht das finale PDF-Protokoll aus</div>
+          </div>
+          <button class="btn btn-secondary" onclick="window.print()">🖨️ Drucken / PDF</button>
+        </div>
+        <div id="previewContainer"></div>
+      </div>
+
+    </div><!-- end main -->
+  </div><!-- end layout -->
+</div><!-- end appScreen -->
+
+<!-- MODAL: Freigabe anfordern -->
+<div class="modal-bg" id="modalApproval">
+  <div class="modal">
+    <h3>Freigabe anfordern</h3>
+    <p>Eine Benachrichtigung wird an <strong id="mApproverName">—</strong> gesendet. Die Teamleitung kann das Protokoll prüfen und freigeben oder zurückgeben.</p>
+    <div class="field">
+      <label>Nachricht (optional)</label>
+      <textarea placeholder="Bitte um Prüfung und Freigabe …" style="min-height:65px;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:inherit;width:100%;resize:vertical;"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalApproval')">Abbrechen</button>
+      <button class="btn btn-primary" onclick="confirmApproval()">📨 Anfrage senden</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Veröffentlichen -->
+<div class="modal-bg" id="modalPublish">
+  <div class="modal">
+    <h3>Protokoll freigeben & versenden</h3>
+    <p>Das Protokoll wird in SharePoint abgelegt und an <strong id="mRecipCount">—</strong> Teilnehmer per E-Mail versendet. Dieser Vorgang kann nicht rückgängig gemacht werden.</p>
+    <div class="alert alert-warn">
+      <strong>SharePoint-Pfad:</strong> <span id="mSpPath">—</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modalPublish')">Abbrechen</button>
+      <button class="btn btn-success" onclick="executePublish()">🚀 Jetzt veröffentlichen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ──────────────────────────────────────
+   PEOPLE REGISTRY (simuliert M365-Gruppen)
+────────────────────────────────────── */
+const M365_GROUPS = {
+  allTeam: [
+    {name:'Markus Peltz',    role:'COTO',          ini:'MP', scribe:true},
+    {name:'Jörg Schneider',  role:'TL Ambulant',   ini:'JS', scribe:true},
+    {name:'Nadine Grund',    role:'TL Ambulant',   ini:'NG', scribe:true},
+    {name:'Laura Meier',     role:'TL Nordstern',  ini:'LM', scribe:true},
+    {name:'Sarah Kuhn',      role:'Fachkraft',     ini:'SK', scribe:false},
+    {name:'Tim Berger',      role:'Fachkraft',     ini:'TB', scribe:false},
+    {name:'Monika Braun',    role:'Fachkraft',     ini:'MB', scribe:false},
+    {name:'Felix Roth',      role:'Fachkraft NS',  ini:'FR', scribe:false},
+    {name:'Anna Wolf',       role:'Fachkraft NS',  ini:'AW', scribe:false},
+    {name:'Kilian Freundl',  role:'Fachkraft NS',  ini:'KF', scribe:false},
+    {name:'Jessica Herrmann',role:'TL Nordstern',  ini:'JH', scribe:true},
+  ],
+  nordstern: [
+    {name:'Laura Meier',      role:'TL Nordstern', ini:'LM', scribe:true},
+    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true},
+    {name:'Kilian Freundl',   role:'Fachkraft NS', ini:'KF', scribe:false},
+    {name:'Anna Wolf',        role:'Fachkraft NS', ini:'AW', scribe:false},
+    {name:'Felix Roth',       role:'Fachkraft NS', ini:'FR', scribe:false},
+  ],
+  leitungNS: [
+    {name:'Markus Peltz', role:'COTO',                  ini:'MP', scribe:true},
+    {name:'Sonja Peltz',  role:'Pädagogische Leiterin', ini:'SP', scribe:true},
+    {name:'Laura Meier',  role:'TL Nordstern',          ini:'LM', scribe:true},
+  ],
+  supervision: [
+    {name:'Supervisor/in (extern)', role:'Supervision',  ini:'SV', scribe:false},
+    {name:'Jörg Schneider',         role:'TL Ambulant',  ini:'JS', scribe:true},
+    {name:'Nadine Grund',           role:'TL Ambulant',  ini:'NG', scribe:true},
+    {name:'Sarah Kuhn',             role:'Fachkraft',    ini:'SK', scribe:false},
+    {name:'Tim Berger',             role:'Fachkraft',    ini:'TB', scribe:false},
+    {name:'Monika Braun',           role:'Fachkraft',    ini:'MB', scribe:false},
+  ],
+};
+
+/* ──────────────────────────────────────
+   CONFIG
+────────────────────────────────────── */
+const TYPES = {
+  team: {
+    label: 'Teammeeting', icon: '👥',
+    sp: 'PNW › Intranet › Protokolle › Teammeeting',
+    tl: 'Teamleitung Ambulant',
+    // thema → { label, group, tops }
+    themen: {
+      grossteam:  { label: 'Großteam',  group: 'allTeam',    tops: ['Rückblick', 'Aktuelle Fälle', 'Organisatorisches', 'Termine', 'Diverses'] },
+      kleinteam:  { label: 'Kleinteam', group: 'allTeam',    tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
+      supervision:{ label: 'Supervision',group: 'supervision', tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
+      nordstern:  { label: 'Nordstern', group: 'nordstern',  tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
+    },
+  },
+  supervision: {
+    label: 'Supervision', icon: '🔍',
+    sp: 'PNW › Intranet › Protokolle › Supervision',
+    tl: 'Teamleitung Ambulant',
+    themen: {
+      ambulant: { label: 'Ambulant', group: 'supervision', tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
+      nordstern:{ label: 'Nordstern', group: 'nordstern', tops: ['Falleinbringung', 'Reflexion', 'Handlungsempfehlungen'] },
+    },
+  },
+  teilnehmer: {
+    label: 'Teilnehmerkonferenz', icon: '🧑‍🤝‍🧑',
+    sp: 'PNW › Intranet › Protokolle › Teilnehmerkonferenzen',
+    tl: 'Teamleitung Ambulant',
+    themen: {
+      hpg:      { label: 'Hilfeplangespräch',   group: null, tops: ['Begrüßung', 'Aktueller Stand', 'Zielerreichung', 'Weiteres Vorgehen', 'Nächster Termin'] },
+      clearing: { label: 'Clearing',            group: null, tops: ['Anlass', 'Situationsanalyse', 'Empfehlung', 'Weiteres Vorgehen'] },
+      abschluss:{ label: 'Abschlussgespräch',   group: null, tops: ['Rückblick', 'Zielerreichung', 'Abschluss', 'Empfehlungen'] },
+    },
+  },
+  nordstern: {
+    label: 'Team Nordstern', icon: '⭐',
+    sp: 'Nordstern › Protokolle › Teambesprechung',
+    tl: 'Teamleitung Nordstern',
+    themen: {
+      team:     { label: 'Teambesprechung',     group: 'nordstern',  tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
+      übergabe: { label: 'Dienstübergabe',       group: 'nordstern',  tops: ['Aktuelles', 'Bewohner/innen', 'Offene Punkte'] },
+    },
+  },
+  konferenz: {
+    label: 'Konferenz Stationär', icon: '🏛️',
+    sp: 'Nordstern › Protokolle › Konferenz Stationär',
+    tl: 'COTO / Pädagogische Leitung',
+    themen: {
+      leitung: { label: 'Leitungskonferenz', group: 'leitungNS', tops: ['Belegungsplanung', 'Personal & Dienstplan', 'Finanzen', 'Qualitätssicherung', 'Sonstiges'] },
+      baustein:{ label: 'Baustein / QM',     group: 'leitungNS', tops: ['Thema', 'Umsetzungsstand', 'Maßnahmen', 'Nächste Schritte'] },
+    },
+  },
+};
+
+/* ──────────────────────────────────────
+   STATE
+────────────────────────────────────── */
+const S = {
+  type: 'team',
+  thema: null,
+  participants: [],
+  tops: [],
+  topId: 0,
+};
+
+/* ──────────────────────────────────────
+   AUTH (Demo)
+────────────────────────────────────── */
+function login() {
+  document.getElementById('loginError').style.display = 'block';
+  document.getElementById('loginError').textContent = 'MSAL-Konfiguration in der Produktionsversion. Bitte Demo-Modus verwenden.';
+}
+function demoLogin() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userName').textContent = 'Markus Peltz';
+  document.getElementById('pendingBadge').style.display = 'inline-block';
+  // init with team type selected
+  selectType('team', document.querySelector('.type-tile.selected'));
+  document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
+  // auto-select Großteam for demo
+  setTimeout(() => {
+    const themaSel = document.getElementById('fThema');
+    if (themaSel) { themaSel.value = 'grossteam'; onThemaChange('grossteam'); }
+  }, 100);
+}
+function logout() {
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('userBadge').style.display = 'none';
+}
+function goHome() { if(document.getElementById('appScreen').style.display==='block') goSection('s-typ'); }
+
+/* ──────────────────────────────────────
+   NAVIGATION
+────────────────────────────────────── */
+const sectionNav = {
+  's-typ':       'n1',
+  's-meta':      'n2',
+  's-teiln':     'n3',
+  's-tops':      'n4',
+  's-freigabe':  'n5',
+  's-offen':     'n-offen',
+  's-archiv':    'n-archiv',
+  's-vorschau':  'n-vorschau',
+};
+function goSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const nid = sectionNav[id];
+  if (nid) document.getElementById(nid).classList.add('active');
+}
+function markDone(n) {
+  const el = document.getElementById('nn'+n);
+  if (el) { el.textContent = '✓'; document.getElementById('n'+n).classList.add('done'); }
+}
+
+/* ──────────────────────────────────────
+   MEETING TYPE
+────────────────────────────────────── */
+function selectType(type, el) {
+  document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('selected'));
+  el.classList.add('selected');
+  S.type = type;
+  S.thema = null;
+  const cfg = TYPES[type];
+
+  // Populate Thema dropdown
+  const themaSel = document.getElementById('fThema');
+  if (themaSel) {
+    themaSel.innerHTML = '<option value="">— bitte auswählen —</option>';
+    Object.entries(cfg.themen).forEach(([key, t]) => {
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = t.label;
+      themaSel.appendChild(opt);
+    });
+  }
+
+  // info card
+  document.getElementById('tInfoTyp').textContent = cfg.label;
+  document.getElementById('tInfoTeiln').textContent = '— (nach Thema-Auswahl)';
+  document.getElementById('tInfoSP').textContent = cfg.sp;
+  document.getElementById('tInfoTL').textContent = cfg.tl;
+
+  // reset
+  S.participants = [];
+  S.tops = [];
+}
+
+function onThemaChange(themaKey) {
+  if (!themaKey) return;
+  S.thema = themaKey;
+  const cfg   = TYPES[S.type];
+  const thema = cfg.themen[themaKey];
+
+  // Load participants from M365 group
+  const group = thema.group ? M365_GROUPS[thema.group] : [];
+  S.participants = group.map(p => ({...p, present: true}));
+
+  // Populate Protokollführer select from people with scribe:true
+  const scribes = group.filter(p => p.scribe);
+  const protSel = document.getElementById('fProtokoll');
+  if (protSel) {
+    protSel.innerHTML = '<option value="">— bitte auswählen —</option>';
+    scribes.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name; opt.textContent = `${p.name} (${p.role})`;
+      protSel.appendChild(opt);
+    });
+  }
+
+  // TOPs
+  S.tops = thema.tops.map(t => ({id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: ''}));
+
+  // info card update
+  document.getElementById('tInfoTeiln').textContent = S.participants.length + ' Personen (' + thema.label + ')';
+
+  // preset mail & filename
+  const d = document.getElementById('fDatum').value || new Date().toISOString().slice(0,10);
+  const label = cfg.label + ' – ' + thema.label;
+  document.getElementById('fMailBetreff').value = `Protokoll ${label} vom ${fmtDate(d)}`;
+  document.getElementById('spPath').textContent = cfg.sp;
+  document.getElementById('spFile').textContent = `Protokoll_${label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${d}.pdf`;
+  document.getElementById('fFileName').value = `Protokoll_${label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${d}.pdf`;
+
+  showToast(`${S.participants.length} Teilnehmer aus M365 geladen (${thema.label})`, 'success');
+}
+
+/* ──────────────────────────────────────
+   PARTICIPANTS
+────────────────────────────────────── */
+function renderParticipants() {
+  const g = document.getElementById('participantGrid');
+  g.innerHTML = '';
+  if (!S.participants.length) {
+    g.insertAdjacentHTML('afterend', '');
+    g.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;">Bitte zuerst ein Thema auswählen — Teilnehmer werden dann aus M365 geladen.</div>';
+    updateAllCb();
+    updateCountBar();
+    return;
+  }
+  S.participants.forEach((p, i) => {
+    const item = document.createElement('div');
+    item.className = `p-item ${p.present ? 'present' : 'absent'}`;
+    item.title = p.role;
+    item.onclick = () => togglePresence(i);
+    item.innerHTML = `
+      <div class="p-cb"><span class="p-cb-check">${p.present ? '✓' : ''}</span></div>
+      <span class="p-name">${p.name}</span>`;
+    g.appendChild(item);
+  });
+  updateAllCb();
+  updateCountBar();
+}
+
+function updateCountBar() {
+  const present = S.participants.filter(p=>p.present).length;
+  const absent  = S.participants.length - present;
+  let bar = document.getElementById('pCountBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'pCountBar';
+    bar.className = 'p-count-bar';
+    document.getElementById('participantGrid').after(bar);
+  }
+  bar.innerHTML = `
+    <span>${S.participants.length} Personen eingeladen</span>
+    <span><span class="p-count-anwesend">${present} anwesend</span> &nbsp;·&nbsp; <span class="p-count-abwesend">${absent} abwesend</span></span>`;
+  document.getElementById('teilnSub').textContent =
+    `${present} anwesend · ${absent} abwesend · Aus M365 geladen`;
+}
+
+function updateAllCb() {
+  const allPresent = S.participants.length > 0 && S.participants.every(p => p.present);
+  const allCb    = document.getElementById('allCb');
+  const allCheck = document.getElementById('allCbCheck');
+  if (allCb) {
+    allCb.style.background   = allPresent ? 'var(--accent)' : 'white';
+    allCb.style.borderColor  = allPresent ? 'var(--accent)' : 'var(--border-strong)';
+  }
+  if (allCheck) { allCheck.textContent = allPresent ? '✓' : ''; }
+}
+
+function togglePresence(i) {
+  S.participants[i].present = !S.participants[i].present;
+  renderParticipants();
+}
+
+function toggleAll() {
+  const allPresent = S.participants.every(p => p.present);
+  S.participants.forEach(p => p.present = !allPresent);
+  renderParticipants();
+}
+
+function reloadM365() {
+  if (!S.thema) { showToast('Bitte zuerst Thema/Anlass auswählen.', 'info'); return; }
+  const btn = document.querySelector('[onclick="reloadM365()"]');
+  document.getElementById('m365Spin').innerHTML = '<span class="spin"></span> ';
+  btn.disabled = true;
+  setTimeout(() => {
+    document.getElementById('m365Spin').innerHTML = '';
+    btn.disabled = false;
+    const thema = TYPES[S.type].themen[S.thema];
+    const group = thema.group ? M365_GROUPS[thema.group] : [];
+    S.participants = group.map(p => ({...p, present: true}));
+    renderParticipants();
+    showToast(`${S.participants.length} Teilnehmer aus M365 geladen`, 'success');
+  }, 900);
+}
+function addGuest() {
+  const area = document.getElementById('guestArea');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" placeholder="Name" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+    <input type="text" placeholder="Organisation / Rolle" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+    <button class="btn-remove" onclick="this.parentElement.remove()">✕</button>`;
+  area.appendChild(row);
+}
+
+/* ──────────────────────────────────────
+   TOPs
+────────────────────────────────────── */
+function renderTOPs() {
+  const list = document.getElementById('topsList');
+  list.innerHTML = '';
+  S.tops.forEach((top, i) => {
+    const el = document.createElement('div');
+    el.className = 'top-block';
+    el.innerHTML = `
+      <div class="top-header">
+        <div class="top-num">${i+1}</div>
+        <input class="top-title-in" value="${top.title}" placeholder="Tagesordnungspunkt …" onchange="S.tops[${i}].title=this.value">
+        <select class="top-type-sel" onchange="S.tops[${i}].type=this.value;renderTOPs()">
+          <option value="info"      ${top.type==='info'      ?'selected':''}>ℹ Info</option>
+          <option value="beschluss" ${top.type==='beschluss' ?'selected':''}>📌 Beschluss</option>
+          <option value="aufgabe"   ${top.type==='aufgabe'   ?'selected':''}>✅ Aufgabe</option>
+        </select>
+        <button class="btn-remove" onclick="S.tops.splice(${i},1);renderTOPs()">Entfernen</button>
+      </div>
+      <textarea placeholder="Protokolltext …" style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;min-height:70px;background:white;outline:none;" onchange="S.tops[${i}].text=this.value">${top.text}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input type="text" placeholder="Verantwortlich" value="${top.owner}" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:12px;font-family:inherit;" onchange="S.tops[${i}].owner=this.value">
+        <input type="date" value="${top.frist}" style="width:140px;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:12px;font-family:inherit;" onchange="S.tops[${i}].frist=this.value">
+      </div>
+      ${top.type==='beschluss' ? '<div class="beschluss-row">📌 Als Beschluss gekennzeichnet</div>' : ''}
+      ${top.type==='aufgabe'   ? '<div class="beschluss-row" style="border-left-color:var(--success);color:var(--success);background:var(--success-bg);">✅ Als Aufgabe gekennzeichnet</div>' : ''}
+    `;
+    list.appendChild(el);
+  });
+}
+function addTOP() {
+  S.tops.push({id:++S.topId, title:'Neuer Punkt', text:'', type:'info', owner:'', frist:''});
+  renderTOPs();
+}
+
+/* ──────────────────────────────────────
+   APPROVAL
+────────────────────────────────────── */
+function requestApproval() {
+  const sel = document.getElementById('fApprover');
+  if (!sel.value) { showToast('Bitte zuerst eine Teamleitung auswählen.', 'info'); return; }
+  document.getElementById('mApproverName').textContent = sel.options[sel.selectedIndex].text;
+  openModal('modalApproval');
+}
+function confirmApproval() {
+  closeModal('modalApproval');
+  document.getElementById('sDot').className = 's-dot pending';
+  document.getElementById('sText').textContent = 'Freigabe-Anfrage gesendet · Wartet auf Bestätigung';
+  document.getElementById('sText').style.color = 'var(--warn)';
+  document.getElementById('btnReqApproval').textContent = '↩ Anfrage zurückziehen';
+  document.getElementById('btnReqApproval').onclick = resetApproval;
+  showToast('Freigabe-Anfrage gesendet', 'success');
+}
+function resetApproval() {
+  document.getElementById('sDot').className = 's-dot draft';
+  document.getElementById('sText').textContent = 'Wartet auf Freigabe-Anfrage';
+  document.getElementById('sText').style.color = 'var(--text-muted)';
+  document.getElementById('btnReqApproval').textContent = '📨 Anfrage senden';
+  document.getElementById('btnReqApproval').onclick = requestApproval;
+}
+function confirmPublish() {
+  const cfg = TYPES[S.type];
+  document.getElementById('mRecipCount').textContent = S.participants.length;
+  document.getElementById('mSpPath').textContent = cfg.sp;
+  openModal('modalPublish');
+}
+function executePublish() {
+  closeModal('modalPublish');
+  showToast('Protokoll veröffentlicht · Mail wird versendet …', 'success');
+  setTimeout(() => showToast('✉ Mail an ' + S.participants.length + ' Empfänger gesendet', 'success'), 2000);
+  setTimeout(() => goSection('s-archiv'), 2500);
+}
+function approveRow(btn) {
+  btn.closest('tr').querySelector('.pill').outerHTML = '<span class="pill pill-approved">✓ Freigegeben</span>';
+  btn.parentElement.innerHTML = '<span style="color:var(--success);font-size:12px;">✓ Freigegeben</span>';
+  showToast('Protokoll freigegeben', 'success');
+}
+function rejectRow(btn) {
+  btn.closest('tr').querySelector('.pill').outerHTML = '<span class="pill pill-draft">↩ Zurückgegeben</span>';
+  btn.parentElement.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">Zurückgegeben</span>';
+  showToast('Protokoll zurückgegeben · Ersteller wird benachrichtigt', 'info');
+}
+
+/* ──────────────────────────────────────
+   PREVIEW
+────────────────────────────────────── */
+function buildPreview() {
+  const cfg    = TYPES[S.type];
+  const thema  = S.thema ? cfg.themen[S.thema] : null;
+  const datum  = fmtDate(document.getElementById('fDatum')?.value || '');
+  const von    = document.getElementById('fZeitVon')?.value || '';
+  const bis    = document.getElementById('fZeitBis')?.value || '';
+  const ort    = document.getElementById('fOrt')?.value || '—';
+  const protSel = document.getElementById('fProtokoll');
+  const proto  = protSel?.value || '—';
+  const themaLabel = document.getElementById('fThema')?.options[document.getElementById('fThema')?.selectedIndex]?.text || '';
+  const next   = fmtDate(document.getElementById('fNextDatum')?.value || '');
+  const nextZ  = document.getElementById('fNextZeit')?.value || '';
+  const nextH  = document.getElementById('fNextHinweis')?.value || '';
+  const pres   = S.participants.filter(p=>p.present).map(p=>p.name).join(', ') || '—';
+  const abw    = S.participants.filter(p=>!p.present).map(p=>p.name).join(', ') || 'keine';
+  const approverSel = document.getElementById('fApprover');
+  const approver = approverSel?.options[approverSel.selectedIndex]?.text || '—';
+
+  const topsHtml = S.tops.length ? S.tops.map((t,i) => `
+    <div class="top-row">
+      <h4>${i+1}. ${t.title}
+        ${t.type==='beschluss' ? '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fffbeb;padding:1px 6px;border-radius:3px;margin-left:6px;">BESCHLUSS</span>' : ''}
+        ${t.type==='aufgabe'   ? '<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:1px 6px;border-radius:3px;margin-left:6px;">AUFGABE</span>' : ''}
+      </h4>
+      <p>${t.text || '<em style="color:#bbb">Kein Text eingetragen</em>'}</p>
+      ${t.owner ? `<p style="font-size:11px;color:#6b6860;margin-top:4px;">👤 ${t.owner}${t.frist ? ' · Frist: '+fmtDate(t.frist) : ''}</p>` : ''}
+      ${t.type==='beschluss' ? `<div class="beschluss-box">📌 Beschlossen</div>` : ''}
+    </div>`) .join('') : '<p style="color:#bbb;font-size:12px;">Keine TOPs erfasst</p>';
+
+  document.getElementById('previewContainer').innerHTML = `
+    <div class="doc-preview">
+      <div class="dh">
+        <div class="dh-left">
+          <h2>Praxis NeueWege</h2>
+          <p>Jugendhilfe &amp; Soziale Dienste · Bayernweit</p>
+          <p style="margin-top:6px;font-size:13px;font-weight:600;color:var(--accent);">${cfg.icon} Meetingprotokoll · ${cfg.label}</p>
+        </div>
+        <div class="dh-right">
+          <strong style="font-size:13px;color:var(--text);display:block;">${datum}</strong>
+          Erstellt: ${fmtDate(new Date().toISOString().slice(0,10))}<br>
+          <span style="margin-top:6px;display:inline-block;padding:2px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">ENTWURF</span>
+        </div>
+      </div>
+
+      <div class="sh">Rahmendaten</div>
+      <table class="mt">
+        <tr><td>Meeting-Typ</td><td>${cfg.icon} ${cfg.label}</td></tr>
+        ${themaLabel ? `<tr><td>Thema / Anlass</td><td>${themaLabel}</td></tr>` : ''}
+        <tr><td>Datum</td><td>${datum}</td></tr>
+        <tr><td>Zeit</td><td>${von} – ${bis} Uhr</td></tr>
+        <tr><td>Ort</td><td>${ort}</td></tr>
+        <tr><td>Protokollführung</td><td>${proto}</td></tr>
+      </table>
+
+      <div class="sh">Teilnehmer</div>
+      <table class="mt">
+        <tr><td>Anwesend</td><td>${pres}</td></tr>
+        <tr><td>Abwesend</td><td>${abw}</td></tr>
+      </table>
+
+      <div class="sh">Protokoll</div>
+      ${topsHtml}
+
+      ${next ? `
+        <div class="sh">Nächster Termin</div>
+        <table class="mt">
+          <tr><td>Datum / Uhrzeit</td><td>${next} · ${nextZ} Uhr</td></tr>
+          ${nextH ? `<tr><td>Hinweise</td><td>${nextH}</td></tr>` : ''}
+        </table>` : ''}
+
+      <div class="sig">
+        <div class="sig-block">
+          <div class="sig-line"></div>
+          <div class="sig-label">Protokollführung: ${proto}</div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-line"></div>
+          <div class="sig-label">Freigabe TL: ${approver}</div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-line"></div>
+          <div class="sig-label">Datum der Freigabe</div>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:1.5rem;">
+        Erstellt mit Praxis NeueWege Meetingprotokoll-App · Ablage: ${cfg.sp}
+      </p>
+    </div>`;
+}
+
+/* ──────────────────────────────────────
+   UTILITIES
+────────────────────────────────────── */
+function saveDraft() { showToast('Entwurf in SharePoint gespeichert', 'success'); }
+function fmtDate(d) {
+  if (!d) return '—';
+  const [y,m,day] = d.split('-');
+  return `${day}.${m}.${y}`;
+}
+function openModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-bg').forEach(o => o.addEventListener('click', e => { if(e.target===o) o.classList.remove('show'); }));
+
+let _tTimer;
+function showToast(msg, type='info') {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  document.getElementById('toastIcon').textContent = type==='success' ? '✓' : 'ℹ';
+  t.className = 'toast show ' + type;
+  clearTimeout(_tTimer);
+  _tTimer = setTimeout(() => { t.className = 'toast'; }, 3200);
+}
+
+/* ──────────────────────────────────────
+   INIT
+────────────────────────────────────── */
+// Pre-populate on section enter
+document.getElementById('s-teiln').addEventListener('transitionend', () => {});
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    const sec = Object.keys(sectionNav).find(k => sectionNav[k] === el.id);
+    if (sec === 's-teiln') renderParticipants();
+    if (sec === 's-tops')  renderTOPs();
+  });
+});
+// also trigger on btn-nav clicks
+const _origGoSection = goSection;
+window.goSection = function(id) {
+  _origGoSection(id);
+  if (id === 's-teiln') renderParticipants();
+  if (id === 's-tops')  renderTOPs();
+};
+</script>
+</body>
+</html>
