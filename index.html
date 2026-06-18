@@ -288,7 +288,7 @@
             </div>
           </div>
           <div class="field-grid">
-            <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Vorname Nachname Sachbearbeiter*in"></div>
+            <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Name Sachbearbeiter*in"></div>
             <div class="field"><label>Fachkraft 1 (Auswahlliste)</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div class="field-grid" id="einrichtungRow" style="display:none;">
@@ -1682,9 +1682,6 @@ function resetForm() {
   if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
   // Reset list ID for new bericht
   currentListId = null;
-  // Datum_Unterschrift mit heutigem Datum vorbelegen
-  const _datumEl = document.getElementById('Datum_Unterschrift');
-  if (_datumEl) _datumEl.value = new Date().toISOString().split('T')[0];
   // PDF-Anhang zurücksetzen
   _anhangPDF = null;
   updateAnhangUI();
@@ -2085,6 +2082,12 @@ function escHtml(s) {
 // Alle kommentierbaren Felder in den Seiten 3–5
 function _commentableFields() {
   const els = [];
+  // S1 und S2 direkt (statische Sections), S3–S5 über content-Container
+  ['s1','s2'].forEach(sid => {
+    const s = document.getElementById(sid);
+    if (!s) return;
+    s.querySelectorAll('textarea[id], input[type="text"][id], input[type="date"][id]').forEach(el => els.push(el));
+  });
   ['s3_content','s4_content','s5_content'].forEach(cid => {
     const c = document.getElementById(cid);
     if (!c) return;
@@ -2931,7 +2934,7 @@ function activateReviewMode() {
   document.getElementById('reviewActions').style.display = 'block';
   document.getElementById('sonjaReviewActions').style.display = 'none';
   document.getElementById('normalActions').style.display = 'none';
-  // Kommentarfunktion für Teamleitung aktivieren (Seiten 3–5)
+  // Kommentarfunktion für Teamleitung aktivieren (Seiten 1–5)
   _isReviewMode = true;
   renderFieldComments();
 
@@ -2978,7 +2981,7 @@ function activateReviewMode() {
     banner.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap;">
       <div style="text-align:center; font-size:13px; min-width:0;">
         <strong>🔍 PRÜFMODUS — Sie prüfen diesen Bericht${von} als Teamleitung.</strong><br>
-        <span style="font-size:12px; opacity:0.95;">Auf den Seiten 3–5 können Sie zu jedem Text einen 💬 Kommentar schreiben. Danach auf der Seite „Absenden“: ✓ Freigeben (erstellt das PDF) oder ✗ Zurückweisen (Fachkraft überarbeitet).</span>
+        <span style="font-size:12px; opacity:0.95;">Auf den Seiten 1–5 können Sie 💬 Kommentare schreiben. Danach auf der Seite „Absenden“: ✓ Freigeben (erstellt das PDF) oder ✗ Zurückweisen (Fachkraft überarbeitet).</span>
       </div>
       <button id="btnSaveComments" onclick="saveCommentsDraft()" style="background:#fff; color:#8a6d1a; border:none; border-radius:20px; padding:8px 18px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,0.2); white-space:nowrap; min-height:40px;">💬 Kommentare zwischenspeichern</button>
     </div>`;
@@ -3581,9 +3584,6 @@ function buildDynamicSections(force = false) {
     <div id="unterschriftFachkraefte"></div>
   </div>`;
   const s5c2 = document.getElementById('s5_content'); if(s5c2) s5c2.innerHTML = s5html;
-  // Nach dem Rebuild: Datum_Unterschrift vorbelegen falls noch leer
-  const _dEl = document.getElementById('Datum_Unterschrift');
-  if (_dEl && !_dEl.value) _dEl.value = new Date().toISOString().split('T')[0];
   // Nach dem Rebuild: Anhang-UI-Status wiederherstellen (falls PDF bereits geladen)
   if (typ !== 'clearing') updateAnhangUI();
 
