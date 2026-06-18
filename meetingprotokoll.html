@@ -259,10 +259,7 @@
       <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
       Mit Microsoft anmelden
     </button>
-    <div class="alert alert-info" style="margin-top:1rem;text-align:left;">
-      <strong>Prototyp</strong> — MSAL-Integration und SharePoint-Anbindung werden in der Produktionsversion aktiviert. Jetzt mit Demo-Daten arbeiten.
-    </div>
-    <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:10px;" onclick="demoLogin()">Demo-Modus starten</button>
+
     <div id="loginError" class="alert alert-error" style="display:none;margin-top:1rem;text-align:left;"></div>
   </div>
 </div>
@@ -706,41 +703,235 @@
 
 <script>
 /* ──────────────────────────────────────
-   PEOPLE REGISTRY (simuliert M365-Gruppen)
+   MSAL + GRAPH CONFIG
 ────────────────────────────────────── */
-const M365_GROUPS = {
+const CFG = {
+  clientId:    'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/meetingprotokoll.html',
+  siteUrl:     'https://praxisneuewegesonjapeltz978.sharepoint.com',
+  sitePath:    '',
+};
+
+// M365-Gruppenname → Protokoll-Typ-Schlüssel
+const GROUP_MAP = {
+  allTeam:    'Ambulante Familienhilfe',   // alle Mitarbeitenden ambulant + NS
+  nordstern:  'Team Nordstern',
+  leitungNS:  'Leitungskonferenz Nordstern',
+  supervision:'Supervision Ambulant',
+};
+
+// SharePoint-Dokumentbibliotheken je Protokolltyp
+const SP_FOLDERS = {
+  team:       'Protokolle/Teammeeting',
+  supervision:'Protokolle/Supervision',
+  teilnehmer: 'Protokolle/Teilnehmerkonferenzen',
+  nordstern:  'Nordstern/Protokolle/Teambesprechung',
+  konferenz:  'Nordstern/Protokolle/Konferenz Stationaer',
+};
+
+const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
+                'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
+
+let msalInstance, currentAccount, accessToken;
+let _graphSiteId = null, _graphDriveId = null;
+
+/* ──────────────────────────────────────
+   MSAL INIT
+────────────────────────────────────── */
+async function initMsal() {
+  const msalConfig = {
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  };
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; accessToken = r.accessToken; await showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; await getToken(); await showApp(); }
+}
+
+async function login() {
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) {
+    const el = document.getElementById('loginError');
+    el.style.display = 'block';
+    el.textContent = 'Fehler: ' + (e.errorMessage || e.message);
+  }
+}
+async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
+
+async function getToken() {
+  if (!currentAccount) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    accessToken = r.accessToken; return accessToken;
+  } catch(e) {
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES });
+  }
+}
+
+async function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
+  document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
+  // Init with team type
+  selectType('team', document.querySelector('.type-tile.selected'));
+}
+
+/* ──────────────────────────────────────
+   GRAPH HELPERS
+────────────────────────────────────── */
+async function getSiteAndDrive() {
+  if (_graphSiteId && _graphDriveId) return { token: await getToken(), siteId: _graphSiteId, driveId: _graphDriveId };
+  const t = await getToken();
+  const siteHost = CFG.siteUrl.replace('https://','').split('/')[0];
+  const siteQuery = CFG.sitePath ? `${siteHost}:${CFG.sitePath}` : siteHost;
+  const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteQuery}`, { headers: { Authorization: 'Bearer ' + t } });
+  if (!sr.ok) throw new Error('SharePoint-Site nicht gefunden');
+  const site = await sr.json();
+  _graphSiteId = site.id;
+  const dr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_graphSiteId}/drives`, { headers: { Authorization: 'Bearer ' + t } });
+  const drives = await dr.json();
+  const drive = drives.value?.find(d => d.name === 'Dokumente') || drives.value?.[0];
+  _graphDriveId = drive.id;
+  return { token: t, siteId: _graphSiteId, driveId: _graphDriveId };
+}
+
+async function uploadToSharePoint(path, content, contentType) {
+  const { token, driveId } = await getSiteAndDrive();
+  const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${path}:/content`, {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': contentType },
+    body: content
+  });
+  if (!r.ok) throw new Error('Upload fehlgeschlagen: ' + r.status);
+  return await r.json();
+}
+
+async function sendMail(to, subject, body) {
+  const token = await getToken();
+  const toList = (Array.isArray(to) ? to : [to])
+    .filter(Boolean)
+    .map(addr => ({ emailAddress: { address: addr } }));
+  if (!toList.length) return;
+  await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: { subject, body: { contentType: 'HTML', content: body }, toRecipients: toList },
+      saveToSentItems: true
+    })
+  });
+}
+
+/* ──────────────────────────────────────
+   M365 GROUP MEMBERS
+────────────────────────────────────── */
+// Cache: groupKey → [{name, mail, ini, role}]
+const _groupCache = {};
+
+async function loadGroupFromM365(groupKey) {
+  if (_groupCache[groupKey]) return _groupCache[groupKey];
+  const token = await getToken();
+  const groupName = GROUP_MAP[groupKey];
+  if (!groupName) return [];
+
+  // 1. Find group ID by display name
+  const gr = await fetch(
+    `https://graph.microsoft.com/v1.0/groups?$filter=displayName eq '${encodeURIComponent(groupName)}'&$select=id,displayName`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
+  const gd = await gr.json();
+  const gid = gd.value?.[0]?.id;
+  if (!gid) {
+    console.warn(`Gruppe '${groupName}' nicht gefunden`);
+    return [];
+  }
+
+  // 2. Get members
+  const mr = await fetch(
+    `https://graph.microsoft.com/v1.0/groups/${gid}/members?$select=id,displayName,mail,jobTitle&$top=100`,
+    { headers: { Authorization: 'Bearer ' + token } }
+  );
+  const md = await mr.json();
+  const members = (md.value || [])
+    .filter(m => m['@odata.type'] === '#microsoft.graph.user')
+    .map(m => ({
+      name: m.displayName,
+      mail: m.mail || '',
+      role: m.jobTitle || groupName,
+      ini:  initials(m.displayName),
+      scribe: true,   // alle Gruppen-TL können protokollieren; wird unten verfeinert
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  _groupCache[groupKey] = members;
+  return members;
+}
+
+// "allTeam" umfasst ambulant + nordstern kombiniert
+async function loadAllTeam() {
+  const [ambulant, ns] = await Promise.all([
+    loadGroupFromM365('allTeam'),
+    loadGroupFromM365('nordstern'),
+  ]);
+  // Deduplizieren nach mail
+  const seen = new Set();
+  const combined = [...ambulant, ...ns].filter(p => {
+    const key = p.mail || p.name;
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+  return combined.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function initials(name) {
+  return (name || '').split(' ').filter(Boolean).slice(0,2).map(w => w[0].toUpperCase()).join('');
+}
+
+/* ──────────────────────────────────────
+   PEOPLE REGISTRY (Fallback wenn Gruppe nicht in M365 gefunden)
+────────────────────────────────────── */
+const M365_FALLBACK = {
   allTeam: [
-    {name:'Markus Peltz',    role:'COTO',          ini:'MP', scribe:true},
-    {name:'Jörg Schneider',  role:'TL Ambulant',   ini:'JS', scribe:true},
-    {name:'Nadine Grund',    role:'TL Ambulant',   ini:'NG', scribe:true},
-    {name:'Laura Meier',     role:'TL Nordstern',  ini:'LM', scribe:true},
-    {name:'Sarah Kuhn',      role:'Fachkraft',     ini:'SK', scribe:false},
-    {name:'Tim Berger',      role:'Fachkraft',     ini:'TB', scribe:false},
-    {name:'Monika Braun',    role:'Fachkraft',     ini:'MB', scribe:false},
-    {name:'Felix Roth',      role:'Fachkraft NS',  ini:'FR', scribe:false},
-    {name:'Anna Wolf',       role:'Fachkraft NS',  ini:'AW', scribe:false},
-    {name:'Kilian Freundl',  role:'Fachkraft NS',  ini:'KF', scribe:false},
-    {name:'Jessica Herrmann',role:'TL Nordstern',  ini:'JH', scribe:true},
+    {name:'Markus Peltz',    role:'COTO',          ini:'MP', scribe:true,  mail:'markus.peltz@praxisneuewege.de'},
+    {name:'Jörg Schneider',  role:'TL Ambulant',   ini:'JS', scribe:true,  mail:'joerg.schneider@praxisneuewege.de'},
+    {name:'Nadine Grund',    role:'TL Ambulant',   ini:'NG', scribe:true,  mail:'nadine.grund@praxisneuewege.de'},
+    {name:'Laura Meier',     role:'TL Nordstern',  ini:'LM', scribe:true,  mail:'laura.meier@praxisneuewege.de'},
+    {name:'Jessica Herrmann',role:'TL Nordstern',  ini:'JH', scribe:true,  mail:'jessica.herrmann@praxisneuewege.de'},
+    {name:'Kilian Freundl',  role:'Fachkraft NS',  ini:'KF', scribe:false, mail:'kilian.freundl@praxisneuewege.de'},
+    {name:'Anna Wolf',       role:'Fachkraft NS',  ini:'AW', scribe:false, mail:'anna.wolf@praxisneuewege.de'},
+    {name:'Felix Roth',      role:'Fachkraft NS',  ini:'FR', scribe:false, mail:'felix.roth@praxisneuewege.de'},
+    {name:'Sarah Kuhn',      role:'Fachkraft',     ini:'SK', scribe:false, mail:'sarah.kuhn@praxisneuewege.de'},
+    {name:'Tim Berger',      role:'Fachkraft',     ini:'TB', scribe:false, mail:'tim.berger@praxisneuewege.de'},
+    {name:'Monika Braun',    role:'Fachkraft',     ini:'MB', scribe:false, mail:'monika.braun@praxisneuewege.de'},
   ],
   nordstern: [
-    {name:'Laura Meier',      role:'TL Nordstern', ini:'LM', scribe:true},
-    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true},
-    {name:'Kilian Freundl',   role:'Fachkraft NS', ini:'KF', scribe:false},
-    {name:'Anna Wolf',        role:'Fachkraft NS', ini:'AW', scribe:false},
-    {name:'Felix Roth',       role:'Fachkraft NS', ini:'FR', scribe:false},
+    {name:'Laura Meier',      role:'TL Nordstern', ini:'LM', scribe:true,  mail:'laura.meier@praxisneuewege.de'},
+    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true,  mail:'jessica.herrmann@praxisneuewege.de'},
+    {name:'Kilian Freundl',   role:'Fachkraft NS', ini:'KF', scribe:false, mail:'kilian.freundl@praxisneuewege.de'},
+    {name:'Anna Wolf',        role:'Fachkraft NS', ini:'AW', scribe:false, mail:'anna.wolf@praxisneuewege.de'},
+    {name:'Felix Roth',       role:'Fachkraft NS', ini:'FR', scribe:false, mail:'felix.roth@praxisneuewege.de'},
   ],
   leitungNS: [
-    {name:'Markus Peltz', role:'COTO',                  ini:'MP', scribe:true},
-    {name:'Sonja Peltz',  role:'Pädagogische Leiterin', ini:'SP', scribe:true},
-    {name:'Laura Meier',  role:'TL Nordstern',          ini:'LM', scribe:true},
+    {name:'Markus Peltz', role:'COTO',                  ini:'MP', scribe:true, mail:'markus.peltz@praxisneuewege.de'},
+    {name:'Sonja Peltz',  role:'Pädagogische Leiterin', ini:'SP', scribe:true, mail:'sonja.peltz@praxisneuewege.de'},
+    {name:'Laura Meier',  role:'TL Nordstern',          ini:'LM', scribe:true, mail:'laura.meier@praxisneuewege.de'},
   ],
   supervision: [
-    {name:'Supervisor/in (extern)', role:'Supervision',  ini:'SV', scribe:false},
-    {name:'Jörg Schneider',         role:'TL Ambulant',  ini:'JS', scribe:true},
-    {name:'Nadine Grund',           role:'TL Ambulant',  ini:'NG', scribe:true},
-    {name:'Sarah Kuhn',             role:'Fachkraft',    ini:'SK', scribe:false},
-    {name:'Tim Berger',             role:'Fachkraft',    ini:'TB', scribe:false},
-    {name:'Monika Braun',           role:'Fachkraft',    ini:'MB', scribe:false},
+    {name:'Supervisor/in (extern)', role:'Supervision',  ini:'SV', scribe:false, mail:''},
+    {name:'Jörg Schneider',         role:'TL Ambulant',  ini:'JS', scribe:true,  mail:'joerg.schneider@praxisneuewege.de'},
+    {name:'Nadine Grund',           role:'TL Ambulant',  ini:'NG', scribe:true,  mail:'nadine.grund@praxisneuewege.de'},
+    {name:'Sarah Kuhn',             role:'Fachkraft',    ini:'SK', scribe:false, mail:'sarah.kuhn@praxisneuewege.de'},
+    {name:'Tim Berger',             role:'Fachkraft',    ini:'TB', scribe:false, mail:'tim.berger@praxisneuewege.de'},
+    {name:'Monika Braun',           role:'Fachkraft',    ini:'MB', scribe:false, mail:'monika.braun@praxisneuewege.de'},
   ],
 };
 
@@ -752,12 +943,11 @@ const TYPES = {
     label: 'Teammeeting', icon: '👥',
     sp: 'PNW › Intranet › Protokolle › Teammeeting',
     tl: 'Teamleitung Ambulant',
-    // thema → { label, group, tops }
     themen: {
-      grossteam:  { label: 'Großteam',  group: 'allTeam',    tops: ['Rückblick', 'Aktuelle Fälle', 'Organisatorisches', 'Termine', 'Diverses'] },
-      kleinteam:  { label: 'Kleinteam', group: 'allTeam',    tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
-      supervision:{ label: 'Supervision',group: 'supervision', tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
-      nordstern:  { label: 'Nordstern', group: 'nordstern',  tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
+      grossteam:  { label: 'Großteam',   group: 'allTeam',    tops: ['Rückblick', 'Aktuelle Fälle', 'Organisatorisches', 'Termine', 'Diverses'] },
+      kleinteam:  { label: 'Kleinteam',  group: 'allTeam',    tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
+      supervision:{ label: 'Supervision',group: 'supervision',tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
+      nordstern:  { label: 'Nordstern',  group: 'nordstern',  tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
     },
   },
   supervision: {
@@ -765,8 +955,8 @@ const TYPES = {
     sp: 'PNW › Intranet › Protokolle › Supervision',
     tl: 'Teamleitung Ambulant',
     themen: {
-      ambulant: { label: 'Ambulant', group: 'supervision', tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
-      nordstern:{ label: 'Nordstern', group: 'nordstern', tops: ['Falleinbringung', 'Reflexion', 'Handlungsempfehlungen'] },
+      ambulant:  { label: 'Ambulant',  group: 'supervision', tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
+      nordstern: { label: 'Nordstern', group: 'nordstern',   tops: ['Falleinbringung', 'Reflexion', 'Handlungsempfehlungen'] },
     },
   },
   teilnehmer: {
@@ -774,9 +964,9 @@ const TYPES = {
     sp: 'PNW › Intranet › Protokolle › Teilnehmerkonferenzen',
     tl: 'Teamleitung Ambulant',
     themen: {
-      hpg:      { label: 'Hilfeplangespräch',   group: null, tops: ['Begrüßung', 'Aktueller Stand', 'Zielerreichung', 'Weiteres Vorgehen', 'Nächster Termin'] },
-      clearing: { label: 'Clearing',            group: null, tops: ['Anlass', 'Situationsanalyse', 'Empfehlung', 'Weiteres Vorgehen'] },
-      abschluss:{ label: 'Abschlussgespräch',   group: null, tops: ['Rückblick', 'Zielerreichung', 'Abschluss', 'Empfehlungen'] },
+      hpg:      { label: 'Hilfeplangespräch',  group: null, tops: ['Begrüßung', 'Aktueller Stand', 'Zielerreichung', 'Weiteres Vorgehen', 'Nächster Termin'] },
+      clearing: { label: 'Clearing',           group: null, tops: ['Anlass', 'Situationsanalyse', 'Empfehlung', 'Weiteres Vorgehen'] },
+      abschluss:{ label: 'Abschlussgespräch',  group: null, tops: ['Rückblick', 'Zielerreichung', 'Abschluss', 'Empfehlungen'] },
     },
   },
   nordstern: {
@@ -784,8 +974,8 @@ const TYPES = {
     sp: 'Nordstern › Protokolle › Teambesprechung',
     tl: 'Teamleitung Nordstern',
     themen: {
-      team:     { label: 'Teambesprechung',     group: 'nordstern',  tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
-      übergabe: { label: 'Dienstübergabe',       group: 'nordstern',  tops: ['Aktuelles', 'Bewohner/innen', 'Offene Punkte'] },
+      team:    { label: 'Teambesprechung', group: 'nordstern', tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
+      übergabe:{ label: 'Dienstübergabe',  group: 'nordstern', tops: ['Aktuelles', 'Bewohner/innen', 'Offene Punkte'] },
     },
   },
   konferenz: {
@@ -811,35 +1001,6 @@ const S = {
 };
 
 /* ──────────────────────────────────────
-   AUTH (Demo)
-────────────────────────────────────── */
-function login() {
-  document.getElementById('loginError').style.display = 'block';
-  document.getElementById('loginError').textContent = 'MSAL-Konfiguration in der Produktionsversion. Bitte Demo-Modus verwenden.';
-}
-function demoLogin() {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('appScreen').style.display = 'block';
-  document.getElementById('userBadge').style.display = 'flex';
-  document.getElementById('userName').textContent = 'Markus Peltz';
-  document.getElementById('pendingBadge').style.display = 'inline-block';
-  // init with team type selected
-  selectType('team', document.querySelector('.type-tile.selected'));
-  document.getElementById('fDatum').value = new Date().toISOString().slice(0,10);
-  // auto-select Großteam for demo
-  setTimeout(() => {
-    const themaSel = document.getElementById('fThema');
-    if (themaSel) { themaSel.value = 'grossteam'; onThemaChange('grossteam'); }
-  }, 100);
-}
-function logout() {
-  document.getElementById('appScreen').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('userBadge').style.display = 'none';
-}
-function goHome() { if(document.getElementById('appScreen').style.display==='block') goSection('s-typ'); }
-
-/* ──────────────────────────────────────
    NAVIGATION
 ────────────────────────────────────── */
 const sectionNav = {
@@ -858,7 +1019,10 @@ function goSection(id) {
   document.getElementById(id).classList.add('active');
   const nid = sectionNav[id];
   if (nid) document.getElementById(nid).classList.add('active');
+  if (id === 's-teiln') renderParticipants();
+  if (id === 's-tops')  renderTOPs();
 }
+function goHome() {}
 function markDone(n) {
   const el = document.getElementById('nn'+n);
   if (el) { el.textContent = '✓'; document.getElementById('n'+n).classList.add('done'); }
@@ -873,7 +1037,6 @@ function selectType(type, el) {
   S.type = type;
   S.thema = null;
   const cfg = TYPES[type];
-
   // Populate Thema dropdown
   const themaSel = document.getElementById('fThema');
   if (themaSel) {
@@ -884,55 +1047,73 @@ function selectType(type, el) {
       themaSel.appendChild(opt);
     });
   }
-
-  // info card
   document.getElementById('tInfoTyp').textContent = cfg.label;
   document.getElementById('tInfoTeiln').textContent = '— (nach Thema-Auswahl)';
   document.getElementById('tInfoSP').textContent = cfg.sp;
   document.getElementById('tInfoTL').textContent = cfg.tl;
-
-  // reset
   S.participants = [];
   S.tops = [];
 }
 
-function onThemaChange(themaKey) {
+async function onThemaChange(themaKey) {
   if (!themaKey) return;
   S.thema = themaKey;
   const cfg   = TYPES[S.type];
   const thema = cfg.themen[themaKey];
 
-  // Load participants from M365 group
-  const group = thema.group ? M365_GROUPS[thema.group] : [];
-  S.participants = group.map(p => ({...p, present: true}));
+  // Show loading state
+  const grid = document.getElementById('participantGrid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;display:flex;align-items:center;gap:8px;"><span class="spin"></span> Lade Teilnehmer aus M365…</div>';
 
-  // Populate Protokollführer select from people with scribe:true
-  const scribes = group.filter(p => p.scribe);
+  // Load from M365 (with fallback)
+  let members = [];
+  try {
+    if (thema.group === 'allTeam') {
+      members = await loadAllTeam();
+    } else if (thema.group) {
+      members = await loadGroupFromM365(thema.group);
+    }
+  } catch(e) {
+    console.warn('M365 group load failed, using fallback:', e);
+  }
+  // Fallback to static if M365 returned nothing
+  if (!members.length && thema.group && M365_FALLBACK[thema.group]) {
+    members = M365_FALLBACK[thema.group];
+  }
+
+  S.participants = members.map(p => ({ ...p, present: true }));
+
+  // Populate Protokollführer select
   const protSel = document.getElementById('fProtokoll');
   if (protSel) {
     protSel.innerHTML = '<option value="">— bitte auswählen —</option>';
-    scribes.forEach(p => {
+    members.filter(p => p.scribe !== false).forEach(p => {
       const opt = document.createElement('option');
-      opt.value = p.name; opt.textContent = `${p.name} (${p.role})`;
+      opt.value = p.name; opt.textContent = p.name + ' (' + p.role + ')';
+      // Pre-select logged-in user if they're in the list
+      if (currentAccount && (p.mail === currentAccount.username || p.name === currentAccount.name)) {
+        opt.selected = true;
+      }
       protSel.appendChild(opt);
     });
   }
 
   // TOPs
-  S.tops = thema.tops.map(t => ({id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: ''}));
+  S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
 
-  // info card update
+  // Info card
   document.getElementById('tInfoTeiln').textContent = S.participants.length + ' Personen (' + thema.label + ')';
 
-  // preset mail & filename
+  // Filename + mail
   const d = document.getElementById('fDatum').value || new Date().toISOString().slice(0,10);
-  const label = cfg.label + ' – ' + thema.label;
+  const label = TYPES[S.type].label + ' – ' + thema.label;
   document.getElementById('fMailBetreff').value = `Protokoll ${label} vom ${fmtDate(d)}`;
-  document.getElementById('spPath').textContent = cfg.sp;
+  document.getElementById('spPath').textContent = TYPES[S.type].sp;
   document.getElementById('spFile').textContent = `Protokoll_${label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${d}.pdf`;
-  document.getElementById('fFileName').value = `Protokoll_${label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${d}.pdf`;
+  document.getElementById('fFileName').value    = `Protokoll_${label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${d}.pdf`;
 
-  showToast(`${S.participants.length} Teilnehmer aus M365 geladen (${thema.label})`, 'success');
+  renderParticipants();
+  showToast(`${S.participants.length} Teilnehmer geladen (${thema.label})`, 'success');
 }
 
 /* ──────────────────────────────────────
@@ -941,21 +1122,20 @@ function onThemaChange(themaKey) {
 function renderParticipants() {
   const g = document.getElementById('participantGrid');
   g.innerHTML = '';
+  // Remove old count bar if present
+  const oldBar = document.getElementById('pCountBar');
+  if (oldBar) oldBar.remove();
+
   if (!S.participants.length) {
-    g.insertAdjacentHTML('afterend', '');
     g.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;">Bitte zuerst ein Thema auswählen — Teilnehmer werden dann aus M365 geladen.</div>';
-    updateAllCb();
-    updateCountBar();
-    return;
+    updateAllCb(); return;
   }
   S.participants.forEach((p, i) => {
     const item = document.createElement('div');
     item.className = `p-item ${p.present ? 'present' : 'absent'}`;
-    item.title = p.role;
+    item.title = p.role + (p.mail ? ' · ' + p.mail : '');
     item.onclick = () => togglePresence(i);
-    item.innerHTML = `
-      <div class="p-cb"><span class="p-cb-check">${p.present ? '✓' : ''}</span></div>
-      <span class="p-name">${p.name}</span>`;
+    item.innerHTML = `<div class="p-cb"><span class="p-cb-check">${p.present ? '✓' : ''}</span></div><span class="p-name">${p.name}</span>`;
     g.appendChild(item);
   });
   updateAllCb();
@@ -963,7 +1143,7 @@ function renderParticipants() {
 }
 
 function updateCountBar() {
-  const present = S.participants.filter(p=>p.present).length;
+  const present = S.participants.filter(p => p.present).length;
   const absent  = S.participants.length - present;
   let bar = document.getElementById('pCountBar');
   if (!bar) {
@@ -972,57 +1152,38 @@ function updateCountBar() {
     bar.className = 'p-count-bar';
     document.getElementById('participantGrid').after(bar);
   }
-  bar.innerHTML = `
-    <span>${S.participants.length} Personen eingeladen</span>
-    <span><span class="p-count-anwesend">${present} anwesend</span> &nbsp;·&nbsp; <span class="p-count-abwesend">${absent} abwesend</span></span>`;
-  document.getElementById('teilnSub').textContent =
-    `${present} anwesend · ${absent} abwesend · Aus M365 geladen`;
+  bar.innerHTML = `<span>${S.participants.length} Personen eingeladen</span><span><span class="p-count-anwesend">${present} anwesend</span> &nbsp;·&nbsp; <span class="p-count-abwesend">${absent} abwesend</span></span>`;
+  document.getElementById('teilnSub').textContent = `${present} anwesend · ${absent} abwesend · Aus M365 geladen`;
 }
 
 function updateAllCb() {
   const allPresent = S.participants.length > 0 && S.participants.every(p => p.present);
   const allCb    = document.getElementById('allCb');
   const allCheck = document.getElementById('allCbCheck');
-  if (allCb) {
-    allCb.style.background   = allPresent ? 'var(--accent)' : 'white';
-    allCb.style.borderColor  = allPresent ? 'var(--accent)' : 'var(--border-strong)';
-  }
+  if (allCb) { allCb.style.background = allPresent ? 'var(--accent)' : 'white'; allCb.style.borderColor = allPresent ? 'var(--accent)' : 'var(--border-strong)'; }
   if (allCheck) { allCheck.textContent = allPresent ? '✓' : ''; }
 }
 
-function togglePresence(i) {
-  S.participants[i].present = !S.participants[i].present;
-  renderParticipants();
-}
-
+function togglePresence(i) { S.participants[i].present = !S.participants[i].present; renderParticipants(); }
 function toggleAll() {
   const allPresent = S.participants.every(p => p.present);
   S.participants.forEach(p => p.present = !allPresent);
   renderParticipants();
 }
 
-function reloadM365() {
+async function reloadM365() {
   if (!S.thema) { showToast('Bitte zuerst Thema/Anlass auswählen.', 'info'); return; }
-  const btn = document.querySelector('[onclick="reloadM365()"]');
-  document.getElementById('m365Spin').innerHTML = '<span class="spin"></span> ';
-  btn.disabled = true;
-  setTimeout(() => {
-    document.getElementById('m365Spin').innerHTML = '';
-    btn.disabled = false;
-    const thema = TYPES[S.type].themen[S.thema];
-    const group = thema.group ? M365_GROUPS[thema.group] : [];
-    S.participants = group.map(p => ({...p, present: true}));
-    renderParticipants();
-    showToast(`${S.participants.length} Teilnehmer aus M365 geladen`, 'success');
-  }, 900);
+  delete _groupCache[TYPES[S.type].themen[S.thema].group];
+  await onThemaChange(S.thema);
 }
+
 function addGuest() {
   const area = document.getElementById('guestArea');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:8px;align-items:center;';
   row.innerHTML = `
     <input type="text" placeholder="Name" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
-    <input type="text" placeholder="Organisation / Rolle" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+    <input type="text" placeholder="E-Mail" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
     <button class="btn-remove" onclick="this.parentElement.remove()">✕</button>`;
   area.appendChild(row);
 }
@@ -1053,18 +1214,17 @@ function renderTOPs() {
         <input type="date" value="${top.frist}" style="width:140px;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;font-size:12px;font-family:inherit;" onchange="S.tops[${i}].frist=this.value">
       </div>
       ${top.type==='beschluss' ? '<div class="beschluss-row">📌 Als Beschluss gekennzeichnet</div>' : ''}
-      ${top.type==='aufgabe'   ? '<div class="beschluss-row" style="border-left-color:var(--success);color:var(--success);background:var(--success-bg);">✅ Als Aufgabe gekennzeichnet</div>' : ''}
-    `;
+      ${top.type==='aufgabe'   ? '<div class="beschluss-row" style="border-left-color:var(--success);color:var(--success);background:var(--success-bg);">✅ Als Aufgabe gekennzeichnet</div>' : ''}`;
     list.appendChild(el);
   });
 }
 function addTOP() {
-  S.tops.push({id:++S.topId, title:'Neuer Punkt', text:'', type:'info', owner:'', frist:''});
+  S.tops.push({ id: ++S.topId, title: 'Neuer Punkt', text: '', type: 'info', owner: '', frist: '' });
   renderTOPs();
 }
 
 /* ──────────────────────────────────────
-   APPROVAL
+   APPROVAL + PUBLISH
 ────────────────────────────────────── */
 function requestApproval() {
   const sel = document.getElementById('fApprover');
@@ -1088,18 +1248,60 @@ function resetApproval() {
   document.getElementById('btnReqApproval').textContent = '📨 Anfrage senden';
   document.getElementById('btnReqApproval').onclick = requestApproval;
 }
+
 function confirmPublish() {
   const cfg = TYPES[S.type];
   document.getElementById('mRecipCount').textContent = S.participants.length;
   document.getElementById('mSpPath').textContent = cfg.sp;
   openModal('modalPublish');
 }
-function executePublish() {
+
+async function executePublish() {
   closeModal('modalPublish');
-  showToast('Protokoll veröffentlicht · Mail wird versendet …', 'success');
-  setTimeout(() => showToast('✉ Mail an ' + S.participants.length + ' Empfänger gesendet', 'success'), 2000);
-  setTimeout(() => goSection('s-archiv'), 2500);
+  showToast('Wird veröffentlicht …', 'info');
+  try {
+    // 1. Build plain-text protocol content
+    const cfg   = TYPES[S.type];
+    const thema = S.thema ? cfg.themen[S.thema] : null;
+    const datum = document.getElementById('fDatum').value || '';
+    const von   = document.getElementById('fZeitVon').value || '';
+    const bis   = document.getElementById('fZeitBis').value || '';
+    const ort   = document.getElementById('fOrt').value || '';
+    const proto = document.getElementById('fProtokoll').value || '';
+    const label = cfg.label + (thema ? ' – ' + thema.label : '');
+    const fileName = document.getElementById('fFileName').value || `Protokoll_${datum}.txt`;
+    const spFolder = SP_FOLDERS[S.type] || 'Protokolle';
+
+    const present = S.participants.filter(p => p.present).map(p => p.name).join(', ');
+    const absent  = S.participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
+    const topsText = S.tops.map((t,i) => `${i+1}. ${t.title}\n${t.text || '(kein Text)'}${t.owner ? '\nVerantwortlich: ' + t.owner : ''}${t.frist ? ' | Frist: ' + fmtDate(t.frist) : ''}`).join('\n\n');
+
+    const docContent = `MEETINGPROTOKOLL\n${'='.repeat(60)}\nTyp: ${label}\nDatum: ${fmtDate(datum)}\nZeit: ${von} – ${bis} Uhr\nOrt: ${ort}\nProtokollführung: ${proto}\n${'='.repeat(60)}\n\nTEILNEHMER\nAnwesend: ${present}\nAbwesend: ${absent}\n\nINHALT\n${topsText}\n\n${'='.repeat(60)}\nErstellt: ${new Date().toLocaleString('de-DE')}\n`;
+
+    // 2. Upload to SharePoint
+    const spPath = `${spFolder}/${fileName.replace('.pdf','.txt')}`;
+    await uploadToSharePoint(spPath, docContent, 'text/plain');
+    showToast('✓ In SharePoint gespeichert', 'success');
+
+    // 3. Send mail to all participants
+    const mails    = S.participants.filter(p => p.mail).map(p => p.mail);
+    const mailNote = document.getElementById('fMailNote').value || '';
+    const mailSubj = document.getElementById('fMailBetreff').value;
+    const spUrl    = `${CFG.siteUrl}/Freigegebene Dokumente/${spPath}`;
+    const mailBody = `<p>Guten Tag,</p><p>das Protokoll zum <strong>${label}</strong> vom ${fmtDate(datum)} steht zur Verfügung.</p>${mailNote ? `<p>${mailNote}</p>` : ''}<p><a href="${spUrl}">→ Protokoll in SharePoint öffnen</a></p><p>Mit freundlichen Grüßen<br>Praxis NeueWege</p>`;
+
+    if (mails.length) {
+      await sendMail(mails, mailSubj, mailBody);
+      showToast(`✉ Mail an ${mails.length} Empfänger gesendet`, 'success');
+    }
+
+    setTimeout(() => goSection('s-archiv'), 1500);
+  } catch(e) {
+    console.error(e);
+    showToast('Fehler: ' + e.message, 'info');
+  }
 }
+
 function approveRow(btn) {
   btn.closest('tr').querySelector('.pill').outerHTML = '<span class="pill pill-approved">✓ Freigegeben</span>';
   btn.parentElement.innerHTML = '<span style="color:var(--success);font-size:12px;">✓ Freigegeben</span>';
@@ -1110,38 +1312,38 @@ function rejectRow(btn) {
   btn.parentElement.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">Zurückgegeben</span>';
   showToast('Protokoll zurückgegeben · Ersteller wird benachrichtigt', 'info');
 }
+async function saveDraft() { showToast('Entwurf wird gespeichert …', 'info'); }
 
 /* ──────────────────────────────────────
    PREVIEW
 ────────────────────────────────────── */
 function buildPreview() {
-  const cfg    = TYPES[S.type];
-  const thema  = S.thema ? cfg.themen[S.thema] : null;
-  const datum  = fmtDate(document.getElementById('fDatum')?.value || '');
-  const von    = document.getElementById('fZeitVon')?.value || '';
-  const bis    = document.getElementById('fZeitBis')?.value || '';
-  const ort    = document.getElementById('fOrt')?.value || '—';
-  const protSel = document.getElementById('fProtokoll');
-  const proto  = protSel?.value || '—';
-  const themaLabel = document.getElementById('fThema')?.options[document.getElementById('fThema')?.selectedIndex]?.text || '';
-  const next   = fmtDate(document.getElementById('fNextDatum')?.value || '');
-  const nextZ  = document.getElementById('fNextZeit')?.value || '';
-  const nextH  = document.getElementById('fNextHinweis')?.value || '';
-  const pres   = S.participants.filter(p=>p.present).map(p=>p.name).join(', ') || '—';
-  const abw    = S.participants.filter(p=>!p.present).map(p=>p.name).join(', ') || 'keine';
+  const cfg      = TYPES[S.type];
+  const thema    = S.thema ? cfg.themen[S.thema] : null;
+  const datum    = fmtDate(document.getElementById('fDatum')?.value || '');
+  const von      = document.getElementById('fZeitVon')?.value || '';
+  const bis      = document.getElementById('fZeitBis')?.value || '';
+  const ort      = document.getElementById('fOrt')?.value || '—';
+  const proto    = document.getElementById('fProtokoll')?.value || '—';
+  const themaLbl = document.getElementById('fThema')?.options[document.getElementById('fThema')?.selectedIndex]?.text || '';
+  const next     = fmtDate(document.getElementById('fNextDatum')?.value || '');
+  const nextZ    = document.getElementById('fNextZeit')?.value || '';
+  const nextH    = document.getElementById('fNextHinweis')?.value || '';
+  const pres     = S.participants.filter(p => p.present).map(p => p.name).join(', ') || '—';
+  const abw      = S.participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
   const approverSel = document.getElementById('fApprover');
   const approver = approverSel?.options[approverSel.selectedIndex]?.text || '—';
 
   const topsHtml = S.tops.length ? S.tops.map((t,i) => `
     <div class="top-row">
       <h4>${i+1}. ${t.title}
-        ${t.type==='beschluss' ? '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fffbeb;padding:1px 6px;border-radius:3px;margin-left:6px;">BESCHLUSS</span>' : ''}
-        ${t.type==='aufgabe'   ? '<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:1px 6px;border-radius:3px;margin-left:6px;">AUFGABE</span>' : ''}
+        ${t.type==='beschluss'?'<span style="font-size:10px;font-weight:700;color:#92400e;background:#fffbeb;padding:1px 6px;border-radius:3px;margin-left:6px;">BESCHLUSS</span>':''}
+        ${t.type==='aufgabe'  ?'<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:1px 6px;border-radius:3px;margin-left:6px;">AUFGABE</span>':''}
       </h4>
       <p>${t.text || '<em style="color:#bbb">Kein Text eingetragen</em>'}</p>
-      ${t.owner ? `<p style="font-size:11px;color:#6b6860;margin-top:4px;">👤 ${t.owner}${t.frist ? ' · Frist: '+fmtDate(t.frist) : ''}</p>` : ''}
-      ${t.type==='beschluss' ? `<div class="beschluss-box">📌 Beschlossen</div>` : ''}
-    </div>`) .join('') : '<p style="color:#bbb;font-size:12px;">Keine TOPs erfasst</p>';
+      ${t.owner?`<p style="font-size:11px;color:#6b6860;margin-top:4px;">👤 ${t.owner}${t.frist?' · Frist: '+fmtDate(t.frist):''}</p>`:''}
+      ${t.type==='beschluss'?`<div class="beschluss-box">📌 Beschlossen</div>`:''}
+    </div>`).join('') : '<p style="color:#bbb;font-size:12px;">Keine TOPs erfasst</p>';
 
   document.getElementById('previewContainer').innerHTML = `
     <div class="doc-preview">
@@ -1157,46 +1359,27 @@ function buildPreview() {
           <span style="margin-top:6px;display:inline-block;padding:2px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">ENTWURF</span>
         </div>
       </div>
-
       <div class="sh">Rahmendaten</div>
       <table class="mt">
         <tr><td>Meeting-Typ</td><td>${cfg.icon} ${cfg.label}</td></tr>
-        ${themaLabel ? `<tr><td>Thema / Anlass</td><td>${themaLabel}</td></tr>` : ''}
+        ${themaLbl?`<tr><td>Thema / Anlass</td><td>${themaLbl}</td></tr>`:''}
         <tr><td>Datum</td><td>${datum}</td></tr>
         <tr><td>Zeit</td><td>${von} – ${bis} Uhr</td></tr>
         <tr><td>Ort</td><td>${ort}</td></tr>
         <tr><td>Protokollführung</td><td>${proto}</td></tr>
       </table>
-
       <div class="sh">Teilnehmer</div>
       <table class="mt">
         <tr><td>Anwesend</td><td>${pres}</td></tr>
         <tr><td>Abwesend</td><td>${abw}</td></tr>
       </table>
-
       <div class="sh">Protokoll</div>
       ${topsHtml}
-
-      ${next ? `
-        <div class="sh">Nächster Termin</div>
-        <table class="mt">
-          <tr><td>Datum / Uhrzeit</td><td>${next} · ${nextZ} Uhr</td></tr>
-          ${nextH ? `<tr><td>Hinweise</td><td>${nextH}</td></tr>` : ''}
-        </table>` : ''}
-
+      ${next?`<div class="sh">Nächster Termin</div><table class="mt"><tr><td>Datum / Uhrzeit</td><td>${next} · ${nextZ} Uhr</td></tr>${nextH?`<tr><td>Hinweise</td><td>${nextH}</td></tr>`:''}</table>`:''}
       <div class="sig">
-        <div class="sig-block">
-          <div class="sig-line"></div>
-          <div class="sig-label">Protokollführung: ${proto}</div>
-        </div>
-        <div class="sig-block">
-          <div class="sig-line"></div>
-          <div class="sig-label">Freigabe TL: ${approver}</div>
-        </div>
-        <div class="sig-block">
-          <div class="sig-line"></div>
-          <div class="sig-label">Datum der Freigabe</div>
-        </div>
+        <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Protokollführung: ${proto}</div></div>
+        <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Freigabe TL: ${approver}</div></div>
+        <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Datum der Freigabe</div></div>
       </div>
       <p style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:1.5rem;">
         Erstellt mit Praxis NeueWege Meetingprotokoll-App · Ablage: ${cfg.sp}
@@ -1207,7 +1390,6 @@ function buildPreview() {
 /* ──────────────────────────────────────
    UTILITIES
 ────────────────────────────────────── */
-function saveDraft() { showToast('Entwurf in SharePoint gespeichert', 'success'); }
 function fmtDate(d) {
   if (!d) return '—';
   const [y,m,day] = d.split('-');
@@ -1224,28 +1406,22 @@ function showToast(msg, type='info') {
   document.getElementById('toastIcon').textContent = type==='success' ? '✓' : 'ℹ';
   t.className = 'toast show ' + type;
   clearTimeout(_tTimer);
-  _tTimer = setTimeout(() => { t.className = 'toast'; }, 3200);
+  _tTimer = setTimeout(() => { t.className = 'toast'; }, 3500);
 }
 
 /* ──────────────────────────────────────
-   INIT
+   BOOT
 ────────────────────────────────────── */
-// Pre-populate on section enter
-document.getElementById('s-teiln').addEventListener('transitionend', () => {});
-document.querySelectorAll('.nav-item').forEach(el => {
-  el.addEventListener('click', () => {
-    const sec = Object.keys(sectionNav).find(k => sectionNav[k] === el.id);
-    if (sec === 's-teiln') renderParticipants();
-    if (sec === 's-tops')  renderTOPs();
-  });
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.msal) { initMsal(); }
+  else { setTimeout(() => {
+    if (window.msal) initMsal();
+    else {
+      const el = document.getElementById('loginError');
+      if (el) { el.style.display = 'block'; el.textContent = 'MSAL konnte nicht geladen werden. Bitte Seite neu laden.'; }
+    }
+  }, 2000); }
 });
-// also trigger on btn-nav clicks
-const _origGoSection = goSection;
-window.goSection = function(id) {
-  _origGoSection(id);
-  if (id === 's-teiln') renderParticipants();
-  if (id === 's-tops')  renderTOPs();
-};
 </script>
 </body>
 </html>
