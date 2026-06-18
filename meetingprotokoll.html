@@ -418,11 +418,8 @@
         <div class="progress-bar"><div class="progress-fill" style="width:60%"></div></div>
 
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+          <div style="margin-bottom:.75rem;">
             <div class="card-title" style="margin:0">Eingeladene Personen</div>
-            <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="reloadM365()">
-              <span id="m365Spin"></span> Aus M365 laden
-            </button>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text-muted);" onclick="toggleAll()">
@@ -864,11 +861,12 @@ async function loadGroupFromM365(groupKey) {
   const members = (md.value || [])
     .filter(m => m['@odata.type'] === '#microsoft.graph.user')
     .map(m => ({
-      name: m.displayName,
+      name: abbrevName(m.displayName),
+      fullName: m.displayName,
       mail: m.mail || '',
       role: m.jobTitle || groupName,
       ini:  initials(m.displayName),
-      scribe: true,   // alle Gruppen-TL können protokollieren; wird unten verfeinert
+      scribe: true,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -894,6 +892,13 @@ async function loadAllTeam() {
 
 function initials(name) {
   return (name || '').split(' ').filter(Boolean).slice(0,2).map(w => w[0].toUpperCase()).join('');
+}
+// "Markus Peltz" → "M. Peltz"
+function abbrevName(name) {
+  if (!name) return name;
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  return parts[0][0].toUpperCase() + '. ' + parts.slice(1).join(' ');
 }
 
 /* ──────────────────────────────────────
@@ -946,7 +951,7 @@ const TYPES = {
     themen: {
       grossteam:  { label: 'Großteam',   group: 'allTeam',    tops: ['Rückblick', 'Aktuelle Fälle', 'Organisatorisches', 'Termine', 'Diverses'] },
       kleinteam:  { label: 'Kleinteam',  group: 'allTeam',    tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
-      supervision:{ label: 'Supervision',group: 'supervision',tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
+      supervision:{ label: 'Supervision',group: 'allTeam',    tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
       nordstern:  { label: 'Nordstern',  group: 'nordstern',  tops: ['Belegung & Dienstplan', 'Fallbesprechungen', 'Haus & Infrastruktur', 'Diverses'] },
     },
   },
@@ -955,7 +960,7 @@ const TYPES = {
     sp: 'PNW › Intranet › Protokolle › Supervision',
     tl: 'Teamleitung Ambulant',
     themen: {
-      ambulant:  { label: 'Ambulant',  group: 'supervision', tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
+      ambulant:  { label: 'Ambulant',  group: 'allTeam',     tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
       nordstern: { label: 'Nordstern', group: 'nordstern',   tops: ['Falleinbringung', 'Reflexion', 'Handlungsempfehlungen'] },
     },
   },
@@ -1133,9 +1138,10 @@ function renderParticipants() {
   S.participants.forEach((p, i) => {
     const item = document.createElement('div');
     item.className = `p-item ${p.present ? 'present' : 'absent'}`;
-    item.title = p.role + (p.mail ? ' · ' + p.mail : '');
+    const dispName = p.fullName ? abbrevName(p.fullName) : (p.name.includes('.') ? p.name : abbrevName(p.name));
+    item.title = (p.fullName || p.name) + ' · ' + p.role + (p.mail ? ' · ' + p.mail : '');
     item.onclick = () => togglePresence(i);
-    item.innerHTML = `<div class="p-cb"><span class="p-cb-check">${p.present ? '✓' : ''}</span></div><span class="p-name">${p.name}</span>`;
+    item.innerHTML = `<div class="p-cb"><span class="p-cb-check">${p.present ? '✓' : ''}</span></div><span class="p-name">${dispName}</span>`;
     g.appendChild(item);
   });
   updateAllCb();
