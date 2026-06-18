@@ -791,7 +791,7 @@ async function login() {
     el.textContent = 'Fehler: ' + (e.errorMessage || e.message);
   }
 }
-async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
+async function logout() { _scribeMembers = null; await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
 
 async function getToken() {
   if (!currentAccount) return null;
@@ -812,6 +812,8 @@ async function showApp() {
   // Auto-save on any input/change in the app
   document.getElementById('appScreen').addEventListener('input',  scheduleAutoSave);
   document.getElementById('appScreen').addEventListener('change', scheduleAutoSave);
+  // Pre-load scribe list so it's ready immediately
+  populateScribeSelect().catch(e => console.warn('scribe preload:', e));
 }
 
 /* ──────────────────────────────────────
@@ -1113,6 +1115,61 @@ function selectThema(type, themaKey, el) {
   goSection('s-meta');
 }
 
+/* ──────────────────────────────────────
+   PROTOKOLLFÜHRER — immer aus Ambulante Familienhilfe
+────────────────────────────────────── */
+let _scribeMembers = null; // cached
+
+async function populateScribeSelect() {
+  const sel = document.getElementById('fProtokoll');
+  if (!sel) return;
+
+  // Load once and cache
+  if (!_scribeMembers) {
+    try {
+      _scribeMembers = await loadGroupFromM365('allTeam');
+    } catch(e) {
+      console.warn('Scribe list load failed, using fallback:', e);
+    }
+    if (!_scribeMembers || !_scribeMembers.length) {
+      _scribeMembers = M365_FALLBACK.allTeam;
+    }
+  }
+
+  const me      = (currentAccount?.username || '').toLowerCase();
+  const myName  = (currentAccount?.name     || '').toLowerCase();
+
+  sel.innerHTML = '<option value="">— bitte auswählen —</option>';
+  let defaultSet = false;
+
+  _scribeMembers.forEach(p => {
+    const opt = document.createElement('option');
+    const display = abbrevName(p.fullName || p.name);
+    opt.value       = p.fullName || p.name;
+    opt.textContent = display + (p.role ? ' (' + p.role + ')' : '');
+
+    // Match logged-in user by email or display name
+    const isMe = (p.mail && p.mail.toLowerCase() === me) ||
+                 (p.fullName || p.name).toLowerCase() === myName ||
+                 abbrevName(p.fullName || p.name).toLowerCase() === myName;
+    if (isMe && !defaultSet) {
+      opt.selected = true;
+      defaultSet   = true;
+    }
+    sel.appendChild(opt);
+  });
+
+  // If no match found, try partial name match as fallback
+  if (!defaultSet && myName) {
+    for (const opt of sel.options) {
+      if (opt.textContent.toLowerCase().includes(myName.split(' ')[0])) {
+        opt.selected = true;
+        break;
+      }
+    }
+  }
+}
+
 async function onThemaChange(themaKey) {
   if (!themaKey) return;
   S.thema = themaKey;
@@ -1145,20 +1202,8 @@ async function onThemaChange(themaKey) {
 
   S.participants = members.map(p => ({ ...p, present: true }));
 
-  // Populate Protokollführer select
-  const protSel = document.getElementById('fProtokoll');
-  if (protSel) {
-    protSel.innerHTML = '<option value="">— bitte auswählen —</option>';
-    members.filter(p => p.scribe !== false).forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.name; opt.textContent = p.name + ' (' + p.role + ')';
-      // Pre-select logged-in user if they're in the list
-      if (currentAccount && (p.mail === currentAccount.username || p.name === currentAccount.name)) {
-        opt.selected = true;
-      }
-      protSel.appendChild(opt);
-    });
-  }
+  // Populate Protokollführer — always from Ambulante Familienhilfe, default = logged-in user
+  await populateScribeSelect();
 
   // TOPs
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
