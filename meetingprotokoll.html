@@ -733,10 +733,18 @@ const GROUP_MAP = {
 
 // Einrichtungen für stationäres Team
 const EINRICHTUNGEN = [
-  { key: 'nordstern',   label: 'Nordstern',    group: 'nordstern',   sp: 'Nordstern › Protokolle › Teambesprechung' },
-  { key: 'suedpol',     label: 'Südpol',        group: 'suedpol',     sp: 'Südpol › Protokolle › Teambesprechung' },
-  { key: 'safeharbor',  label: 'Safe Harbor',   group: 'safeharbor',  sp: 'Safe Harbor › Protokolle › Teambesprechung' },
-  { key: 'jwg',         label: 'JWG Stationär', group: 'jwg',         sp: 'JWG › Protokolle › Teambesprechung' },
+  { key: 'nordstern',  label: 'Nordstern',    group: 'nordstern', sp: 'Nordstern › Protokolle › Teambesprechung' },
+  { key: 'suedpol',    label: 'Südpol',        group: 'nordstern', sp: 'Südpol › Protokolle › Teambesprechung' },
+  { key: 'safeharbor', label: 'Safe Harbor',   group: 'nordstern', sp: 'Safe Harbor › Protokolle › Teambesprechung' },
+  { key: 'jwg',        label: 'JWG Stationär', group: 'nordstern', sp: 'JWG › Protokolle › Teambesprechung' },
+];
+
+// Also used for Wohngruppen Konferenz SP path
+const EINRICHTUNGEN_KONFERENZ = [
+  { key: 'nordstern',  label: 'Nordstern',    group: 'nordstern', sp: 'Nordstern › Protokolle › Konferenz' },
+  { key: 'suedpol',    label: 'Südpol',        group: 'nordstern', sp: 'Südpol › Protokolle › Konferenz' },
+  { key: 'safeharbor', label: 'Safe Harbor',   group: 'nordstern', sp: 'Safe Harbor › Protokolle › Konferenz' },
+  { key: 'jwg',        label: 'JWG Stationär', group: 'nordstern', sp: 'JWG › Protokolle › Konferenz' },
 ];
 
 // SharePoint-Dokumentbibliotheken je Protokolltyp
@@ -1020,7 +1028,7 @@ const TYPES = {
     sp: 'Nordstern › Protokolle › Konferenz Stationär',
     tl: 'COTO / Pädagogische Leitung',
     themen: {
-      leitung: { label: 'Wohngruppen Konferenz', group: 'leitungNS', tops: ['Belegungsplanung', 'Personal & Dienstplan', 'Finanzen', 'Qualitätssicherung', 'Sonstiges'] },
+      leitung: { label: 'Wohngruppen Konferenz', group: 'leitungNS', einrichtung: true, tops: ['Belegungsplanung', 'Personal & Dienstplan', 'Finanzen', 'Qualitätssicherung', 'Sonstiges'] },
     },
   },
 };
@@ -1139,7 +1147,8 @@ function selectThema(type, themaKey, el) {
     // Set SP path from default Einrichtung (Nordstern)
     document.getElementById('fEinrichtung').value = 'nordstern';
     S.einrichtung = 'nordstern';
-    const einr = EINRICHTUNGEN.find(e => e.key === 'nordstern');
+    const einrList = (S.type === 'konferenz') ? EINRICHTUNGEN_KONFERENZ : EINRICHTUNGEN;
+    const einr = einrList.find(e => e.key === 'nordstern');
     document.getElementById('spPath').textContent = einr.sp;
     const _n1 = new Date(); const _y1 = String(_n1.getFullYear()).slice(-2); const _m1 = String(_n1.getMonth()+1).padStart(2,'0');
     const _f1 = (cfg.label+' '+einr.label).replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')+'_'+_y1+_m1+'.pdf';
@@ -1241,7 +1250,10 @@ async function onThemaChange(themaKey) {
   // Load from M365 (with fallback)
   let members = [];
   // Resolve group key: stationaer uses current einrichtung
-  const groupKey = thema.einrichtung ? (S.einrichtung || 'nordstern') : thema.group;
+  // For einrichtung-based themen, load participants from the Einrichtung's M365 group
+  const einrListResolved = (S.type === 'konferenz') ? EINRICHTUNGEN_KONFERENZ : EINRICHTUNGEN;
+  const einrResolved = thema.einrichtung ? einrListResolved.find(e => e.key === (S.einrichtung || 'nordstern')) : null;
+  const groupKey = einrResolved ? einrResolved.group : thema.group;
   try {
     if (groupKey === 'allTeam') {
       members = await loadAllTeam();
@@ -1345,7 +1357,8 @@ async function reloadM365() {
 
 async function onEinrichtungChange(einrKey) {
   S.einrichtung = einrKey;
-  const einr = EINRICHTUNGEN.find(e => e.key === einrKey);
+  const einrList = (S.type === 'konferenz') ? EINRICHTUNGEN_KONFERENZ : EINRICHTUNGEN;
+  const einr = einrList.find(e => e.key === einrKey);
   if (!einr) return;
   // Update SP path
   document.getElementById('spPath').textContent = einr.sp;
