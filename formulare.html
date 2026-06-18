@@ -130,7 +130,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .klient-header-sub{font-size:12px;opacity:.85;margin-top:2px;}
 .klient-progress{height:4px;background:rgba(255,255,255,.3);}
 .klient-progress-fill{height:100%;background:#fff;transition:width .4s;}
-.form-reader{max-width:680px;margin:0 auto;padding:1.5rem 1.25rem 6rem;}
+.form-reader{max-width:680px;margin:0 auto;padding:1.5rem 1.25rem 8rem;}
 .form-step{display:none;}
 .form-step.active{display:block;}
 
@@ -147,12 +147,12 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .klient-inputs-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:1rem;}
 .kf{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
 .kf label{font-size:14px;font-weight:500;color:var(--text);}
-.kf input,.kf select,.kf textarea{border:1px solid var(--border);border-radius:var(--radius);padding:11px 12px;font-size:16px;color:var(--text);background:#fff;outline:none;font-family:inherit;transition:border-color .12s;width:100%;}
+.kf input,.kf select,.kf textarea{border:1px solid var(--border);border-radius:var(--radius);padding:13px 12px;font-size:16px;color:var(--text);background:#fff;outline:none;font-family:inherit;transition:border-color .12s;width:100%;min-height:52px;}
 .kf input:focus,.kf select:focus{border-color:var(--success);box-shadow:0 0 0 2px rgba(45,106,79,.12);}
 .kf input[readonly]{background:var(--bg);color:var(--text-muted);}
 .kcheck{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
 .kcheck:last-child{border-bottom:none;}
-.kcheck input[type=checkbox]{width:22px;height:22px;accent-color:var(--success);cursor:pointer;flex-shrink:0;margin-top:2px;}
+.kcheck input[type=checkbox]{width:26px;height:26px;accent-color:var(--success);cursor:pointer;flex-shrink:0;margin-top:2px;}
 .kcheck .kcheck-label{font-size:14px;color:var(--text);cursor:pointer;line-height:1.6;}
 .kcheck .kcheck-sub{font-size:12px;color:var(--text-muted);margin-top:3px;}
 
@@ -173,15 +173,15 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .sig-container{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1.25rem;}
 .sig-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:.75rem;}
 .sig-meta{font-size:12px;color:var(--text-muted);margin-bottom:.75rem;}
-.sig-canvas-wrap{border:2px dashed var(--border-strong);border-radius:var(--radius);background:#fafafa;position:relative;touch-action:none;overflow:hidden;}
-.sig-canvas-wrap canvas{display:block;cursor:crosshair;touch-action:none;}
+.sig-canvas-wrap{border:2px dashed var(--border-strong);border-radius:var(--radius);background:#fafafa;position:relative;touch-action:none;overflow:hidden;-ms-touch-action:none;user-select:none;-webkit-user-select:none;}
+.sig-canvas-wrap canvas{display:block;cursor:crosshair;touch-action:none;-ms-touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;}
 .sig-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:13px;color:var(--text-hint);pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:6px;}
 .sig-actions{display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;}
-.sig-status{font-size:12px;color:var(--text-muted);}
-.sig-status.signed{color:var(--success);font-weight:600;}
+.sig-status{font-size:13px;color:var(--text-muted);}
+.sig-status.signed{color:var(--success);font-weight:600;font-size:13px;}
 
 /* Klient nav */
-.klient-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:.9rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:200;box-shadow:0 -2px 12px rgba(0,0,0,.06);}
+.klient-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:.9rem 1.25rem;padding-bottom:calc(.9rem + env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:200;box-shadow:0 -2px 12px rgba(0,0,0,.06);}
 .form-counter{font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4;}
 
 /* Summary */
@@ -1116,7 +1116,7 @@ function buildStep(fid,idx){
       <div class="sig-title">Unterschrift Erziehungsberechtigte/r</div>
       <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
       <div class="sig-canvas-wrap" id="sigWrap_${pad1}">
-        <canvas id="sigCanvas_${pad1}" width="600" height="150"></canvas>
+        <canvas id="sigCanvas_${pad1}" width="600" height="180"></canvas>
         <div class="sig-hint" id="sigHint_${pad1}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
           Mit Finger oder Stift unterschreiben
@@ -1131,7 +1131,7 @@ function buildStep(fid,idx){
       <div class="sig-title">Unterschrift Klient (sofern volljährig oder nach Absprache)</div>
       <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
       <div class="sig-canvas-wrap" id="sigWrap_${pad2}">
-        <canvas id="sigCanvas_${pad2}" width="600" height="150"></canvas>
+        <canvas id="sigCanvas_${pad2}" width="600" height="180"></canvas>
         <div class="sig-hint" id="sigHint_${pad2}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
           Mit Finger oder Stift unterschreiben (optional)
@@ -1153,7 +1153,7 @@ function buildStep(fid,idx){
     <div class="sig-title">Unterschrift ${vg.name||'Vollmachtgeber '+(i+1)}</div>
     <div class="sig-meta">${kd.datum?fmtDate(kd.datum):''}</div>
     <div class="sig-canvas-wrap" id="sigWrap_${padId}">
-      <canvas id="sigCanvas_${padId}" width="600" height="150"></canvas>
+      <canvas id="sigCanvas_${padId}" width="600" height="180"></canvas>
       <div class="sig-hint" id="sigHint_${padId}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
         Mit Finger oder Stift unterschreiben
@@ -1171,7 +1171,7 @@ function buildStep(fid,idx){
     <div class="sig-title">Unterschrift Klient / Sorgeberechtigte/r</div>
     <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
     <div class="sig-canvas-wrap" id="sigWrap_${fid}">
-      <canvas id="sigCanvas_${fid}" width="600" height="170"></canvas>
+      <canvas id="sigCanvas_${fid}" width="600" height="180"></canvas>
       <div class="sig-hint" id="sigHint_${fid}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
         Mit Finger oder Stift hier unterschreiben
@@ -1201,30 +1201,99 @@ function setupPad(fid){
   }
 }
 function _initPad(padId){
-  // Guard: skip if already initialized (prevents canvas clear on re-navigation)
-  if(pads[padId]) return;
-  setTimeout(()=>{
+  if(pads[padId]) return; // already initialized
+  // Use rAF to ensure DOM is ready
+  requestAnimationFrame(()=>setTimeout(()=>{
     const canvas=document.getElementById('sigCanvas_'+padId);
     if(!canvas) return;
     const wrap=document.getElementById('sigWrap_'+padId);
-    canvas.width=wrap.offsetWidth||620;
-    canvas.height=parseInt(canvas.getAttribute('height'))||170;
+    // Size canvas to actual pixel dimensions (handle devicePixelRatio for sharp rendering)
+    const dpr=window.devicePixelRatio||1;
+    const rect=wrap.getBoundingClientRect();
+    const displayW=rect.width||wrap.offsetWidth||620;
+    const displayH=parseInt(canvas.getAttribute('height'))||160;
+    canvas.width=Math.floor(displayW*dpr);
+    canvas.height=Math.floor(displayH*dpr);
+    canvas.style.width=displayW+'px';
+    canvas.style.height=displayH+'px';
     const ctx=canvas.getContext('2d');
+    ctx.scale(dpr,dpr);
     let drawing=false,hasSig=false;
-    function pos(e){const r=canvas.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
-    function start(e){e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);}
-    function move(e){
-      e.preventDefault();if(!drawing)return;
-      const p=pos(e);ctx.lineWidth=2.8;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#1a1916';
-      ctx.lineTo(p.x,p.y);ctx.stroke();
-      if(!hasSig){hasSig=true;document.getElementById('sigHint_'+padId).style.display='none';document.getElementById('sigStatus_'+padId).textContent='✅ Unterschrift vorhanden';document.getElementById('sigStatus_'+padId).className='sig-status signed';sigs[padId]=canvas.toDataURL();}
+
+    function getPos(e){
+      const r=canvas.getBoundingClientRect();
+      // Pointer Events (primary on Android Chrome)
+      if(e.clientX!==undefined&&!e.touches){
+        return{x:(e.clientX-r.left),y:(e.clientY-r.top)};
+      }
+      // Touch Events fallback
+      const t=e.changedTouches?e.changedTouches[0]:(e.touches?e.touches[0]:e);
+      return{x:(t.clientX-r.left),y:(t.clientY-r.top)};
     }
-    function end(e){e.preventDefault();drawing=false;if(hasSig)sigs[padId]=canvas.toDataURL();}
-    canvas.addEventListener('mousedown',start);canvas.addEventListener('mousemove',move);canvas.addEventListener('mouseup',end);
-    canvas.addEventListener('touchstart',start,{passive:false});canvas.addEventListener('touchmove',move,{passive:false});canvas.addEventListener('touchend',end,{passive:false});
-    pads[padId]={ctx,canvas,reset:()=>{ctx.clearRect(0,0,canvas.width,canvas.height);hasSig=false;delete sigs[padId];document.getElementById('sigHint_'+padId).style.display='flex';document.getElementById('sigStatus_'+padId).textContent='Noch nicht unterschrieben';document.getElementById('sigStatus_'+padId).className='sig-status';}};
-  },80);
+
+    function startDraw(e){
+      e.preventDefault();e.stopPropagation();
+      drawing=true;
+      const p=getPos(e);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+    }
+    function draw(e){
+      e.preventDefault();e.stopPropagation();
+      if(!drawing)return;
+      const p=getPos(e);
+      ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#1a1916';
+      ctx.lineTo(p.x,p.y);ctx.stroke();
+      if(!hasSig){
+        hasSig=true;
+        const hint=document.getElementById('sigHint_'+padId);
+        if(hint)hint.style.display='none';
+        const status=document.getElementById('sigStatus_'+padId);
+        if(status){status.textContent='✅ Unterschrift vorhanden';status.className='sig-status signed';}
+      }
+      // Save continuously
+      sigs[padId]=canvas.toDataURL('image/png');
+    }
+    function endDraw(e){
+      if(e)e.preventDefault();
+      drawing=false;
+      if(hasSig)sigs[padId]=canvas.toDataURL('image/png');
+    }
+
+    // ── Pointer Events (Android Chrome, Samsung Browser) ──
+    canvas.addEventListener('pointerdown', startDraw, {passive:false});
+    canvas.addEventListener('pointermove', draw,      {passive:false});
+    canvas.addEventListener('pointerup',   endDraw,   {passive:false});
+    canvas.addEventListener('pointercancel',endDraw,  {passive:false});
+    // Set pointer capture so drawing works when finger moves fast
+    canvas.addEventListener('pointerdown', e=>{
+      try{canvas.setPointerCapture(e.pointerId);}catch(ex){}
+    });
+
+    // ── Touch Events fallback (older browsers) ──
+    canvas.addEventListener('touchstart', startDraw, {passive:false});
+    canvas.addEventListener('touchmove',  draw,      {passive:false});
+    canvas.addEventListener('touchend',   endDraw,   {passive:false});
+
+    // ── Mouse Events fallback (desktop) ──
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', e=>{if(drawing)draw(e);});
+    canvas.addEventListener('mouseup',   endDraw);
+    canvas.addEventListener('mouseleave',endDraw);
+
+    pads[padId]={
+      ctx,canvas,dpr,
+      reset:()=>{
+        ctx.clearRect(0,0,canvas.width/dpr,canvas.height/dpr);
+        hasSig=false;delete sigs[padId];
+        const hint=document.getElementById('sigHint_'+padId);
+        if(hint)hint.style.display='flex';
+        const status=document.getElementById('sigStatus_'+padId);
+        if(status){status.textContent='Noch nicht unterschrieben';status.className='sig-status';}
+      }
+    };
+  },60));
 }
+
 function clearSig(padId){if(pads[padId])pads[padId].reset();}
 
 // ── KLIENT NAV ──
