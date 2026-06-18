@@ -318,7 +318,6 @@
         <div class="progress-bar"><div class="progress-fill" style="width:20%"></div></div>
 
         <div class="card">
-          <div class="card-title">Teammeeting</div>
           <div class="type-grid" id="typeGrid">
             <div class="type-tile" onclick="selectThema('team','grossteam',this)">
               <div class="tile-icon">👥</div>
@@ -345,15 +344,9 @@
               <div class="tile-label">Stationäres Team</div>
               <div class="tile-sub">JWG / Einrichtung</div>
             </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Konferenz Stationär</div>
-          <div class="type-grid">
             <div class="type-tile" onclick="selectThema('konferenz','leitung',this)">
               <div class="tile-icon">🏛️</div>
-              <div class="tile-label">Wohngruppe Konferenz</div>
+              <div class="tile-label">Wohngruppen Konferenz</div>
               <div class="tile-sub">Stationäre Leitung</div>
             </div>
           </div>
@@ -1001,7 +994,7 @@ const TYPES = {
     sp: 'Nordstern › Protokolle › Konferenz Stationär',
     tl: 'COTO / Pädagogische Leitung',
     themen: {
-      leitung: { label: 'Wohngruppe Konferenz', group: 'leitungNS', tops: ['Belegungsplanung', 'Personal & Dienstplan', 'Finanzen', 'Qualitätssicherung', 'Sonstiges'] },
+      leitung: { label: 'Wohngruppen Konferenz', group: 'leitungNS', tops: ['Belegungsplanung', 'Personal & Dienstplan', 'Finanzen', 'Qualitätssicherung', 'Sonstiges'] },
     },
   },
 };
