@@ -356,19 +356,15 @@
               <div class="tile-label">Wohngruppen Konferenz</div>
               <div class="tile-sub">Stationäre Leitung</div>
             </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Sonstiges</div>
-          <div class="type-grid">
             <div class="type-tile" onclick="selectThema('allgemein','besprechung',this)">
               <div class="tile-icon">📝</div>
-              <div class="tile-label">Besprechungsprotokoll</div>
+              <div class="tile-label">Besprechungsprotokoll extern</div>
               <div class="tile-sub">Allgemeine Besprechung</div>
             </div>
           </div>
         </div>
+
+
 
         <div class="info-card" id="typeInfo" style="display:none">
           <div class="info-row"><span class="info-label">Thema</span><span class="info-val" id="tInfoTyp">—</span></div>
@@ -1105,7 +1101,7 @@ const TYPES = {
     sp: 'PNW › Intranet › Protokolle › Besprechungen',
     tl: 'Teamleitung Ambulant',
     themen: {
-      besprechung: { label: 'Besprechungsprotokoll', group: null, tops: ['Begrüßung & Anlass', 'Besprechungspunkte', 'Ergebnisse & Beschlüsse', 'Aufgaben & Nächste Schritte'] },
+      besprechung: { label: 'Besprechungsprotokoll extern', group: null, tops: ['Begrüßung & Anlass', 'Besprechungspunkte', 'Ergebnisse & Beschlüsse', 'Aufgaben & Nächste Schritte'] },
     },
   },
 };
@@ -1377,11 +1373,11 @@ async function onThemaChange(themaKey) {
 
   // TOPs — base tops first, then bewohner appended async
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
-  // Immediately inject bewohner TOPs if this thema requires it (uses cache if available)
+  // Immediately inject bewohner TOPs if this thema requires it (uses einrichtung key)
   if (thema.bewohner) {
-    loadBewohner(groupKey).then(bew => {
+    const _bEinrKey = S.einrichtung || 'nordstern';
+    loadBewohner(_bEinrKey).then(bew => {
       injectBewohnerTOPs(bew);
-      // Re-render TOPs if already on that page
       if (document.getElementById('s-tops')?.classList.contains('active')) renderTOPs();
     });
   }
