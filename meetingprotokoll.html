@@ -938,6 +938,13 @@ function abbrevName(name) {
   if (parts.length < 2) return name;
   return parts[0][0].toUpperCase() + '. ' + parts.slice(1).join(' ');
 }
+// "Markus Peltz" → "Peltz, Markus"
+function lastFirst(name) {
+  if (!name) return name;
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  return parts[parts.length - 1] + ', ' + parts.slice(0, -1).join(' ');
+}
 
 /* ──────────────────────────────────────
    PEOPLE REGISTRY (Fallback wenn Gruppe nicht in M365 gefunden)
@@ -1143,14 +1150,21 @@ async function populateScribeSelect() {
   const me      = (currentAccount?.username || '').toLowerCase();
   const myName  = (currentAccount?.name     || '').toLowerCase();
 
+  // Sort by last name
+  const sorted = [..._scribeMembers].sort((a, b) => {
+    const la = lastFirst(a.fullName || a.name).toLowerCase();
+    const lb = lastFirst(b.fullName || b.name).toLowerCase();
+    return la.localeCompare(lb, 'de');
+  });
+
   sel.innerHTML = '<option value="">— bitte auswählen —</option>';
   let defaultSet = false;
 
-  _scribeMembers.forEach(p => {
+  sorted.forEach(p => {
     const opt = document.createElement('option');
-    const display = abbrevName(p.fullName || p.name);
+    const display = lastFirst(p.fullName || p.name);
     opt.value       = p.fullName || p.name;
-    opt.textContent = display + (p.role ? ' (' + p.role + ')' : '');
+    opt.textContent = display;
 
     // Match logged-in user by email or display name
     const pMail = (p.mail || '').toLowerCase();
