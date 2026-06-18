@@ -518,12 +518,6 @@
                 <label>Zuständige Teamleitung</label>
                 <select id="fApprover">
                   <option value="">— bitte auswählen —</option>
-                  <option value="mp">Markus Peltz (COTO)</option>
-                  <option value="js">Jörg Schneider (TL Ambulant)</option>
-                  <option value="ng">Nadine Grund (TL Ambulant)</option>
-                  <option value="lm">Laura Meier (TL Nordstern)</option>
-                  <option value="jh">Jessica Herrmann (TL Nordstern)</option>
-                  <option value="kf">Kilian Freundl (TL Nordstern)</option>
                 </select>
               </div>
             </div>
@@ -1031,6 +1025,48 @@ const TYPES = {
   },
 };
 
+// Teamleiter je Protokoll-Kontext
+// key: 'ambulant' or 'nordstern'
+const TL_LISTS = {
+  ambulant: [
+    { value: 'ng', label: 'Grund, Nadine',   full: 'Nadine Grund' },
+    { value: 'lm', label: 'Meier, Laura',    full: 'Laura Meier' },
+    { value: 'js', label: 'Schneider, Jörg', full: 'Jörg Schneider' },
+    { value: 'sp', label: 'Peltz, Sonja',    full: 'Sonja Peltz' },
+  ],
+  nordstern: [
+    { value: 'jh', label: 'Herrmann, Jessica', full: 'Jessica Herrmann' },
+    { value: 'kf', label: 'Freundl, Kilian',   full: 'Kilian Freundl' },
+    { value: 'lm', label: 'Meier, Laura',      full: 'Laura Meier' },
+    { value: 'sp', label: 'Peltz, Sonja',      full: 'Sonja Peltz' },
+  ],
+};
+
+// Which TL list to use per type+thema
+function getApproverContext() {
+  if (!S.type || !S.thema) return 'ambulant';
+  // Nordstern-context: stationaer team, konferenz/leitung
+  if (S.type === 'konferenz') return 'nordstern';
+  if (S.type === 'team' && S.thema === 'stationaer') return 'nordstern';
+  if (S.type === 'team' && S.thema === 'nordstern')  return 'nordstern';
+  return 'ambulant';
+}
+
+function populateApproverSelect() {
+  const sel = document.getElementById('fApprover');
+  if (!sel) return;
+  const list = TL_LISTS[getApproverContext()];
+  const cur  = sel.value; // preserve current selection if valid
+  sel.innerHTML = '<option value="">— bitte auswählen —</option>';
+  list.forEach(tl => {
+    const opt = document.createElement('option');
+    opt.value       = tl.value;
+    opt.textContent = tl.label;
+    if (tl.value === cur) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
 /* ──────────────────────────────────────
    STATE
 ────────────────────────────────────── */
@@ -1066,7 +1102,8 @@ function goSection(id) {
     if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
     else renderParticipants();
   }
-  if (id === 's-tops')  renderTOPs();
+  if (id === 's-tops')      renderTOPs();
+  if (id === 's-freigabe')  populateApproverSelect();
 }
 function goHome() {}
 function markDone(n) {
@@ -1124,6 +1161,8 @@ function selectThema(type, themaKey, el) {
   // Navigate directly to step 2
   markDone(1);
   goSection('s-meta');
+  // Pre-populate approver list for the new context
+  populateApproverSelect();
 }
 
 /* ──────────────────────────────────────
@@ -1379,7 +1418,10 @@ function addTOP() {
 function requestApproval() {
   const sel = document.getElementById('fApprover');
   if (!sel.value) { showToast('Bitte zuerst eine Teamleitung auswählen.', 'info'); return; }
-  document.getElementById('mApproverName').textContent = sel.options[sel.selectedIndex].text;
+  // Find full name for modal
+  const ctx  = getApproverContext();
+  const tl   = (TL_LISTS[ctx] || []).find(t => t.value === sel.value);
+  document.getElementById('mApproverName').textContent = tl ? tl.full : sel.options[sel.selectedIndex].text;
   openModal('modalApproval');
 }
 function confirmApproval() {
