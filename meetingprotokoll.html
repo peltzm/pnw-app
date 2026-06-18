@@ -537,11 +537,21 @@
           <div class="card-title">Freigabe durch Teamleitung</div>
           <div class="approval-card">
             <div class="field-grid full">
-              <div class="field">
+              <div id="freigabeStandardWrap">
                 <label>Zuständige Teamleitung</label>
                 <select id="fApprover">
                   <option value="">— bitte auswählen —</option>
                 </select>
+              </div>
+              <div id="freigabeExternWrap" style="display:none">
+                <div class="field">
+                  <label>Unterschrift 1 – Name / Funktion</label>
+                  <input type="text" id="fSig1" placeholder="z. B. Markus Peltz, Leitung Verwaltung">
+                </div>
+                <div class="field" style="margin-top:8px;">
+                  <label>Unterschrift 2 – Name / Funktion</label>
+                  <input type="text" id="fSig2" placeholder="z. B. Gesprächspartner/in, Organisation">
+                </div>
               </div>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
@@ -696,6 +706,7 @@
             <div class="section-sub">So sieht das finale PDF-Protokoll aus</div>
           </div>
           <button class="btn btn-secondary" onclick="window.print()">🖨️ Drucken / PDF</button>
+          <button class="btn btn-secondary" id="btnBlankoPrint" style="display:none" onclick="printBlanko()">🖨️ Blanko drucken</button>
         </div>
         <div id="previewContainer"></div>
       </div>
@@ -1101,7 +1112,7 @@ const TYPES = {
     sp: 'PNW › Intranet › Protokolle › Besprechungen',
     tl: 'Teamleitung Ambulant',
     themen: {
-      besprechung: { label: 'Besprechungsprotokoll extern', group: null, tops: ['Begrüßung & Anlass', 'Besprechungspunkte', 'Ergebnisse & Beschlüsse', 'Aufgaben & Nächste Schritte'] },
+      besprechung: { label: 'Besprechungsprotokoll extern', group: null, extern: true, tops: ['Begrüßung & Anlass', 'Besprechungspunkte', 'Ergebnisse & Beschlüsse', 'Aufgaben & Nächste Schritte'] },
     },
   },
 };
@@ -1202,7 +1213,16 @@ function goSection(id) {
       renderTOPs();
     }
   }
-  if (id === 's-freigabe')  populateApproverSelect();
+  if (id === 's-freigabe') {
+    populateApproverSelect();
+    const _isExtern = S.type === 'allgemein' && S.thema === 'besprechung';
+    const stdWrap = document.getElementById('freigabeStandardWrap');
+    const extWrap = document.getElementById('freigabeExternWrap');
+    const cardTitle = document.getElementById('freigabeCardTitle');
+    if (stdWrap) stdWrap.style.display = _isExtern ? 'none' : '';
+    if (extWrap) extWrap.style.display = _isExtern ? '' : 'none';
+    if (cardTitle) cardTitle.textContent = _isExtern ? 'Unterschriften' : 'Zuständige Teamleitung';
+  }
 }
 function goHome() {}
 function markDone(n) {
@@ -1484,6 +1504,58 @@ async function onEinrichtungChange(einrKey) {
   renderBewohnerCard();
 }
 
+function printBlanko() {
+  const cfg   = TYPES[S.type];
+  const thema = cfg?.themen[S.thema];
+  const datum = document.getElementById('fDatum')?.value || '';
+  const ort   = document.getElementById('fOrt')?.value || '';
+  const sig1  = document.getElementById('fSig1')?.value?.trim() || 'Unterschrift 1';
+  const sig2  = document.getElementById('fSig2')?.value?.trim() || 'Unterschrift 2';
+
+  // Build blank TOPs from thema.tops (ignoring any entered text)
+  const blankTops = (thema?.tops || S.tops.filter(t=>!t._bewohner).map(t=>t.title)).map((title, i) => `
+    <div style="margin-bottom:1.5rem;border:1px solid #ddd;border-radius:6px;padding:1rem;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:.75rem;">${i+1}. ${title}</div>
+      <div style="border-bottom:1px solid #ccc;height:24px;margin-bottom:6px;"></div>
+      <div style="border-bottom:1px solid #ccc;height:24px;margin-bottom:6px;"></div>
+      <div style="border-bottom:1px solid #ccc;height:24px;"></div>
+    </div>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Kodchasan',sans-serif; font-size:12px; color:#1a1916; padding:2rem 2.5rem; }
+    h1 { font-size:16px; font-weight:700; margin-bottom:4px; }
+    .meta { display:flex; gap:2rem; font-size:11px; color:#666; margin-bottom:1.5rem; padding-bottom:.75rem; border-bottom:2px solid #8B5E3C; }
+    .meta span { display:flex; flex-direction:column; gap:2px; }
+    .meta strong { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#999; }
+    .sig { display:flex; gap:2rem; margin-top:2.5rem; }
+    .sig-block { flex:1; }
+    .sig-line { border-bottom:1px solid #aaa; height:50px; margin-bottom:4px; }
+    .sig-label { font-size:10px; color:#666; }
+    @media print { body { padding:1.5cm; } }
+  </style></head><body>
+  <h1>Besprechungsprotokoll</h1>
+  <div class="meta">
+    <span><strong>Datum</strong>${datum ? fmtDate(datum) : '___________'}</span>
+    <span><strong>Ort / Thema</strong>${ort || '___________'}</span>
+    <span><strong>Seite</strong>____ / ____</span>
+  </div>
+  ${blankTops}
+  <div class="sig">
+    <div class="sig-block"><div class="sig-line"></div><div class="sig-label">${sig1}</div></div>
+    <div class="sig-block"><div class="sig-line"></div><div class="sig-label">${sig2}</div></div>
+  </div>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 500);
+}
+
 function addGuest() {
   const area = document.getElementById('guestArea');
   const row = document.createElement('div');
@@ -1628,6 +1700,11 @@ async function saveDraft() { showToast('Entwurf wird gespeichert …', 'info'); 
    PREVIEW
 ────────────────────────────────────── */
 function buildPreview() {
+  // Show/hide Blanko button
+  const _isExternPrev = S.type === 'allgemein' && S.thema === 'besprechung';
+  const _blankBtn = document.getElementById('btnBlankoPrint');
+  if (_blankBtn) _blankBtn.style.display = _isExternPrev ? '' : 'none';
+
   const cfg      = TYPES[S.type];
   const thema    = S.thema ? cfg.themen[S.thema] : null;
   const datum    = fmtDate(document.getElementById('fDatum')?.value || '');
@@ -1642,6 +1719,9 @@ function buildPreview() {
   const pres     = S.participants.filter(p => p.present).map(p => p.name).join(', ') || '—';
   const abw      = S.participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
   const bewohnerAnwesend = getSelectedBewohner().map(b => bewohnerDisplay(b.nn, b.vn)).join(', ') || null;
+  const isExtern = S.type === 'allgemein' && S.thema === 'besprechung';
+  const sig1     = document.getElementById('fSig1')?.value?.trim() || '';
+  const sig2     = document.getElementById('fSig2')?.value?.trim() || '';
   const approverSel = document.getElementById('fApprover');
   const approver = approverSel?.options[approverSel.selectedIndex]?.text || '—';
 
@@ -1688,11 +1768,16 @@ function buildPreview() {
       <div class="sh">Protokoll</div>
       ${topsHtml}
       ${next?`<div class="sh">Nächster Termin</div><table class="mt"><tr><td>Datum / Uhrzeit</td><td>${next} · ${nextZ} Uhr</td></tr>${nextH?`<tr><td>Hinweise</td><td>${nextH}</td></tr>`:''}</table>`:''}
+      ${isExtern ? `
+      <div class="sig">
+        <div class="sig-block"><div class="sig-line" style="height:50px;"></div><div class="sig-label">${sig1 || 'Unterschrift 1'}</div></div>
+        <div class="sig-block"><div class="sig-line" style="height:50px;"></div><div class="sig-label">${sig2 || 'Unterschrift 2'}</div></div>
+      </div>` : `
       <div class="sig">
         <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Protokollführung: ${proto}</div></div>
         <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Freigabe TL: ${approver}</div></div>
         <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Datum der Freigabe</div></div>
-      </div>
+      </div>`}
       <p style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:1.5rem;">
         Erstellt mit Praxis NeueWege Meetingprotokoll-App · Ablage: ${cfg.sp}
       </p>
