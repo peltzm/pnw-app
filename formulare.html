@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Formulare — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#fff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --success:#2d6a4f; --success-bg:#eaf4ee;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --info-bg:#eff6ff; --info:#1d4ed8;
+  --radius:8px; --radius-lg:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;min-height:100vh;}
+
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:54px;position:sticky;top:0;z-index:300;}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.user-badge{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);}
+.mode-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.04em;}
+.mode-pill.fk{background:var(--accent-light);color:var(--accent);}
+.mode-pill.klient{background:#d1fae5;color:#065f46;}
+
+.screen{display:none;}
+.screen.active{display:block;}
+
+/* LOGIN */
+#loginScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2.5rem;max-width:400px;width:100%;text-align:center;margin:1rem;}
+
+/* FK LAYOUT */
+.fk-layout{display:flex;min-height:calc(100vh - 54px);}
+.fk-sidebar{width:256px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:54px;height:calc(100vh - 54px);overflow-y:auto;}
+.fk-sidebar-hd{padding:1.1rem 1rem .6rem;border-bottom:1px solid var(--border);}
+.fk-sidebar-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-hint);}
+.klient-box{background:var(--accent-light);border:1px solid #e8c4a8;border-radius:var(--radius);padding:9px 11px;margin:.75rem 1rem;}
+.klient-box-name{font-size:13px;font-weight:600;color:var(--accent);}
+.klient-box-sub{font-size:11px;color:var(--text-muted);margin-top:1px;}
+.klient-box-link{font-size:11px;color:var(--accent-mid);cursor:pointer;text-decoration:underline;margin-top:3px;display:inline-block;}
+.tab{display:flex;align-items:center;gap:9px;padding:9px 1rem;cursor:pointer;border-left:3px solid transparent;transition:all .12s;min-height:46px;}
+.tab:hover{background:var(--bg);}
+.tab.active{background:var(--accent-light);border-left-color:var(--accent);}
+.tab-icon{font-size:17px;flex-shrink:0;}
+.tab-text{flex:1;min-width:0;}
+.tab-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tab.active .tab-name{color:var(--accent);}
+.tab-sub{font-size:10px;color:var(--text-hint);margin-top:1px;}
+.tab-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dot-e{background:var(--border);}
+.dot-p{background:var(--accent-mid);}
+.dot-r{background:var(--success);}
+.sidebar-bot{margin-top:auto;border-top:1px solid var(--border);padding:.75rem 1rem;}
+.sidebar-link{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted);cursor:pointer;padding:5px 0;}
+.sidebar-link:hover{color:var(--accent);}
+
+.fk-content{flex:1;overflow-y:auto;}
+.klient-banner{background:var(--surface);border-bottom:1px solid var(--border);padding:.6rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.klient-banner-name{font-size:14px;font-weight:600;}
+.tag{font-size:11px;background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:20px;font-weight:500;}
+.panel{display:none;padding:1.75rem 2rem;max-width:720px;}
+.panel.active{display:block;}
+.panel-title{font-size:17px;font-weight:600;margin-bottom:3px;}
+.panel-sub{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1rem;}
+.card-title{font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1rem;}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.fg.full{grid-template-columns:1fr;}
+.fg.tri{grid-template-columns:1fr 1fr 1fr;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:12px;font-weight:500;color:var(--text-muted);}
+.field input,.field select,.field textarea{border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;color:var(--text);background:#fff;outline:none;font-family:inherit;transition:border-color .12s;width:100%;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent-mid);}
+.field input[readonly]{background:var(--bg);color:var(--text-muted);}
+.field textarea{min-height:68px;resize:vertical;}
+select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b6860' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px;}
+
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:#6a3418;}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed;}
+.btn-secondary{background:#fff;color:var(--text);border:1px solid var(--border-strong);}
+.btn-secondary:hover{background:var(--bg);}
+.btn-success{background:var(--success);color:#fff;}
+.btn-success:hover{background:#245a41;}
+.btn-danger{background:#fee2e2;color:var(--error);border:1px solid #fca5a5;}
+.btn-danger:hover{background:#fecaca;}
+.btn-sm{padding:6px 12px;font-size:12px;}
+.btn-row{display:flex;align-items:center;justify-content:space-between;margin-top:1.25rem;gap:8px;}
+.btn-row-r{display:flex;gap:8px;}
+
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:12px;line-height:1.5;margin-bottom:1rem;}
+.alert-info{background:var(--info-bg);color:var(--info);border:1px solid #bfdbfe;}
+.alert-success{background:var(--success-bg);color:var(--success);border:1px solid #a7f3d0;}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca;}
+.alert-warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a;}
+
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;}
+.fc{border:2px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.1rem;cursor:pointer;transition:all .14s;background:var(--surface);position:relative;}
+.fc:hover{border-color:var(--accent-mid);background:var(--accent-light);}
+.fc.sel{border-color:var(--accent);background:var(--accent-light);}
+.fc-icon{font-size:20px;margin-bottom:5px;}
+.fc-title{font-size:13px;font-weight:600;margin-bottom:2px;}
+.fc-desc{font-size:11px;color:var(--text-muted);line-height:1.4;}
+.fc-check{position:absolute;top:9px;right:9px;width:18px;height:18px;border-radius:50%;background:var(--accent);display:none;align-items:center;justify-content:center;}
+.fc.sel .fc-check{display:flex;}
+
+/* KLIENT MODE */
+#klientScreen{min-height:100vh;background:var(--bg);}
+.klient-header{background:var(--success);color:#fff;padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;}
+.klient-header-title{font-size:15px;font-weight:600;}
+.klient-header-sub{font-size:12px;opacity:.85;margin-top:2px;}
+.klient-progress{height:4px;background:rgba(255,255,255,.3);}
+.klient-progress-fill{height:100%;background:#fff;transition:width .4s;}
+.form-reader{max-width:680px;margin:0 auto;padding:1.5rem 1.25rem 6rem;}
+.form-step{display:none;}
+.form-step.active{display:block;}
+
+/* Form text */
+.form-text-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.5rem;margin-bottom:1.25rem;line-height:1.8;font-size:14px;}
+.form-text-box h2{font-size:17px;font-weight:700;margin-bottom:2px;}
+.form-text-box .subtitle{font-size:13px;color:var(--text-muted);margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border);}
+.form-text-box h3{font-size:13px;font-weight:700;margin:1rem 0 .4rem;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;}
+.form-text-box p{margin-bottom:.65rem;color:var(--text);}
+.form-text-box .inst-highlight{background:var(--accent-light);border-left:3px solid var(--accent);padding:8px 12px;border-radius:4px;font-weight:600;margin:.5rem 0;}
+
+/* Klient inputs */
+.klient-inputs{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1.25rem;}
+.klient-inputs-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:1rem;}
+.kf{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+.kf label{font-size:14px;font-weight:500;color:var(--text);}
+.kf input,.kf select,.kf textarea{border:1px solid var(--border);border-radius:var(--radius);padding:11px 12px;font-size:16px;color:var(--text);background:#fff;outline:none;font-family:inherit;transition:border-color .12s;width:100%;}
+.kf input:focus,.kf select:focus{border-color:var(--success);box-shadow:0 0 0 2px rgba(45,106,79,.12);}
+.kf input[readonly]{background:var(--bg);color:var(--text-muted);}
+.kcheck{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.kcheck:last-child{border-bottom:none;}
+.kcheck input[type=checkbox]{width:22px;height:22px;accent-color:var(--success);cursor:pointer;flex-shrink:0;margin-top:2px;}
+.kcheck .kcheck-label{font-size:14px;color:var(--text);cursor:pointer;line-height:1.6;}
+.kcheck .kcheck-sub{font-size:12px;color:var(--text-muted);margin-top:3px;}
+
+/* Toggle switches for optional consent */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);}
+.toggle-row:last-child{border-bottom:none;}
+.toggle-label{flex:1;padding-right:12px;}
+.toggle-label-main{font-size:14px;font-weight:500;color:var(--text);}
+.toggle-label-sub{font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.5;}
+.toggle{position:relative;width:44px;height:26px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#d1d5db;border-radius:26px;transition:.3s;}
+.toggle-slider:before{position:absolute;content:"";height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.toggle input:checked+.toggle-slider{background:var(--success);}
+.toggle input:checked+.toggle-slider:before{transform:translateX(18px);}
+
+/* Signature */
+.sig-container{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1.25rem;}
+.sig-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:.75rem;}
+.sig-meta{font-size:12px;color:var(--text-muted);margin-bottom:.75rem;}
+.sig-canvas-wrap{border:2px dashed var(--border-strong);border-radius:var(--radius);background:#fafafa;position:relative;touch-action:none;overflow:hidden;}
+.sig-canvas-wrap canvas{display:block;cursor:crosshair;touch-action:none;}
+.sig-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:13px;color:var(--text-hint);pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:6px;}
+.sig-actions{display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;}
+.sig-status{font-size:12px;color:var(--text-muted);}
+.sig-status.signed{color:var(--success);font-weight:600;}
+
+/* Klient nav */
+.klient-nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:.9rem 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:200;box-shadow:0 -2px 12px rgba(0,0,0,.06);}
+.form-counter{font-size:12px;color:var(--text-muted);text-align:center;line-height:1.4;}
+
+/* Summary */
+.sum-row{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.sum-row:last-child{border-bottom:none;}
+.sum-lbl{color:var(--text-muted);min-width:130px;flex-shrink:0;}
+.sum-val{font-weight:500;}
+
+/* Done screen */
+#doneScreen{min-height:100vh;background:var(--bg);}
+.done-inner{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 54px);}
+.done-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2.5rem;max-width:480px;width:100%;text-align:center;margin:1rem;}
+.done-icon{font-size:52px;margin-bottom:1rem;}
+
+/* ── MOBILE FIRST ── */
+/* Base = mobile (< 600px) */
+.fk-layout{display:flex;flex-direction:column;min-height:calc(100vh - 54px);}
+.fk-sidebar{width:100%;height:auto;position:static;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);background:var(--surface);display:flex;}
+.fk-sidebar-hd,.sidebar-bot,.klient-box{display:none;}
+.tab{flex-direction:column;padding:8px 10px;border-left:none;border-bottom:3px solid transparent;min-height:56px;justify-content:center;align-items:center;}
+.tab.active{border-bottom-color:var(--accent);border-left-color:transparent;background:var(--accent-light);}
+.tab-text{display:none;}
+.tab-dot{display:none;}
+.tab-icon{font-size:22px;}
+.fk-content{flex:1;}
+.klient-banner{padding:.6rem 1rem;}
+.panel{padding:1rem;max-width:100%;}
+.form-grid{grid-template-columns:1fr;}
+.fg{grid-template-columns:1fr;}
+.fg.tri{grid-template-columns:1fr;}
+/* Touch targets */
+.field input,.field select,.field textarea{font-size:16px !important;padding:11px 12px;min-height:48px;}
+.btn{min-height:48px;font-size:14px;}
+.kf input,.kf select{font-size:16px;padding:12px;}
+
+/* Add-button pattern (like other PNW apps) */
+.btn-add{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent-mid);background:none;border:1px dashed var(--accent-mid);border-radius:var(--radius);padding:8px 14px;cursor:pointer;font-family:inherit;margin-top:4px;min-height:44px;}
+.btn-add:hover{background:var(--accent-light);}
+.extra-block{border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:.75rem;background:var(--bg);position:relative;}
+.extra-block-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;}
+.extra-block-label{font-size:12px;font-weight:600;color:var(--accent);}
+.btn-remove-block{font-size:11px;color:var(--error);background:none;border:1px solid currentColor;border-radius:4px;padding:3px 9px;cursor:pointer;min-height:32px;}
+
+/* Leerformular download section */
+.dl-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:1rem;}
+.dl-card{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.1rem;gap:12px;}
+.dl-card-info{flex:1;}
+.dl-card-title{font-size:13px;font-weight:600;color:var(--text);}
+.dl-card-sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.dl-actions{display:flex;gap:8px;flex-shrink:0;}
+
+/* ── TABLET (≥ 600px) ── */
+@media(min-width:600px){
+  .form-grid{grid-template-columns:1fr 1fr;}
+  .fg{grid-template-columns:1fr 1fr;}
+  .fg.tri{grid-template-columns:1fr 1fr 1fr;}
+  .dl-grid{grid-template-columns:1fr 1fr;}
+}
+
+/* ── DESKTOP (≥ 900px) ── */
+@media(min-width:900px){
+  .fk-layout{flex-direction:row;}
+  .fk-sidebar{width:256px;flex-shrink:0;flex-direction:column;height:calc(100vh - 54px);position:sticky;top:54px;overflow-y:auto;border-right:1px solid var(--border);border-bottom:none;}
+  .fk-sidebar-hd{display:block;}
+  .sidebar-bot{display:block;}
+  .klient-box{display:block;}
+  .tab{flex-direction:row;padding:9px 1rem;border-bottom:none;border-left:3px solid transparent;min-height:46px;justify-content:flex-start;align-items:center;}
+  .tab.active{border-left-color:var(--accent);border-bottom-color:transparent;}
+  .tab-text{display:block;}
+  .tab-dot{display:block;}
+  .tab-icon{font-size:17px;}
+  .klient-banner{padding:.6rem 2rem;}
+  .panel{padding:1.75rem 2rem;max-width:720px;}
+  .field input,.field select,.field textarea{font-size:13px !important;padding:8px 10px;min-height:unset;}
+  .btn{min-height:unset;font-size:13px;}
+  .dl-grid{grid-template-columns:1fr 1fr 1fr;}
+}
+
+input,select,textarea,button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+input[type=date]{-webkit-appearance:none;appearance:none;}
+@media print{
+  .header,.fk-sidebar,.klient-nav,.klient-banner,.mode-pill,.user-badge{display:none!important;}
+  body{font-size:12pt;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.5rem;" alt="PNW">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px;">Formulare</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:1.75rem;line-height:1.65;">Klientenformulare digital erfassen, unterzeichnen und in SharePoint ablegen.</div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:14px;padding:11px;" onclick="doLogin()">
+      <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <div style="margin-top:1.25rem;font-size:11px;color:var(--text-hint);">Praxis NeueWege</div>
+    <div id="loginError" class="alert alert-error" style="display:none;margin-top:1rem;text-align:left;"></div>
+  </div>
+</div>
+
+<!-- FK-MODUS -->
+<div id="fkScreen" class="screen">
+  <div class="header">
+    <div class="header-brand" onclick="showPanel('stamm')">
+      <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:30px;width:auto;" alt="PNW">
+      <span style="font-size:14px;font-weight:600;margin-left:4px;">Formulare</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="mode-pill fk">🧑‍💼 Fachkraft-Modus</div>
+      <div class="user-badge">
+        <div class="user-dot"></div>
+        <span id="fkUserName"></span>
+        <button onclick="doLogout()" style="margin-left:6px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 7px;cursor:pointer;color:var(--text-muted);">Abmelden</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="fk-layout">
+    <div class="fk-sidebar">
+      <div class="fk-sidebar-hd"><div class="fk-sidebar-label">Workflow</div></div>
+      <div id="klientBoxSidebar" class="klient-box" style="display:none;">
+        <div class="klient-box-name" id="sbName">–</div>
+        <div class="klient-box-sub" id="sbSub">–</div>
+        <span class="klient-box-link" onclick="showPanel('stamm')">Stammdaten</span>
+      </div>
+      <div class="tab active" id="tab_stamm" onclick="showPanel('stamm')">
+        <div class="tab-icon">👤</div>
+        <div class="tab-text"><div class="tab-name">Stammdaten</div><div class="tab-sub" id="sub_stamm">Klientendaten eingeben</div></div>
+        <div class="tab-dot dot-e" id="dot_stamm"></div>
+      </div>
+      <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
+      <div style="padding:3px 1rem 5px;font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.07em;">Formulare wählen</div>
+      <div class="tab" id="tab_formulare" onclick="showPanel('formulare')">
+        <div class="tab-icon">📋</div>
+        <div class="tab-text"><div class="tab-name">Auswahl</div><div class="tab-sub" id="sub_formulare">Keine ausgewählt</div></div>
+        <div class="tab-dot dot-e" id="dot_formulare"></div>
+      </div>
+      <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
+      <div class="tab" id="tab_uebergabe" onclick="showPanel('uebergabe')">
+        <div class="tab-icon">🤲</div>
+        <div class="tab-text"><div class="tab-name">Tablet übergeben</div><div class="tab-sub">An Klient weitergeben</div></div>
+        <div class="tab-dot dot-e" id="dot_uebergabe"></div>
+      </div>
+      <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
+      <div class="tab" id="tab_leer" onclick="showPanel('leer')">
+        <div class="tab-icon">🖨️</div>
+        <div class="tab-text"><div class="tab-name">Leerformulare</div><div class="tab-sub">Drucken / Download</div></div>
+        <div class="tab-dot dot-e"></div>
+      </div>
+      <div class="sidebar-bot">
+        <div class="sidebar-link" onclick="window.open('https://apps.praxisneuewege.de','_blank')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+          <span>App Launcher</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fk-content">
+      <div id="klientBanner" class="klient-banner" style="display:none;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="klient-banner-name" id="bnrName"></span>
+          <span class="tag" id="bnrSgb"></span>
+          <span class="tag" id="bnrJa"></span>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted);" id="bnrFk"></span>
+      </div>
+
+      <!-- STAMMDATEN -->
+      <div class="panel active" id="panel_stamm">
+        <div class="panel-title">Klientenstammdaten</div>
+        <div class="panel-sub">Einmalig erfassen — alle Formulare verwenden diese Daten automatisch.</div>
+        <div class="card">
+          <div class="card-title">Klient / Familie</div>
+          <div class="fg">
+            <div class="field"><label>Nachname *</label><input type="text" id="k_nn" placeholder="Mustermann" oninput="onKlientChange()"></div>
+            <div class="field"><label>Vorname *</label><input type="text" id="k_vn" placeholder="Max" oninput="onKlientChange()"></div>
+          </div>
+          <div class="fg">
+            <div class="field"><label>Geburtsdatum</label><input type="date" id="k_geb"></div>
+            <div class="field"><label>Telefon / WhatsApp</label><input type="tel" id="k_tel" placeholder="+49 170 0000000"></div>
+          </div>
+          <div class="fg">
+            <div class="field"><label>E-Mail Familie</label><input type="email" id="k_email" placeholder="familie@beispiel.de"></div>
+            <div class="field"><label>Straße + Hausnummer</label><input type="text" id="k_str" placeholder="Musterstraße 1"></div>
+          </div>
+          <div class="fg tri">
+            <div class="field"><label>PLZ</label><input type="text" id="k_plz" placeholder="85405" maxlength="5"></div>
+            <div class="field" style="grid-column:span 2;"><label>Ort</label><input type="text" id="k_ort" placeholder="Nandlstadt"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Hilfe &amp; Zuständigkeit</div>
+          <div class="fg">
+            <div class="field">
+              <label>SGB VIII Paragraph</label>
+              <select id="k_sgb" onchange="onKlientChange()">
+                <option value="">Bitte wählen …</option>
+                <option>§27 — Hilfe zur Erziehung</option>
+                <option>§27(2) — Sozialpädag. Einzelbetreuung</option>
+                <option>§30 — Erziehungsbeistand</option>
+                <option>§31 — Sozialpädag. Familienhilfe</option>
+                <option>§34 — Heimerziehung / Vollzeitpflege</option>
+                <option>§35a — Eingliederungshilfe</option>
+                <option>§41 — Hilfe für junge Volljährige</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Zuständiges Jugendamt</label>
+              <select id="k_ja" onchange="onKlientChange()">
+                <option value="">Bitte wählen …</option>
+                <option>Pfaffenhofen a.d. Ilm</option>
+                <option>Kelheim</option>
+                <option>Freising</option>
+                <option>Eichstätt</option>
+                <option>Neuburg-Schrobenhausen</option>
+                <option>Ingolstadt</option>
+                <option>Sonstiges</option>
+              </select>
+            </div>
+          </div>
+          <div class="fg">
+            <div class="field"><label>Fachkraft PNW</label><input type="text" id="k_fk" readonly></div>
+            <div class="field"><label>Datum</label><input type="date" id="k_datum"></div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <div></div>
+          <button class="btn btn-primary" onclick="saveStamm()">Speichern → Formulare wählen</button>
+        </div>
+        <div id="stammSaved" class="alert alert-success" style="display:none;margin-top:1rem;">✅ Gespeichert.</div>
+      </div>
+
+      <!-- FORMULARAUSWAHL -->
+      <div class="panel" id="panel_formulare">
+        <div class="panel-title">Formulare auswählen</div>
+        <div class="panel-sub">Wählen Sie die relevanten Formulare für diesen Klienten. Die Datenschutzerklärung enthält alle optionalen Einwilligungen — der Klient entscheidet selbst welche er erteilt.</div>
+        <div class="form-grid">
+          <div class="fc" id="fc_schweig" onclick="toggleFC('schweig')">
+            <div class="fc-check"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="fc-icon">🤝</div>
+            <div class="fc-title">Schweigepflichtsentbindung</div>
+            <div class="fc-desc">Einwilligung zur Informationsweitergabe an eine Institution.</div>
+          </div>
+          <div class="fc" id="fc_datenschutz" onclick="toggleFC('datenschutz')">
+            <div class="fc-check"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="fc-icon">🔒</div>
+            <div class="fc-title">Datenschutzerklärung</div>
+            <div class="fc-desc">Inkl. optionaler Einwilligungen für WhatsApp &amp; OneDrive — Klient wählt selbst.</div>
+          </div>
+          <div class="fc" id="fc_vollm" onclick="toggleFC('vollm')">
+            <div class="fc-check"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="fc-icon">⚖️</div>
+            <div class="fc-title">Vollmacht Sorgerecht</div>
+            <div class="fc-desc">Bevollmächtigung für Angelegenheiten der elterlichen Sorge.</div>
+          </div>
+          <div class="fc" id="fc_kompass" onclick="toggleFC('kompass')">
+            <div class="fc-check"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="fc-icon">🧭</div>
+            <div class="fc-title">Startkompass</div>
+            <div class="fc-desc">Stammdaten, Eltern, Geschwister, Notfall, Einverständnisse — Erstaufnahme.</div>
+          </div>
+        </div>
+
+        <!-- Schweigepflicht Details -->
+        <div id="det_schweig" style="display:none;">
+          <div class="card">
+            <div class="card-title">🤝 Details — Schweigepflichtsentbindung</div>
+            <div class="fg full"><div class="field"><label>Institution (Name + Ort) *</label><input type="text" id="s_inst" placeholder="z.B. Grundschule Musterstadt, Hauptstraße 1, 85405 Musterstadt"></div></div>
+            <div class="fg">
+              <div class="field"><label>Zweiter Sorgeberechtigter (optional)</label><input type="text" id="s_sorge2" placeholder="Name"></div>
+              <div class="field"><label>Vertretende Fachkraft (aus M365)</label><input type="text" id="s_vertr" readonly style="background:var(--bg);color:var(--text-muted);"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vollmacht Details -->
+        <div id="det_vollm" style="display:none;">
+          <div class="card">
+            <div class="card-title">⚖️ Details — Vollmacht Sorgerecht</div>
+            <div id="vgeber_list">
+              <div class="extra-block" id="vgeber_0">
+                <div class="extra-block-hd">
+                  <span class="extra-block-label">Vollmachtgeber 1</span>
+                </div>
+                <div class="fg">
+                  <div class="field"><label>Name, Vorname</label><input type="text" id="v_geb" placeholder="Mustermann, Maria" oninput="this.dataset.manuallyEdited='1'"></div>
+                  <div class="field"><label>Wohnort</label><input type="text" id="v_geb_ort" placeholder="85405 Nandlstadt" oninput="this.dataset.manuallyEdited='1'"></div>
+                </div>
+              </div>
+            </div>
+            <button class="btn-add" onclick="addVollmachtgeber()" id="btnAddVG">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+              Weiteren Vollmachtgeber hinzufügen
+            </button>
+            <div style="height:1px;background:var(--border);margin:1rem 0;"></div>
+            <div class="fg">
+              <div class="field"><label>Kind (Name, Vorname) *</label><input type="text" id="v_kind" placeholder="Mustermann, Tim"></div>
+              <div class="field"><label>Geburtsdatum Kind</label><input type="date" id="v_kind_geb"></div>
+            </div>
+            <div class="fg">
+              <div class="field"><label>Vollmachtnehmer FK 1 (aus M365)</label><input type="text" id="v_fk1" readonly style="background:var(--bg);color:var(--text-muted);"></div>
+              <div class="field">
+                <label>Vollmachtnehmer FK 2 (optional)</label>
+                <select id="v_fk2_sel">
+                  <option value="">— optional —</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="noFormWarn" class="alert alert-warn" style="display:none;">Bitte mindestens ein Formular auswählen.</div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="showPanel('stamm')">← Stammdaten</button>
+          <button class="btn btn-primary" onclick="goToHandover()">Weiter → Tablet übergeben</button>
+        </div>
+      </div>
+
+      <!-- ÜBERGABE -->
+      <div class="panel" id="panel_uebergabe">
+        <div class="panel-title">Tablet an Klient übergeben</div>
+        <div class="panel-sub">Prüfen Sie die Zusammenfassung und starten Sie den Klient-Modus.</div>
+        <div class="card">
+          <div class="card-title">Zusammenfassung</div>
+          <div id="summaryContent"></div>
+        </div>
+        <div class="alert alert-info" style="font-size:13px;">
+          <strong>Hinweis für Fachkraft:</strong> Der Klient liest jeden Formulartext vollständig, füllt ggf. fehlende Felder aus, wählt optionale Einwilligungen selbst und unterschreibt jedes Formular einzeln mit dem Finger. Ohne Unterschrift ist kein Weiterblättern möglich.
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="showPanel('formulare')">← Formulare</button>
+          <button class="btn btn-success" style="font-size:14px;padding:11px 24px;" onclick="startKlientMode()">
+            🤲 Klient-Modus starten
+          </button>
+        </div>
+      </div>
+
+      <!-- LEERFORMULARE -->
+      <div class="panel" id="panel_leer">
+        <div class="panel-title">Leerformulare</div>
+        <div class="panel-sub">Formulare ohne Klientdaten herunterladen oder drucken — für Papiervorlage oder externe Ablage.</div>
+        <div class="dl-grid">
+          <div class="dl-card">
+            <div class="dl-card-info">
+              <div class="dl-card-title">🤝 Schweigepflichtsentbindung</div>
+              <div class="dl-card-sub">1 Seite · PDF</div>
+            </div>
+            <div class="dl-actions">
+              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Schweigepflichtsentbindung')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Drucken
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Schweigepflichtsentbindung')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                PDF
+              </button>
+            </div>
+          </div>
+          <div class="dl-card">
+            <div class="dl-card-info">
+              <div class="dl-card-title">🔒 Datenschutzerklärung</div>
+              <div class="dl-card-sub">2 Seiten · PDF · inkl. WA &amp; OneDrive</div>
+            </div>
+            <div class="dl-actions">
+              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Datenschutzerklärung')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Drucken
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Datenschutzerklärung')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                PDF
+              </button>
+            </div>
+          </div>
+          <div class="dl-card">
+            <div class="dl-card-info">
+              <div class="dl-card-title">⚖️ Vollmacht Sorgerecht</div>
+              <div class="dl-card-sub">1 Seite · PDF</div>
+            </div>
+            <div class="dl-actions">
+              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Vollmacht_Sorgerecht')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Drucken
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Vollmacht_Sorgerecht')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                PDF
+              </button>
+            </div>
+          </div>
+          <div class="dl-card">
+            <div class="dl-card-info">
+              <div class="dl-card-title">🧭 Startkompass</div>
+              <div class="dl-card-sub">1 Seite · PDF · Erstaufnahme</div>
+            </div>
+            <div class="dl-actions">
+              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Startkompass')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Drucken
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Startkompass')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                PDF
+              </button>
+            </div>
+          </div>
+          <div class="dl-card">
+            <div class="dl-card-info">
+              <div class="dl-card-title">📦 Alle Formulare</div>
+              <div class="dl-card-sub">Komplettpaket · 3 PDFs als ZIP</div>
+            </div>
+            <div class="dl-actions">
+              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Alle_Formulare_PNW')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                ZIP
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-info">Im Vollbetrieb werden die Leer-PDFs direkt aus SharePoint geladen und per Browser-Download bereitgestellt.</div>
+      </div>
+
+    </div><!-- /fk-content -->
+  </div><!-- /fk-layout -->
+</div><!-- /fkScreen -->
+
+<!-- KLIENT-MODUS -->
+<div id="klientScreen" class="screen">
+  <div class="klient-header">
+    <div>
+      <div class="klient-header-title">Praxis NeueWege — Formulare</div>
+      <div class="klient-header-sub" id="klHeaderSub">Bitte lesen und unterzeichnen Sie die folgenden Formulare.</div>
+    </div>
+    <div class="mode-pill klient">🙋 Klient-Modus</div>
+  </div>
+  <div class="klient-progress"><div class="klient-progress-fill" id="klProgress" style="width:0%"></div></div>
+  <div class="form-reader" id="formReader"></div>
+  <div class="klient-nav">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-danger btn-sm" onclick="abortKlientMode()" style="min-height:44px;">✕ Abbrechen</button>
+      <button class="btn btn-secondary" id="btnBack" onclick="klNav(-1)" style="display:none;">← Zurück</button>
+    </div>
+    <div class="form-counter" id="formCounter"></div>
+    <button class="btn btn-primary" id="btnNext" onclick="klNav(1)">Weiter →</button>
+  </div>
+</div>
+
+<!-- ABSCHLUSS -->
+<div id="doneScreen" class="screen">
+  <div class="header">
+    <div class="header-brand">
+      <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:30px;width:auto;" alt="PNW">
+      <span style="font-size:14px;font-weight:600;margin-left:4px;">Formulare</span>
+    </div>
+    <div class="mode-pill fk">🧑‍💼 Fachkraft-Modus</div>
+  </div>
+  <div class="done-inner">
+      <div class="done-card">
+        <div class="done-icon">✅</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:8px;">Alle Formulare unterzeichnet</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:1.5rem;">Der Klient hat alle Formulare gelesen und unterschrieben. PDFs können jetzt generiert und versendet werden.</div>
+        <!-- Hidden SP path for PDF metadata only -->
+        <input type="hidden" id="done_sp_hidden">
+        <div class="card" style="text-align:left;margin-bottom:1.25rem;">
+          <div class="card-title">Versand</div>
+          <div class="fg">
+            <div class="field"><label>E-Mail Fachkraft</label><input type="email" id="done_fk_email"></div>
+            <div class="field"><label>E-Mail Familie (Kopie)</label><input type="email" id="done_fam_email"></div>
+          </div>
+        </div>
+        <div id="doneStatus"></div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="mockPDFPreview()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            PDF-Vorschau
+          </button>
+          <button class="btn btn-success" id="sendBtn" onclick="mockSend()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+            Senden &amp; Abschließen
+          </button>
+        </div>
+      </div>
+  </div>
+</div>
+
+<script>
+// ── MSAL CONFIG ──
+const MSAL_CONFIG = {
+  auth: {
+    clientId:    'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+    authority:   'https://login.microsoftonline.com/1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+    redirectUri: (()=>{ const h=window.location.origin+window.location.pathname.replace(/[^/]*$/,''); return h+'formulare.html'; })()
+  },
+  cache: { cacheLocation:'localStorage', storeAuthStateInCookie:true },
+  system: { allowNativeBroker:false }
+};
+const SCOPES = ['User.Read','User.ReadBasic.All','Mail.Send','GroupMember.Read.All'];
+const msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+let currentAccount = null;
+let accessToken    = null;
+
+// ── STATE ──
+let M365_USER = { displayName:'', email:'', jobTitle:'' };
+let M365_FK2_CANDIDATES = [];
+
+const selForms = new Set();
+let kd         = {};
+let klSteps    = [];
+let klCurrent  = 0;
+const sigs     = {};
+const pads     = {};
+
+const FL = {
+  schweig:    {icon:'🤝', name:'Schweigepflichtsentbindung'},
+  datenschutz:{icon:'🔒', name:'Datenschutzerklärung'},
+  vollm:      {icon:'⚖️', name:'Vollmacht Sorgerecht'},
+  kompass:    {icon:'🧭', name:'Startkompass'}
+};
+
+// ── MSAL INIT ──
+(async ()=>{
+  await msalInstance.initialize();
+  const resp = await msalInstance.handleRedirectPromise();
+  if(resp){ currentAccount=resp.account; accessToken=resp.accessToken; }
+  else {
+    const accounts=msalInstance.getAllAccounts();
+    if(accounts.length>0){ currentAccount=accounts[0]; }
+  }
+  if(currentAccount){ await initApp(); }
+  else { document.getElementById('loginScreen').style.display='flex'; }
+})();
+
+async function getToken(){
+  try {
+    const r=await msalInstance.acquireTokenSilent({scopes:SCOPES,account:currentAccount});
+    accessToken=r.accessToken; return accessToken;
+  } catch(e){
+    await msalInstance.acquireTokenRedirect({scopes:SCOPES});
+  }
+}
+
+async function graphGet(path){
+  const token=await getToken();
+  const r=await fetch('https://graph.microsoft.com/v1.0'+path,{headers:{Authorization:'Bearer '+token}});
+  if(!r.ok) throw new Error('Graph '+path+' → '+r.status);
+  return r.json();
+}
+
+async function doLogin(){
+  await msalInstance.loginRedirect({scopes:SCOPES});
+}
+
+async function initApp(){
+  try {
+    // Get own profile
+    const me = await graphGet('/me?$select=displayName,mail,userPrincipalName,jobTitle');
+    M365_USER = {
+      displayName: me.displayName||'',
+      email:       me.mail||me.userPrincipalName||'',
+      jobTitle:    me.jobTitle||''
+    };
+    // Get colleagues from same domain (simple /users list, filter out self)
+    const domain=M365_USER.email.split('@')[1]||'praxisneuewege.de';
+    const users = await graphGet(`/users?$select=displayName,mail,userPrincipalName&$top=50&$filter=endswith(mail,'@${domain}') and id ne '${currentAccount.localAccountId}'`).catch(()=>({value:[]}));
+    M365_FK2_CANDIDATES = (users.value||[])
+      .filter(u=>u.displayName&&u.displayName!==M365_USER.displayName)
+      .map(u=>({displayName:u.displayName, email:u.mail||u.userPrincipalName}));
+  } catch(e){
+    console.warn('Graph /me failed, using account name:', e.message);
+    M365_USER = {
+      displayName: currentAccount.name||currentAccount.username||'',
+      email:       currentAccount.username||''
+    };
+  }
+  // Show app
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('fkScreen').classList.add('active');
+  document.getElementById('fkUserName').textContent=M365_USER.displayName;
+  document.getElementById('k_fk').value=M365_USER.displayName;
+  document.getElementById('v_fk1').value=M365_USER.displayName;
+  document.getElementById('s_vertr').value=M365_USER.displayName;
+  document.getElementById('k_datum').value=new Date().toISOString().split('T')[0];
+  // Populate FK2 dropdown
+  const sel=document.getElementById('v_fk2_sel');
+  sel.innerHTML='<option value="">— optional —</option>';
+  M365_FK2_CANDIDATES.forEach(u=>{
+    const o=document.createElement('option');
+    o.value=u.displayName; o.textContent=u.displayName;
+    sel.appendChild(o);
+  });
+  document.getElementById('loginError').style.display='none';
+}
+
+function doLogout(){
+  msalInstance.logoutRedirect({postLogoutRedirectUri:MSAL_CONFIG.auth.redirectUri});
+}
+function abortKlientMode(){
+  if(!confirm('Wirklich abbrechen?\n\nAlle bisherigen Unterschriften gehen verloren.')){return;}
+  // Clear all signatures
+  Object.keys(sigs).forEach(k=>delete sigs[k]);
+  // Return to FK mode, Übergabe panel
+  document.getElementById('klientScreen').classList.remove('active');
+  document.getElementById('fkScreen').classList.add('active');
+  showPanel('uebergabe');
+}
+
+// ── PANEL NAV ──
+function showPanel(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel_'+id).classList.add('active');
+  const t=document.getElementById('tab_'+id);
+  if(t) t.classList.add('active');
+  if(id==='uebergabe') buildSummary();
+}
+
+// ── KLIENT DATA ──
+function getKlientName(){
+  const nn=(document.getElementById('k_nn').value||'').trim();
+  const vn=(document.getElementById('k_vn').value||'').trim();
+  return nn?(nn+(vn?', '+vn:'')):'';
+}
+function onKlientChange(){
+  const name=getKlientName();
+  const sgb=document.getElementById('k_sgb').value;
+  const ja=document.getElementById('k_ja').value;
+  // Auto-populate Vollmacht: Vollmachtgeber = Klientname
+  const vGeb=document.getElementById('v_geb');
+  if(vGeb && name && !vGeb.dataset.manuallyEdited) vGeb.value=name;
+  const vGebOrt=document.getElementById('v_geb_ort');
+  const ort=(document.getElementById('k_plz').value+' '+document.getElementById('k_ort').value).trim();
+  if(vGebOrt && ort && !vGebOrt.dataset.manuallyEdited) vGebOrt.value=ort;
+  if(name){
+    document.getElementById('klientBoxSidebar').style.display='block';
+    document.getElementById('sbName').textContent=name;
+    document.getElementById('sbSub').textContent=[sgb,ja].filter(Boolean).join(' · ')||'Hilfe noch nicht gewählt';
+    document.getElementById('klientBanner').style.display='flex';
+    document.getElementById('bnrName').textContent=name;
+    document.getElementById('bnrSgb').textContent=sgb||'';
+    document.getElementById('bnrJa').textContent=ja||'';
+    document.getElementById('bnrFk').textContent=M365_USER.displayName;
+  } else {
+    document.getElementById('klientBoxSidebar').style.display='none';
+    document.getElementById('klientBanner').style.display='none';
+  }
+}
+function saveStamm(){
+  if(!document.getElementById('k_nn').value.trim()){
+    document.getElementById('k_nn').style.borderColor='var(--error)';
+    document.getElementById('k_nn').focus();
+    return;
+  }
+  document.getElementById('k_nn').style.borderColor='';
+  kd={
+    name:getKlientName(),
+    nn:document.getElementById('k_nn').value.trim(),
+    vn:document.getElementById('k_vn').value.trim(),
+    geb:document.getElementById('k_geb').value,
+    tel:document.getElementById('k_tel').value,
+    email:document.getElementById('k_email').value,
+    str:document.getElementById('k_str').value,
+    plz:document.getElementById('k_plz').value,
+    ort:document.getElementById('k_ort').value,
+    sgb:document.getElementById('k_sgb').value,
+    ja:document.getElementById('k_ja').value,
+    fk:M365_USER.displayName,
+    datum:document.getElementById('k_datum').value
+  };
+  document.getElementById('dot_stamm').className='tab-dot dot-r';
+  document.getElementById('sub_stamm').textContent=kd.name||'Gespeichert';
+  document.getElementById('stammSaved').style.display='block';
+  setTimeout(()=>{document.getElementById('stammSaved').style.display='none';showPanel('formulare');},1200);
+}
+
+// ── FORM SELECTION ──
+function toggleFC(id){
+  const el=document.getElementById('fc_'+id);
+  const det=document.getElementById('det_'+id);
+  if(selForms.has(id)){selForms.delete(id);el.classList.remove('sel');if(det)det.style.display='none';}
+  else{selForms.add(id);el.classList.add('sel');if(det)det.style.display='block';}
+  const n=selForms.size;
+  document.getElementById('dot_formulare').className='tab-dot '+(n>0?'dot-p':'dot-e');
+  document.getElementById('sub_formulare').textContent=n>0?n+' ausgewählt':'Keine ausgewählt';
+  document.getElementById('noFormWarn').style.display='none';
+}
+function goToHandover(){
+  if(selForms.size===0){document.getElementById('noFormWarn').style.display='block';return;}
+  if(!kd.name){alert('Bitte zuerst Stammdaten speichern.');showPanel('stamm');return;}
+  showPanel('uebergabe');
+}
+
+// ── SUMMARY ──
+function buildSummary(){
+  const rows=[
+    ['Klient',kd.name||'–'],['SGB VIII',kd.sgb||'–'],['Jugendamt',kd.ja||'–'],
+    ['Fachkraft',kd.fk||'–'],['Datum',kd.datum||'–'],
+    ['Formulare',[...selForms].map(f=>FL[f].icon+' '+FL[f].name).join('<br>')]
+  ];
+  document.getElementById('summaryContent').innerHTML=rows.map(([l,v])=>
+    `<div class="sum-row"><span class="sum-lbl">${l}</span><span class="sum-val">${v}</span></div>`).join('');
+}
+
+// ── KLIENT MODE ──
+function startKlientMode(){
+  klSteps=[...selForms];
+  klCurrent=0;
+  Object.keys(sigs).forEach(k=>delete sigs[k]);
+  const reader=document.getElementById('formReader');
+  reader.innerHTML='';
+  klSteps.forEach((fid,i)=>{
+    const div=document.createElement('div');
+    div.className='form-step'+(i===0?' active':'');
+    div.id='kl_'+i;
+    div.innerHTML=buildStep(fid,i);
+    reader.appendChild(div);
+  });
+  klSteps.forEach((fid,i)=>setupPad(fid,i));
+  document.getElementById('fkScreen').classList.remove('active');
+  document.getElementById('klientScreen').classList.add('active');
+  updateNav();
+}
+
+function fmtDate(d){if(!d)return '_______________';const p=d.split('-');return p[2]+'.'+p[1]+'.'+p[0];}
+
+function buildStep(fid,idx){
+  const d=kd;
+  const total=klSteps.length;
+  let html=`<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-hint);margin-bottom:.75rem;">${FL[fid].icon} Formular ${idx+1} von ${total} — ${FL[fid].name}</div>`;
+
+  // ── SCHWEIGEPFLICHT ──
+  if(fid==='schweig'){
+    const inst=document.getElementById('s_inst').value||'_______________';
+    const vertr=(document.getElementById('s_vertr').value)||M365_USER.displayName;
+    html+=`
+    <div class="form-text-box">
+      <h2>Erklärung zur Entbindung der Schweigepflicht</h2>
+      <div class="subtitle">Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt</div>
+      <p>Ich/Wir gebe/n hiermit das Einverständnis, dass <strong>${vertr}</strong> gemäß ihres/seines Auftrages nach <strong>${d.sgb||'§ SGB VIII'}</strong> als Mitarbeiter/in der Praxis NeueWege sowie Mitarbeiter/innen im Rahmen der Vertretung</p>
+      <p>alle zur gezielten Unterstützung und Förderung unserer Familie erforderlichen Daten mündlicher und schriftlicher Art von der unten genannten Institution einholen dürfen. Ich/Wir entbinde/n schweigepflichtige Personen, die am Hilfeverfahren beteiligt sind, von ihrer Schweigepflicht und stimme/n der Verwendung von deren Auskünften zu.</p>
+      <p>Ich/Wir erkläre/n mich/uns damit einverstanden, dass die Fachkraft von Praxis NeueWege berechtigt ist, alle erforderlichen Auskünfte (Gutachten, Untersuchungsergebnisse, Diagnosen, Therapiepläne etc.) mündlicher und schriftlicher Art an die unten genannte Institution zu übermitteln.</p>
+      <h3>Betroffene Institution</h3>
+      <div class="inst-highlight">${inst}</div>
+      <p style="font-size:13px;">und der dort zuständigen Fachkräfte/Mitarbeiter, auch ohne persönlich namentliche Nennung.</p>
+      <p>Ich/Wir wurde/n über die gesetzliche Schweigepflicht gem. § 203 StGB und § 65 SGB VIII umfassend unterrichtet. Die Daten dürfen anderen Stellen nur unter den Voraussetzungen der §§ 61–68 SGB VIII sowie §§ 67–85a SGB X übermittelt werden.</p>
+      <p style="color:var(--text-muted);font-size:13px;border-top:1px solid var(--border);padding-top:.75rem;margin-top:.75rem;">Diese Entbindungserklärung kann jederzeit schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO).</p>
+    </div>
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Ihre Angaben</div>
+      <div class="kf"><label>Name Klient</label><input type="text" value="${d.name}" readonly></div>
+      <div class="kf"><label>Wohnort</label><input type="text" id="ki_s_wohnort" value="${(d.plz+' '+d.ort).trim()}" placeholder="Ort"></div>
+    </div>`;
+  }
+
+  // ── DATENSCHUTZ (unified, with toggles) ──
+  else if(fid==='datenschutz'){
+    html+=`
+    <div class="form-text-box">
+      <h2>Datenschutzerklärung</h2>
+      <div class="subtitle">Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt · zwischen PNW und Familie <strong>${d.nn||'___'}</strong></div>
+      <h3>1. Verantwortliche Stelle (Art. 13 DSGVO)</h3>
+      <p>Praxis NeueWege – Sonja Peltz, Hausmehring 19½, 85405 Nandlstadt<br>Tel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de</p>
+      <h3>2. Zweck &amp; Rechtsgrundlage der Datenverarbeitung</h3>
+      <p>Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach <strong>${d.sgb||'§§ 27 ff. SGB VIII'}</strong> durch das Jugendamt <strong>${d.ja||'___'}</strong>. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).</p>
+      <h3>3. Erhobene Datenkategorien</h3>
+      <p>Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne).</p>
+      <h3>4. Speicherdauer</h3>
+      <p>Ihre Daten werden bis zum Ablauf der gesetzlichen Aufbewahrungsfristen (§ 63 SGB VIII; i.d.R. 10 Jahre nach Hilfeende) gespeichert. Daten, die keiner gesetzlichen Aufbewahrungspflicht unterliegen, werden nach Wegfall des Verarbeitungszwecks gelöscht.</p>
+      <h3>5. Weitergabe an Dritte</h3>
+      <p>Daten werden nur weitergegeben, soweit dies zur Hilfeerfüllung erforderlich ist (§ 64 SGB VIII, §§ 69 ff. SGB X) oder Sie ausdrücklich eingewilligt haben. Empfänger können sein: das beauftragende Jugendamt, beteiligte Fachkräfte und Institutionen im Rahmen der Hilfeplanung.</p>
+      <h3>6. Ihre Rechte (Art. 15–21 DSGVO)</h3>
+      <p>Sie haben das Recht auf <strong>Auskunft</strong> (Art. 15), <strong>Berichtigung</strong> (Art. 16), <strong>Löschung</strong> (Art. 17), <strong>Einschränkung</strong> (Art. 18) und <strong>Widerspruch</strong> (Art. 21). Beschwerden: Bayerisches Landesamt für Datenschutzaufsicht, Promenade 27, 91522 Ansbach, poststelle@lda.bayern.de</p>
+      <h3>7. Widerruf von Einwilligungen</h3>
+      <p style="color:var(--text-muted);font-size:13px;">Erteilte Einwilligungen können jederzeit ohne Angabe von Gründen schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO). Der Widerruf berührt nicht die Rechtmäßigkeit der bis dahin erfolgten Verarbeitung.</p>
+    </div>
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Pflicht­einwilligung</div>
+      <label class="kcheck"><input type="checkbox" id="ki_ds_basis"> <div><div class="kcheck-label">Ich habe die Datenschutzerklärung gelesen und stimme der Erhebung und Verarbeitung meiner personenbezogenen Daten zur Erfüllung der Hilfe zur Erziehung gem. ${d.sgb||'SGB VIII'} zu.</div><div class="kcheck-sub">Erforderlich für die Hilfedurchführung · Rechtsgrundlage: Art. 6 Abs. 1 lit. c) DSGVO, §§ 61 ff. SGB VIII</div></div></label>
+    </div>
+    <div class="klient-inputs" style="margin-top:0;">
+      <div class="klient-inputs-title">Optionale Einwilligungen — freiwillig, jederzeit widerrufbar</div>
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <div class="toggle-label-main">📁 OneDrive / Microsoft 365</div>
+          <div class="toggle-label-sub">Ablage und Austausch von Dokumenten über OneDrive (Microsoft Ireland Operations Ltd.). Datenübertragung in die USA auf Basis des EU-USA Data Privacy Framework.</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="ki_ds_onedrive" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <div class="toggle-label-main">💬 WhatsApp-Kommunikation</div>
+          <div class="toggle-label-sub">Nutzung von WhatsApp (Meta Platforms Ireland Ltd.) für die Kommunikation mit der Fachkraft. Die Einwilligung ist freiwillig — bei Ablehnung wird auf andere Kommunikationswege ausgewichen.</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="ki_ds_wa" checked><span class="toggle-slider"></span></label>
+      </div>
+    </div>`;
+  }
+
+  // ── VOLLMACHT ──
+  else if(fid==='vollm'){
+    const vGebers=getAllVollmachtgeber();
+    const vGeberHtml=vGebers.length>0
+      ? vGebers.map(vg=>`<div class="inst-highlight" style="margin-bottom:6px;"><strong>${vg.name}</strong>${vg.ort?' · '+vg.ort:''}</div>`).join('')
+      : '<div class="inst-highlight">_______________</div>';
+    const vKind=document.getElementById('v_kind').value||'_______________';
+    const vKindGeb=fmtDate(document.getElementById('v_kind_geb').value);
+    const vFk1=document.getElementById('v_fk1').value||M365_USER.displayName;
+    const vFk2=document.getElementById('v_fk2_sel').value;
+    html+=`
+    <div class="form-text-box">
+      <h2>Vollmacht über Angelegenheiten der elterlichen Sorge</h2>
+      <div class="subtitle">Praxis NeueWege – Sonja Peltz · Hausmehring 19½ · 85405 Nandlstadt</div>
+      ${vGebers.length>1?'<p>Wir, die unterzeichnenden Sorgeberechtigten,</p>':'<p>Ich, die/der unterzeichnende Sorgeberechtigte,</p>'}
+      ${vGeberHtml}
+      <p>${vGebers.length>1?'sind Mitinhaber/innen':'bin Mitinhaber/in'} der elterlichen Sorge für das Kind</p>
+      <div class="inst-highlight">${vKind} · geb. ${vKindGeb}</div>
+      <p>und bevollmächtige${vGebers.length>1?'n':''} hiermit folgende Mitarbeiter/innen der Praxis NeueWege:</p>
+      <div class="inst-highlight">${vFk1}${vFk2?'<br>'+vFk2:''}</div>
+      <p>${vGebers.length>1?'uns':'mich'} in den unten angekreuzten Angelegenheiten der elterlichen Sorge für das Kind rechtlich zu vertreten und in ${vGebers.length>1?'unserem':'meinem'} Namen zu handeln.</p>
+      <p style="font-size:13px;color:var(--text-muted);">Diese Vollmacht gilt bis auf Widerruf. Sie kann jederzeit schriftlich widerrufen werden. Die bevollmächtigten Personen sind verpflichtet, im Rahmen ihrer Tätigkeit die Bestimmungen des SGB VIII sowie die Datenschutzbestimmungen einzuhalten.</p>
+    </div>
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Aufgabenkreise — bitte ankreuzen was gilt</div>
+      <label class="kcheck"><input type="checkbox" id="ki_v_alle"> <div class="kcheck-label">Alle Angelegenheiten der elterlichen Sorge</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_v_gesund"> <div class="kcheck-label">Gesundheitsfürsorge</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_v_aufenth"> <div class="kcheck-label">Aufenthaltsbestimmung</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_v_beh"> <div class="kcheck-label">Behördenangelegenheiten, insbesondere Angelegenheiten der Hilfe zur Erziehung</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_v_verm"> <div class="kcheck-label">Vermögensrechtliche Angelegenheiten</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_v_schule"> <div class="kcheck-label">Schulische Angelegenheiten</div></label>
+    </div>`;
+  }
+
+  // ── STARTKOMPASS ──
+  else if(fid==='kompass'){
+    html+=`
+    <div class="form-text-box">
+      <h2>Startkompass</h2>
+      <div class="subtitle">Stammdaten · Einverständnis · Notfall — Praxis NeueWege</div>
+      <p style="font-size:13px;color:var(--text-muted);">Bitte füllen Sie alle Felder so vollständig wie möglich aus. Felder die mit * markiert sind, müssen ausgefüllt werden.</p>
+    </div>
+
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Hilfeempfänger (von Fachkraft vorausgefüllt)</div>
+      <div class="kf"><label>Name *</label><input type="text" id="ki_k_name" value="${d.name}" readonly></div>
+      <div class="kf"><label>Geburtsdatum</label><input type="text" id="ki_k_geb" value="${d.geb||''}" readonly></div>
+      <div class="kf"><label>Adresse</label><input type="text" id="ki_k_adr" value="${((d.str||'')+(d.plz?' · ':'')+((d.plz||'')+' '+(d.ort||'')).trim()).trim()}" readonly></div>
+      <div class="kf"><label>Telefonnummer</label><input type="text" id="ki_k_tel" value="${d.tel||''}" readonly></div>
+      <div class="kf"><label>Krankenkasse</label><input type="text" id="ki_k_kk" placeholder="z.B. AOK Bayern"></div>
+    </div>
+
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Mutter</div>
+      <div class="kf"><label>Name, Vorname</label><input type="text" id="ki_m_name" placeholder="Mustermann, Maria"></div>
+      <div class="kf"><label>Adresse</label><input type="text" id="ki_m_adr" placeholder="Straße, PLZ Ort"></div>
+      <div class="kf"><label>Telefonnummer</label><input type="tel" id="ki_m_tel" placeholder="+49 170 …"></div>
+    </div>
+
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Vater</div>
+      <div class="kf"><label>Name, Vorname</label><input type="text" id="ki_v_name" placeholder="Mustermann, Hans"></div>
+      <div class="kf"><label>Adresse</label><input type="text" id="ki_v_adr" placeholder="Straße, PLZ Ort"></div>
+      <div class="kf"><label>Telefonnummer</label><input type="tel" id="ki_v_tel" placeholder="+49 170 …"></div>
+      <div class="kf"><label>Sorgerecht / Teilbereiche</label><input type="text" id="ki_sorgerecht" placeholder="z.B. gemeinsames Sorgerecht, Aufenthaltsbestimmung bei Mutter"></div>
+      <div class="kf"><label>Sonstige Ansprechpartner</label><input type="text" id="ki_ansprechpartner" placeholder="z.B. Großeltern, Vormund"></div>
+    </div>
+
+    <div class="klient-inputs" id="ki_geschwister_wrap">
+      <div class="klient-inputs-title">Geschwister</div>
+      <div id="ki_geschwister_list"></div>
+      <button class="btn-add" onclick="addGeschwister()" style="margin-top:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Geschwister hinzufügen
+      </button>
+    </div>
+
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Gesundheit &amp; Notfall</div>
+      <div class="kf"><label>Krankheiten</label><textarea id="ki_krankheiten" placeholder="z.B. Asthma, ADHS …" style="min-height:60px;"></textarea></div>
+      <div class="kf"><label>Allergien</label><input type="text" id="ki_allergien" placeholder="z.B. Erdnüsse, Bienen"></div>
+      <div class="kf"><label>Sonstiges</label><input type="text" id="ki_sonstiges" placeholder="z.B. Epilepsie, Rollstuhl"></div>
+      <div style="height:1px;background:var(--border);margin:10px 0;"></div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px;">Notfallmedikation</div>
+      <div id="ki_notfmed_list"></div>
+      <button class="btn-add" onclick="addNotfmed()" style="margin-top:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Notfallmedikation hinzufügen
+      </button>
+      <label class="kcheck" style="margin-top:12px;"><input type="checkbox" id="ki_selbst_einnehmen"> <div class="kcheck-label">Klient kann Notfallmedikation selbst einnehmen</div></label>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px;padding:8px;background:var(--bg);border-radius:6px;">ℹ️ Notruf wird in gesundheitlichen Notfällen immer von MA PNW abgesetzt.</p>
+      <div style="height:1px;background:var(--border);margin:10px 0;"></div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px;">Notfallkontakte</div>
+      <div id="ki_notfkontakt_list"></div>
+      <button class="btn-add" onclick="addNotfkontakt()" style="margin-top:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Notfallkontakt hinzufügen
+      </button>
+    </div>
+
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Schwimmen</div>
+      <label class="kcheck"><input type="checkbox" id="ki_schwimm_frei"> <div class="kcheck-label">Darf ohne Schwimmhilfe ins Wasser</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_schwimm_hilfe"> <div class="kcheck-label">Benötigt Schwimmhilfe</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_schwimm_aufsicht"> <div class="kcheck-label">Ausschließlich unter Aufsicht eines Bademeisters (wird vor Ort von MA PNW informiert)</div></label>
+    </div>
+
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Zecken (z.B. bei Tagesausflügen)</div>
+      <label class="kcheck"><input type="checkbox" id="ki_zecken_pnw"> <div class="kcheck-label">Zecken sollen von MA PNW entfernt werden</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_zecken_eltern"> <div class="kcheck-label">Eltern werden informiert, holen ihr Kind ab und gehen zum Arzt</div></label>
+    </div>
+
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Einverständnisse</div>
+      <label class="kcheck"><input type="checkbox" id="ki_einv_erlebn"> <div class="kcheck-label">Erlebnispädagogische Maßnahmen</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_einv_auto"> <div class="kcheck-label">Mitnahme im Auto</div></label>
+      <label class="kcheck"><input type="checkbox" id="ki_einv_foto"> <div><div class="kcheck-label">Fotoaufnahmen</div></div></label>
+      <div style="margin-left:32px;margin-top:4px;display:flex;gap:16px;flex-wrap:wrap;" id="ki_foto_bereich" style="display:none;">
+        <label class="kcheck" style="margin:0;"><input type="checkbox" id="ki_foto_intern"> <span style="font-size:13px;">Trägerintern</span></label>
+        <label class="kcheck" style="margin:0;"><input type="checkbox" id="ki_foto_public"> <span style="font-size:13px;">Öffentlich</span></label>
+      </div>
+    </div>`;
+
+    // Two signature pads for Kompass
+    const pad1='kompass_eb', pad2='kompass_kl';
+    html+=`
+    <div class="sig-container">
+      <div class="sig-title">Unterschrift Erziehungsberechtigte/r</div>
+      <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
+      <div class="sig-canvas-wrap" id="sigWrap_${pad1}">
+        <canvas id="sigCanvas_${pad1}" width="600" height="150"></canvas>
+        <div class="sig-hint" id="sigHint_${pad1}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
+          Mit Finger oder Stift unterschreiben
+        </div>
+      </div>
+      <div class="sig-actions">
+        <span class="sig-status" id="sigStatus_${pad1}">Noch nicht unterschrieben</span>
+        <button class="btn btn-secondary btn-sm" onclick="clearSig('${pad1}')">Löschen</button>
+      </div>
+    </div>
+    <div class="sig-container">
+      <div class="sig-title">Unterschrift Klient (sofern volljährig oder nach Absprache)</div>
+      <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
+      <div class="sig-canvas-wrap" id="sigWrap_${pad2}">
+        <canvas id="sigCanvas_${pad2}" width="600" height="150"></canvas>
+        <div class="sig-hint" id="sigHint_${pad2}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
+          Mit Finger oder Stift unterschreiben (optional)
+        </div>
+      </div>
+      <div class="sig-actions">
+        <span class="sig-status" id="sigStatus_${pad2}">Optional</span>
+        <button class="btn btn-secondary btn-sm" onclick="clearSig('${pad2}')">Löschen</button>
+      </div>
+    </div>`;
+  }
+  const vGebers2=(fid==='vollm')?getAllVollmachtgeber():[];
+  if(fid==='vollm' && vGebers2.length>1){
+    // Multiple signature pads: one per Vollmachtgeber
+    vGebers2.forEach((vg,i)=>{
+      const padId=fid+'_'+i;
+      html+=`
+  <div class="sig-container">
+    <div class="sig-title">Unterschrift ${vg.name||'Vollmachtgeber '+(i+1)}</div>
+    <div class="sig-meta">${kd.datum?fmtDate(kd.datum):''}</div>
+    <div class="sig-canvas-wrap" id="sigWrap_${padId}">
+      <canvas id="sigCanvas_${padId}" width="600" height="150"></canvas>
+      <div class="sig-hint" id="sigHint_${padId}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
+        Mit Finger oder Stift unterschreiben
+      </div>
+    </div>
+    <div class="sig-actions">
+      <span class="sig-status" id="sigStatus_${padId}">Noch nicht unterschrieben</span>
+      <button class="btn btn-secondary btn-sm" onclick="clearSig('${padId}')">Löschen</button>
+    </div>
+  </div>`;
+    });
+  } else {
+    html+=`
+  <div class="sig-container">
+    <div class="sig-title">Unterschrift Klient / Sorgeberechtigte/r</div>
+    <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
+    <div class="sig-canvas-wrap" id="sigWrap_${fid}">
+      <canvas id="sigCanvas_${fid}" width="600" height="170"></canvas>
+      <div class="sig-hint" id="sigHint_${fid}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
+        Mit Finger oder Stift hier unterschreiben
+      </div>
+    </div>
+    <div class="sig-actions">
+      <span class="sig-status" id="sigStatus_${fid}">Noch nicht unterschrieben</span>
+      <button class="btn btn-secondary btn-sm" onclick="clearSig('${fid}')">Unterschrift löschen</button>
+    </div>
+  </div>`;
+  }
+
+  return html;
+}
+
+// ── SIGNATURE PAD ──
+function setupPad(fid){
+  if(fid==='vollm'){
+    const vGebers=getAllVollmachtgeber();
+    const padIds=vGebers.length>1 ? vGebers.map((_,i)=>fid+'_'+i) : [fid];
+    padIds.forEach(padId=>_initPad(padId));
+  } else if(fid==='kompass'){
+    _initPad('kompass_eb');
+    _initPad('kompass_kl');
+  } else {
+    _initPad(fid);
+  }
+}
+function _initPad(padId){
+  setTimeout(()=>{
+    const canvas=document.getElementById('sigCanvas_'+padId);
+    if(!canvas) return;
+    const wrap=document.getElementById('sigWrap_'+padId);
+    canvas.width=wrap.offsetWidth||620;
+    canvas.height=parseInt(canvas.getAttribute('height'))||170;
+    const ctx=canvas.getContext('2d');
+    let drawing=false,hasSig=false;
+    function pos(e){const r=canvas.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
+    function start(e){e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);}
+    function move(e){
+      e.preventDefault();if(!drawing)return;
+      const p=pos(e);ctx.lineWidth=2.8;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#1a1916';
+      ctx.lineTo(p.x,p.y);ctx.stroke();
+      if(!hasSig){hasSig=true;document.getElementById('sigHint_'+padId).style.display='none';document.getElementById('sigStatus_'+padId).textContent='✅ Unterschrift vorhanden';document.getElementById('sigStatus_'+padId).className='sig-status signed';sigs[padId]=canvas.toDataURL();}
+    }
+    function end(e){e.preventDefault();drawing=false;if(hasSig)sigs[padId]=canvas.toDataURL();}
+    canvas.addEventListener('mousedown',start);canvas.addEventListener('mousemove',move);canvas.addEventListener('mouseup',end);
+    canvas.addEventListener('touchstart',start,{passive:false});canvas.addEventListener('touchmove',move,{passive:false});canvas.addEventListener('touchend',end,{passive:false});
+    pads[padId]={ctx,canvas,reset:()=>{ctx.clearRect(0,0,canvas.width,canvas.height);hasSig=false;delete sigs[padId];document.getElementById('sigHint_'+padId).style.display='flex';document.getElementById('sigStatus_'+padId).textContent='Noch nicht unterschrieben';document.getElementById('sigStatus_'+padId).className='sig-status';}};
+  },80);
+}
+function clearSig(padId){if(pads[padId])pads[padId].reset();}
+
+// ── KLIENT NAV ──
+function updateNav(){
+  const total=klSteps.length;
+  const isLast=klCurrent===total-1;
+  document.getElementById('btnBack').style.display=klCurrent>0?'inline-flex':'none';
+  document.getElementById('btnNext').textContent=isLast?'✅ Abschließen':'Weiter →';
+  document.getElementById('btnNext').className='btn '+(isLast?'btn-success':'btn-primary');
+  document.getElementById('formCounter').innerHTML=`<div>${klCurrent+1} / ${total}</div><div style="font-size:11px;">${FL[klSteps[klCurrent]].name}</div>`;
+  document.getElementById('klHeaderSub').textContent=`${FL[klSteps[klCurrent]].icon} ${FL[klSteps[klCurrent]].name} (${klCurrent+1} von ${total})`;
+  document.getElementById('klProgress').style.width=((klCurrent+1)/total*100)+'%';
+}
+function klNav(dir){
+  if(dir===1){
+    const fid=klSteps[klCurrent];
+    // Check all required signatures for this step
+    const vGebers=(fid==='vollm')?getAllVollmachtgeber():[];
+    let padIds;
+    if(fid==='kompass'){
+      padIds=['kompass_eb']; // kompass_kl is optional
+    } else if(fid==='vollm'&&vGebers.length>1){
+      padIds=vGebers.map((_,i)=>fid+'_'+i);
+    } else {
+      padIds=[fid];
+    }
+    const missing=padIds.filter(pid=>!sigs[pid]).length;
+    if(missing>0){alert(missing>1?'Bitte alle '+missing+' Unterschriften leisten.':'Bitte zuerst unterschreiben.');return;}
+    // Validate mandatory checkbox for datenschutz
+    if(fid==='datenschutz'){const cb=document.getElementById('ki_ds_basis');if(!cb||!cb.checked){alert('Bitte bestätigen Sie die Pflicht-Einwilligung zur Datenschutzerklärung.');return;}}
+    if(klCurrent===klSteps.length-1){finishKlientMode();return;}
+  }
+  const old=document.getElementById('kl_'+klCurrent);
+  klCurrent+=dir;
+  const nw=document.getElementById('kl_'+klCurrent);
+  if(old)old.classList.remove('active');
+  if(nw){nw.classList.add('active');setupPad(klSteps[klCurrent]);}
+  window.scrollTo(0,0);
+  updateNav();
+}
+
+// ── FINISH ──
+function finishKlientMode(){
+  document.getElementById('klientScreen').classList.remove('active');
+  document.getElementById('doneScreen').classList.add('active');
+  document.getElementById('done_fk_email').value=M365_USER.email;
+  document.getElementById('done_fam_email').value=kd.email||'';
+  // SP path stored as hidden data attribute (for PDF metadata), not shown in UI
+  const yr=new Date().getFullYear();
+  const sn=(kd.name||'Klient').replace(', ','_');
+  document.getElementById('done_sp_hidden').value=`PNW SharePoint / Klienten / ${yr} / ${sn} / Formulare`;
+}
+function buildFileName(formId){
+  const nn=(kd.nn||'Klient').replace(/\s+/g,'');
+  const vn=(kd.vn||'').replace(/\s+/g,'');
+  const vv=vn.substring(0,2);
+  const now=kd.datum?new Date(kd.datum):new Date();
+  const jj=String(now.getFullYear()).slice(-2);
+  const mm=String(now.getMonth()+1).padStart(2,'0');
+  const artMap={schweig:'Schweigepflicht',datenschutz:'Datenschutz',vollm:'Vollmacht',kompass:'Startkompass'};
+  const art=artMap[formId]||FL[formId].name.replace(/\s+/g,'');
+  return `${nn}${vv}_${art}_${jj}${mm}.pdf`;
+}
+async function sendMail(toEmail,subject,htmlBody){
+  const token=await getToken();
+  const r=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({message:{subject,body:{contentType:'HTML',content:htmlBody},toRecipients:[{emailAddress:{address:toEmail}}]},saveToSentItems:true})
+  });
+  if(!r.ok){const t=await r.text();throw new Error('Mail.Send: '+r.status+' '+t);}
+}
+async function mockSend(){
+  const btn=document.getElementById('sendBtn');
+  btn.disabled=true;btn.textContent='⏳ …';
+  document.getElementById('doneStatus').innerHTML='<div class="alert alert-info">⏳ E-Mails werden versendet …</div>';
+  const fileList=[...selForms].map(f=>buildFileName(f));
+  const filesHtml=fileList.map(f=>`<li>${f}</li>`).join('');
+  const fkEmail=document.getElementById('done_fk_email').value;
+  const famEmail=document.getElementById('done_fam_email').value;
+  const fkFirst=M365_USER.displayName.split(' ')[0]||M365_USER.displayName;
+  const fkBody=`<p>Hallo ${fkFirst},</p><p>anbei die von ${kd.name||'dem Klienten'} heute digital unterzeichneten Formulare:</p><ul>${filesHtml}</ul><p><strong>Bitte lege die beigefügten PDFs manuell in Kilanka ab.</strong></p><hr style="border:none;border-top:1px solid #e2dfd8;margin:16px 0;"><p style="font-size:12px;color:#6b6860;">Praxis NeueWege · Formulare-App<br>Erstellt am ${kd.datum||new Date().toLocaleDateString('de-DE')} · ${kd.sgb||''} · ${kd.ja||''}</p>`;
+  const famBody=`<p>Guten Tag,</p><p>anbei Ihre heute unterzeichneten Dokumente ${kd.sgb?'zur Hilfe zur Erziehung ('+kd.sgb+')':''} als PDF zur persönlichen Ablage.</p><ul>${filesHtml}</ul><p>Bei Fragen wenden Sie sich bitte an Ihre Fachkraft <strong>${M365_USER.displayName}</strong>.</p><hr style="border:none;border-top:1px solid #e2dfd8;margin:16px 0;"><p style="font-size:12px;color:#6b6860;">Praxis NeueWege – Sonja Peltz<br>Hausmehring 19½ · 85405 Nandlstadt<br>Tel.: +49 173 2875 212 · info@praxisneuewege.de</p>`;
+  try{
+    await sendMail(fkEmail,`Unterzeichnete Formulare – ${kd.name||'Klient'}`,fkBody);
+    if(famEmail) await sendMail(famEmail,'Ihre Formulare – Praxis NeueWege',famBody);
+    document.getElementById('doneStatus').innerHTML=`<div class="alert alert-success">✅ <strong>${selForms.size} Formular${selForms.size!==1?'e':''} versendet.</strong><br><span style="font-size:11px;line-height:2.2;">📧 Fachkraft: ${fkEmail}<br>${famEmail?'📧 Familie: '+famEmail+'<br>':''}${fileList.map(f=>'📄 '+f).join('<br>')}</span></div>`;
+    btn.disabled=false;btn.innerHTML='✅ Erneut senden';
+  }catch(e){
+    document.getElementById('doneStatus').innerHTML=`<div class="alert alert-error">❌ Fehler: ${e.message}</div>`;
+    btn.disabled=false;btn.textContent='Erneut versuchen';
+  }
+}
+function mockPDFPreview(){alert('PDF-Vorschau folgt im nächsten Schritt (jsPDF-Integration).');}
+
+// ── LEERFORMULARE ──
+function mockDownload(name){
+  // In production: fetch from SharePoint and trigger download
+  const a=document.createElement('a');
+  a.href='data:application/pdf;base64,JVBERi0='; // minimal stub
+  a.download='PNW_Leer_'+name+'.pdf';
+  a.click();
+  // Show toast
+  showToast('⬇️ '+name+'.pdf wird heruntergeladen …');
+}
+function mockPrint(name){
+  showToast('🖨️ Druckdialog für '+name+' wird geöffnet …');
+  setTimeout(()=>window.print(),400);
+}
+function showToast(msg){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a1916;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;z-index:9999;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.25);';document.body.appendChild(t);}
+  t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._timer);t._timer=setTimeout(()=>{t.style.opacity='0';},2200);
+}
+
+// ── NOTFALLMEDIKATION: add/remove ──
+let nfmCount=0;
+function addNotfmed(){
+  const list=document.getElementById('ki_notfmed_list');
+  if(!list) return;
+  const idx=nfmCount++;
+  const block=document.createElement('div');
+  block.className='extra-block';block.id='nfm_'+idx;
+  block.innerHTML=`
+    <div class="extra-block-hd">
+      <span class="extra-block-label">Medikament ${idx+1}</span>
+      <button class="btn-remove-block" onclick="removeNfm(${idx})">Entfernen</button>
+    </div>
+    <div class="kf"><label>Name</label><input type="text" id="nfm_name_${idx}" placeholder="z.B. Diazepam"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="kf"><label>Dosierung</label><input type="text" id="nfm_dos_${idx}" placeholder="z.B. 5 mg"></div>
+      <div class="kf"><label>Art der Anwendung</label><input type="text" id="nfm_art_${idx}" placeholder="z.B. oral"></div>
+    </div>`;
+  list.appendChild(block);
+  renumberNfm();
+}
+function removeNfm(idx){
+  const el=document.getElementById('nfm_'+idx);
+  if(el)el.remove();
+  renumberNfm();
+}
+function renumberNfm(){
+  document.querySelectorAll('#ki_notfmed_list .extra-block').forEach((b,i)=>{
+    const lbl=b.querySelector('.extra-block-label');
+    if(lbl)lbl.textContent='Medikament '+(i+1);
+  });
+}
+
+// ── NOTFALLKONTAKTE: add/remove ──
+let nfkCount=0;
+function addNotfkontakt(){
+  const list=document.getElementById('ki_notfkontakt_list');
+  if(!list) return;
+  const idx=nfkCount++;
+  const block=document.createElement('div');
+  block.className='extra-block';block.id='nfk_'+idx;
+  block.innerHTML=`
+    <div class="extra-block-hd">
+      <span class="extra-block-label">Kontakt ${idx+1}</span>
+      <button class="btn-remove-block" onclick="removeNfk(${idx})">Entfernen</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="kf"><label>Name</label><input type="text" id="nfk_name_${idx}" placeholder="z.B. Oma Müller"></div>
+      <div class="kf"><label>Telefon</label><input type="tel" id="nfk_tel_${idx}" placeholder="+49 170 …"></div>
+    </div>`;
+  list.appendChild(block);
+  renumberNfk();
+}
+function removeNfk(idx){
+  const el=document.getElementById('nfk_'+idx);
+  if(el)el.remove();
+  renumberNfk();
+}
+function renumberNfk(){
+  document.querySelectorAll('#ki_notfkontakt_list .extra-block').forEach((b,i)=>{
+    const lbl=b.querySelector('.extra-block-label');
+    if(lbl)lbl.textContent='Kontakt '+(i+1);
+  });
+}
+
+// ── GESCHWISTER: add/remove ──
+let gsCount=0;
+function addGeschwister(){
+  const list=document.getElementById('ki_geschwister_list');
+  if(!list) return;
+  const idx=gsCount++;
+  const block=document.createElement('div');
+  block.className='extra-block';block.id='gs_'+idx;
+  block.innerHTML=`
+    <div class="extra-block-hd">
+      <span class="extra-block-label">Geschwister ${idx+1}</span>
+      <button class="btn-remove-block" onclick="removeGS(${idx})">Entfernen</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+      <div class="kf"><label>Schwester / Name</label><input type="text" id="gs_sw_name_${idx}" placeholder="Name"></div>
+      <div class="kf"><label>Bruder / Name</label><input type="text" id="gs_br_name_${idx}" placeholder="Name"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+      <div class="kf"><label>Geburtsdatum</label><input type="date" id="gs_sw_geb_${idx}"></div>
+      <div class="kf"><label>Geburtsdatum</label><input type="date" id="gs_br_geb_${idx}"></div>
+    </div>
+    <div class="kf"><label>Anmerkungen</label><input type="text" id="gs_anm_${idx}" placeholder="z.B. lebt bei Vater"></div>`;
+  list.appendChild(block);
+  renumberGS();
+}
+function removeGS(idx){
+  const el=document.getElementById('gs_'+idx);
+  if(el)el.remove();
+  renumberGS();
+}
+function renumberGS(){
+  document.querySelectorAll('#ki_geschwister_list .extra-block').forEach((b,i)=>{
+    const lbl=b.querySelector('.extra-block-label');
+    if(lbl)lbl.textContent='Geschwister '+(i+1);
+  });
+}
+let vgCount=1;
+function addVollmachtgeber(){
+  const list=document.getElementById('vgeber_list');
+  const idx=vgCount++;
+  const block=document.createElement('div');
+  block.className='extra-block';block.id='vgeber_'+idx;
+  block.innerHTML=`
+    <div class="extra-block-hd">
+      <span class="extra-block-label">Vollmachtgeber ${idx+1}</span>
+      <button class="btn-remove-block" onclick="removeVG(${idx})">Entfernen</button>
+    </div>
+    <div class="fg">
+      <div class="field"><label>Name, Vorname</label><input type="text" id="v_geb_${idx}" placeholder="Musterfrau, Maria"></div>
+      <div class="field"><label>Wohnort</label><input type="text" id="v_geb_ort_${idx}" placeholder="85405 Nandlstadt"></div>
+    </div>`;
+  list.appendChild(block);
+  // Re-number labels
+  renumberVG();
+}
+function removeVG(idx){
+  const el=document.getElementById('vgeber_'+idx);
+  if(el)el.remove();
+  renumberVG();
+}
+function renumberVG(){
+  document.querySelectorAll('#vgeber_list .extra-block').forEach((b,i)=>{
+    const lbl=b.querySelector('.extra-block-label');
+    if(lbl)lbl.textContent='Vollmachtgeber '+(i+1);
+  });
+}
+// Collect all Vollmachtgeber for form rendering
+function getAllVollmachtgeber(){
+  const result=[];
+  document.querySelectorAll('#vgeber_list .extra-block').forEach((b,i)=>{
+    const nameEl=b.querySelector('input[id^="v_geb"]');
+    const ortEl=b.querySelector('input[id^="v_geb_ort"]');
+    if(nameEl&&nameEl.value.trim())result.push({name:nameEl.value.trim(),ort:ortEl?ortEl.value.trim():''});
+  });
+  return result;
+}
+</script>
+</body>
+</html>
