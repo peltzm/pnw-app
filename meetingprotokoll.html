@@ -432,6 +432,12 @@
             </div>
           </div>
 
+          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.5rem;">Externe Gäste</div>
+            <button class="btn-add" onclick="addGuest()">+ Externen Gast hinzufügen</button>
+            <div id="guestArea" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+
         </div>
 
         <div class="btn-row">
@@ -458,10 +464,6 @@
           </div>
           <div class="p-grid" id="participantGrid"></div>
 
-          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
-            <button class="btn-add" onclick="addGuest()">+ Externen Gast hinzufügen</button>
-            <div id="guestArea" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
-          </div>
         </div>
 
         <!-- Bewohner (nur Wohngruppen Konferenz) -->
@@ -517,6 +519,13 @@
               <label>Hinweis <span style="font-weight:400;color:var(--text-hint)">(optional)</span></label>
               <input type="text" id="fNextHinweis" placeholder="z. B. Fallbesprechungen vorbereiten …">
             </div>
+          </div>
+        </div>
+
+        <div class="card" id="signaturesCard">
+          <div class="card-title">Unterschriften</div>
+          <div style="display:flex;gap:2rem;margin-top:.5rem;" id="signaturesGrid">
+            <!-- populated by renderSignatureFields() -->
           </div>
         </div>
 
@@ -1176,6 +1185,7 @@ const S = {
   thema: null,
   einrichtung: null,
   participants: [],
+  guests: [],
   tops: [],
   topId: 0,
 };
@@ -1203,6 +1213,9 @@ function goSection(id) {
     if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
     else renderParticipants();
     renderBewohnerCard();
+  }
+  if (id === 's-meta') {
+    renderGuestArea();
   }
   if (id === 's-tops') {
     const _thema = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
@@ -1286,6 +1299,7 @@ function selectThema(type, themaKey, el) {
   // Pre-init TOPs and reset participants
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
+  S.guests = [];
   _currentDraftId = null; // fresh draft
   // Pre-load bewohner TOPs if applicable (async, cached)
   if (thema.bewohner) {
@@ -1570,20 +1584,55 @@ function printBlanko() {
   setTimeout(() => win.print(), 500);
 }
 
-function addGuest() {
-  const area = document.getElementById('guestArea');
-  const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:8px;align-items:center;';
-  row.innerHTML = `
-    <input type="text" placeholder="Name" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
-    <input type="text" placeholder="E-Mail" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
-    <button class="btn-remove" onclick="this.parentElement.remove()">✕</button>`;
-  area.appendChild(row);
+function renderSignatureFields() {
+  const grid = document.getElementById('signaturesGrid');
+  if (!grid) return;
+
+  // Collect: anwesende Mitarbeiter + externe Gäste
+  const staff  = (S.participants || []).filter(p => p.present && !p.extern);
+  const guests = (S.guests       || []).filter(g => g.name);
+
+  const all = [
+    ...staff.map(p  => ({ label: p.name,                  sub: 'Mitarbeiter/in' })),
+    ...guests.map(g => ({ label: g.name, sub: g.role || 'Externer Gast' })),
+  ];
+
+  if (!all.length) {
+    grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Keine Teilnehmer ausgewählt.</div>';
+    return;
+  }
+
+  grid.innerHTML = all.map(p => `
+    <div style="flex:1;min-width:160px;max-width:220px;">
+      <div style="border-bottom:1px solid #aaa;height:48px;margin-bottom:6px;"></div>
+      <div style="font-size:11px;font-weight:600;color:var(--text);">${p.label}</div>
+      <div style="font-size:10px;color:var(--text-muted);">${p.sub}</div>
+    </div>`).join('');
 }
 
-/* ──────────────────────────────────────
-   TOPs
-────────────────────────────────────── */
+function addGuest() {
+  if (!S.guests) S.guests = [];
+  S.guests.push({ name: '', role: '' });
+  renderGuestArea();
+}
+
+function renderGuestArea() {
+  const area = document.getElementById('guestArea');
+  if (!area) return;
+  if (!S.guests) S.guests = [];
+  area.innerHTML = S.guests.map((g, i) => `
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" placeholder="Name" value="${g.name}"
+        style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;"
+        oninput="S.guests[${i}].name=this.value">
+      <input type="text" placeholder="Funktion / Organisation" value="${g.role}"
+        style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;"
+        oninput="S.guests[${i}].role=this.value">
+      <button class="btn-remove" onclick="S.guests.splice(${i},1);renderGuestArea()">×</button>
+    </div>`).join('');
+}
+
+
 function renderTOPs() {
   const list = document.getElementById('topsList');
   list.innerHTML = '';
@@ -1711,6 +1760,7 @@ async function saveDraft() { showToast('Entwurf wird gespeichert …', 'info'); 
    PREVIEW
 ────────────────────────────────────── */
 function buildPreview() {
+  renderSignatureFields();
   // Show/hide Blanko button
   const _isExternPrev = S.type === 'allgemein' && S.thema === 'besprechung';
   const _blankBtn = document.getElementById('btnBlankoPrint');
