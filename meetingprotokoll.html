@@ -1068,12 +1068,11 @@ const S = {
    NAVIGATION
 ────────────────────────────────────── */
 const sectionNav = {
-  's-typ':       'n1',
-  's-meta':      'n2',
-  's-tops':     'n3',
-  's-tops':      'n4',
-  's-offen':     'n-offen',
-  's-archiv':    'n-archiv',
+  's-typ':    'n1',
+  's-meta':   'n2',
+  's-tops':   'n3',
+  's-offen':  'n-offen',
+  's-archiv': 'n-archiv',
 };
 function goSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -1081,11 +1080,7 @@ function goSection(id) {
   document.getElementById(id).classList.add('active');
   const nid = sectionNav[id];
   if (nid) document.getElementById(nid).classList.add('active');
-  if (id === 's-tops') {
-    if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
-    else renderParticipants();
-    renderBewohnerCard();
-  }
+
   if (id === 's-meta') {
     renderGuestArea();
   }
