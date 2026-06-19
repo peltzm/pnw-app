@@ -132,6 +132,8 @@
   <div class="header-brand" onclick="goToStart()" style="cursor:pointer;" title="Zur Startseite">
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:32px; width:auto;" alt="Praxis NeueWege">
     <span style="font-size:14px; font-weight:600; color:var(--text); margin-left:4px;">Berichtsgenerator</span>
+    <span id="versionBadge" style="font-size:10px; font-weight:600; color:var(--text-hint); background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:1px 6px; margin-left:4px; font-family:'Kodchasan',monospace;"></span>
+    <a href="changelog.html" target="_blank" style="font-size:10px; color:var(--accent-mid); text-decoration:none; margin-left:6px; opacity:0.8;" title="Changelog öffnen">Changelog ↗</a>
   </div>
   <div class="user-badge" id="userBadge" style="display:none">
     <div class="user-dot"></div>
@@ -163,6 +165,10 @@
       <div style="text-align:center; margin-bottom:1.5rem;">
         <div style="font-size:20px; font-weight:600; color:var(--text); margin-bottom:6px;">Berichtsgenerator</div>
         <div style="font-size:13px; color:var(--text-muted);">Praxis NeueWege</div>
+        <div style="margin-top:6px; display:flex; align-items:center; justify-content:center; gap:10px;">
+          <span id="versionBadgeStart" style="font-size:11px; font-weight:600; color:var(--text-hint); background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:2px 8px; font-family:'Kodchasan',monospace;"></span>
+          <a href="changelog.html" target="_blank" style="font-size:11px; color:var(--accent-mid); text-decoration:none;" title="Changelog">Changelog ↗</a>
+        </div>
       </div>
       <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem 1.25rem; margin-bottom:1.5rem;">
         <div style="font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.75rem;">Berichtstyp wählen</div>
@@ -305,7 +311,7 @@
           <div style="margin-bottom:12px;">
             <button class="btn-add" id="btnAddFachkraft" onclick="addFachkraft()">+ Fachkraft hinzufügen</button>
           </div>
-          <div class="field-grid full" style="margin-bottom:4px;">
+          <div class="field-grid full" id="fallleitungRow" style="margin-bottom:4px;">
             <div class="field"><label>Teamleiter NeueWege (Auswahlliste)</label>
               <select id="Fallleitung"><option value="">Wird geladen...</option></select>
             </div>
@@ -528,12 +534,20 @@ const CONFIG = {
   siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com'
 };
 
+const APP_VERSION = 'v02602d7'; // auto-updated on deploy
+
 let msalInstance = null;
 let currentAccount = null;
 let accessToken = null;
 let zielCount = 0;
 
 // ─── MSAL ─────────────────────────────────────────────────────────────────────
+function applyVersionBadge() {
+  document.querySelectorAll('#versionBadge, #versionBadgeStart').forEach(el => {
+    if (el) el.textContent = APP_VERSION;
+  });
+}
+
 async function initMsal() {
   const msalConfig = {
     auth: {
@@ -544,6 +558,7 @@ async function initMsal() {
     cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
+  applyVersionBadge();
   await msalInstance.initialize();
   try {
     const response = await msalInstance.handleRedirectPromise();
@@ -1297,6 +1312,9 @@ function selectBerichtstyp(typ) {
   // Sorgeberechtigten-Adressblock nur bei nicht-stationaer
   const sorgAddr = document.getElementById('sorgAddrBlock');
   if (sorgAddr) sorgAddr.style.display = (typ === 'stationaer') ? 'none' : '';
+  // Teamleiter-Auswahl nur bei nicht-stationaer
+  const flRow = document.getElementById('fallleitungRow');
+  if (flRow) flRow.style.display = (typ === 'stationaer') ? 'none' : '';
   // Anhang-Upload in S5 wird dynamisch in buildDynamicSections eingefügt (nur bei nicht-Clearing)
   // Force rebuild of dynamic sections on next visit (type changed)
   ['s3_content','s4_content','s5_content'].forEach(id => {
