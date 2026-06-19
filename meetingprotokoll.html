@@ -238,7 +238,7 @@
 
 <!-- HEADER -->
 <div class="header">
-  <div class="header-brand" onclick="window.location.href='https://apps.praxisneuewege.de/apps.html'" style="cursor:pointer;" title="App Store">
+  <div class="header-brand" onclick="goHome()">
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:30px;width:auto;" alt="Praxis NeueWege">
     <span style="font-size:14px;font-weight:600;color:var(--text);margin-left:4px;">Meetingprotokoll</span>
     <span id="versionBadge" style="font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace;"></span>
@@ -285,12 +285,18 @@
         <span class="nav-num" id="nn2">2</span>
         <span>Details</span>
       </div>
-      
+      <div class="nav-item" id="n3" onclick="goSection('s-teiln')">
+        <span class="nav-num" id="nn3">3</span>
+        <span>Teilnehmer</span>
+      </div>
       <div class="nav-item" id="n4" onclick="goSection('s-tops')">
         <span class="nav-num" id="nn4">4</span>
         <span>Inhalte</span>
       </div>
-      
+      <div class="nav-item" id="n5" onclick="goSection('s-freigabe')">
+        <span class="nav-num" id="nn5">5</span>
+        <span>Freigabe</span>
+      </div>
       <div class="nav-divider"></div>
       <div class="nav-section">Verwaltung</div>
       <div class="nav-item" id="n-offen" onclick="goSection('s-offen')">
@@ -302,7 +308,10 @@
         <span style="font-size:14px;">📁</span>
         <span>Archiv</span>
       </div>
-      
+      <div class="nav-item" id="n-vorschau" onclick="goSection('s-vorschau');buildPreview()">
+        <span style="font-size:14px;">📄</span>
+        <span>Vorschau</span>
+      </div>
     </div>
 
     <!-- MAIN CONTENT -->
@@ -381,7 +390,7 @@
       <div class="section" id="s-meta">
         <div class="section-title">Meeting-Details</div>
         <div class="section-sub">Datum, Ort und Protokollführung eintragen.</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:33%"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:40%"></div></div>
 
         <div class="card">
           <div class="card-title">Rahmendaten</div>
@@ -423,17 +432,57 @@
             </div>
           </div>
 
-          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:.5rem;">Externe Gäste</div>
-            <button class="btn-add" onclick="addGuest()">+ Externen Gast hinzufügen</button>
-            <div id="guestArea" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
-          </div>
-
         </div>
 
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="goSection('s-typ')">← Zurück</button>
-          <button class="btn btn-primary" onclick="goSection('s-tops');markDone(2)">Weiter →</button>
+          <button class="btn btn-primary" onclick="goSection('s-teiln');markDone(2)">Weiter →</button>
+        </div>
+      </div>
+
+      <!-- ══ S3: TEILNEHMER ══ -->
+      <div class="section" id="s-teiln">
+        <div class="section-title">Teilnehmer</div>
+        <div class="section-sub" id="teilnSub">Aus M365-Gruppe geladen · Anwesenheit mit Klick eintragen</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:60%"></div></div>
+
+        <div class="card">
+          <div style="margin-bottom:.75rem;">
+            <div class="card-title" style="margin:0">Eingeladene Personen</div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text-muted);" onclick="toggleAll()">
+              <div class="p-cb" id="allCb" style="cursor:pointer;"><span class="p-cb-check" id="allCbCheck">✓</span></div>
+              Alle
+            </label>
+          </div>
+          <div class="p-grid" id="participantGrid"></div>
+
+          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+            <button class="btn-add" onclick="addGuest()">+ Externen Gast hinzufügen</button>
+            <div id="guestArea" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+        </div>
+
+        <!-- Bewohner (nur Wohngruppen Konferenz) -->
+        <div class="card" id="bewohnerCard" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+            <div class="card-title" style="margin:0">Bewohner/innen</div>
+            <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="openBewohnerModal()">✏️ Verwalten</button>
+          </div>
+          <div style="display:flex;align-items:center;margin-bottom:8px;">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text-muted);" onclick="toggleAllBewohner()">
+              <div class="p-cb" id="allBewohnerCb" style="cursor:pointer;background:var(--accent);border-color:var(--accent);"><span class="p-cb-check" style="color:white;">✓</span></div>
+              Alle
+            </label>
+          </div>
+          <div class="p-grid" id="bewohnerGrid"></div>
+          <div class="p-count-bar" id="bewohnerCountBar" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="goSection('s-meta')">← Zurück</button>
+          <button class="btn btn-primary" onclick="goSection('s-tops');markDone(3)">Weiter →</button>
         </div>
       </div>
 
@@ -441,7 +490,7 @@
       <div class="section" id="s-tops">
         <div class="section-title">Tagesordnung & Inhalte</div>
         <div class="section-sub">Protokolltext, Beschlüsse und Aufgaben je Tagesordnungspunkt.</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:67%"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:80%"></div></div>
 
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
@@ -471,20 +520,93 @@
           </div>
         </div>
 
-        <div class="card" id="signaturesCard" style="display:none">
-          <div class="card-title">Unterschriften</div>
-          <div id="signaturesGrid" style="display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:.5rem;">
-            <!-- populated by renderSignatureFields() -->
+        <div class="btn-row">
+          <div class="btn-row-right">
+            <button class="btn btn-secondary" onclick="goSection('s-teiln')">← Zurück</button>
+            <button class="btn btn-secondary" onclick="saveDraft()">💾 Entwurf</button>
+          </div>
+          <button class="btn btn-primary" onclick="goSection('s-freigabe');markDone(4)">Zur Freigabe →</button>
+        </div>
+      </div>
+
+      <!-- ══ S5: FREIGABE ══ -->
+      <div class="section" id="s-freigabe">
+        <div class="section-title">Freigabe & Versand</div>
+        <div class="section-sub">Teamleitung auswählen · Nach Freigabe automatischer Versand und SharePoint-Ablage.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+
+        <div class="card">
+          <div class="card-title">Freigabe durch Teamleitung</div>
+          <div class="approval-card">
+            <div class="field-grid full">
+              <div id="freigabeStandardWrap">
+                <label>Zuständige Teamleitung</label>
+                <select id="fApprover">
+                  <option value="">— bitte auswählen —</option>
+                </select>
+              </div>
+              <div id="freigabeExternWrap" style="display:none">
+                <div class="field">
+                  <label>Unterschrift 1 – Name / Funktion</label>
+                  <input type="text" id="fSig1" placeholder="z. B. Markus Peltz, Leitung Verwaltung">
+                </div>
+                <div class="field" style="margin-top:8px;">
+                  <label>Unterschrift 2 – Name / Funktion</label>
+                  <input type="text" id="fSig2" placeholder="z. B. Gesprächspartner/in, Organisation">
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
+              <div class="status-indicator">
+                <div class="s-dot draft" id="sDot"></div>
+                <span id="sText" style="font-size:13px;color:var(--text-muted);">Wartet auf Freigabe-Anfrage</span>
+              </div>
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;" onclick="requestApproval()" id="btnReqApproval">
+                📨 Anfrage senden
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Mailversand nach Freigabe</div>
+          <div class="alert alert-info" style="margin-bottom:1rem;">
+            Nach Freigabe erhalten alle eingeladenen Teilnehmer automatisch eine E-Mail mit dem Link zur SharePoint-Ablage.
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Betreff</label>
+              <input type="text" id="fMailBetreff">
+            </div>
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Anmerkung <span style="font-weight:400;color:var(--text-hint)">(optional)</span></label>
+              <textarea id="fMailNote" placeholder="Optionale Nachricht an die Empfänger …" style="min-height:60px;"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">SharePoint-Ablage</div>
+          <div class="info-card" style="margin-bottom:1rem;">
+            <div class="info-row"><span class="info-label">Bibliothek</span><span class="info-val" id="spPath">—</span></div>
+            <div class="info-row"><span class="info-label">Dateiname</span><span class="info-val" id="spFile">—</span></div>
+          </div>
+          <div class="field-grid full">
+            <div class="field">
+              <label>Dateiname anpassen</label>
+              <input type="text" id="fFileName">
+            </div>
           </div>
         </div>
 
         <div class="btn-row">
           <div class="btn-row-right">
-            <button class="btn btn-secondary" onclick="goSection('s-meta')">← Zurück</button>
-            <button class="btn btn-secondary" onclick="saveDraft()">💾 Entwurf</button>
-            <button class="btn btn-secondary" onclick="buildPreview();openModal('modalPreview')">👁️ PDF Vorschau</button>
+            <button class="btn btn-secondary" onclick="goSection('s-tops')">← Zurück</button>
+            <button class="btn btn-secondary" onclick="goSection('s-vorschau');buildPreview()">👁️ Vorschau</button>
           </div>
-          <button class="btn btn-success" onclick="sendProtokollMail()">📨 Per Mail versenden</button>
+          <button class="btn btn-success" onclick="confirmPublish()">🚀 Freigeben & Versenden</button>
         </div>
       </div>
 
@@ -579,6 +701,16 @@
       </div>
 
       <!-- ══ VORSCHAU ══ -->
+      <div class="section" id="s-vorschau">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
+          <div>
+            <div class="section-title">Dokument-Vorschau</div>
+            <div class="section-sub">So sieht das finale PDF-Protokoll aus</div>
+          </div>
+          <button class="btn btn-secondary" onclick="window.print()">🖨️ Drucken / PDF</button>
+          <button class="btn btn-secondary" id="btnBlankoPrint" style="display:none" onclick="printBlanko()">🖨️ Blanko drucken</button>
+        </div>
+        <div id="previewContainer"></div>
       </div>
 
     </div><!-- end main -->
@@ -598,21 +730,6 @@
       <button class="btn btn-secondary" onclick="closeModal('modalApproval')">Abbrechen</button>
       <button class="btn btn-primary" onclick="confirmApproval()">📨 Anfrage senden</button>
     </div>
-  </div>
-</div>
-
-<!-- MODAL: PDF Vorschau -->
-<div class="modal-bg" id="modalPreview" onclick="if(event.target===this)closeModal('modalPreview')">
-  <div class="modal" style="max-width:800px;width:95vw;max-height:90vh;overflow-y:auto;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-      <h3 style="margin:0">Protokoll Vorschau</h3>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="window.print()">🖨️ Drucken</button>
-        <button id="btnBlankoPrint" style="display:none;" class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="printBlanko()">🖨️ Blanko</button>
-        <button onclick="closeModal('modalPreview')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">×</button>
-      </div>
-    </div>
-    <div id="previewContainer"></div>
   </div>
 </div>
 
@@ -704,7 +821,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v8def906'; // auto-updated on deploy
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1059,7 +1176,6 @@ const S = {
   thema: null,
   einrichtung: null,
   participants: [],
-  guests: [],
   tops: [],
   topId: 0,
 };
@@ -1068,31 +1184,27 @@ const S = {
    NAVIGATION
 ────────────────────────────────────── */
 const sectionNav = {
-  's-typ':    'n1',
-  's-meta':   'n2',
-  's-tops':   'n4',
-  's-offen':  'n-offen',
-  's-archiv': 'n-archiv',
+  's-typ':       'n1',
+  's-meta':      'n2',
+  's-teiln':     'n3',
+  's-tops':      'n4',
+  's-freigabe':  'n5',
+  's-offen':     'n-offen',
+  's-archiv':    'n-archiv',
+  's-vorschau':  'n-vorschau',
 };
 function goSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const secEl = document.getElementById(id);
-  if (!secEl) { console.error('Section not found:', id); return; }
-  secEl.classList.add('active');
+  document.getElementById(id).classList.add('active');
   const nid = sectionNav[id];
-  if (nid) { const nel = document.getElementById(nid); if (nel) nel.classList.add('active'); }
-
-  if (id === 's-meta') {
-    renderGuestArea();
+  if (nid) document.getElementById(nid).classList.add('active');
+  if (id === 's-teiln') {
+    if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
+    else renderParticipants();
+    renderBewohnerCard();
   }
   if (id === 's-tops') {
-    // Load participants for signature fields
-    if (S.thema && !S.participants.length) {
-      onThemaChange(S.thema).then(() => renderSignatureFields()).catch(e => console.warn('participant load:', e));
-    } else {
-      renderSignatureFields();
-    }
     const _thema = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
     if (_thema?.bewohner) {
       const _einrKey = S.einrichtung || 'nordstern';
@@ -1110,9 +1222,22 @@ function goSection(id) {
       renderTOPs();
     }
   }
-
+  if (id === 's-freigabe') {
+    populateApproverSelect();
+    const _isExtern = S.type === 'allgemein' && S.thema === 'besprechung';
+    const stdWrap = document.getElementById('freigabeStandardWrap');
+    const extWrap = document.getElementById('freigabeExternWrap');
+    const cardTitle = document.getElementById('freigabeCardTitle');
+    if (stdWrap) stdWrap.style.display = _isExtern ? 'none' : '';
+    if (extWrap) extWrap.style.display = _isExtern ? '' : 'none';
+    if (cardTitle) cardTitle.textContent = _isExtern ? 'Unterschriften' : 'Zuständige Teamleitung';
+  }
 }
-function goHome() { window.location.href = "apps.html"; }
+function goHome() {}
+function markDone(n) {
+  const el = document.getElementById('nn'+n);
+  if (el) { el.textContent = '✓'; document.getElementById('n'+n).classList.add('done'); }
+}
 
 /* ──────────────────────────────────────
    THEMA SELECTION (flat: type + thema in one click)
@@ -1161,7 +1286,6 @@ function selectThema(type, themaKey, el) {
   // Pre-init TOPs and reset participants
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
-  S.guests = [];
   _currentDraftId = null; // fresh draft
   // Pre-load bewohner TOPs if applicable (async, cached)
   if (thema.bewohner) {
@@ -1446,119 +1570,20 @@ function printBlanko() {
   setTimeout(() => win.print(), 500);
 }
 
-function renderSignatureFields() {
-  const grid = document.getElementById('signaturesGrid');
-  const card = document.getElementById('signaturesCard');
-  if (!grid) return;
-
-  // Collect: anwesende Mitarbeiter + externe Gäste
-  const staff  = (S.participants || []).filter(p => p.present && !p.extern);
-  const guests = (S.guests       || []).filter(g => g.name?.trim());
-
-  const all = [
-    ...staff.map(p  => ({ id: 'sig_staff_' + (p.mail||p.name).replace(/\W/g,'_'), label: p.name, sub: 'Mitarbeiter/in' })),
-    ...guests.map((g,i) => ({ id: 'sig_guest_' + i, label: g.name, sub: g.role || 'Externer Gast' })),
-  ];
-
-  if (card) card.style.display = all.length ? '' : 'none';
-  if (!all.length) { grid.innerHTML = ''; return; }
-
-  grid.innerHTML = all.map(p => `
-    <div style="flex:1;min-width:200px;max-width:260px;">
-      <canvas id="${p.id}" style="border:1px solid var(--border);border-radius:var(--radius);width:100%;height:90px;touch-action:none;background:white;cursor:crosshair;display:block;"></canvas>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
-        <div>
-          <div style="font-size:12px;font-weight:600;color:var(--text);">${p.label}</div>
-          <div style="font-size:10px;color:var(--text-muted);">${p.sub}</div>
-        </div>
-        <button onclick="clearSigPad('${p.id}')" style="font-size:10px;color:var(--text-muted);background:none;border:none;cursor:pointer;">✕ Löschen</button>
-      </div>
-    </div>`).join('');
-
-  // Init all signature pads
-  requestAnimationFrame(() => all.forEach(p => initSigPad(p.id)));
-}
-
-// Pad state
-const _sigPads = {}; // id → {canvas, ctx, drawing, lastX, lastY}
-
-function initSigPad(id) {
-  const canvas = document.getElementById(id);
-  if (!canvas || _sigPads[id]) return;
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width  = canvas.offsetWidth  * dpr;
-  canvas.height = canvas.offsetHeight * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.strokeStyle = '#1a1916';
-  ctx.lineWidth   = 1.5;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  const pad = { canvas, ctx, drawing: false };
-  _sigPads[id] = pad;
-
-  function pos(e) {
-    const r = canvas.getBoundingClientRect();
-    const src = e.touches ? e.touches[0] : e;
-    return { x: src.clientX - r.left, y: src.clientY - r.top };
-  }
-  canvas.addEventListener('pointerdown', e => {
-    pad.drawing = true; canvas.setPointerCapture(e.pointerId);
-    const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y);
-    e.preventDefault();
-  });
-  canvas.addEventListener('pointermove', e => {
-    if (!pad.drawing) return;
-    const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke();
-    e.preventDefault();
-  });
-  canvas.addEventListener('pointerup',   () => { pad.drawing = false; });
-  canvas.addEventListener('pointerleave',() => { pad.drawing = false; });
-}
-
-function clearSigPad(id) {
-  const pad = _sigPads[id];
-  if (!pad) return;
-  pad.ctx.clearRect(0, 0, pad.canvas.width, pad.canvas.height);
-}
-
-function getSigDataURL(id) {
-  const canvas = document.getElementById(id);
-  if (!canvas) return null;
-  // Check if empty
-  const ctx = canvas.getContext('2d');
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  const empty = data.every(v => v === 0);
-  return empty ? null : canvas.toDataURL('image/png');
-}
-
-
 function addGuest() {
-  if (!S.guests) S.guests = [];
-  S.guests.push({ name: '', role: '' });
-  renderGuestArea();
-}
-
-function renderGuestArea() {
   const area = document.getElementById('guestArea');
-  if (!area) return;
-  if (!S.guests) S.guests = [];
-  area.innerHTML = S.guests.map((g, i) => `
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <input type="text" placeholder="Name" value="${g.name}"
-        style="flex:2;min-width:120px;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;"
-        oninput="S.guests[${i}].name=this.value">
-      <input type="text" placeholder="Funktion / Organisation" value="${g.role}"
-        style="flex:2;min-width:120px;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;"
-        oninput="S.guests[${i}].role=this.value">
-      <input type="email" placeholder="E-Mail" value="${g.email||''}"
-        style="flex:2;min-width:140px;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;"
-        oninput="S.guests[${i}].email=this.value">
-      <button class="btn-remove" onclick="S.guests.splice(${i},1);renderGuestArea()">×</button>
-    </div>`).join('');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" placeholder="Name" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+    <input type="text" placeholder="E-Mail" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+    <button class="btn-remove" onclick="this.parentElement.remove()">✕</button>`;
+  area.appendChild(row);
 }
 
-
+/* ──────────────────────────────────────
+   TOPs
+────────────────────────────────────── */
 function renderTOPs() {
   const list = document.getElementById('topsList');
   list.innerHTML = '';
@@ -1615,55 +1640,6 @@ function resetApproval() {
   document.getElementById('sText').style.color = 'var(--text-muted)';
   document.getElementById('btnReqApproval').textContent = '📨 Anfrage senden';
   document.getElementById('btnReqApproval').onclick = requestApproval;
-}
-
-async function sendProtokollMail() {
-  // Collect recipients: participants with mail + guests with email
-  const staff  = (S.participants || []).filter(p => p.present && p.mail);
-  const guests = (S.guests       || []).filter(g => g.email?.trim());
-  const allRecip = [
-    ...staff.map(p  => ({ name: p.name,  address: p.mail })),
-    ...guests.map(g => ({ name: g.name,  address: g.email })),
-  ];
-
-  if (!allRecip.length) {
-    showToast('Keine E-Mail-Adressen gefunden. Bitte Teilnehmer oder Gäste mit E-Mail eintragen.', 'info');
-    return;
-  }
-
-  const betreff  = document.getElementById('fMailBetreff')?.value || 'Meetingprotokoll';
-  const hinweis  = document.getElementById('fMailNote')?.value    || '';
-  const fileName = document.getElementById('fFileName')?.value    || 'Protokoll.pdf';
-
-  // Build preview HTML to generate PDF content
-  buildPreview();
-  const previewHtml = document.getElementById('previewContainer')?.innerHTML || '';
-
-  showToast('Protokoll wird versendet…', 'info');
-  try {
-    const token   = await getToken();
-    const toList  = allRecip.map(r => ({ emailAddress: { name: r.name, address: r.address } }));
-    const body    = `<p>${hinweis ? hinweis + '<br><br>' : ''}Anbei das Protokoll als HTML-Vorschau:</p><hr>${previewHtml}`;
-
-    await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: {
-          subject: betreff,
-          body: { contentType: 'HTML', content: body },
-          toRecipients: toList,
-        },
-        saveToSentItems: true,
-      }),
-    });
-
-    // Save draft as sent
-    _currentDraftId = null;
-    showToast('✓ Protokoll erfolgreich versendet!', 'success');
-  } catch(e) {
-    showToast('Fehler beim Versenden: ' + e.message, 'info');
-  }
 }
 
 function confirmPublish() {
@@ -1735,7 +1711,6 @@ async function saveDraft() { showToast('Entwurf wird gespeichert …', 'info'); 
    PREVIEW
 ────────────────────────────────────── */
 function buildPreview() {
-  renderSignatureFields();
   // Show/hide Blanko button
   const _isExternPrev = S.type === 'allgemein' && S.thema === 'besprechung';
   const _blankBtn = document.getElementById('btnBlankoPrint');
