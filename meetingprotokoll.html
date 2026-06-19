@@ -285,10 +285,7 @@
         <span class="nav-num" id="nn2">2</span>
         <span>Details</span>
       </div>
-      <div class="nav-item" id="n3" onclick="goSection('s-teiln')">
-        <span class="nav-num" id="nn3">3</span>
-        <span>Teilnehmer</span>
-      </div>
+      
       <div class="nav-item" id="n4" onclick="goSection('s-tops')">
         <span class="nav-num" id="nn4">4</span>
         <span>Inhalte</span>
@@ -390,7 +387,7 @@
       <div class="section" id="s-meta">
         <div class="section-title">Meeting-Details</div>
         <div class="section-sub">Datum, Ort und Protokollführung eintragen.</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:40%"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:33%"></div></div>
 
         <div class="card">
           <div class="card-title">Rahmendaten</div>
@@ -442,49 +439,7 @@
 
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="goSection('s-typ')">← Zurück</button>
-          <button class="btn btn-primary" onclick="goSection('s-teiln');markDone(2)">Weiter →</button>
-        </div>
-      </div>
-
-      <!-- ══ S3: TEILNEHMER ══ -->
-      <div class="section" id="s-teiln">
-        <div class="section-title">Teilnehmer</div>
-        <div class="section-sub" id="teilnSub">Aus M365-Gruppe geladen · Anwesenheit mit Klick eintragen</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:60%"></div></div>
-
-        <div class="card">
-          <div style="margin-bottom:.75rem;">
-            <div class="card-title" style="margin:0">Eingeladene Personen</div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text-muted);" onclick="toggleAll()">
-              <div class="p-cb" id="allCb" style="cursor:pointer;"><span class="p-cb-check" id="allCbCheck">✓</span></div>
-              Alle
-            </label>
-          </div>
-          <div class="p-grid" id="participantGrid"></div>
-
-        </div>
-
-        <!-- Bewohner (nur Wohngruppen Konferenz) -->
-        <div class="card" id="bewohnerCard" style="display:none">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
-            <div class="card-title" style="margin:0">Bewohner/innen</div>
-            <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="openBewohnerModal()">✏️ Verwalten</button>
-          </div>
-          <div style="display:flex;align-items:center;margin-bottom:8px;">
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text-muted);" onclick="toggleAllBewohner()">
-              <div class="p-cb" id="allBewohnerCb" style="cursor:pointer;background:var(--accent);border-color:var(--accent);"><span class="p-cb-check" style="color:white;">✓</span></div>
-              Alle
-            </label>
-          </div>
-          <div class="p-grid" id="bewohnerGrid"></div>
-          <div class="p-count-bar" id="bewohnerCountBar" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;"></div>
-        </div>
-
-        <div class="btn-row">
-          <button class="btn btn-secondary" onclick="goSection('s-meta')">← Zurück</button>
-          <button class="btn btn-primary" onclick="goSection('s-tops');markDone(3)">Weiter →</button>
+          <button class="btn btn-primary" onclick="goSection('s-tops');markDone(2)">Weiter →</button>
         </div>
       </div>
 
@@ -492,7 +447,7 @@
       <div class="section" id="s-tops">
         <div class="section-title">Tagesordnung & Inhalte</div>
         <div class="section-sub">Protokolltext, Beschlüsse und Aufgaben je Tagesordnungspunkt.</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:80%"></div></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:67%"></div></div>
 
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
@@ -531,7 +486,7 @@
 
         <div class="btn-row">
           <div class="btn-row-right">
-            <button class="btn btn-secondary" onclick="goSection('s-teiln')">← Zurück</button>
+            <button class="btn btn-secondary" onclick="goSection('s-tops')">← Zurück</button>
             <button class="btn btn-secondary" onclick="saveDraft()">💾 Entwurf</button>
           </div>
           <button class="btn btn-primary" onclick="goSection('s-freigabe');markDone(4)">Zur Freigabe →</button>
@@ -1196,7 +1151,7 @@ const S = {
 const sectionNav = {
   's-typ':       'n1',
   's-meta':      'n2',
-  's-teiln':     'n3',
+  's-tops':     'n3',
   's-tops':      'n4',
   's-freigabe':  'n5',
   's-offen':     'n-offen',
@@ -1209,7 +1164,7 @@ function goSection(id) {
   document.getElementById(id).classList.add('active');
   const nid = sectionNav[id];
   if (nid) document.getElementById(nid).classList.add('active');
-  if (id === 's-teiln') {
+  if (id === 's-tops') {
     if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
     else renderParticipants();
     renderBewohnerCard();
@@ -1218,6 +1173,10 @@ function goSection(id) {
     renderGuestArea();
   }
   if (id === 's-tops') {
+    // Load participants in background for signature fields (no UI shown)
+    if (S.thema && !S.participants.length) {
+      onThemaChange(S.thema).catch(e => console.warn('participant load:', e));
+    }
     const _thema = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
     if (_thema?.bewohner) {
       const _einrKey = S.einrichtung || 'nordstern';
