@@ -305,7 +305,7 @@
           <div style="margin-bottom:12px;">
             <button class="btn-add" id="btnAddFachkraft" onclick="addFachkraft()">+ Fachkraft hinzufügen</button>
           </div>
-          <div class="field-grid full" style="margin-bottom:4px;">
+          <div class="field-grid full" id="fallleitungRow" style="margin-bottom:4px;">
             <div class="field"><label>Teamleiter NeueWege (Auswahlliste)</label>
               <select id="Fallleitung"><option value="">Wird geladen...</option></select>
             </div>
@@ -1297,6 +1297,9 @@ function selectBerichtstyp(typ) {
   // Sorgeberechtigten-Adressblock nur bei nicht-stationaer
   const sorgAddr = document.getElementById('sorgAddrBlock');
   if (sorgAddr) sorgAddr.style.display = (typ === 'stationaer') ? 'none' : '';
+  // Teamleiter-Auswahl nur bei nicht-stationaer
+  const flRow = document.getElementById('fallleitungRow');
+  if (flRow) flRow.style.display = (typ === 'stationaer') ? 'none' : '';
   // Anhang-Upload in S5 wird dynamisch in buildDynamicSections eingefügt (nur bei nicht-Clearing)
   // Force rebuild of dynamic sections on next visit (type changed)
   ['s3_content','s4_content','s5_content'].forEach(id => {
