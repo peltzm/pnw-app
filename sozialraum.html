@@ -408,6 +408,8 @@ input, select, textarea, button { -webkit-tap-highlight-color: transparent; touc
     <div class="header-brand">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:30px; width:auto;" alt="Praxis NeueWege">
       <span style="font-size:14px; font-weight:600; color:var(--text);">Sozialraumangebote</span>
+      <span id="versionBadge" style="font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace;"></span>
+      <a href="changelog.html" target="_blank" style="font-size:10px;color:var(--accent-mid);text-decoration:none;margin-left:6px;opacity:0.8;" title="Changelog">Changelog ↗</a>
     </div>
     <div class="user-badge" id="userBadge">
       <div class="user-dot"></div>
@@ -605,6 +607,12 @@ const CONFIG = {
   listName:    'Sozialraum-Angebote'
 };
 
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
+
+function applyVersionBadge() {
+  document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
+}
+
 let msalInstance = null, currentAccount = null, accessToken = null;
 let _graphSiteId = null, _graphListId = null;
 let allItems = [];
@@ -622,6 +630,7 @@ async function initMsal() {
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
+  applyVersionBadge();
   try {
     const response = await msalInstance.handleRedirectPromise();
     if (response) { currentAccount = response.account; accessToken = response.accessToken; showApp(); return; }
