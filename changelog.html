@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,200;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Changelog — Berichtsgenerator</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
+    --text: #1a1916; --text-muted: #6b6860; --text-hint: #a09e99;
+    --accent: #7b3f1e; --accent-light: #f5ede7; --accent-mid: #c47848;
+    --success: #2d6a4f; --success-bg: #eaf4ee;
+    --error: #9b1c1c; --error-bg: #fef2f2;
+    --radius: 8px; --radius-lg: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Kodchasan', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .header-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .header-brand:hover { opacity: 0.8; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 2rem; }
+  .page-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 2rem; }
+  .release { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 1.25rem; overflow: hidden; }
+  .release-header { padding: 1rem 1.25rem 0.75rem; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .release-version { font-size: 15px; font-weight: 700; color: var(--accent); font-family: 'Kodchasan', monospace; }
+  .release-date { font-size: 12px; color: var(--text-muted); }
+  .release-body { padding: 0.875rem 1.25rem; }
+  .entry { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; }
+  .tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-radius: 4px; padding: 2px 6px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .tag-feat  { background: #e0f2e9; color: #1a5c38; }
+  .tag-fix   { background: #fef2f2; color: #9b1c1c; }
+  .tag-ui    { background: #eff6ff; color: #1e40af; }
+  .tag-chore { background: #f5f5f5; color: #555; }
+  .entry-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .sha { font-size: 10px; color: var(--text-hint); font-family: 'Kodchasan', monospace; margin-left: 6px; }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent-mid); text-decoration: none; margin-bottom: 1.5rem; }
+  .back-link:hover { color: var(--accent); }
+  .divider { height: 1px; background: var(--border); margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <a class="header-brand" href="index.html">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:32px; width:auto;" alt="Praxis NeueWege">
+    <span style="font-size:14px; font-weight:600; color:var(--text);">Berichtsgenerator</span>
+  </a>
+  <span style="font-size:12px; color:var(--text-muted);">Changelog</span>
+</div>
+
+<div class="wrap">
+  <a class="back-link" href="index.html">← Zurück zur App</a>
+  <div class="page-title">Changelog</div>
+  <div class="page-sub">Berichtsgenerator — Praxis NeueWege</div>
+
+  <!-- 2026-06-19 -->
+  <div class="release">
+    <div class="release-header">
+      <span class="release-version">v02602d7</span>
+      <span class="release-date">19. Juni 2026</span>
+    </div>
+    <div class="release-body">
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Verlaufsbericht stationär: Feld „Teamleiter NeueWege (Auswahlliste)" wird nicht mehr angezeigt — Freigabe erfolgt direkt über Jessica Hermann / Kilian Freundl <span class="sha">02602d7</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Sozialraum: Kategorie-Dropdown an Ist-Bestand angepasst (Freizeit &amp; Sport u.a.) <span class="sha">c217730</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2026-06-18 — Meetingprotokoll + Wohngruppen-Konferenz -->
+  <div class="release">
+    <div class="release-header">
+      <span class="release-version">v43dd32a</span>
+      <span class="release-date">18. Juni 2026</span>
+    </div>
+    <div class="release-body">
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Meetingprotokoll-App (Beta) im App Launcher verfügbar <span class="sha">43dd32a</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Wohngruppen Konferenz: Einrichtungs-Selektor + Nordstern-Team-Teilnehmer automatisch geladen <span class="sha">607ffa4</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Bewohner-Verwaltung für Wohngruppen Konferenz mit SharePoint-Speicherung und Datenschutz-Anzeige (Vorname N.) <span class="sha">ff2f806</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Automatische TOPs pro Bewohner, default-Daten für alle Einrichtungen <span class="sha">f7e4c75</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Besprechungsprotokoll extern: Blanko-Druck + 2 Unterschriftsfelder <span class="sha">f3613b4</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Protokollführer immer aus Ambulante Familienhilfe, Standard = angemeldeter Nutzer <span class="sha">c0e0917</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Kachel-Klick → Weiter, YYMM-Dateiname, Auto-Save Entwurf in SharePoint <span class="sha">7d933e6</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">MSAL-Auth + M365-Gruppenladung, Demo-Modus entfernt <span class="sha">6a5dd72</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Designer-PDF für alle 4 Formulare (Kodchasan, Logo, Kapitälchen, Consent-Boxen) <span class="sha">2eec83d</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Formulare-App (digitale Klientenformulare mit MSAL) im App Launcher <span class="sha">693021d</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Prüfmodus-Kommentare auch auf S1/S2 (Stammdaten &amp; Kind/Familie) <span class="sha">6141a41</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-ui">UI</span>
+        <span class="entry-text">Kodchasan-Schriftart in allen Apps und Dokumenten vereinheitlicht <span class="sha">30f8710</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-ui">UI</span>
+        <span class="entry-text">Placeholder Sachbearbeiter*in + Datum_Unterschrift mit heutigem Datum vorbelegt <span class="sha">b6c70f7</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Freigabe-Empfänger dynamisch je Kontext, Nordstern nur Jessica/Kilian, Sonja immer dabei <span class="sha">6bd8f42</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Protokollführer-Sortierung nach Nachname, Anzeige als „Nachname, Vorname" <span class="sha">577b36d</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Samsung Tab A9: Pointer-Events, DPR-Skalierung, Touch-Hardening, One UI Safe-Area <span class="sha">5dfa488</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2026-06-17 — PDF-Anhang + stationaer Bugfixes -->
+  <div class="release">
+    <div class="release-header">
+      <span class="release-version">v9ef7cec</span>
+      <span class="release-date">17. Juni 2026</span>
+    </div>
+    <div class="release-body">
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">PDF-Anhang-Upload für alle Berichtstypen in S5 (vor Unterschrift) <span class="sha">9ef7cec</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">PDF-Anhang im Clearingbericht (Anhang-Methodik) <span class="sha">57d510f</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Verlaufsbericht stationär: S3-Felder (Situation) werden beim Navigieren nicht mehr überschrieben <span class="sha">396dcf8</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Verlaufsbericht stationär: Speichern/Laden der Eingaben korrekt <span class="sha">b8b852d</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Anhang-Widget überlebt S5-Rebuild beim Seitenwechsel <span class="sha">c158105</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-ui">UI</span>
+        <span class="entry-text">Datum-Warnung volle Breite, Abschluss-Hinweis in Rot <span class="sha">ad2eb53</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Abrechnungs-Badge Belegliste + Datum-Warnung Erfassen + Alter-Hinweis Abschluss (Spesenabrechnung) <span class="sha">c83df59</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Lösch-Sperre für abgerechnete Belege — Eingereicht/Genehmigt nicht löschbar <span class="sha">24d1836</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2026-06-16 — stationaer Einführung + Spesenabrechnung -->
+  <div class="release">
+    <div class="release-header">
+      <span class="release-version">v172a03b</span>
+      <span class="release-date">16. Juni 2026</span>
+    </div>
+    <div class="release-body">
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Einreichung fest an Sonja Peltz (GF) — kein TL-Dropdown mehr <span class="sha">172a03b</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Schreibschutz für genehmigte Monate — Banner + Warnung bei Erfassen (Spesenabrechnung) <span class="sha">2dc0d31</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Monatsauswahl dynamisch — aktueller Monat + 11 Monate rückwärts, kein Hardcoding <span class="sha">7a5616d</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Freigabe-Mail nur noch an spesen@praxisneuewege.de <span class="sha">ad785cb</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Methoden &amp; Maßnahmen als textarea (mehrzeilig) <span class="sha">477fd58</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Label „Aktuelle Lebenssituation" → „Aktuelle Situation" <span class="sha">2c0061f</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">Einreichen-Button funktioniert korrekt nach 3 Pflicht-Häkchen <span class="sha">616c114</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2026-06-15 — stationaer Launch -->
+  <div class="release">
+    <div class="release-header">
+      <span class="release-version">vdc4460c</span>
+      <span class="release-date">15. Juni 2026</span>
+    </div>
+    <div class="release-body">
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Berichtstyp „Verlaufsbericht stationär" (VB-S) für Nordstern eingeführt <span class="sha">dc4460c</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Monatsbericht-Kachel als Platzhalter (Demnächst) <span class="sha">dc4460c</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">§ 34 SGB VIII – Heimerziehung zur Hilfeart-Auswahl hinzugefügt <span class="sha">dc4460c</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Stationär: Freigabe-Routing an Jessica Hermann + Kilian Freundl (unabhängig von TL Ambulant) <span class="sha">9b92206</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-feat">Neu</span>
+        <span class="entry-text">Stationär: Hilfeplanziele (S4) ausgeblendet, Einrichtungsfeld, angepasste Beziehungsoptionen <span class="sha">221e977</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-ui">UI</span>
+        <span class="entry-text">Berichtstyp-Grid: 3 Spalten, alle Kacheln gleich groß, Hover-Effekte <span class="sha">2a461af</span></span>
+      </div>
+      <div class="entry">
+        <span class="tag tag-fix">Fix</span>
+        <span class="entry-text">MSAL: cacheLocation auf localStorage (Safari ITP / iOS-Fix) <span class="sha">30693a6</span></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
