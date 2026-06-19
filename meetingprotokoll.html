@@ -1070,16 +1070,18 @@ const S = {
 const sectionNav = {
   's-typ':    'n1',
   's-meta':   'n2',
-  's-tops':   'n3',
+  's-tops':   'n4',
   's-offen':  'n-offen',
   's-archiv': 'n-archiv',
 };
 function goSection(id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+  const secEl = document.getElementById(id);
+  if (!secEl) { console.error('Section not found:', id); return; }
+  secEl.classList.add('active');
   const nid = sectionNav[id];
-  if (nid) document.getElementById(nid).classList.add('active');
+  if (nid) { const nel = document.getElementById(nid); if (nel) nel.classList.add('active'); }
 
   if (id === 's-meta') {
     renderGuestArea();
