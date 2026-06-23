@@ -696,7 +696,7 @@ const MSAL_CONFIG = {
   system: { allowNativeBroker:false }
 };
 const SCOPES = ['User.Read','User.ReadBasic.All','Mail.Send','GroupMember.Read.All'];
-const APP_VERSION = '38a3661'; // auto-updated on deploy
+const APP_VERSION = '69692b8'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1273,7 +1273,7 @@ function buildStep(fid,idx){
     </div>
   </div>`;
     });
-  } else {
+  } else if(fid!=='kompass'){
     html+=`
   <div class="sig-container">
     <div class="sig-title">Unterschrift Klient / Sorgeberechtigte/r</div>
