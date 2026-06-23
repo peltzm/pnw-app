@@ -406,7 +406,16 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
           <div class="fg">
             <div class="field"><label>Fachkraft PNW</label><input type="text" id="k_fk" readonly></div>
             <div class="field"><label>Datum</label><input type="date" id="k_datum"></div>
- <!-- FORMULARAUSWAHL -->
+          </div>
+        </div>
+        <div class="btn-row">
+          <div></div>
+          <button class="btn btn-primary" onclick="saveStamm()">Speichern → Formulare wählen</button>
+        </div>
+        <div id="stammSaved" class="alert alert-success" style="display:none;margin-top:1rem;">✅ Gespeichert.</div>
+      </div>
+
+      <!-- FORMULARAUSWAHL -->
       <div class="panel" id="panel_formulare">
         <div class="panel-title">Formulare auswählen</div>
         <div class="panel-sub">Wählen Sie die relevanten Formulare für diesen Klienten. Details zu Institutionen, Vollmachtgebern etc. kommen im nächsten Schritt.</div>
