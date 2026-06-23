@@ -368,7 +368,7 @@
           <div class="field-grid triple">
             <div class="field"><label>Vorname</label><input type="text" id="Sorg_Vorname"></div>
             <div class="field"><label>Familienname</label><input type="text" id="Sorg_Familienname" oninput="this.value=this.value.toUpperCase()"></div>
-            <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg_Beziehung"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option><option>Jugendamt</option></select></div>
+            <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg_Beziehung"><option value="">— bitte wählen —</option><option>Mutter</option><option>Vater</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option><option>Jugendamt</option></select></div>
           </div>
           <div id="sorgAddrBlock">
             <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:8px;">
@@ -3750,7 +3750,7 @@ function addExtraSorg() {
     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:8px;">
       <div class="field"><label>Vorname</label><input type="text" id="Sorg2_Vorname_${n}" style="width:100%;"></div>
       <div class="field"><label>Familienname</label><input type="text" id="Sorg2_Name_${n}" oninput="this.value=this.value.toUpperCase()" style="width:100%;"></div>
-      <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg2_Beziehung_${n}" style="width:100%;"><option value="">— bitte wählen —</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option></select></div>
+      <div class="field"><label>Beziehung (Auswahlliste)</label><select id="Sorg2_Beziehung_${n}" style="width:100%;"><option value="">— bitte wählen —</option><option>Mutter</option><option>Vater</option><option>Eltern</option><option>Stiefeltern</option><option>Großeltern</option><option>Betreuer</option><option>Jugendamt</option></select></div>
     </div>
     <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); cursor:pointer; margin-bottom:8px;">
       <input type="checkbox" id="Sorg2_SameAddr_${n}" checked onchange="toggleSorg2SameAddr(${n})" style="width:14px; height:14px; cursor:pointer;">
