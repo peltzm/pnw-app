@@ -192,7 +192,8 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .fk-layout{display:flex;flex-direction:column;min-height:calc(100vh - 54px);}
 .fk-sidebar{width:100%;height:auto;position:static;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);background:var(--surface);display:flex;padding:0;}
 .fk-sidebar-hd,.sidebar-bot,.klient-box{display:none;}
-.tab{flex-direction:column;padding:6px 12px;border-left:none;border-bottom:3px solid transparent;min-height:52px;justify-content:center;align-items:center;flex:1;min-width:52px;}
+.tab{flex-direction:column;padding:6px 8px;border-left:none;border-bottom:3px solid transparent;min-height:52px;justify-content:center;align-items:center;flex:1;min-width:0;}
+.sidebar-section-sep,.sidebar-section-label{display:none;}
 .tab.active{border-bottom-color:var(--accent);border-left-color:transparent;background:var(--accent-light);}
 .tab-text{display:block;}
 .tab-name{font-size:10px;color:var(--text-muted);margin-top:2px;white-space:nowrap;}
@@ -316,8 +317,8 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
         <div class="tab-text"><div class="tab-name">Stammdaten</div><div class="tab-sub" id="sub_stamm">Klientendaten eingeben</div></div>
         <div class="tab-dot dot-e" id="dot_stamm"></div>
       </div>
-      <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
-      <div style="padding:3px 1rem 5px;font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.07em;">Formulare wählen</div>
+      <div class="sidebar-section-sep" style="height:1px;background:var(--border);margin:4px 1rem;"></div>
+      <div class="sidebar-section-label" style="padding:3px 1rem 5px;font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.07em;">Formulare wählen</div>
       <div class="tab" id="tab_formulare" onclick="showPanel('formulare')">
         <div class="tab-icon">📋</div>
         <div class="tab-text"><div class="tab-name">Auswahl</div><div class="tab-sub" id="sub_formulare">Keine ausgewählt</div></div>
@@ -331,13 +332,13 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
       <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
       <div class="tab" id="tab_uebergabe" onclick="showPanel('uebergabe')">
         <div class="tab-icon">🤲</div>
-        <div class="tab-text"><div class="tab-name">Tablet übergeben</div><div class="tab-sub">An Klient weitergeben</div></div>
+        <div class="tab-text"><div class="tab-name">Übergabe</div><div class="tab-sub">An Klient weitergeben</div></div>
         <div class="tab-dot dot-e" id="dot_uebergabe"></div>
       </div>
       <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
       <div class="tab" id="tab_leer" onclick="showPanel('leer')">
         <div class="tab-icon">🖨️</div>
-        <div class="tab-text"><div class="tab-name">Leerformulare</div><div class="tab-sub">Drucken / Download</div></div>
+        <div class="tab-text"><div class="tab-name">Drucken</div><div class="tab-sub">Drucken / Download</div></div>
         <div class="tab-dot dot-e"></div>
       </div>
       <div class="sidebar-bot">
@@ -704,7 +705,7 @@ const MSAL_CONFIG = {
   system: { allowNativeBroker:false }
 };
 const SCOPES = ['User.Read','User.ReadBasic.All','Mail.Send','GroupMember.Read.All'];
-const APP_VERSION = 'ec01b6f'; // auto-updated on deploy
+const APP_VERSION = '374cc89'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
