@@ -1300,10 +1300,12 @@ function setupPad(fid){
   if(fid==='vollm'){
     const vGebers=getAllVollmachtgeber();
     const padIds=vGebers.length>1 ? vGebers.map((_,i)=>fid+'_'+i) : [fid];
-    padIds.forEach(padId=>_initPad(padId));
+    // Sequenziell initialisieren: jedes Pad 80ms nach dem vorherigen
+    padIds.forEach((padId,i)=>setTimeout(()=>_initPad(padId), i*80));
   } else if(fid==='kompass'){
+    // Sequenziell: eb zuerst, kl 100ms danach
     _initPad('kompass_eb');
-    _initPad('kompass_kl');
+    setTimeout(()=>_initPad('kompass_kl'), 100);
   } else {
     _initPad(fid);
   }
@@ -1318,8 +1320,10 @@ function _initPad(padId){
     // Size canvas to actual pixel dimensions (handle devicePixelRatio for sharp rendering)
     const dpr=window.devicePixelRatio||1;
     const rect=wrap.getBoundingClientRect();
-    const displayW=rect.width||wrap.offsetWidth||620;
+    const displayW=rect.width||wrap.offsetWidth||(wrap.parentElement&&wrap.parentElement.offsetWidth)||620;
     const displayH=parseInt(canvas.getAttribute('height'))||160;
+    // Guard: wenn Canvas noch nicht sichtbar (width=0), retry mit längerem Delay
+    if(displayW < 10){ setTimeout(()=>{ delete pads[padId]; _initPad(padId); }, 150); return; }
     canvas.width=Math.floor(displayW*dpr);
     canvas.height=Math.floor(displayH*dpr);
     canvas.style.width=displayW+'px';
