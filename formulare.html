@@ -1312,28 +1312,40 @@ function setupPad(fid){
 }
 function _initPad(padId){
   if(pads[padId]) return; // already initialized
+  pads[padId]='pending'; // Mutex: verhindert doppelte Initialisierung
   // Use rAF to ensure DOM is ready
   requestAnimationFrame(()=>setTimeout(()=>{
     const canvas=document.getElementById('sigCanvas_'+padId);
     if(!canvas) return;
     const wrap=document.getElementById('sigWrap_'+padId);
+    // Canvas klonen um ggf. alte Event-Listener zu entfernen
+    const freshCanvas=canvas.cloneNode(false);
+    canvas.parentNode.replaceChild(freshCanvas,canvas);
+    const canv=freshCanvas;
     // Size canvas to actual pixel dimensions (handle devicePixelRatio for sharp rendering)
     const dpr=window.devicePixelRatio||1;
     const rect=wrap.getBoundingClientRect();
     const displayW=rect.width||wrap.offsetWidth||(wrap.parentElement&&wrap.parentElement.offsetWidth)||620;
-    const displayH=parseInt(canvas.getAttribute('height'))||160;
+    const displayH=parseInt(canv.getAttribute('height'))||160;
     // Guard: wenn Canvas noch nicht sichtbar (width=0), retry mit längerem Delay
-    if(displayW < 10){ setTimeout(()=>{ delete pads[padId]; _initPad(padId); }, 150); return; }
-    canvas.width=Math.floor(displayW*dpr);
-    canvas.height=Math.floor(displayH*dpr);
-    canvas.style.width=displayW+'px';
-    canvas.style.height=displayH+'px';
-    const ctx=canvas.getContext('2d');
+    if(displayW < 10){
+      delete pads[padId];
+      // Canvas klonen um alte Event-Listener zu entfernen
+      const fresh=canv.cloneNode(false);
+      canv.parentNode.replaceChild(fresh,canv);
+      setTimeout(()=>_initPad(padId), 200);
+      return;
+    }
+    canv.width=Math.floor(displayW*dpr);
+    canv.height=Math.floor(displayH*dpr);
+    canv.style.width=displayW+'px';
+    canv.style.height=displayH+'px';
+    const ctx=canv.getContext('2d');
     ctx.scale(dpr,dpr);
     let drawing=false,hasSig=false;
 
     function getPos(e){
-      const r=canvas.getBoundingClientRect();
+      const r=canv.getBoundingClientRect();
       // Pointer Events (primary on Android Chrome)
       if(e.clientX!==undefined&&!e.touches){
         return{x:(e.clientX-r.left),y:(e.clientY-r.top)};
@@ -1363,39 +1375,39 @@ function _initPad(padId){
         if(status){status.textContent='✅ Unterschrift vorhanden';status.className='sig-status signed';}
       }
       // Save continuously
-      sigs[padId]=canvas.toDataURL('image/png');
+      sigs[padId]=canv.toDataURL('image/png');
     }
     function endDraw(e){
       if(e)e.preventDefault();
       drawing=false;
-      if(hasSig)sigs[padId]=canvas.toDataURL('image/png');
+      if(hasSig)sigs[padId]=canv.toDataURL('image/png');
     }
 
     // ── Pointer Events (Android Chrome, Samsung Browser) ──
-    canvas.addEventListener('pointerdown', startDraw, {passive:false});
-    canvas.addEventListener('pointermove', draw,      {passive:false});
-    canvas.addEventListener('pointerup',   endDraw,   {passive:false});
-    canvas.addEventListener('pointercancel',endDraw,  {passive:false});
+    canv.addEventListener('pointerdown', startDraw, {passive:false});
+    canv.addEventListener('pointermove', draw,      {passive:false});
+    canv.addEventListener('pointerup',   endDraw,   {passive:false});
+    canv.addEventListener('pointercancel',endDraw,  {passive:false});
     // Set pointer capture so drawing works when finger moves fast
-    canvas.addEventListener('pointerdown', e=>{
-      try{canvas.setPointerCapture(e.pointerId);}catch(ex){}
+    canv.addEventListener('pointerdown', e=>{
+      try{canv.setPointerCapture(e.pointerId);}catch(ex){}
     });
 
     // ── Touch Events fallback (older browsers) ──
-    canvas.addEventListener('touchstart', startDraw, {passive:false});
-    canvas.addEventListener('touchmove',  draw,      {passive:false});
-    canvas.addEventListener('touchend',   endDraw,   {passive:false});
+    canv.addEventListener('touchstart', startDraw, {passive:false});
+    canv.addEventListener('touchmove',  draw,      {passive:false});
+    canv.addEventListener('touchend',   endDraw,   {passive:false});
 
     // ── Mouse Events fallback (desktop) ──
-    canvas.addEventListener('mousedown', startDraw);
-    canvas.addEventListener('mousemove', e=>{if(drawing)draw(e);});
-    canvas.addEventListener('mouseup',   endDraw);
-    canvas.addEventListener('mouseleave',endDraw);
+    canv.addEventListener('mousedown', startDraw);
+    canv.addEventListener('mousemove', e=>{if(drawing)draw(e);});
+    canv.addEventListener('mouseup',   endDraw);
+    canv.addEventListener('mouseleave',endDraw);
 
     pads[padId]={
-      ctx,canvas,dpr,
+      ctx,canv,dpr,
       reset:()=>{
-        ctx.clearRect(0,0,canvas.width/dpr,canvas.height/dpr);
+        ctx.clearRect(0,0,canv.width/dpr,canv.height/dpr);
         hasSig=false;delete sigs[padId];
         const hint=document.getElementById('sigHint_'+padId);
         if(hint)hint.style.display='flex';
