@@ -536,7 +536,7 @@
         <div class="section-sub">Freigabe-Anfrage an Teamleitung senden · Nach Freigabe automatischer Versand.</div>
         <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
 
-        <div class="card">
+        <div class="card" id="approvalCard">
           <div class="card-title">Freigabe durch Teamleitung</div>
           <div class="approval-card">
             <div class="field-grid full">
@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v4b3865a'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -869,21 +869,13 @@ function _applyFreigabeRoleUI() {
   const sDot    = document.getElementById('sDot');
   const sText   = document.getElementById('sText');
   if (isTL) {
-    // TL/Admin: Freigabe-Karte ausblenden, nur Direkt-Versenden anzeigen
-    if (reqBtn)  reqBtn.style.display  = 'none';
-    if (sDot)    sDot.style.display    = 'none';
-    if (sText)   sText.style.display   = 'none';
-    // Card-Titel anpassen
-    const cardTitle = document.querySelector('#freigabeStandardWrap')?.closest('.card')?.querySelector('.card-title');
-    // Hide the whole approval card for TL – they use Direkt versenden
-    const approvalCard = document.querySelector('.approval-card');
-    if (approvalCard) approvalCard.style.display = 'none';
+    // TL/Admin: gesamte Freigabe-Karte ausblenden
+    const card = document.getElementById('approvalCard');
+    if (card) card.style.display = 'none';
   } else {
-    if (reqBtn)  reqBtn.style.display  = '';
-    if (sDot)    sDot.style.display    = '';
-    if (sText)   sText.style.display   = '';
-    const approvalCard = document.querySelector('.approval-card');
-    if (approvalCard) approvalCard.style.display = '';
+    // Fachkraft: Freigabe-Karte einblenden
+    const card = document.getElementById('approvalCard');
+    if (card) card.style.display = '';
   }
 }
 
