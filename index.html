@@ -524,7 +524,7 @@ const CONFIG = {
   siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com'
 };
 
-const APP_VERSION = 'v5b4f503'; // auto-updated on deploy
+const APP_VERSION = 'v389cc74'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -545,7 +545,8 @@ async function initMsal() {
       authority: `https://login.microsoftonline.com/${CONFIG.tenantId}`,
       redirectUri: CONFIG.redirectUri
     },
-    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
   applyVersionBadge();
@@ -558,12 +559,39 @@ async function initMsal() {
   if (accounts.length > 0) { currentAccount = accounts[0]; await getToken(); showApp(); }
 }
 
+// Ob Popups wahrscheinlich funktionieren (nicht iOS Safari)
+function _popupLikelyWorks() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const isSafariOnly = /Safari/.test(ua) && !/Chrome|Firefox|Edge/.test(ua);
+  return !(isIOS || isSafariOnly);
+}
+
+const _SCOPES = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'];
+const _SCOPES_TOKEN = ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'Mail.Send', 'GroupMember.Read.All'];
+
 async function login() {
   const errEl = document.getElementById('loginError');
   const btn = document.querySelector('.login-card .btn-primary');
   if (btn) btn.disabled = true;
   if (errEl) errEl.style.display = 'none';
-  const req = { scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'User.Read', 'Mail.Send', 'GroupMember.Read.All'] };
+  const req = { scopes: _SCOPES };
+  // Popup auf Desktop-Browsern (Firefox, Chrome, Edge auf Mac/Win/Linux)
+  // Redirect auf iOS Safari (Popups dort standardmäßig blockiert)
+  if (_popupLikelyWorks()) {
+    try {
+      const response = await msalInstance.loginPopup(req);
+      if (response) { currentAccount = response.account; accessToken = response.accessToken; showApp(); return; }
+    } catch(e) {
+      // Bei interaction_in_progress: kurz warten und nochmal versuchen
+      if (e.errorCode === 'interaction_in_progress') {
+        setTimeout(() => { if (btn) btn.disabled = false; if (errEl) { errEl.style.display='block'; errEl.textContent='Eine Anmeldung läuft bereits. Bitte kurz warten und erneut versuchen.'; } }, 500);
+        return;
+      }
+      // Popup doch geblockt → auf Redirect fallen
+    }
+  }
+  // Redirect-Fallback (iOS Safari, oder falls Popup fehlschlug)
   try {
     await msalInstance.loginRedirect(req);
   } catch(e) {
@@ -579,10 +607,17 @@ async function logout() {
 async function getToken() {
   if (!currentAccount) return null;
   try {
-    const r = await msalInstance.acquireTokenSilent({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'Mail.Send', 'GroupMember.Read.All'], account: currentAccount });
+    const r = await msalInstance.acquireTokenSilent({ scopes: _SCOPES_TOKEN, account: currentAccount });
     accessToken = r.accessToken; return accessToken;
   } catch(e) {
-    await msalInstance.acquireTokenRedirect({ scopes: ['Files.ReadWrite.All', 'Sites.ReadWrite.All', 'Sites.Read.All', 'Mail.Send', 'GroupMember.Read.All'] });
+    // Silent fehlgeschlagen → Popup wenn möglich, sonst Redirect
+    if (_popupLikelyWorks()) {
+      try {
+        const r2 = await msalInstance.acquireTokenPopup({ scopes: _SCOPES_TOKEN, account: currentAccount });
+        accessToken = r2.accessToken; return accessToken;
+      } catch(e2) { /* Popup fehlgeschlagen → Redirect */ }
+    }
+    await msalInstance.acquireTokenRedirect({ scopes: _SCOPES_TOKEN });
   }
 }
 
