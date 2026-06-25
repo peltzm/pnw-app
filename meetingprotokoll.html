@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v3979844'; // auto-updated on deploy
+const APP_VERSION = 'v14f30a3'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -831,6 +831,16 @@ async function showApp() {
   const nOffen = document.getElementById('n-offen');
   if (nOffen) nOffen.style.display = _isFreigabeUser() ? '' : 'none';
   _applyFreigabeRoleUI();
+  // Deep-Link: ?item=ID lädt das Protokoll direkt
+  const _params = new URLSearchParams(window.location.search);
+  const _itemId = _params.get('item');
+  if (_itemId) {
+    setTimeout(() => {
+      // TL/Admin → direkt zur Freigabe-Seite, andere → Schritt 2
+      const _target = _isFreigabeUser() ? 's-freigabe' : 's-meta';
+      loadDraft(_itemId, _target).catch(e => console.warn('Deep-link load failed:', e));
+    }, 300);
+  }
 }
 
 function _applyFreigabeRoleUI() {
@@ -1642,7 +1652,7 @@ async function confirmApproval() {
     const label  = cfg?.label + (thema ? ' – ' + thema.label : '');
     const datum  = document.getElementById('fDatum')?.value || '';
     const sender = currentAccount?.name || currentAccount?.username || '';
-    const appUrl = window.location.href;
+    const appUrl = window.location.origin + window.location.pathname + '?item=' + (_currentDraftId || '');
     const mailBody = `<p>Hallo ${tl.full},</p>
 <p><strong>${sender}</strong> bittet um Freigabe des folgenden Protokolls:</p>
 <table style="border-collapse:collapse;margin:12px 0;">
@@ -2802,7 +2812,7 @@ async function showDraftPanel() {
   }
 }
 
-async function loadDraft(itemId) {
+async function loadDraft(itemId, targetSection) {
   try {
     const { siteId } = await getSiteAndDrive();
     const listId = await getDraftListId();
@@ -2836,9 +2846,10 @@ async function loadDraft(itemId) {
       document.getElementById('tInfoTL').textContent    = cfg.tl;
       document.getElementById('tInfoTeiln').textContent = S.participants.length + ' Personen';
     }
-    // Go to step 2 and fill fields
-    markDone(1);
-    goSection('s-meta');
+    // Go to target section (default: s-meta / step 2)
+    markDone(1); markDone(2); markDone(3); markDone(4);
+    const _target = targetSection || 's-meta';
+    goSection(_target);
     setTimeout(() => {
       if (data.datum)       document.getElementById('fDatum').value       = data.datum;
       if (data.zeitVon)     document.getElementById('fZeitVon').value     = data.zeitVon;
