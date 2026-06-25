@@ -639,7 +639,7 @@
             <div class="section-title">Dokument-Vorschau</div>
             <div class="section-sub">So sieht das finale PDF-Protokoll aus</div>
           </div>
-          <button class="btn btn-secondary" onclick="window.print()">🖨️ Drucken / PDF</button>
+          <button class="btn btn-secondary" onclick="printPreview()">🖨️ Drucken / PDF</button>
           <button class="btn btn-secondary" id="btnBlankoPrint" style="display:none" onclick="printBlanko()">🖨️ Blanko drucken</button>
         </div>
         <div id="previewContainer"></div>
@@ -754,7 +754,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v8983d70'; // auto-updated on deploy
+const APP_VERSION = 'v4f1612f'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1531,6 +1531,63 @@ async function onEinrichtungChange(einrKey) {
   }
   renderBewohnerCard();
 }
+
+function printPreview() {
+  const container = document.getElementById('previewContainer');
+  if (!container || !container.innerHTML.trim()) {
+    buildPreview();
+  }
+  const html = document.getElementById('previewContainer')?.innerHTML || '';
+  if (!html) { showToast('Bitte zuerst Vorschau laden', 'info'); return; }
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <title>Meetingprotokoll – Praxis NeueWege</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { font-family:'Kodchasan',sans-serif; font-size:12px; color:#1a1916; background:white; }
+      @media print {
+        body { margin:0; padding:0; }
+        @page { margin:1.5cm; size:A4 portrait; }
+      }
+      /* Copy critical styles from main app */
+      .doc-preview { max-width:794px; margin:0 auto; padding:2rem 2.5rem; }
+      .doc-header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:14px; margin-bottom:14px; border-bottom:3px solid #803300; }
+      .dh-left h1 { font-size:18px; font-weight:700; color:#803300; margin-bottom:2px; }
+      .dh-left .subtitle { font-size:11px; color:#888; }
+      .dh-left .doc-type { margin-top:6px; font-size:13px; font-weight:600; color:#803300; }
+      .dh-right { text-align:right; font-size:11px; color:#888; }
+      .dh-right .doc-date { font-size:13px; font-weight:700; color:#1a1916; display:block; }
+      .status-badge { margin-top:6px; display:inline-block; padding:2px 8px; border-radius:3px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+      .sh { background:#803300; color:white; padding:4px 10px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; border-radius:3px; margin:14px 0 8px; display:inline-block; }
+      .mt { width:100%; border-collapse:collapse; margin-bottom:10px; }
+      .mt td { padding:5px 8px; border:1px solid #e8e0d8; font-size:12px; vertical-align:top; }
+      .mt td:first-child { background:#f8f5f2; font-weight:500; width:150px; color:#4a3020; }
+      .mt td:last-child { background:white; }
+      .top-row { margin-bottom:8px; border:1px solid #e8e0d8; border-radius:6px; overflow:hidden; }
+      .top-row h4 { background:white; padding:8px 12px; font-size:13px; font-weight:600; color:#321900; border-bottom:1px solid #e8e0d8; margin:0; display:flex; justify-content:space-between; align-items:center; }
+      .top-row p { background:white; padding:8px 12px; font-size:12px; color:#555; margin:0; }
+      .top-row p.empty { color:#bbb; font-style:italic; }
+      .top-frist { background:#fafafa; padding:3px 12px; font-size:11px; color:#96500a; font-style:italic; border-top:1px solid #e8e0d8; }
+      .sig { display:flex; gap:2rem; margin-top:2rem; padding-top:1rem; border-top:1px solid #ccc; }
+      .sig-block { flex:1; }
+      .sig-line { border-bottom:1px solid #aaa; height:30px; margin-bottom:4px; }
+      .sig-label { font-size:10px; color:#888; }
+      .doc-footer { text-align:center; font-size:10px; color:#bbb; margin-top:1.5rem; }
+    </style>
+  </head><body>
+    ${html}
+  </body></html>`);
+  win.document.close();
+  // Wait for fonts to load then print
+  win.onload = () => {
+    win.focus();
+    setTimeout(() => { win.print(); }, 500);
+  };
+}
+
 
 function printBlanko() {
   const cfg   = TYPES[S.type];
