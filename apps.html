@@ -274,6 +274,11 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 </div>
 
 <script>
+// HTTPS erzwingen — MSAL funktioniert nicht über HTTP
+if (location.protocol === 'http:' && location.hostname !== 'localhost') {
+  location.replace('https://' + location.host + location.pathname + location.search + location.hash);
+}
+
 const CFG = {
   clientId:    'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
   tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
@@ -294,12 +299,32 @@ const msalInstance = new msal.PublicClientApplication(msalConfig);
 applyVersionBadge();
 const SCOPES = ['User.Read'];
 
+// Popup auf Desktop (Firefox, Chrome, Edge auf Mac/Win); Redirect auf iOS Safari
+function _popupLikelyWorks() {
+  const ua = navigator.userAgent;
+  return !(/iPhone|iPad|iPod/.test(ua) || (/Safari/.test(ua) && !/Chrome|Firefox|Edge/.test(ua)));
+}
+
 async function login() {
   const btn = document.getElementById('loginBtn');
   const errEl = document.getElementById('loginError');
   btn.disabled = true;
   errEl.style.display = 'none';
   const req = { scopes: SCOPES };
+  if (_popupLikelyWorks()) {
+    try {
+      const resp = await msalInstance.loginPopup(req);
+      if (resp) { msalInstance.setActiveAccount(resp.account); await showApp(resp.account); return; }
+    } catch(e) {
+      if (e.errorCode === 'interaction_in_progress') {
+        errEl.style.display = 'block';
+        errEl.textContent = 'Eine Anmeldung läuft bereits. Bitte kurz warten und erneut versuchen.';
+        btn.disabled = false;
+        return;
+      }
+      // Popup fehlgeschlagen → Redirect-Fallback
+    }
+  }
   try {
     await msalInstance.loginRedirect(req);
   } catch(e) {
