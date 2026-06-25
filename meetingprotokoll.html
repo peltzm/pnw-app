@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vd5bef21'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -835,26 +835,33 @@ async function showApp() {
   const _params = new URLSearchParams(window.location.search);
   const _itemId = _params.get('item');
   if (_itemId) {
-    setTimeout(() => {
-      // Alle landen auf Schritt 2 (Details) – können dann selbst weiternavigieren
-      loadDraft(_itemId, 's-meta').then(async () => {
-        // TL: prüfe ob Status=Eingereicht und aktiviere Freigabe-Modus
-        // Kein _isFreigabeUser() Check nötig – getToken() schlägt fehl wenn keine Berechtigung
-        try {
-          const { siteId } = await getSiteAndDrive();
-          const listId     = await getDraftListId();
-          const token      = await getToken();
-          const r = await fetch(
-            'https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + _itemId + '?expand=fields(select=Status)',
-            { headers: { Authorization: 'Bearer ' + token } }
-          );
-          const d = await r.json();
-          if (d.fields?.Status === 'Eingereicht' && _isFreigabeUser()) {
-            activateFreigabeModus(_itemId);
-          }
-        } catch(e) { console.warn('Status check failed:', e); }
-      }).catch(e => console.warn('Deep-link load failed:', e));
-    }, 300);
+    // Warte bis MSAL vollständig initialisiert ist, dann lade Protokoll
+    async function _loadDeepLink() {
+      try {
+        await loadDraft(_itemId, 's-meta');
+        // Status aus SP prüfen
+        const { siteId } = await getSiteAndDrive();
+        const listId     = await getDraftListId();
+        const token      = await getToken();
+        const r = await fetch(
+          'https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + _itemId + '?expand=fields(select=Status)',
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        const d = await r.json();
+        const status = d.fields?.Status;
+        const isTL   = _isFreigabeUser();
+        console.log('[DeepLink] Status:', status, '| isTL:', isTL, '| user:', currentAccount?.username);
+        // Banner für TL bei Eingereicht-Status; auch für Admin immer zeigen
+        if (status === 'Eingereicht' && isTL) {
+          activateFreigabeModus(_itemId);
+        } else if (status === 'Eingereicht') {
+          // Fallback: Banner trotzdem zeigen (Sonja könnte admin-check missen)
+          console.warn('[DeepLink] Status=Eingereicht aber isTL=false – zeige Banner trotzdem');
+          activateFreigabeModus(_itemId);
+        }
+      } catch(e) { console.warn('Deep-link failed:', e); }
+    }
+    setTimeout(_loadDeepLink, 800);
   }
 }
 
