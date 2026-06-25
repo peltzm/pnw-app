@@ -750,7 +750,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vb31983e'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -780,6 +780,9 @@ async function initMsal() {
 }
 
 async function login() {
+  // Preserve deep-link item ID across MSAL redirect
+  const _preItem = new URLSearchParams(window.location.search).get('item');
+  if (_preItem) sessionStorage.setItem('pnw_deeplink_item', _preItem);
   try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
   catch(e) {
     const el = document.getElementById('loginError');
@@ -814,9 +817,10 @@ async function showApp() {
   const nOffen = document.getElementById('n-offen');
   if (nOffen) nOffen.style.display = _isFreigabeUser() ? '' : 'none';
   _applyFreigabeRoleUI();
-  // Deep-Link: ?item=ID lädt das Protokoll direkt
+  // Deep-Link: ?item=ID – aus URL oder sessionStorage (nach MSAL Redirect)
   const _params = new URLSearchParams(window.location.search);
-  const _itemId = _params.get('item');
+  const _itemId = _params.get('item') || sessionStorage.getItem('pnw_deeplink_item') || '';
+  if (_itemId) sessionStorage.removeItem('pnw_deeplink_item'); // einmal verwenden
   if (_itemId) {
     // Warte bis MSAL vollständig initialisiert ist, dann lade Protokoll
     async function _loadDeepLink() {
@@ -3136,6 +3140,9 @@ async function deleteDraft(itemId, btn) {
    BOOT
 ────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', () => {
+  // Preserve ?item= param across any potential MSAL redirect
+  const _bootItem = new URLSearchParams(window.location.search).get('item');
+  if (_bootItem) sessionStorage.setItem('pnw_deeplink_item', _bootItem);
   if (window.msal) { initMsal(); }
   else { setTimeout(() => {
     if (window.msal) initMsal();
