@@ -9,6 +9,7 @@
 <title>Meetingprotokoll — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root {
     --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
@@ -750,7 +751,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vb5aef38'; // auto-updated on deploy
+const APP_VERSION = 've045d0a'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1789,7 +1790,7 @@ async function executePublish() {
     const directData = collectDraftData();
     const pdfFileName = fileName.replace('.txt', '.pdf');
     const spPath = `${spFolder}/${pdfFileName}`;
-    const pdfBytes = generateProtokollPDF(directData, currentAccount?.name || 'Direkt versendet');
+    const pdfBytes = await generateProtokollPDF(directData, currentAccount?.name || 'Direkt versendet');
     await uploadToSharePoint(spPath, pdfBytes, 'application/pdf');
     showToast('✓ PDF in SharePoint gespeichert', 'success');
 
@@ -1954,10 +1955,8 @@ function renderFreigabe() {
 /* ──────────────────────────────────────
    PDF GENERIERUNG
 ────────────────────────────────────── */
-function generateProtokollPDF(data, freigeberName) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
+async function generateProtokollPDF(data, freigeberName) {
+  // Baue temporäres HTML-Element mit exakt dem Vorschau-Layout
   const cfg      = data.type ? TYPES[data.type] : null;
   const thema    = data.thema && cfg ? cfg.themen?.[data.thema] : null;
   const typLabel = cfg ? cfg.label : (data.label || 'Protokoll');
@@ -1968,217 +1967,118 @@ function generateProtokollPDF(data, freigeberName) {
   const ort      = data.ort       || '\u2014';
   const proto    = data.protokoll || '\u2014';
   const today    = new Date().toLocaleDateString('de-DE');
-  const nextDatum   = data.nextDatum  ? data.nextDatum.split('-').reverse().join('.')  : '';
-  const nextZeit    = data.nextZeit   || '';
+  const nextDatum   = data.nextDatum ? data.nextDatum.split('-').reverse().join('.') : '';
+  const nextZeit    = data.nextZeit  || '';
   const nextHinweis = data.nextHinweis || '';
 
-  // Approver: resolve value → full name from TL_LISTS
+  // Approver full name
   let approverFull = '\u2014 bitte ausw\u00e4hlen \u2014';
   if (data.approver) {
-    const allTL = [...(TL_LISTS.ambulant || []), ...(TL_LISTS.nordstern || [])];
+    const allTL = [...(TL_LISTS.ambulant||[]), ...(TL_LISTS.nordstern||[])];
     const found = allTL.find(t => t.value === data.approver);
     if (found) approverFull = found.full;
     else approverFull = data.approver;
   }
 
-  let participants = []; try { participants = JSON.parse(data.participants || '[]'); } catch(e) {}
-  let tops = [];         try { tops = JSON.parse(data.tops || '[]'); } catch(e) {}
+  let participants = []; try { participants = JSON.parse(data.participants||'[]'); } catch(e) {}
+  let tops = [];         try { tops = JSON.parse(data.tops||'[]'); } catch(e) {}
+  const present = participants.filter(p=>p.present).map(p=>p.name).join(', ') || '\u2014';
+  const absent  = participants.filter(p=>!p.present).map(p=>p.name).join(', ') || 'keine';
 
-  const present = participants.filter(p => p.present).map(p => p.name).join(', ') || '\u2014';
-  const absent  = participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
+  const topsHtml = tops.length ? tops.map((t,i) => `
+    <div style="margin-bottom:10px;border:1px solid #e5ddd5;border-radius:6px;overflow:hidden;">
+      <div style="background:#f5ece0;padding:7px 10px;font-size:13px;font-weight:600;color:#321900;display:flex;justify-content:space-between;align-items:center;">
+        <span>${i+1}. ${t.title||''}</span>
+        ${t.type==='beschluss'?'<span style="font-size:10px;font-weight:700;color:#92400e;background:#fffbeb;padding:2px 7px;border-radius:3px;">BESCHLUSS</span>':''}
+        ${t.type==='aufgabe'?'<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:2px 7px;border-radius:3px;">AUFGABE</span>':''}
+      </div>
+      <div style="background:#fffcf8;padding:7px 10px;font-size:12px;color:${t.text?'#333':'#bbb'};font-style:${t.text?'normal':'italic'};">
+        ${t.text||'Kein Text eingetragen'}
+      </div>
+      ${t.frist?`<div style="background:#fffcf8;padding:3px 10px;font-size:11px;color:#96500a;font-style:italic;border-top:1px solid #f0e8df;">Frist: ${t.frist.split('-').reverse().join('.')}</div>`:''}
+    </div>`).join('')
+    : '<p style="color:#bbb;font-size:12px;font-style:italic;">Keine TOPs erfasst</p>';
 
-  const W = 210, M = 20, CW = 170;
-  let y = M;
+  const sh = (title) => `<div style="background:#803300;color:white;padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-radius:3px;margin:14px 0 8px;display:inline-block;">${title}</div>`;
+  const tr = (label, value) => `<tr><td style="background:#f5f0eb;font-weight:500;width:150px;padding:5px 8px;border:1px solid #e5ddd5;font-size:12px;vertical-align:top;">${label}</td><td style="padding:5px 8px;border:1px solid #e5ddd5;font-size:12px;">${value||'\u2014'}</td></tr>`;
 
-  function np(need) {
-    if (y + need > 277) { doc.addPage(); y = M; }
-  }
-  function sf(sz, st, col) {
-    doc.setFontSize(sz);
-    doc.setFont('helvetica', st || 'normal');
-    doc.setTextColor(...(col || [26,25,22]));
-  }
-  function tx(str, x, maxW) {
-    const lines = doc.splitTextToSize(String(str||''), maxW || (CW-(x-M)));
-    np(lines.length*(doc.getFontSize()*0.38)+2);
-    doc.text(lines, x, y);
-    y += lines.length*(doc.getFontSize()*0.38)+1;
-  }
+  const html = `
+  <div style="font-family:'Kodchasan',sans-serif;font-size:12px;line-height:1.7;color:#1a1916;background:white;padding:36px 42px;width:794px;box-sizing:border-box;">
+    <link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;margin-bottom:14px;border-bottom:3px solid #803300;">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:#803300;">Praxis NeueWege</div>
+        <div style="font-size:11px;color:#888;">Jugendhilfe &amp; Soziale Dienste &middot; Bayernweit</div>
+        <div style="margin-top:6px;font-size:13px;font-weight:600;color:#803300;">${cfg?.icon||''} Meetingprotokoll &middot; ${typLabel}${themaLbl?' &middot; '+themaLbl:''}</div>
+      </div>
+      <div style="text-align:right;font-size:11px;color:#888;">
+        <strong style="font-size:13px;color:#1a1916;display:block;">${datumDE}</strong>
+        Erstellt: ${today}<br>
+        <span style="margin-top:6px;display:inline-block;padding:2px 8px;background:#f5f5f5;border:1px solid #ccc;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">ENTWURF</span>
+      </div>
+    </div>
+    ${sh('Rahmendaten')}
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+      ${tr('Meeting-Typ', typLabel)}
+      ${themaLbl?tr('Thema / Anlass', themaLbl):''}
+      ${tr('Datum', datumDE)}
+      ${tr('Zeit', von+' &ndash; '+bis+' Uhr')}
+      ${tr('Ort', ort)}
+      ${tr('Protokollf&uuml;hrung', proto)}
+    </table>
+    ${sh('Teilnehmer')}
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+      ${tr('Anwesend', present)}
+      ${absent!=='keine'?tr('Abwesend', absent):''}
+    </table>
+    ${sh('Protokoll')}
+    ${topsHtml}
+    ${nextDatum?`${sh('N&auml;chster Termin')}<table style="width:100%;border-collapse:collapse;margin-bottom:10px;">${tr('Datum / Uhrzeit', nextDatum+(nextZeit?' &middot; '+nextZeit+' Uhr':''))}${nextHinweis?tr('Hinweise',nextHinweis):''}</table>`:''}
+    <div style="display:flex;gap:3rem;margin-top:2rem;padding-top:1rem;border-top:1px solid #ccc;">
+      <div style="flex:1;"><div style="border-bottom:1px solid #aaa;height:30px;margin-bottom:4px;"></div><div style="font-size:10px;color:#888;">Protokollf&uuml;hrung: ${proto}</div></div>
+      <div style="flex:1;"><div style="border-bottom:1px solid #aaa;height:30px;margin-bottom:4px;"></div><div style="font-size:10px;color:#888;">Freigabe TL: ${approverFull}</div></div>
+      <div style="flex:1;"><div style="border-bottom:1px solid #aaa;height:30px;margin-bottom:4px;"></div><div style="font-size:10px;color:#888;">Datum der Freigabe</div></div>
+    </div>
+    <p style="text-align:center;font-size:10px;color:#bbb;margin-top:1.5rem;">Erstellt mit Praxis NeueWege Meetingprotokoll-App &middot; Ablage: ${cfg?.sp||''}</p>
+  </div>`;
 
-  // ── Header (wie Vorschau: Name links, Datum rechts, brauner Strich) ───────
-  sf(16,'bold',[128,51,0]);
-  doc.text('Praxis NeueWege', M, y);
-  sf(9,'normal',[100,100,100]);
-  doc.text('Jugendhilfe & Soziale Dienste \u00b7 Bayernweit', M, y+6);
-  // Datum + Erstellt rechts
-  sf(12,'bold',[26,25,22]);
-  doc.text(datumDE, W-M, y, {align:'right'});
-  sf(9,'normal',[100,100,100]);
-  doc.text('Erstellt: '+today, W-M, y+6, {align:'right'});
-  // ENTWURF badge
-  doc.setFillColor(245,245,245);
-  doc.setDrawColor(200,200,200);
-  doc.roundedRect(W-M-22, y+9, 20, 6, 1, 1, 'FD');
-  sf(7,'bold',[80,80,80]);
-  doc.text('ENTWURF', W-M-12, y+13, {align:'center'});
-  y += 17;
-  // Typ-Zeile in Braun (ohne Emoji)
-  sf(11,'bold',[128,51,0]);
-  doc.text('Meetingprotokoll \u00b7 '+typLabel+(themaLbl?' \u00b7 '+themaLbl:''), M, y);
-  y += 5;
-  // Brauner Trennstrich
-  doc.setDrawColor(128,51,0);
-  doc.setLineWidth(0.8);
-  doc.line(M, y, W-M, y);
-  y += 7;
+  // Render HTML to canvas, then to PDF
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;';
+  container.innerHTML = html;
+  document.body.appendChild(container);
 
-  // ── Section-Header (braune Box wie .sh) ───────────────────────────────────
-  function sh(title) {
-    np(12);
-    doc.setFillColor(128,51,0);
-    doc.roundedRect(M, y, CW, 7, 1, 1, 'F');
-    sf(8,'bold',[255,255,255]);
-    doc.text(title.toUpperCase(), M+3, y+5);
-    y += 10;
-  }
+  // Wait for Kodchasan font to load
+  await document.fonts.ready;
 
-  // ── Tabellen-Zeile (wie .mt) ──────────────────────────────────────────────
-  function tr(label, value) {
-    np(8);
-    const H = 7;
-    doc.setFillColor(245,242,237);
-    doc.rect(M, y, 45, H, 'F');
-    doc.setFillColor(255,255,255);
-    doc.rect(M+45, y, CW-45, H, 'F');
-    doc.setDrawColor(220,212,202);
-    doc.setLineWidth(0.2);
-    doc.rect(M, y, CW, H);
-    sf(9,'bold',[60,40,20]);
-    doc.text(label, M+2, y+5);
-    sf(9,'normal',[26,25,22]);
-    const vl = doc.splitTextToSize(String(value||'\u2014'), CW-47);
-    if (vl.length > 1) {
-      // multi-line row
-      const rowH = vl.length*5+2;
-      doc.setFillColor(245,242,237);
-      doc.rect(M, y, 45, rowH, 'F');
-      doc.setFillColor(255,255,255);
-      doc.rect(M+45, y, CW-45, rowH, 'F');
-      doc.rect(M, y, CW, rowH);
-      sf(9,'bold',[60,40,20]);
-      doc.text(label, M+2, y+5);
-      sf(9,'normal',[26,25,22]);
-      doc.text(vl, M+47, y+5);
-      y += rowH;
-    } else {
-      doc.text(vl, M+47, y+5);
-      y += H;
-    }
-  }
-
-  // ── RAHMENDATEN ───────────────────────────────────────────────────────────
-  sh('Rahmendaten');
-  tr('Meeting-Typ', typLabel);
-  if (themaLbl) tr('Thema / Anlass', themaLbl);
-  tr('Datum', datumDE);
-  tr('Zeit', von+' \u2013 '+bis+' Uhr');
-  tr('Ort', ort);
-  tr('Protokollf\u00fchrung', proto);
-  y += 4;
-
-  // ── TEILNEHMER ────────────────────────────────────────────────────────────
-  sh('Teilnehmer');
-  tr('Anwesend', present);
-  if (absent !== 'keine') tr('Abwesend', absent);
-  y += 4;
-
-  // ── PROTOKOLL / TOPs ─────────────────────────────────────────────────────
-  sh('Protokoll');
-  if (!tops.length) {
-    sf(10,'normal',[160,160,160]);
-    doc.text('Keine TOPs erfasst', M, y);
-    y += 7;
-  } else {
-    tops.forEach((t, i) => {
-      np(18);
-      // TOP-Header (wie .top-row h4)
-      doc.setFillColor(248,243,235);
-      doc.setDrawColor(220,212,202);
-      doc.setLineWidth(0.2);
-      const titleLines = doc.splitTextToSize((i+1)+'. '+(t.title||''), CW-28);
-      const titleH = Math.max(7, titleLines.length*5+2);
-      doc.rect(M, y, CW, titleH, 'FD');
-      sf(10,'bold',[50,25,0]);
-      doc.text(titleLines, M+3, y+5);
-      // Badge
-      if (t.type==='beschluss') {
-        doc.setFillColor(255,245,220); doc.roundedRect(W-M-24,y+1,22,5,1,1,'F');
-        sf(7,'bold',[146,64,14]); doc.text('BESCHLUSS',W-M-13,y+5,{align:'center'});
-      } else if (t.type==='aufgabe') {
-        doc.setFillColor(234,244,238); doc.roundedRect(W-M-18,y+1,16,5,1,1,'F');
-        sf(7,'bold',[45,106,79]); doc.text('AUFGABE',W-M-10,y+5,{align:'center'});
-      }
-      y += titleH;
-      // TOP-Text (wie .top-row p)
-      const txt = t.text && t.text.trim() ? t.text : null;
-      const txtLines = txt ? doc.splitTextToSize(txt, CW-4) : null;
-      const txtH = txtLines ? txtLines.length*5+4 : 7;
-      doc.setFillColor(255,252,248);
-      doc.rect(M, y, CW, txtH, 'FD');
-      if (txtLines) {
-        sf(9,'normal',[50,50,50]);
-        doc.text(txtLines, M+3, y+4);
-      } else {
-        sf(9,'italic',[180,180,180]);
-        doc.text('Kein Text eingetragen', M+3, y+5);
-      }
-      y += txtH;
-      if (t.frist) { sf(8,'italic',[150,80,0]); doc.text('Frist: '+t.frist.split('-').reverse().join('.'), M+3, y+4); y+=5; }
-      y += 3;
-    });
-  }
-  y += 2;
-
-  // ── NÄCHSTER TERMIN ───────────────────────────────────────────────────────
-  if (nextDatum) {
-    sh('N\u00e4chster Termin');
-    tr('Datum / Uhrzeit', nextDatum+(nextZeit?' \u00b7 '+nextZeit+' Uhr':''));
-    if (nextHinweis) tr('Hinweise', nextHinweis);
-    y += 4;
-  }
-
-  // ── SIGNATUR-ZEILEN (wie .sig) ─────────────────────────────────────────────
-  np(30);
-  y += 6;
-  doc.setDrawColor(170,170,170);
-  doc.setLineWidth(0.3);
-  const sw = (CW-10)/3;
-  [
-    'Protokollf\u00fchrung: '+proto,
-    'Freigabe TL: '+approverFull,
-    'Datum der Freigabe'
-  ].forEach((lbl,i) => {
-    const x = M+i*(sw+5);
-    doc.line(x, y+14, x+sw, y+14);
-    sf(8,'normal',[120,120,120]);
-    doc.text(doc.splitTextToSize(lbl,sw), x, y+18);
+  const canvas = await html2canvas(container.firstElementChild, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#ffffff',
+    width: 794,
+    windowWidth: 794
   });
-  y += 26;
+  document.body.removeChild(container);
 
-  // ── FOOTER ────────────────────────────────────────────────────────────────
-  const pc = doc.internal.getNumberOfPages();
-  const sp = cfg?.sp || '';
-  for (let p=1;p<=pc;p++) {
-    doc.setPage(p);
-    doc.setDrawColor(200,200,200); doc.setLineWidth(0.2);
-    doc.line(M,286,W-M,286);
-    sf(8,'normal',[150,150,150]);
-    doc.text('Erstellt mit Praxis NeueWege Meetingprotokoll-App \u00b7 Ablage: '+sp, M, 290);
-    doc.text('Seite '+p+' / '+pc, W-M, 290, {align:'right'});
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  const pdfW = 210;
+  const pdfH = (canvas.height / canvas.width) * pdfW;
+
+  // Multi-page if content is longer than A4
+  const pageH = 297;
+  let yPos = 0;
+  while (yPos < pdfH) {
+    if (yPos > 0) doc.addPage();
+    doc.addImage(imgData, 'JPEG', 0, -yPos, pdfW, pdfH);
+    yPos += pageH;
   }
 
   return doc.output('arraybuffer');
 }
+
 
 
 
@@ -2300,7 +2200,7 @@ async function freigabeAction(itemId, newStatus) {
       // PDF generieren
       const pdfFileName = fileName.replace('.txt', '.pdf');
       const spPath = spFolder + '/' + pdfFileName;
-      const pdfBytes = generateProtokollPDF(data, freigeberName);
+      const pdfBytes = await generateProtokollPDF(data, freigeberName);
       await uploadToSharePoint(spPath, pdfBytes, 'application/pdf');
       showToast('\u2713 PDF in SharePoint gespeichert', 'success');
       const spUrl = CFG.siteUrl + '/Freigegebene Dokumente/' + spPath;
@@ -2383,12 +2283,12 @@ async function freigabeAction(itemId, newStatus) {
   }
 }
 
-function exportPDF() {
+async function exportPDF() {
   if (!S.type) { showToast('Bitte zuerst einen Meeting-Typ auswählen.', 'info'); return; }
   try {
     const data = collectDraftData();
     const freigeberName = currentAccount?.name || 'Entwurf';
-    const pdfBytes = generateProtokollPDF(data, freigeberName);
+    const pdfBytes = await generateProtokollPDF(data, freigeberName);
     // Download im Browser
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const url  = URL.createObjectURL(blob);
