@@ -750,7 +750,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v4c0d287'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1029,7 +1029,7 @@ const M365_FALLBACK = {
     {name:'Jörg Schneider',  role:'TL Ambulant',   ini:'JS', scribe:true,  mail:'joerg.schneider@praxisneuewege.de'},
     {name:'Nadine Grund',    role:'TL Ambulant',   ini:'NG', scribe:true,  mail:'nadine.grund@praxisneuewege.de'},
     {name:'Laura Meier',     role:'TL Nordstern',  ini:'LM', scribe:true,  mail:'laura.meier@praxisneuewege.de'},
-    {name:'Jessica Herrmann',role:'TL Nordstern',  ini:'JH', scribe:true,  mail:'jessica.herrmann@praxisneuewege.de'},
+    {name:'Jessica Herrmann',role:'TL Nordstern',  ini:'JH', scribe:true,  mail:'jessica.hermann@praxisneuewege.de'},
     {name:'Kilian Freundl',  role:'Fachkraft NS',  ini:'KF', scribe:false, mail:'kilian.freundl@praxisneuewege.de'},
     {name:'Anna Wolf',       role:'Fachkraft NS',  ini:'AW', scribe:false, mail:'anna.wolf@praxisneuewege.de'},
     {name:'Felix Roth',      role:'Fachkraft NS',  ini:'FR', scribe:false, mail:'felix.roth@praxisneuewege.de'},
@@ -1039,7 +1039,7 @@ const M365_FALLBACK = {
   ],
   nordstern: [
     {name:'Laura Meier',      role:'TL Nordstern', ini:'LM', scribe:true,  mail:'laura.meier@praxisneuewege.de'},
-    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true,  mail:'jessica.herrmann@praxisneuewege.de'},
+    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true,  mail:'jessica.hermann@praxisneuewege.de'},
     {name:'Kilian Freundl',   role:'Fachkraft NS', ini:'KF', scribe:false, mail:'kilian.freundl@praxisneuewege.de'},
     {name:'Anna Wolf',        role:'Fachkraft NS', ini:'AW', scribe:false, mail:'anna.wolf@praxisneuewege.de'},
     {name:'Felix Roth',       role:'Fachkraft NS', ini:'FR', scribe:false, mail:'felix.roth@praxisneuewege.de'},
@@ -1067,7 +1067,7 @@ const M365_FALLBACK = {
   // Stationäres Team Nordstern (default, überschrieben bei anderer Einrichtung)
   nordstern: [
     {name:'Laura Meier',      role:'TL Nordstern', ini:'LM', scribe:true,  mail:'laura.meier@praxisneuewege.de'},
-    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true,  mail:'jessica.herrmann@praxisneuewege.de'},
+    {name:'Jessica Herrmann', role:'TL Nordstern', ini:'JH', scribe:true,  mail:'jessica.hermann@praxisneuewege.de'},
     {name:'Kilian Freundl',   role:'Fachkraft NS', ini:'KF', scribe:false, mail:'kilian.freundl@praxisneuewege.de'},
     {name:'Anna Wolf',        role:'Fachkraft NS', ini:'AW', scribe:false, mail:'anna.wolf@praxisneuewege.de'},
     {name:'Felix Roth',       role:'Fachkraft NS', ini:'FR', scribe:false, mail:'felix.roth@praxisneuewege.de'},
@@ -1124,7 +1124,7 @@ const TL_LISTS = {
     { value: 'sp', label: 'Peltz, Sonja',    full: 'Sonja Peltz',      mail: 'sonja.peltz@praxisneuewege.de' },
   ],
   nordstern: [
-    { value: 'jh', label: 'Herrmann, Jessica', full: 'Jessica Herrmann', mail: 'jessica.herrmann@praxisneuewege.de' },
+    { value: 'jh', label: 'Herrmann, Jessica', full: 'Jessica Herrmann', mail: 'jessica.hermann@praxisneuewege.de' },
     { value: 'kf', label: 'Freundl, Kilian',   full: 'Kilian Freundl',   mail: 'kilian.freundl@praxisneuewege.de' },
     { value: 'lm', label: 'Meier, Laura',      full: 'Laura Meier',      mail: 'laura.meier@praxisneuewege.de' },
     { value: 'sp', label: 'Peltz, Sonja',      full: 'Sonja Peltz',      mail: 'sonja.peltz@praxisneuewege.de' },
@@ -1848,7 +1848,7 @@ const FREIGABE_MAILS = [
   'nadine.grund@praxisneuewege.de',
   'laura.meier@praxisneuewege.de',
   'joerg.schneider@praxisneuewege.de',
-  'jessica.herrmann@praxisneuewege.de',
+  'jessica.hermann@praxisneuewege.de',
   'kilian.freundl@praxisneuewege.de',
   'markus.peltz@praxisneuewege.de',
   'sonja.peltz@praxisneuewege.de',
