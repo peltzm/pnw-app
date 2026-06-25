@@ -616,8 +616,10 @@
               style="font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:white;width:100%;font-family:inherit;">
               <option value="alle">Alle Protokolle</option>
               <option value="entwurf">Entwürfe</option>
-              <option value="versendet">Versendet</option>
+              <option value="eingereicht">Eingereicht (warten auf TL)</option>
               <option value="freigegeben">Freigegeben</option>
+              <option value="versendet">Versendet</option>
+              <option value="abgelehnt">Abgelehnt</option>
             </select>
           </div>
           <input type="text" id="archivSearch" placeholder="🔍 Suchen …" oninput="renderArchivTable()"
@@ -2980,6 +2982,8 @@ async function loadDraft(itemId, targetSection) {
     const item = await r.json();
     const data = JSON.parse(item.fields?.ProtokollDaten || '{}');
     _currentDraftId = itemId;
+    // Restore _draftStatus from SP (wichtig: verhindert dass autoSave den Status überschreibt)
+    _draftStatus = item.fields?.Status || 'Entwurf';
     // Restore state
     S.type        = data.type        || 'team';
     S.thema       = data.thema       || null;
