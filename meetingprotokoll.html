@@ -306,7 +306,7 @@
       </div>
       <div class="nav-item" id="n-archiv" onclick="goSection('s-archiv')">
         <span style="font-size:14px;">📁</span>
-        <span>Archiv</span>
+        <span>Status Protokolle</span>
       </div>
       <div class="nav-item" id="n-vorschau" onclick="goSection('s-vorschau');buildPreview()">
         <span style="font-size:14px;">📄</span>
@@ -650,8 +650,8 @@
 
       <!-- ══ ARCHIV ══ -->
       <div class="section" id="s-archiv">
-        <div class="section-title">Protokoll-Archiv</div>
-        <div class="section-sub">Alle Protokolle – eigene Entwürfe und versendete Protokolle.</div>
+        <div class="section-title">Status Protokolle</div>
+        <div class="section-sub">Übersicht aller Protokolle im Workflow</div>
 
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
@@ -794,7 +794,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v9ea32e5'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2252,51 +2252,50 @@ function renderArchivTable() {
     return;
   }
 
-  const statusColor = s => ({
-    'Entwurf':     'var(--text-muted)',
-    'Versendet':   '#1d4ed8',
-    'Freigegeben': '#166534',
-  }[s] || 'var(--text-muted)');
-
-  const statusBorder = s => ({
-    'Entwurf':     'var(--border)',
-    'Versendet':   '#bfdbfe',
-    'Freigegeben': '#86efac',
-  }[s] || 'var(--border)');
-
-  const statusBg = s => ({
-    'Entwurf':     'var(--surface)',
-    'Versendet':   '#eff6ff',
-    'Freigegeben': '#f0fdf4',
-  }[s] || 'var(--surface)');
+  // Status → Farben (wie HPG-Ampel in Berichts-App)
+  function statusStyle(s) {
+    if (s === 'Freigegeben') return { color:'#166534', border:'#86efac', bg:'#f0fdf4', btnBg:'#dcfce7', btnColor:'#166534' };
+    if (s === 'Versendet')   return { color:'#1d4ed8', border:'#bfdbfe', bg:'#eff6ff', btnBg:'#dbeafe', btnColor:'#1d4ed8' };
+    /* Entwurf */             return { color:'var(--text-muted)', border:'var(--border)', bg:'var(--surface)', btnBg:'var(--accent)', btnColor:'white' };
+  }
 
   contentEl.innerHTML = rows.map(r => {
-    const border = statusBorder(r.status);
-    const bg     = statusBg(r.status);
-    const color  = statusColor(r.status);
+    const st = statusStyle(r.status);
 
     const openBtn = r.status === 'Entwurf'
-      ? `<button onclick="loadDraft('${r.id}')" style="font-size:12px;padding:6px 14px;background:var(--accent);color:white;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">Weiterbearbeiten</button>`
+      ? `<button onclick="loadDraft('${r.id}')"
+           style="font-size:12px;padding:6px 14px;background:var(--accent);color:white;
+           border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">
+           Weiterbearbeiten</button>`
       : r.spUrl
-        ? `<a href="${r.spUrl}" target="_blank" style="font-size:12px;padding:6px 14px;background:${bg};color:${color};border:1px solid ${border};border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;text-decoration:none;display:inline-block;line-height:24px;">Öffnen ↗</a>`
-        : `<button disabled style="font-size:12px;padding:6px 14px;background:var(--bg);color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius);cursor:not-allowed;min-height:36px;">Öffnen</button>`;
+        ? `<a href="${r.spUrl}" target="_blank"
+             style="font-size:12px;padding:6px 14px;background:${st.btnBg};color:${st.btnColor};
+             border:1px solid ${st.border};border-radius:var(--radius);font-weight:600;
+             min-height:36px;text-decoration:none;display:inline-flex;align-items:center;">
+             Öffnen ↗</a>`
+        : `<button disabled
+             style="font-size:12px;padding:6px 14px;background:var(--bg);color:var(--text-muted);
+             border:1px solid var(--border);border-radius:var(--radius);cursor:not-allowed;min-height:36px;">
+             Öffnen</button>`;
 
     return `<div style="display:flex;align-items:center;justify-content:space-between;
-        padding:10px 14px;border:1px solid ${border};border-left:4px solid ${border};
-        border-radius:var(--radius);margin-bottom:8px;background:${bg};flex-wrap:wrap;gap:6px;">
+        padding:10px 14px;border:1px solid ${st.border};border-left:4px solid ${st.border};
+        border-radius:var(--radius);margin-bottom:8px;background:${st.bg};
+        flex-wrap:wrap;gap:6px;">
       <div style="min-width:0;flex:1;">
         <div style="font-size:13px;font-weight:600;color:var(--text);">
           ${r.typIcon} ${r.typLabel}
-          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:4px;">${r.datum}</span>
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">${r.datum}</span>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
-          ${r.themaText ? 'Betreff: <strong>' + r.themaText + '</strong> &nbsp;·&nbsp; ' : ''}
-          Freigabe: <strong>${r.approverShort}</strong>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
+          ${r.themaText ? 'Betreff: <strong style="color:var(--text);">' + r.themaText + '</strong>' : ''}
+          ${r.themaText && r.approverShort !== '—' ? ' &nbsp;·&nbsp; ' : ''}
+          ${r.approverShort !== '—' ? 'Freigabe: <strong>' + r.approverShort + '</strong>' : ''}
           ${r.teiln ? ' &nbsp;·&nbsp; ' + r.teiln + ' Teiln.' : ''}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <span style="font-size:11px;font-weight:600;color:${color};white-space:nowrap;">${r.status}</span>
+        <span style="font-size:11px;font-weight:600;color:${st.color};white-space:nowrap;">${r.status}</span>
         ${openBtn}
       </div>
     </div>`;
