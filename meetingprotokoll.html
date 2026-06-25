@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v210d289'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -838,19 +838,21 @@ async function showApp() {
     setTimeout(() => {
       // Alle landen auf Schritt 2 (Details) – können dann selbst weiternavigieren
       loadDraft(_itemId, 's-meta').then(async () => {
-        if (_isFreigabeUser()) {
-          try {
-            const { siteId } = await getSiteAndDrive();
-            const listId     = await getDraftListId();
-            const token      = await getToken();
-            const r = await fetch(
-              'https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + _itemId + '?expand=fields(select=Status)',
-              { headers: { Authorization: 'Bearer ' + token } }
-            );
-            const d = await r.json();
-            if (d.fields?.Status === 'Eingereicht') activateFreigabeModus(_itemId);
-          } catch(e) { console.warn('Status check failed:', e); }
-        }
+        // TL: prüfe ob Status=Eingereicht und aktiviere Freigabe-Modus
+        // Kein _isFreigabeUser() Check nötig – getToken() schlägt fehl wenn keine Berechtigung
+        try {
+          const { siteId } = await getSiteAndDrive();
+          const listId     = await getDraftListId();
+          const token      = await getToken();
+          const r = await fetch(
+            'https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + _itemId + '?expand=fields(select=Status)',
+            { headers: { Authorization: 'Bearer ' + token } }
+          );
+          const d = await r.json();
+          if (d.fields?.Status === 'Eingereicht' && _isFreigabeUser()) {
+            activateFreigabeModus(_itemId);
+          }
+        } catch(e) { console.warn('Status check failed:', e); }
       }).catch(e => console.warn('Deep-link load failed:', e));
     }, 300);
   }
@@ -3019,6 +3021,15 @@ async function loadDraft(itemId, targetSection) {
       }
       renderParticipants();
       renderTOPs();
+      // Restore spPath display
+      const _rCfg  = S.type ? TYPES[S.type] : null;
+      const _rThema = S.thema && _rCfg ? _rCfg.themen[S.thema] : null;
+      if (_rCfg && _rThema) {
+        const _rEinrList = (S.type === 'konferenz') ? EINRICHTUNGEN_KONFERENZ : EINRICHTUNGEN;
+        const _rEinr = _rThema.einrichtung ? _rEinrList.find(e => e.key === (S.einrichtung || 'nordstern')) : null;
+        const _rSP = document.getElementById('spPath');
+        if (_rSP) _rSP.textContent = _rEinr ? _rEinr.sp : (_rCfg.sp || _rCfg.label);
+      }
     }, 100);
     showToast('Entwurf geladen', 'success');
   } catch(e) {
