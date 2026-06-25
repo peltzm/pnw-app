@@ -797,7 +797,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vd8b248b'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2068,11 +2068,20 @@ async function getDraftListId() {
     { headers: { Authorization: 'Bearer ' + token } }
   );
   const d = await r.json();
-  const found = (d.value || []).find(l =>
-    l.displayName === DRAFT_LIST || l.name === DRAFT_LIST
+  const allLists = d.value || [];
+  // Flexible match: exact name, internal name, or contains key terms
+  const found = allLists.find(l =>
+    l.displayName === DRAFT_LIST ||
+    l.name === DRAFT_LIST ||
+    l.displayName === 'Protokoll Entwürfe' ||
+    l.displayName === 'Protokoll Entwuerfe' ||
+    l.displayName?.toLowerCase().includes('protokoll') ||
+    l.name?.toLowerCase().includes('protokoll')
   );
   if (found) { _graphListIdDraft = found.id; return found.id; }
-  // Create the list if it doesn't exist
+  // Log available lists for debugging
+  console.warn('Protokoll-Liste nicht gefunden. Verfügbare Listen:', allLists.map(l => l.displayName + ' (' + l.name + ')').join(', '));
+  // Create the list
   const cr = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/lists`,
     { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -2181,6 +2190,15 @@ async function loadArchiv(forceReload) {
     );
     if (!r.ok) {
       const errText = await r.text();
+      // If 404: list not found – show available lists for diagnosis
+      if (r.status === 404) {
+        const { siteId: sid3 } = await getSiteAndDrive();
+        const tok3 = await getToken();
+        const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${sid3}/lists?$select=displayName,name&$top=200`, { headers: { Authorization: 'Bearer ' + tok3 } });
+        const ld = await lr.json();
+        const names = (ld.value || []).map(l => l.displayName).join(', ');
+        throw new Error('Liste nicht gefunden. Vorhandene Listen: ' + names);
+      }
       throw new Error('SP ' + r.status + ': ' + errText.slice(0,200));
     }
     const d = await r.json();
