@@ -797,7 +797,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v67b6e31'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2174,14 +2174,20 @@ async function loadArchiv(forceReload) {
     const { siteId } = await getSiteAndDrive();
     const listId     = await getDraftListId();
     const token      = await getToken();
-    // Fetch all non-Entwurf items, newest first
+    // Fetch all items – NO $orderby (causes 400 on unindexed SP columns), sort client-side
     const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200&$orderby=fields/Modified desc`,
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
       { headers: { Authorization: 'Bearer ' + token } }
     );
+    if (!r.ok) {
+      const errText = await r.text();
+      throw new Error('SP ' + r.status + ': ' + errText.slice(0,200));
+    }
     const d = await r.json();
-    const items = (d.value || []).filter(i =>
-      i.fields?.Status && i.fields.Status !== 'Entwurf'
+    const allItems = d.value || [];
+    // Include items without Status field (older entries) + all non-Entwurf
+    const items = allItems.filter(i =>
+      !i.fields?.Status || i.fields.Status !== 'Entwurf'
     );
     _archivData = items.map(it => {
       const f    = it.fields || {};
