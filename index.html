@@ -855,6 +855,21 @@ function collectData() {
     data[`Sorg2_Str_${i+1}`] = s.strasse || '';
     data[`Sorg2_PLZ_${i+1}`] = s.plzOrt || '';
   });
+  // Alle Sorgeberechtigten (Sorg 1 + Extra) in die Template-Tokens zusammenführen.
+  // Die Templates haben nur einen Sorg-Slot — alle weiteren werden zeilenweise angehängt.
+  if (data._extraSorg.length > 0) {
+    const _de = iso => { const m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : (iso||''); };
+    const allSorg = [
+      { vorname: data['Sorg_Vorname'], name: data['Sorg_Familienname'],
+        geburtsdatum: data['Sorg_Geburtsdatum'], strasse: data['Sorg_Strasse'], plzOrt: data['Sorg_PLZ_Ort'] },
+      ...data._extraSorg
+    ];
+    data['Sorg_Vorname']      = allSorg.map(s => s.vorname || '').join('\n');
+    data['Sorg_Familienname'] = allSorg.map(s => s.name || '').join('\n');
+    data['Sorg_Geburtsdatum'] = allSorg.map(s => _de(s.geburtsdatum)).join('\n');
+    data['Sorg_Strasse']      = allSorg.map(s => s.strasse || '').join('\n');
+    data['Sorg_PLZ_Ort']      = allSorg.map(s => s.plzOrt || '').join('\n');
+  }
   // "Anschrift wie Kind 1"-Status des Sorgeberechtigten mitspeichern
   data._sorgSameAddr = document.getElementById('Sorg_SameAddr')?.checked ? '1' : '0';
   // TL-Kommentare mitpersistieren
