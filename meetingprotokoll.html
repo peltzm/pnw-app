@@ -655,48 +655,24 @@
 
         <div class="card">
           <div style="display:flex;gap:10px;margin-bottom:1rem;">
-            <input type="text" placeholder="🔍 Suchen …" style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;outline:none;flex:1;font-family:inherit;">
-            <select style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;color:var(--text);background:white;font-family:inherit;min-width:160px;">
-              <option>Alle Typen</option>
-              <option>Teammeeting</option>
-              <option>Supervision</option>
-              <option>Team Nordstern</option>
-              <option>Konferenz Stationär</option>
-              <option>Teilnehmerkonferenz</option>
+            <input type="text" id="archivSearch" placeholder="🔍 Suchen …" oninput="renderArchivTable()"
+              style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;outline:none;flex:1;font-family:inherit;">
+            <select id="archivFilter" onchange="renderArchivTable()"
+              style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;color:var(--text);background:white;font-family:inherit;min-width:160px;">
+              <option value="">Alle Typen</option>
             </select>
           </div>
-          <table class="data-table">
+          <div id="archivLoading" style="color:var(--text-muted);font-size:13px;padding:.5rem 0;display:none;"><span class="spin"></span> Wird geladen…</div>
+          <div id="archivError" style="color:var(--error);font-size:13px;padding:.5rem 0;display:none;"></div>
+          <table class="data-table" id="archivTable">
             <thead>
               <tr><th>Datum</th><th>Typ</th><th>Thema</th><th>Teiln.</th><th>Freigabe</th><th>Status</th><th></th></tr>
             </thead>
-            <tbody>
-              <tr>
-                <td>05.06.2025</td><td>👥 Teammeeting</td><td>Wochenbesprechung KW 23</td><td>8</td><td>M. Peltz</td>
-                <td><span class="pill pill-sent">✉ Versendet</span></td>
-                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
-              </tr>
-              <tr>
-                <td>28.05.2025</td><td>⭐ Team Nordstern</td><td>Fallreflexion Gruppe</td><td>5</td><td>L. Meier</td>
-                <td><span class="pill pill-sent">✉ Versendet</span></td>
-                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
-              </tr>
-              <tr>
-                <td>20.05.2025</td><td>🏛️ Konferenz Stationär</td><td>Belegungsplanung Juni</td><td>3</td><td>M. Peltz</td>
-                <td><span class="pill pill-sent">✉ Versendet</span></td>
-                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
-              </tr>
-              <tr>
-                <td>14.05.2025</td><td>🔍 Supervision</td><td>Fallsupervision Ambulant</td><td>6</td><td>J. Schneider</td>
-                <td><span class="pill pill-approved">✓ Freigegeben</span></td>
-                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
-              </tr>
-              <tr>
-                <td>07.05.2025</td><td>🧑‍🤝‍🧑 Teilnehmerkonferenz</td><td>Hilfeplangespräch</td><td>4</td><td>N. Grund</td>
-                <td><span class="pill pill-sent">✉ Versendet</span></td>
-                <td><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;">Öffnen</button></td>
-              </tr>
+            <tbody id="archivBody">
+              <tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:1.5rem;">Bitte einloggen.</td></tr>
             </tbody>
           </table>
+          <div id="archivEmpty" style="color:var(--text-muted);font-size:13px;padding:.5rem 0;display:none;">Keine Protokolle gefunden.</div>
         </div>
       </div>
 
@@ -1231,6 +1207,8 @@ function goSection(id) {
     if (stdWrap) stdWrap.style.display = _isExtern ? 'none' : '';
     if (extWrap) extWrap.style.display = _isExtern ? '' : 'none';
     if (cardTitle) cardTitle.textContent = _isExtern ? 'Unterschriften' : 'Zuständige Teamleitung';
+  if (id === 's-archiv') {
+    loadArchiv();
   }
 }
 function goHome() {}
@@ -1688,6 +1666,36 @@ async function executePublish() {
       showToast(`✉ Mail an ${mails.length} Empfänger gesendet`, 'success');
     }
 
+    // 4. Update draft list item: Status → Versendet, store spUrl
+    try {
+      const { siteId: sid2 } = await getSiteAndDrive();
+      const listId2 = await getDraftListId();
+      const token2  = await getToken();
+      // Collect updated data including spUrl
+      const finalData = collectDraftData();
+      finalData.spUrl = spUrl;
+      const updateFields = {
+        Status:         'Versendet',
+        ProtokollDaten: JSON.stringify(finalData),
+        SpUrl:          spUrl,
+      };
+      if (_currentDraftId) {
+        await fetch(
+          `https://graph.microsoft.com/v1.0/sites/${sid2}/lists/${listId2}/items/${_currentDraftId}/fields`,
+          { method: 'PATCH', headers: { Authorization: token2 ? 'Bearer ' + token2 : '', 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateFields) }
+        );
+      } else {
+        // No draft existed yet – create a final record
+        await fetch(
+          `https://graph.microsoft.com/v1.0/sites/${sid2}/lists/${listId2}/items`,
+          { method: 'POST', headers: { Authorization: token2 ? 'Bearer ' + token2 : '', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { Title: label, ...updateFields, ProtokollDaten: JSON.stringify(finalData) } }) }
+        );
+      }
+      _archivLoaded = false; // force reload next time archiv is opened
+    } catch(e) { console.warn('Archiv-Update fehlgeschlagen:', e); }
+
     setTimeout(() => goSection('s-archiv'), 1500);
   } catch(e) {
     console.error(e);
@@ -2144,6 +2152,107 @@ async function autoSaveDraft() {
 function scheduleAutoSave() {
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(autoSaveDraft, 2000);
+}
+
+
+/* ──────────────────────────────────────
+   ARCHIV — live load from SharePoint list
+────────────────────────────────────── */
+let _archivData = [];   // all loaded items
+let _archivLoaded = false;
+
+async function loadArchiv(forceReload) {
+  if (_archivLoaded && !forceReload) { renderArchivTable(); return; }
+  const loading = document.getElementById('archivLoading');
+  const errEl   = document.getElementById('archivError');
+  const body    = document.getElementById('archivBody');
+  if (loading) loading.style.display = '';
+  if (errEl)   errEl.style.display = 'none';
+  if (body)    body.innerHTML = '';
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId     = await getDraftListId();
+    const token      = await getToken();
+    // Fetch all non-Entwurf items, newest first
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200&$orderby=fields/Modified desc`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const d = await r.json();
+    const items = (d.value || []).filter(i =>
+      i.fields?.Status && i.fields.Status !== 'Entwurf'
+    );
+    _archivData = items.map(it => {
+      const f    = it.fields || {};
+      const data = (() => { try { return JSON.parse(f.ProtokollDaten || '{}'); } catch(e) { return {}; } })();
+      const cfg  = data.type ? TYPES[data.type] : null;
+      const thema= data.thema && cfg ? cfg.themen?.[data.thema] : null;
+      const typLabel  = (cfg && thema) ? cfg.label + ' – ' + thema.label : (data.label || f.Title || '—');
+      const typIcon   = cfg?.icon || '📋';
+      const datum     = data.datum ? data.datum.split('-').reverse().join('.') : (f.Modified ? f.Modified.slice(0,10).split('-').reverse().join('.') : '—');
+      const datumSort = data.datum || f.Modified || '';
+      const themaRaw  = data.mailBetreff || '';
+      // Extract short subject: "Protokoll Teammeeting – Wochenbesprechung KW 23 vom …" → "Wochenbesprechung KW 23"
+      const themaMatch = themaRaw.match(/–\s*(.+?)\s*vom\s/);
+      const themaText  = themaMatch ? themaMatch[1] : (data.ort || themaRaw.replace(/^Protokoll\s+.+?–\s*/,'').replace(/\s*vom\s+.*/,'') || '');
+      const teiln     = (() => { try { return JSON.parse(data.participants || '[]').length; } catch(e) { return 0; } })();
+      const approver  = data.approver || f.Approver || '';
+      const approverShort = approver ? approver.split(' ').map((w,i,a) => i===a.length-1 ? w : w[0]+'.').join(' ') : '—';
+      const status    = f.Status || 'Freigegeben';
+      const spUrl     = data.spUrl || f.SpUrl || null;
+      return { datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, raw: data };
+    });
+    // Sort descending by date
+    _archivData.sort((a,b) => b.datumSort.localeCompare(a.datumSort));
+    _archivLoaded = true;
+    // Populate type filter
+    const sel = document.getElementById('archivFilter');
+    if (sel) {
+      const types = [...new Set(_archivData.map(i => i.typLabel))].sort();
+      sel.innerHTML = '<option value="">Alle Typen</option>' +
+        types.map(t => `<option value="${t}">${t}</option>`).join('');
+    }
+  } catch(e) {
+    if (errEl) { errEl.textContent = 'Fehler beim Laden: ' + e.message; errEl.style.display = ''; }
+  } finally {
+    if (loading) loading.style.display = 'none';
+  }
+  renderArchivTable();
+}
+
+function renderArchivTable() {
+  const body    = document.getElementById('archivBody');
+  const emptyEl = document.getElementById('archivEmpty');
+  if (!body) return;
+  const q   = (document.getElementById('archivSearch')?.value || '').toLowerCase().trim();
+  const typ = (document.getElementById('archivFilter')?.value || '');
+  let rows = _archivData;
+  if (typ)  rows = rows.filter(r => r.typLabel === typ);
+  if (q)    rows = rows.filter(r =>
+    r.typLabel.toLowerCase().includes(q) ||
+    r.themaText.toLowerCase().includes(q) ||
+    r.datum.includes(q) ||
+    r.approverShort.toLowerCase().includes(q)
+  );
+  if (emptyEl) emptyEl.style.display = rows.length ? 'none' : '';
+  body.innerHTML = rows.map(r => {
+    const pillClass = r.status === 'Versendet' ? 'pill-sent' :
+                      r.status === 'Freigegeben' ? 'pill-approved' : 'pill-pending';
+    const pillIcon  = r.status === 'Versendet' ? '✉' :
+                      r.status === 'Freigegeben' ? '✓' : '⏳';
+    const openBtn   = r.spUrl
+      ? `<a href="${r.spUrl}" target="_blank" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;text-decoration:none;">Öffnen</a>`
+      : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;opacity:.4;" disabled>Öffnen</button>`;
+    return `<tr>
+      <td>${r.datum}</td>
+      <td>${r.typIcon} ${r.typLabel}</td>
+      <td>${r.themaText || '—'}</td>
+      <td>${r.teiln || '—'}</td>
+      <td>${r.approverShort}</td>
+      <td><span class="pill ${pillClass}">${pillIcon} ${r.status}</span></td>
+      <td>${openBtn}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:1.5rem;">Keine Einträge gefunden.</td></tr>`;
 }
 
 async function showDraftPanel() {
