@@ -754,7 +754,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v76802c8'; // auto-updated on deploy
+const APP_VERSION = 'v4f1612f'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2941,20 +2941,20 @@ function renderArchivTable() {
   }
 
   // Count Entwürfe for bulk delete button
-  const entwurfIds = _archivData.filter(r => r.status === 'Entwurf').map(r => r.id);
-  const bulkBar = entwurfIds.length > 0
+  const deletableItems = _archivData.filter(r => r.status === 'Entwurf' || r.status === 'Abgelehnt');
+  const bulkBar = deletableItems.length > 0
     ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius);">
-        <span style="font-size:12px;color:#9b1c1c;font-weight:600;">${entwurfIds.length} Entwurf/Entwürfe</span>
-        <button onclick="deleteAllDrafts()" style="font-size:12px;padding:5px 12px;background:#9b1c1c;color:white;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;">🗑 Alle Entwürfe löschen</button>
+        <span style="font-size:12px;color:#9b1c1c;font-weight:600;">${deletableItems.length} Entwurf/Abgelehnt</span>
+        <button onclick="deleteAllDrafts()" style="font-size:12px;padding:5px 12px;background:#9b1c1c;color:white;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;">🗑 Alle löschen</button>
        </div>`
     : '';
 
   contentEl.innerHTML = bulkBar + rows.map(r => {
     const st = statusStyle(r.status);
 
-    const deleteBtn = r.status === 'Entwurf'
+    const deleteBtn = (r.status === 'Entwurf' || r.status === 'Abgelehnt')
       ? `<button onclick="deleteDraft('${r.id}', this)"
-           title="Entwurf löschen"
+           title="${r.status} löschen"
            style="font-size:12px;padding:6px 10px;background:white;color:#9b1c1c;
            border:1px solid #fca5a5;border-radius:var(--radius);cursor:pointer;min-height:36px;">🗑</button>`
       : '';
@@ -3015,7 +3015,7 @@ async function deleteDraft(itemId, btn) {
     );
     const checkData = await check.json();
     const currentStatus = checkData.fields?.Status || 'Entwurf';
-    if (currentStatus !== 'Entwurf') {
+    if (currentStatus !== 'Entwurf' && currentStatus !== 'Abgelehnt') {
       showToast(`Löschen nicht erlaubt – Status: ${currentStatus}`, 'info');
       btn.disabled = false; btn.textContent = '🗑';
       return;
@@ -3035,9 +3035,9 @@ async function deleteDraft(itemId, btn) {
 }
 
 async function deleteAllDrafts() {
-  const entwuerfe = _archivData.filter(r => r.status === 'Entwurf');
+  const entwuerfe = _archivData.filter(r => r.status === 'Entwurf' || r.status === 'Abgelehnt');
   if (!entwuerfe.length) return;
-  if (!confirm(`${entwuerfe.length} Entwurf/Entwürfe unwiderruflich löschen?`)) return;
+  if (!confirm(`${entwuerfe.length} Einträge (Entwürfe + Abgelehnte) unwiderruflich löschen?`)) return;
   try {
     showToast(`Lösche ${entwuerfe.length} Entwürfe…`, 'info');
     const { siteId } = await getSiteAndDrive();
@@ -3049,7 +3049,7 @@ async function deleteAllDrafts() {
         { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }
       )
     ));
-    _archivData = _archivData.filter(r => r.status !== 'Entwurf');
+    _archivData = _archivData.filter(r => r.status !== 'Entwurf' && r.status !== 'Abgelehnt');
     renderArchivTable();
     showToast(`✓ ${entwuerfe.length} Entwürfe gelöscht`, 'success');
   } catch(e) {
