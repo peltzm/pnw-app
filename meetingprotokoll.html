@@ -752,7 +752,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vcf52c0c'; // auto-updated on deploy
+const APP_VERSION = 've045d0a'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1991,21 +1991,21 @@ async function generateProtokollPDF(data, freigeberName) {
   const absent  = participants.filter(p=>!p.present).map(p=>p.name).join(', ') || 'keine';
 
   const topsHtml = tops.length ? tops.map((t,i) => `
-    <div style="margin-bottom:10px;border:1px solid #e5ddd5;border-radius:6px;overflow:hidden;">
-      <div style="background:#f5ece0;padding:7px 10px;font-size:13px;font-weight:600;color:#321900;display:flex;justify-content:space-between;align-items:center;">
+    <div style="margin-bottom:8px;border:1px solid #e8e0d8;border-radius:6px;overflow:hidden;">
+      <div style="background:white;padding:8px 12px;font-size:13px;font-weight:600;color:#321900;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e8e0d8;">
         <span>${i+1}. ${t.title||''}</span>
         ${t.type==='beschluss'?'<span style="font-size:10px;font-weight:700;color:#92400e;background:#fffbeb;padding:2px 7px;border-radius:3px;">BESCHLUSS</span>':''}
         ${t.type==='aufgabe'?'<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:2px 7px;border-radius:3px;">AUFGABE</span>':''}
       </div>
-      <div style="background:#fffcf8;padding:7px 10px;font-size:12px;color:${t.text?'#333':'#bbb'};font-style:${t.text?'normal':'italic'};">
+      <div style="background:white;padding:8px 12px;font-size:12px;color:${t.text?'#555':'#bbb'};font-style:${t.text?'normal':'italic'};">
         ${t.text||'Kein Text eingetragen'}
       </div>
-      ${t.frist?`<div style="background:#fffcf8;padding:3px 10px;font-size:11px;color:#96500a;font-style:italic;border-top:1px solid #f0e8df;">Frist: ${t.frist.split('-').reverse().join('.')}</div>`:''}
+      ${t.frist?`<div style="background:#fafafa;padding:3px 12px;font-size:11px;color:#96500a;font-style:italic;border-top:1px solid #e8e0d8;">Frist: ${t.frist.split('-').reverse().join('.')}</div>`:''}
     </div>`).join('')
     : '<p style="color:#bbb;font-size:12px;font-style:italic;">Keine TOPs erfasst</p>';
 
-  const sh = (title) => `<div style="background:#803300;color:white;padding:5px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-radius:3px;margin:14px 0 8px;display:inline-block;">${title}</div>`;
-  const tr = (label, value) => `<tr><td style="background:#f5f0eb;font-weight:500;width:150px;padding:5px 8px;border:1px solid #e5ddd5;font-size:12px;vertical-align:top;">${label}</td><td style="padding:5px 8px;border:1px solid #e5ddd5;font-size:12px;">${value||'\u2014'}</td></tr>`;
+  const sh = (title) => `<div style="background:#803300;color:white;padding:4px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-radius:3px;margin:14px 0 8px;display:inline-block;">${title}</div>`;
+  const tr = (label, value) => `<tr><td style="background:#f8f5f2;font-weight:500;width:150px;padding:5px 8px;border:1px solid #e8e0d8;font-size:12px;vertical-align:top;color:#4a3020;">${label}</td><td style="background:white;padding:5px 8px;border:1px solid #e8e0d8;font-size:12px;color:#333;">${value||'\u2014'}</td></tr>`;
 
   const html = `
   <div style="font-family:'Kodchasan',sans-serif;font-size:12px;line-height:1.7;color:#1a1916;background:white;padding:36px 42px;width:794px;box-sizing:border-box;">
