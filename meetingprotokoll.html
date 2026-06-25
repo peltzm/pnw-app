@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'va12ba02'; // auto-updated on deploy
+const APP_VERSION = 'v14f30a3'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -836,9 +836,8 @@ async function showApp() {
   const _itemId = _params.get('item');
   if (_itemId) {
     setTimeout(() => {
-      // TL/Admin → direkt zur Freigabe-Seite, andere → Schritt 2
-      const _target = _isFreigabeUser() ? 's-freigabe' : 's-meta';
-      loadDraft(_itemId, _target).catch(e => console.warn('Deep-link load failed:', e));
+      // Alle landen auf Schritt 2 (Details) – können dann selbst weiternavigieren
+      loadDraft(_itemId, 's-meta').catch(e => console.warn('Deep-link load failed:', e));
     }, 300);
   }
 }
@@ -1681,12 +1680,61 @@ async function confirmApproval() {
     console.error('confirmApproval:', e);
   }
 }
-function resetApproval() {
+async function resetApproval() {
+  // UI sofort zurücksetzen
   document.getElementById('sDot').className = 's-dot draft';
   document.getElementById('sText').textContent = 'Wartet auf Freigabe-Anfrage';
   document.getElementById('sText').style.color = 'var(--text-muted)';
   document.getElementById('btnReqApproval').textContent = '📨 Anfrage senden';
   document.getElementById('btnReqApproval').onclick = requestApproval;
+
+  try {
+    // SP-Status zurück auf Entwurf
+    if (_currentDraftId) {
+      const { siteId } = await getSiteAndDrive();
+      const listId     = await getDraftListId();
+      const token      = await getToken();
+      await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${_currentDraftId}/fields`,
+        { method: 'PATCH',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ Status: 'Entwurf' }) }
+      );
+    }
+
+    // Mail an TL dass Anfrage zurückgezogen wurde
+    const sel = document.getElementById('fApprover');
+    const ctx = getApproverContext();
+    const tl  = (TL_LISTS[ctx] || []).find(t => t.value === sel?.value);
+    if (tl?.mail) {
+      const cfg    = S.type ? TYPES[S.type] : null;
+      const thema  = S.thema && cfg ? cfg.themen?.[S.thema] : null;
+      const label  = cfg ? cfg.label + (thema ? ' – ' + thema.label : '') : 'Protokoll';
+      const datum  = document.getElementById('fDatum')?.value || '';
+      const datumDE = datum ? datum.split('-').reverse().join('.') : '—';
+      const sender = currentAccount?.name || currentAccount?.username || '';
+
+      await sendMail(
+        [tl.mail],
+        `Freigabe-Anfrage zurückgezogen: ${label} vom ${datumDE}`,
+        `<p>Hallo ${tl.full},</p>
+<p><strong>${sender}</strong> hat die Freigabe-Anfrage für folgendes Protokoll zurückgezogen:</p>
+<table style="border-collapse:collapse;margin:12px 0;">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Typ:</td><td><strong>${label}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Datum:</td><td>${datumDE}</td></tr>
+</table>
+<p>Das Protokoll wird weiter bearbeitet und später erneut zur Freigabe eingereicht.</p>
+<p>Mit freundlichen Grüßen<br>Praxis NeueWege</p>`
+      );
+      showToast('Anfrage zurückgezogen – TL wurde benachrichtigt', 'success');
+    } else {
+      showToast('Anfrage zurückgezogen', 'success');
+    }
+    _archivLoaded = false;
+  } catch(e) {
+    console.warn('resetApproval:', e);
+    showToast('Anfrage zurückgezogen', 'success'); // UI schon korrekt, Fehler ist sekundär
+  }
 }
 
 function confirmPublish() {
