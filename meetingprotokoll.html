@@ -651,29 +651,26 @@
       <!-- ══ ARCHIV ══ -->
       <div class="section" id="s-archiv">
         <div class="section-title">Protokoll-Archiv</div>
-        <div class="section-sub">Alle freigegebenen und versendeten Protokolle.</div>
+        <div class="section-sub">Alle Protokolle – eigene Entwürfe und versendete Protokolle.</div>
 
-        <div class="card">
-          <div style="display:flex;gap:10px;margin-bottom:1rem;">
-            <input type="text" id="archivSearch" placeholder="🔍 Suchen …" oninput="renderArchivTable()"
-              style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;outline:none;flex:1;font-family:inherit;">
-            <select id="archivFilter" onchange="renderArchivTable()"
-              style="border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;color:var(--text);background:white;font-family:inherit;min-width:160px;">
-              <option value="">Alle Typen</option>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <select id="archivStatusFilter" onchange="loadArchiv(true)"
+              style="font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:white;width:100%;font-family:inherit;">
+              <option value="alle">Alle Protokolle</option>
+              <option value="entwurf">Entwürfe</option>
+              <option value="versendet">Versendet</option>
+              <option value="freigegeben">Freigegeben</option>
             </select>
           </div>
-          <div id="archivLoading" style="color:var(--text-muted);font-size:13px;padding:.5rem 0;display:none;"><span class="spin"></span> Wird geladen…</div>
-          <div id="archivError" style="color:var(--error);font-size:13px;padding:.5rem 0;display:none;"></div>
-          <table class="data-table" id="archivTable">
-            <thead>
-              <tr><th>Datum</th><th>Typ</th><th>Thema</th><th>Teiln.</th><th>Freigabe</th><th>Status</th><th></th></tr>
-            </thead>
-            <tbody id="archivBody">
-              <tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:1.5rem;">Bitte einloggen.</td></tr>
-            </tbody>
-          </table>
-          <div id="archivEmpty" style="color:var(--text-muted);font-size:13px;padding:.5rem 0;display:none;">Keine Protokolle gefunden.</div>
+          <input type="text" id="archivSearch" placeholder="🔍 Suchen …" oninput="renderArchivTable()"
+            style="border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;outline:none;flex:2;min-width:180px;font-family:inherit;">
+          <button onclick="loadArchiv(true)" style="padding:8px 14px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius);background:white;cursor:pointer;font-family:inherit;">↺ Aktualisieren</button>
         </div>
+
+        <div id="archivLoading" style="color:var(--text-muted);font-size:13px;padding:.5rem 0;display:none;"><span class="spin"></span> Wird geladen…</div>
+        <div id="archivError" style="color:var(--error);font-size:13px;padding:.5rem 0;display:none;"></div>
+        <div id="archivContent" style="font-size:13px;color:var(--text-muted);">Wird geladen…</div>
       </div>
 
       <!-- ══ VORSCHAU ══ -->
@@ -797,7 +794,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v469e37b'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2163,117 +2160,149 @@ function scheduleAutoSave() {
 /* ──────────────────────────────────────
    ARCHIV — live load from SharePoint list
 ────────────────────────────────────── */
-let _archivData = [];   // all loaded items
+let _archivData = [];
 let _archivLoaded = false;
+
+function _isAdminUser() {
+  const me = (currentAccount?.username || '').toLowerCase();
+  return me.includes('markus') || me.includes('peltz') || me.includes('sonja');
+}
 
 async function loadArchiv(forceReload) {
   if (_archivLoaded && !forceReload) { renderArchivTable(); return; }
-  const loading = document.getElementById('archivLoading');
-  const errEl   = document.getElementById('archivError');
-  const body    = document.getElementById('archivBody');
-  if (loading) loading.style.display = '';
-  if (errEl)   errEl.style.display = 'none';
-  if (body)    body.innerHTML = '';
+  const loadingEl = document.getElementById('archivLoading');
+  const errEl     = document.getElementById('archivError');
+  const content   = document.getElementById('archivContent');
+  if (loadingEl) loadingEl.style.display = '';
+  if (errEl)     errEl.style.display = 'none';
+  if (content)   content.textContent = '';
   try {
     const { siteId } = await getSiteAndDrive();
     const listId     = await getDraftListId();
     const token      = await getToken();
-    // Fetch all items – NO $orderby (causes 400 on unindexed SP columns), sort client-side
     const r = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
       { headers: { Authorization: 'Bearer ' + token } }
     );
     if (!r.ok) {
       const errText = await r.text();
-      // If 404: list not found – show available lists for diagnosis
       if (r.status === 404) {
-        const { siteId: sid3 } = await getSiteAndDrive();
-        const tok3 = await getToken();
-        const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${sid3}/lists?$select=displayName,name&$top=200`, { headers: { Authorization: 'Bearer ' + tok3 } });
+        const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists?$select=displayName,name&$top=200`, { headers: { Authorization: 'Bearer ' + token } });
         const ld = await lr.json();
         const names = (ld.value || []).map(l => l.displayName).join(', ');
         throw new Error('Liste nicht gefunden. Vorhandene Listen: ' + names);
       }
-      throw new Error('SP ' + r.status + ': ' + errText.slice(0,200));
+      throw new Error('SP ' + r.status + ': ' + errText.slice(0, 200));
     }
     const d = await r.json();
-    const allItems = d.value || [];
-    // Include items without Status field (older entries) + all non-Entwurf
-    const items = allItems.filter(i =>
-      !i.fields?.Status || i.fields.Status !== 'Entwurf'
-    );
-    _archivData = items.map(it => {
+    const me = (currentAccount?.username || '').toLowerCase();
+    const meShort = me.split('@')[0];
+    const isAdmin = _isAdminUser();
+
+    _archivData = (d.value || []).map(it => {
       const f    = it.fields || {};
       const data = (() => { try { return JSON.parse(f.ProtokollDaten || '{}'); } catch(e) { return {}; } })();
-      const cfg  = data.type ? TYPES[data.type] : null;
-      const thema= data.thema && cfg ? cfg.themen?.[data.thema] : null;
+      const cfg   = data.type ? TYPES[data.type] : null;
+      const thema = data.thema && cfg ? cfg.themen?.[data.thema] : null;
       const typLabel  = (cfg && thema) ? cfg.label + ' – ' + thema.label : (data.label || f.Title || '—');
       const typIcon   = cfg?.icon || '📋';
       const datum     = data.datum ? data.datum.split('-').reverse().join('.') : (f.Modified ? f.Modified.slice(0,10).split('-').reverse().join('.') : '—');
       const datumSort = data.datum || f.Modified || '';
       const themaRaw  = data.mailBetreff || '';
-      // Extract short subject: "Protokoll Teammeeting – Wochenbesprechung KW 23 vom …" → "Wochenbesprechung KW 23"
       const themaMatch = themaRaw.match(/–\s*(.+?)\s*vom\s/);
-      const themaText  = themaMatch ? themaMatch[1] : (data.ort || themaRaw.replace(/^Protokoll\s+.+?–\s*/,'').replace(/\s*vom\s+.*/,'') || '');
+      const themaText  = themaMatch ? themaMatch[1] : (data.ort || themaRaw.replace(/^Protokoll\s+.+?–\s*/, '').replace(/\s*vom\s+.*/, '') || '');
       const teiln     = (() => { try { return JSON.parse(data.participants || '[]').length; } catch(e) { return 0; } })();
       const approver  = data.approver || f.Approver || '';
       const approverShort = approver ? approver.split(' ').map((w,i,a) => i===a.length-1 ? w : w[0]+'.').join(' ') : '—';
-      const status    = f.Status || 'Freigegeben';
+      const status    = f.Status || 'Entwurf';
       const spUrl     = data.spUrl || f.SpUrl || null;
-      return { datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, raw: data };
-    });
-    // Sort descending by date
+      const erstelltVon = (f.Erstellt_Von || data.savedBy || '').toLowerCase();
+      const isMine    = erstelltVon.includes(meShort) || erstelltVon.includes(me.split('@')[0]);
+      return { id: it.id, datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, isMine, isAdmin };
+    }).filter(r => r.isAdmin || r.isMine); // Admins sehen alles, andere nur eigene
+
     _archivData.sort((a,b) => b.datumSort.localeCompare(a.datumSort));
     _archivLoaded = true;
-    // Populate type filter
-    const sel = document.getElementById('archivFilter');
-    if (sel) {
-      const types = [...new Set(_archivData.map(i => i.typLabel))].sort();
-      sel.innerHTML = '<option value="">Alle Typen</option>' +
-        types.map(t => `<option value="${t}">${t}</option>`).join('');
-    }
   } catch(e) {
     if (errEl) { errEl.textContent = 'Fehler beim Laden: ' + e.message; errEl.style.display = ''; }
   } finally {
-    if (loading) loading.style.display = 'none';
+    if (loadingEl) loadingEl.style.display = 'none';
   }
   renderArchivTable();
 }
 
 function renderArchivTable() {
-  const body    = document.getElementById('archivBody');
-  const emptyEl = document.getElementById('archivEmpty');
-  if (!body) return;
-  const q   = (document.getElementById('archivSearch')?.value || '').toLowerCase().trim();
-  const typ = (document.getElementById('archivFilter')?.value || '');
+  const contentEl = document.getElementById('archivContent');
+  if (!contentEl) return;
+
+  const statusFilter = (document.getElementById('archivStatusFilter')?.value || 'alle').toLowerCase();
+  const q = (document.getElementById('archivSearch')?.value || '').toLowerCase().trim();
+
   let rows = _archivData;
-  if (typ)  rows = rows.filter(r => r.typLabel === typ);
-  if (q)    rows = rows.filter(r =>
+  if (statusFilter !== 'alle') rows = rows.filter(r => r.status.toLowerCase() === statusFilter);
+  if (q) rows = rows.filter(r =>
     r.typLabel.toLowerCase().includes(q) ||
     r.themaText.toLowerCase().includes(q) ||
     r.datum.includes(q) ||
     r.approverShort.toLowerCase().includes(q)
   );
-  if (emptyEl) emptyEl.style.display = rows.length ? 'none' : '';
-  body.innerHTML = rows.map(r => {
-    const pillClass = r.status === 'Versendet' ? 'pill-sent' :
-                      r.status === 'Freigegeben' ? 'pill-approved' : 'pill-pending';
-    const pillIcon  = r.status === 'Versendet' ? '✉' :
-                      r.status === 'Freigegeben' ? '✓' : '⏳';
-    const openBtn   = r.spUrl
-      ? `<a href="${r.spUrl}" target="_blank" class="btn btn-secondary" style="padding:4px 10px;font-size:12px;text-decoration:none;">Öffnen</a>`
-      : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;opacity:.4;" disabled>Öffnen</button>`;
-    return `<tr>
-      <td>${r.datum}</td>
-      <td>${r.typIcon} ${r.typLabel}</td>
-      <td>${r.themaText || '—'}</td>
-      <td>${r.teiln || '—'}</td>
-      <td>${r.approverShort}</td>
-      <td><span class="pill ${pillClass}">${pillIcon} ${r.status}</span></td>
-      <td>${openBtn}</td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:1.5rem;">Keine Einträge gefunden.</td></tr>`;
+
+  if (!rows.length) {
+    contentEl.innerHTML = '<div style="color:var(--text-muted);padding:.5rem 0;">Keine Protokolle gefunden.</div>';
+    return;
+  }
+
+  const statusColor = s => ({
+    'Entwurf':     'var(--text-muted)',
+    'Versendet':   '#1d4ed8',
+    'Freigegeben': '#166534',
+  }[s] || 'var(--text-muted)');
+
+  const statusBorder = s => ({
+    'Entwurf':     'var(--border)',
+    'Versendet':   '#bfdbfe',
+    'Freigegeben': '#86efac',
+  }[s] || 'var(--border)');
+
+  const statusBg = s => ({
+    'Entwurf':     'var(--surface)',
+    'Versendet':   '#eff6ff',
+    'Freigegeben': '#f0fdf4',
+  }[s] || 'var(--surface)');
+
+  contentEl.innerHTML = rows.map(r => {
+    const border = statusBorder(r.status);
+    const bg     = statusBg(r.status);
+    const color  = statusColor(r.status);
+
+    const openBtn = r.status === 'Entwurf'
+      ? `<button onclick="loadDraft('${r.id}')" style="font-size:12px;padding:6px 14px;background:var(--accent);color:white;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">Weiterbearbeiten</button>`
+      : r.spUrl
+        ? `<a href="${r.spUrl}" target="_blank" style="font-size:12px;padding:6px 14px;background:${bg};color:${color};border:1px solid ${border};border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;text-decoration:none;display:inline-block;line-height:24px;">Öffnen ↗</a>`
+        : `<button disabled style="font-size:12px;padding:6px 14px;background:var(--bg);color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius);cursor:not-allowed;min-height:36px;">Öffnen</button>`;
+
+    return `<div style="display:flex;align-items:center;justify-content:space-between;
+        padding:10px 14px;border:1px solid ${border};border-left:4px solid ${border};
+        border-radius:var(--radius);margin-bottom:8px;background:${bg};flex-wrap:wrap;gap:6px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);">
+          ${r.typIcon} ${r.typLabel}
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:4px;">${r.datum}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+          ${r.themaText ? 'Betreff: <strong>' + r.themaText + '</strong> &nbsp;·&nbsp; ' : ''}
+          Freigabe: <strong>${r.approverShort}</strong>
+          ${r.teiln ? ' &nbsp;·&nbsp; ' + r.teiln + ' Teiln.' : ''}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:600;color:${color};white-space:nowrap;">${r.status}</span>
+        ${openBtn}
+      </div>
+    </div>`;
+  }).join('');
 }
+
 
 async function showDraftPanel() {
   const panel = document.getElementById('draftPanel');
