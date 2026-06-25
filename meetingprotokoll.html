@@ -614,38 +614,9 @@
       <div class="section" id="s-offen">
         <div class="section-title">Zur Freigabe</div>
         <div class="section-sub">Protokolle, die auf Ihre Genehmigung warten.</div>
-
-        <div class="card">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Datum</th><th>Typ</th><th>Erstellt von</th><th>Status</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="offenBody">
-              <tr>
-                <td>12.06.2025</td>
-                <td>👥 Teammeeting</td>
-                <td>Nadine Grund</td>
-                <td><span class="pill pill-pending">⏳ Ausstehend</span></td>
-                <td style="display:flex;gap:6px;">
-                  <button class="btn btn-success" style="padding:5px 12px;font-size:12px;" onclick="approveRow(this)">✓ Freigeben</button>
-                  <button class="btn-remove" onclick="rejectRow(this)">✗ Ablehnen</button>
-                </td>
-              </tr>
-              <tr>
-                <td>10.06.2025</td>
-                <td>⭐ Team Nordstern</td>
-                <td>Jessica Herrmann</td>
-                <td><span class="pill pill-pending">⏳ Ausstehend</span></td>
-                <td style="display:flex;gap:6px;">
-                  <button class="btn btn-success" style="padding:5px 12px;font-size:12px;" onclick="approveRow(this)">✓ Freigeben</button>
-                  <button class="btn-remove" onclick="rejectRow(this)">✗ Ablehnen</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <div id="offenLoading" style="color:var(--text-muted);font-size:13px;padding:.5rem 0;display:none;"><span class="spin"></span> Wird geladen…</div>
+        <div id="offenError"   style="color:var(--error);font-size:13px;padding:.5rem 0;display:none;"></div>
+        <div id="offenContent" style="font-size:13px;color:var(--text-muted);">Wird geladen…</div>
       </div>
 
       <!-- ══ ARCHIV ══ -->
@@ -794,7 +765,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v13fa147'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -854,6 +825,9 @@ async function showApp() {
   document.getElementById('appScreen').addEventListener('change', scheduleAutoSave);
   // Pre-load scribe list so it's ready immediately
   populateScribeSelect().catch(e => console.warn('scribe preload:', e));
+  // Show/hide Zur Freigabe based on role
+  const nOffen = document.getElementById('n-offen');
+  if (nOffen) nOffen.style.display = _isFreigabeUser() ? '' : 'none';
 }
 
 /* ──────────────────────────────────────
@@ -1207,6 +1181,9 @@ function goSection(id) {
   }
   if (id === 's-archiv') {
     loadArchiv();
+  }
+  if (id === 's-offen') {
+    loadFreigabe();
   }
 }
 function goHome() {}
@@ -1701,16 +1678,142 @@ async function executePublish() {
   }
 }
 
-function approveRow(btn) {
-  btn.closest('tr').querySelector('.pill').outerHTML = '<span class="pill pill-approved">✓ Freigegeben</span>';
-  btn.parentElement.innerHTML = '<span style="color:var(--success);font-size:12px;">✓ Freigegeben</span>';
-  showToast('Protokoll freigegeben', 'success');
+// ── FREIGABE-BERECHTIGTE ─────────────────────────────────────────────────────
+// TL Ambulant + Nordstern TL + Markus + Sonja
+const FREIGABE_MAILS = [
+  'nadine.grund@praxisneuewege.de',
+  'laura.meier@praxisneuewege.de',
+  'joerg.schneider@praxisneuewege.de',
+  'jessica.herrmann@praxisneuewege.de',
+  'kilian.freundl@praxisneuewege.de',
+  'markus.peltz@praxisneuewege.de',
+  'sonja.peltz@praxisneuewege.de',
+];
+
+function _isFreigabeUser() {
+  const me = (currentAccount?.username || '').toLowerCase();
+  return FREIGABE_MAILS.some(m => me.includes(m.split('@')[0])) ||
+         me.includes('peltz') || me.includes('markus');
 }
-function rejectRow(btn) {
-  btn.closest('tr').querySelector('.pill').outerHTML = '<span class="pill pill-draft">↩ Zurückgegeben</span>';
-  btn.parentElement.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">Zurückgegeben</span>';
-  showToast('Protokoll zurückgegeben · Ersteller wird benachrichtigt', 'info');
+
+/* ──────────────────────────────────────
+   ZUR FREIGABE — load + actions
+────────────────────────────────────── */
+let _freigabeData = [];
+
+async function loadFreigabe() {
+  if (!_isFreigabeUser()) {
+    document.getElementById('offenContent').innerHTML =
+      '<div style="color:var(--text-muted);padding:.5rem 0;">Kein Zugriff – nur für Teamleitungen.</div>';
+    return;
+  }
+  const loadingEl = document.getElementById('offenLoading');
+  const errEl     = document.getElementById('offenError');
+  const contentEl = document.getElementById('offenContent');
+  if (loadingEl) loadingEl.style.display = '';
+  if (errEl)     errEl.style.display = 'none';
+  if (contentEl) contentEl.textContent = '';
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId     = await getDraftListId();
+    const token      = await getToken();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!r.ok) throw new Error('SP ' + r.status);
+    const d = await r.json();
+    // Show items with Status = Eingereicht (waiting for approval)
+    _freigabeData = (d.value || []).filter(i => i.fields?.Status === 'Eingereicht');
+    renderFreigabe();
+    // Update badge
+    const badge = document.getElementById('pendingBadge');
+    if (badge) {
+      badge.textContent = _freigabeData.length;
+      badge.style.display = _freigabeData.length ? '' : 'none';
+    }
+  } catch(e) {
+    if (errEl) { errEl.textContent = 'Fehler: ' + e.message; errEl.style.display = ''; }
+  } finally {
+    if (loadingEl) loadingEl.style.display = 'none';
+  }
 }
+
+function renderFreigabe() {
+  const contentEl = document.getElementById('offenContent');
+  if (!contentEl) return;
+  if (!_freigabeData.length) {
+    contentEl.innerHTML = '<div style="color:var(--text-muted);padding:.5rem 0;">Keine Protokolle zur Freigabe ausstehend. ✓</div>';
+    return;
+  }
+  contentEl.innerHTML = _freigabeData.map(it => {
+    const f    = it.fields || {};
+    const data = (() => { try { return JSON.parse(f.ProtokollDaten || '{}'); } catch(e) { return {}; } })();
+    const cfg   = data.type ? TYPES[data.type] : null;
+    const thema = data.thema && cfg ? cfg.themen?.[data.thema] : null;
+    const typLabel = (cfg && thema) ? cfg.label + ' – ' + thema.label : (data.label || f.Title || '—');
+    const typIcon  = cfg?.icon || '📋';
+    const datum    = data.datum ? data.datum.split('-').reverse().join('.') : '—';
+    const erstelltVon = f.Erstellt_Von || data.savedBy || '—';
+    const themaRaw = data.mailBetreff || '';
+    const themaMatch = themaRaw.match(/–\s*(.+?)\s*vom\s/);
+    const themaText  = themaMatch ? themaMatch[1] : '';
+    const spUrl = data.spUrl || f.SpUrl || null;
+
+    return `<div id="freigabe_${it.id}" style="display:flex;align-items:center;justify-content:space-between;
+        padding:10px 14px;border:1px solid #fde68a;border-left:4px solid #f59e0b;
+        border-radius:var(--radius);margin-bottom:8px;background:#fffbeb;flex-wrap:wrap;gap:6px;">
+      <div style="min-width:0;flex:1;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);">
+          ${typIcon} ${typLabel}
+          <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">${datum}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
+          ${themaText ? 'Betreff: <strong style="color:var(--text);">' + themaText + '</strong> &nbsp;·&nbsp; ' : ''}
+          Erstellt von: <strong>${erstelltVon}</strong>
+          ${spUrl ? ' &nbsp;·&nbsp; <a href="' + spUrl + '" target="_blank" style="color:var(--accent);">Dokument ↗</a>' : ''}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:600;color:#92400e;white-space:nowrap;">⏳ Ausstehend</span>
+        <button onclick="freigabeAction('${it.id}','Freigegeben')"
+          style="font-size:12px;padding:6px 14px;background:#166534;color:white;border:none;
+          border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">✓ Freigeben</button>
+        <button onclick="freigabeAction('${it.id}','Abgelehnt')"
+          style="font-size:12px;padding:6px 14px;background:white;color:#9b1c1c;
+          border:1px solid #fca5a5;border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">✗ Ablehnen</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function freigabeAction(itemId, newStatus) {
+  const label = newStatus === 'Freigegeben' ? 'freigegeben' : 'abgelehnt';
+  try {
+    const { siteId } = await getSiteAndDrive();
+    const listId     = await getDraftListId();
+    const token      = await getToken();
+    await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}/fields`,
+      { method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Status: newStatus }) }
+    );
+    // Remove from list + update badge
+    _freigabeData = _freigabeData.filter(i => i.id !== itemId);
+    const el = document.getElementById('freigabe_' + itemId);
+    if (el) el.remove();
+    const badge = document.getElementById('pendingBadge');
+    if (badge) { badge.textContent = _freigabeData.length; badge.style.display = _freigabeData.length ? '' : 'none'; }
+    showToast('Protokoll ' + label + ' ✓', 'success');
+    if (!_freigabeData.length) renderFreigabe();
+    // Force archiv reload so status shows updated
+    _archivLoaded = false;
+  } catch(e) {
+    showToast('Fehler: ' + e.message, 'info');
+  }
+}
+
 async function saveDraft() { showToast('Entwurf wird gespeichert …', 'info'); }
 
 /* ──────────────────────────────────────
