@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v939cee5'; // auto-updated on deploy
+const APP_VERSION = 'v14f30a3'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1292,16 +1292,26 @@ async function populateScribeSelect() {
   const sel = document.getElementById('fProtokoll');
   if (!sel) return;
 
-  // Load once and cache
-  if (!_scribeMembers) {
+  // Determine which group to load based on current meeting context
+  const _isNordstern = S.type === 'konferenz' ||
+    (S.type === 'team' && (S.thema === 'stationaer' || S.thema === 'nordstern'));
+  const _scribeGroupKey = _isNordstern ? 'nordstern' : 'allTeam';
+
+  // Load group (cache per group key)
+  if (!_scribeMembers || _scribeMembers._groupKey !== _scribeGroupKey) {
+    let loaded = null;
     try {
-      _scribeMembers = await loadGroupFromM365('allTeam');
+      loaded = _isNordstern
+        ? await loadGroupFromM365('nordstern')
+        : await loadGroupFromM365('allTeam');
     } catch(e) {
       console.warn('Scribe list load failed, using fallback:', e);
     }
-    if (!_scribeMembers || !_scribeMembers.length) {
-      _scribeMembers = M365_FALLBACK.allTeam;
+    if (!loaded || !loaded.length) {
+      loaded = _isNordstern ? M365_FALLBACK.nordstern : M365_FALLBACK.allTeam;
     }
+    _scribeMembers = loaded;
+    _scribeMembers._groupKey = _scribeGroupKey;
   }
 
   const me      = (currentAccount?.username || '').toLowerCase();
@@ -1381,7 +1391,8 @@ async function onThemaChange(themaKey) {
 
   S.participants = members.map(p => ({ ...p, present: true }));
 
-  // Populate Protokollführer — always from Ambulante Familienhilfe, default = logged-in user
+  // Populate Protokollführer — Nordstern meetings: nur Nordstern-Gruppe; andere: allTeam
+  _scribeMembers = null; // reset cache so group reloads for new context
   await populateScribeSelect();
 
   // TOPs — base tops first, then bewohner appended async
