@@ -750,7 +750,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v605e9d0'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2232,9 +2232,19 @@ async function freigabeAction(itemId, newStatus) {
     const token         = await getToken();
     const freigeberName = currentAccount?.name || currentAccount?.username || 'Teamleitung';
 
-    // Protokolldaten aus Cache holen
-    const item = _freigabeData.find(i => i.id === itemId);
-    const f    = item?.fields || {};
+    // Protokolldaten aus Cache oder direkt aus SP laden
+    let _cachedItem = _freigabeData.find(i => i.id === itemId);
+    if (!_cachedItem) {
+      // Deep-Link-Fall: direkt aus SP laden
+      try {
+        const _r = await fetch(
+          'https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + itemId + '?expand=fields',
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        _cachedItem = await _r.json();
+      } catch(e) { console.warn('Item load failed:', e); }
+    }
+    const f    = _cachedItem?.fields || {};
     const data = (() => { try { return JSON.parse(f.ProtokollDaten || '{}'); } catch(e) { return {}; } })();
     const cfg   = data.type ? TYPES[data.type] : null;
     const thema = data.thema && cfg ? cfg.themen?.[data.thema] : null;
