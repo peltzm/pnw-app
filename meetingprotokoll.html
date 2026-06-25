@@ -765,7 +765,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v99c0fa9'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1141,6 +1141,9 @@ const sectionNav = {
   's-vorschau':  'n-vorschau',
 };
 function goSection(id) {
+  // Sofort speichern bei jedem Seitenwechsel (kein Timer-Delay)
+  clearTimeout(_autoSaveTimer);
+  if (S.type) autoSaveDraft();
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -2219,7 +2222,7 @@ function collectDraftData() {
 
 async function autoSaveDraft() {
   if (_autoSaving) return;
-  if (!S.type || !S.thema) return; // nothing worth saving yet
+  if (!S.type) return; // Mindestvoraussetzung: Meeting-Typ gewählt
   _autoSaving = true;
   try {
     const { siteId } = await getSiteAndDrive();
@@ -2249,14 +2252,14 @@ async function autoSaveDraft() {
     }
     // Show subtle save indicator
     const ind = document.getElementById('autoSaveIndicator');
-    if (ind) { ind.textContent = '✓ Entwurf gespeichert'; ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 2000); }
+    if (ind) { ind.textContent = '✓ Gespeichert'; ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 3000); }
   } catch(e) { console.warn('Auto-save failed:', e); }
   finally { _autoSaving = false; }
 }
 
 function scheduleAutoSave() {
   clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(autoSaveDraft, 2000);
+  _autoSaveTimer = setTimeout(autoSaveDraft, 800);
 }
 
 
