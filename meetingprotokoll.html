@@ -754,7 +754,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v843611a'; // auto-updated on deploy
+const APP_VERSION = 'v4f1612f'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2883,8 +2883,24 @@ function renderArchivTable() {
     /* Entwurf */             return { color:'var(--text-muted)', border:'var(--border)', bg:'var(--surface)', btnBg:'var(--accent)', btnColor:'white' };
   }
 
-  contentEl.innerHTML = rows.map(r => {
+  // Count Entwürfe for bulk delete button
+  const entwurfIds = _archivData.filter(r => r.status === 'Entwurf').map(r => r.id);
+  const bulkBar = entwurfIds.length > 0
+    ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:8px 12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--radius);">
+        <span style="font-size:12px;color:#9b1c1c;font-weight:600;">${entwurfIds.length} Entwurf/Entwürfe</span>
+        <button onclick="deleteAllDrafts()" style="font-size:12px;padding:5px 12px;background:#9b1c1c;color:white;border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;">🗑 Alle Entwürfe löschen</button>
+       </div>`
+    : '';
+
+  contentEl.innerHTML = bulkBar + rows.map(r => {
     const st = statusStyle(r.status);
+
+    const deleteBtn = r.status === 'Entwurf'
+      ? `<button onclick="deleteDraft('${r.id}', this)"
+           title="Entwurf löschen"
+           style="font-size:12px;padding:6px 10px;background:white;color:#9b1c1c;
+           border:1px solid #fca5a5;border-radius:var(--radius);cursor:pointer;min-height:36px;">🗑</button>`
+      : '';
 
     const openBtn = r.status === 'Entwurf'
       ? `<button onclick="loadDraft('${r.id}')"
@@ -2920,10 +2936,56 @@ function renderArchivTable() {
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:11px;font-weight:600;color:${st.color};white-space:nowrap;">${r.status}</span>
+        ${deleteBtn}
         ${openBtn}
       </div>
     </div>`;
   }).join('');
+}
+
+
+async function deleteDraft(itemId, btn) {
+  if (!confirm('Entwurf löschen? Dies kann nicht rückgängig gemacht werden.')) return;
+  try {
+    btn.disabled = true; btn.textContent = '…';
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}`,
+      { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }
+    );
+    // Remove from local data and re-render
+    _archivData = _archivData.filter(r => r.id !== itemId);
+    renderArchivTable();
+    showToast('Entwurf gelöscht', 'success');
+  } catch(e) {
+    showToast('Fehler: ' + e.message, 'info');
+    btn.disabled = false; btn.textContent = '🗑';
+  }
+}
+
+async function deleteAllDrafts() {
+  const entwuerfe = _archivData.filter(r => r.status === 'Entwurf');
+  if (!entwuerfe.length) return;
+  if (!confirm(`${entwuerfe.length} Entwurf/Entwürfe unwiderruflich löschen?`)) return;
+  try {
+    showToast(`Lösche ${entwuerfe.length} Entwürfe…`, 'info');
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    await Promise.all(entwuerfe.map(r =>
+      fetch(
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${r.id}`,
+        { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }
+      )
+    ));
+    _archivData = _archivData.filter(r => r.status !== 'Entwurf');
+    renderArchivTable();
+    showToast(`✓ ${entwuerfe.length} Entwürfe gelöscht`, 'success');
+  } catch(e) {
+    showToast('Fehler beim Löschen: ' + e.message, 'info');
+  }
 }
 
 
