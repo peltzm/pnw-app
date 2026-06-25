@@ -765,7 +765,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vb7b191c'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1857,26 +1857,73 @@ function renderFreigabe() {
 }
 
 async function freigabeAction(itemId, newStatus) {
-  const label = newStatus === 'Freigegeben' ? 'freigegeben' : 'abgelehnt';
+  const labelDE = newStatus === 'Freigegeben' ? 'freigegeben' : 'abgelehnt';
   try {
     const { siteId } = await getSiteAndDrive();
     const listId     = await getDraftListId();
     const token      = await getToken();
+
+    // Protokolldaten aus Cache holen (für Mail an Ersteller)
+    const item = _freigabeData.find(i => i.id === itemId);
+    const f    = item?.fields || {};
+    const data = (() => { try { return JSON.parse(f.ProtokollDaten || '{}'); } catch(e) { return {}; } })();
+
+    // 1. Status in SP setzen
     await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}/fields`,
       { method: 'PATCH',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ Status: newStatus }) }
     );
-    // Remove from list + update badge
+
+    // 2. Mail an Ersteller senden
+    try {
+      const erstellerMail = data.savedBy || f.Erstellt_Von || '';
+      if (erstellerMail && erstellerMail.includes('@')) {
+        const cfg    = data.type ? TYPES[data.type] : null;
+        const thema  = data.thema && cfg ? cfg.themen?.[data.thema] : null;
+        const label  = cfg ? cfg.label + (thema ? ' – ' + thema.label : '') : (data.label || 'Protokoll');
+        const datum  = data.datum ? data.datum.split('-').reverse().join('.') : '—';
+        const freigeberName = currentAccount?.name || currentAccount?.username || 'Teamleitung';
+        const spUrl  = data.spUrl || f.SpUrl || null;
+
+        const mailSubj = newStatus === 'Freigegeben'
+          ? `✓ Protokoll freigegeben: ${label} vom ${datum}`
+          : `↩ Protokoll abgelehnt: ${label} vom ${datum}`;
+
+        const mailBody = newStatus === 'Freigegeben'
+          ? `<p>Hallo,</p>
+<p>dein Protokoll wurde von <strong>${freigeberName}</strong> freigegeben.</p>
+<table style="border-collapse:collapse;margin:12px 0;">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Typ:</td><td><strong>${label}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Datum:</td><td>${datum}</td></tr>
+</table>
+${spUrl ? `<p><a href="${spUrl}" style="background:#166534;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;display:inline-block;">→ Protokoll in SharePoint öffnen</a></p>` : ''}
+<p>Mit freundlichen Grüßen<br>${freigeberName}<br>Praxis NeueWege</p>`
+          : `<p>Hallo,</p>
+<p>dein Protokoll wurde von <strong>${freigeberName}</strong> <strong style="color:#9b1c1c;">abgelehnt</strong> und zur Überarbeitung zurückgegeben.</p>
+<table style="border-collapse:collapse;margin:12px 0;">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Typ:</td><td><strong>${label}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Datum:</td><td>${datum}</td></tr>
+</table>
+<p><a href="${window.location.href}" style="background:#803300;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;display:inline-block;">→ Protokoll überarbeiten</a></p>
+<p>Mit freundlichen Grüßen<br>${freigeberName}<br>Praxis NeueWege</p>`;
+
+        await sendMail([erstellerMail], mailSubj, mailBody);
+      }
+    } catch(mailErr) {
+      console.warn('Benachrichtigungs-Mail fehlgeschlagen:', mailErr);
+      // Kein showToast – SP-Status ist schon gesetzt, Mail-Fehler ist sekundär
+    }
+
+    // 3. UI aktualisieren
     _freigabeData = _freigabeData.filter(i => i.id !== itemId);
     const el = document.getElementById('freigabe_' + itemId);
     if (el) el.remove();
     const badge = document.getElementById('pendingBadge');
     if (badge) { badge.textContent = _freigabeData.length; badge.style.display = _freigabeData.length ? '' : 'none'; }
-    showToast('Protokoll ' + label + ' ✓', 'success');
+    showToast('Protokoll ' + labelDE + ' ✓', 'success');
     if (!_freigabeData.length) renderFreigabe();
-    // Force archiv reload so status shows updated
     _archivLoaded = false;
   } catch(e) {
     showToast('Fehler: ' + e.message, 'info');
