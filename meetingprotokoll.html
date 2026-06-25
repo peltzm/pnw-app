@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vb932c66'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1973,169 +1973,220 @@ function generateProtokollPDF(data, freigeberName) {
 
   const cfg   = data.type ? TYPES[data.type] : null;
   const thema = data.thema && cfg ? cfg.themen?.[data.thema] : null;
-  const label = cfg ? cfg.label + (thema ? ' – ' + thema.label : '') : (data.label || 'Protokoll');
-  const datumDE = data.datum ? data.datum.split('-').reverse().join('.') : '—';
+  const typLabel  = cfg ? cfg.label : (data.label || 'Protokoll');
+  const themaLbl  = thema ? thema.label : '';
+  const datumDE   = data.datum ? data.datum.split('-').reverse().join('.') : '\u2014';
+  const von       = data.zeitVon  || '';
+  const bis       = data.zeitBis  || '';
+  const ort       = data.ort      || '\u2014';
+  const proto     = data.protokoll || '\u2014';
+  const nextDatum = data.nextDatum ? data.nextDatum.split('-').reverse().join('.') : '';
+  const nextZeit  = data.nextZeit  || '';
+  const nextHinweis = data.nextHinweis || '';
+  const approver  = data.approver || '\u2014';
+  const today     = new Date().toLocaleDateString('de-DE');
 
   let participants = []; try { participants = JSON.parse(data.participants || '[]'); } catch(e) {}
   let tops = [];         try { tops = JSON.parse(data.tops || '[]'); } catch(e) {}
 
-  const present = participants.filter(p => p.present).map(p => p.name).join(', ') || '—';
+  const present = participants.filter(p => p.present).map(p => p.name).join(', ') || '\u2014';
   const absent  = participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
 
-  const margin = 20;
   const pageW  = 210;
-  const contentW = pageW - margin * 2;
+  const margin = 20;
+  const cW     = pageW - margin * 2;  // 170mm
   let y = margin;
 
   // ── Hilfsfunktionen ──────────────────────────────────────────────────────
-  function checkPage(needed) {
-    if (y + needed > 275) { doc.addPage(); y = margin; }
+  function newPageIfNeeded(needed) {
+    if (y + needed > 277) { doc.addPage(); y = margin; }
   }
 
-  function drawText(text, x, fontSize, style, color) {
-    doc.setFontSize(fontSize);
+  function setFont(size, style, color) {
+    doc.setFontSize(size);
     doc.setFont('helvetica', style || 'normal');
-    if (color) doc.setTextColor(...color);
-    else doc.setTextColor(30, 30, 30);
-    const lines = doc.splitTextToSize(String(text || ''), contentW - (x - margin));
-    checkPage(lines.length * (fontSize * 0.4) + 2);
-    doc.text(lines, x, y);
-    y += lines.length * (fontSize * 0.4) + 1;
-    return lines.length;
+    doc.setTextColor(...(color || [26, 25, 22]));
   }
 
-  function drawLine(color) {
-    doc.setDrawColor(...(color || [180, 130, 80]));
-    doc.setLineWidth(0.3);
-    doc.line(margin, y, pageW - margin, y);
-    y += 4;
+  function text(str, x, opts) {
+    const lines = doc.splitTextToSize(String(str || ''), opts?.maxW || (cW - (x - margin)));
+    newPageIfNeeded(lines.length * (doc.getFontSize() * 0.4) + 2);
+    doc.text(lines, x, y, opts);
+    y += lines.length * (doc.getFontSize() * 0.4) + 1;
   }
 
   // ── Header ───────────────────────────────────────────────────────────────
-  // Braune Kopfzeile
+  // Braune Kopfbox links
   doc.setFillColor(128, 51, 0);
-  doc.rect(0, 0, pageW, 18, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(11);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Praxis NeueWege', margin, 8);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Jugendhilfe & Soziale Dienste', margin, 13);
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.text('MEETINGPROTOKOLL', pageW - margin, 11, { align: 'right' });
-  y = 26;
+  doc.rect(margin, y - 5, cW * 0.6, 20, 'F');
+  setFont(14, 'bold', [255, 255, 255]);
+  doc.text('Praxis NeueWege', margin + 3, y + 3);
+  setFont(9, 'normal', [255, 220, 180]);
+  doc.text('Jugendhilfe & Soziale Dienste \u00b7 Bayernweit', margin + 3, y + 9);
+  setFont(10, 'bold', [255, 255, 255]);
+  doc.text('MEETINGPROTOKOLL', pageW - margin, y + 3, { align: 'right' });
+  // Datum rechts oben
+  setFont(9, 'normal', [80, 80, 80]);
+  doc.text(datumDE, pageW - margin, y + 11, { align: 'right' });
+  doc.text('Erstellt: ' + today, pageW - margin, y + 15, { align: 'right' });
+  y += 20;
 
-  // Titel
-  doc.setTextColor(128, 51, 0);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  const titleLines = doc.splitTextToSize(label, contentW);
-  doc.text(titleLines, margin, y);
-  y += titleLines.length * 6 + 2;
-
-  // Meta-Zeile
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-  const metaParts = [datumDE];
-  if (data.zeitVon && data.zeitBis) metaParts.push(data.zeitVon + ' – ' + data.zeitBis + ' Uhr');
-  if (data.ort) metaParts.push(data.ort);
-  doc.text(metaParts.join('  ·  '), margin, y);
-  y += 4;
-
-  // Trennlinie
+  // Brauner Trennstrich
   doc.setDrawColor(128, 51, 0);
-  doc.setLineWidth(0.5);
+  doc.setLineWidth(0.8);
   doc.line(margin, y, pageW - margin, y);
   y += 6;
 
-  // ── Meta-Tabelle ─────────────────────────────────────────────────────────
-  function metaRow(lbl, val) {
-    checkPage(6);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(80, 80, 80);
-    doc.text(lbl + ':', margin, y);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(30, 30, 30);
-    const valLines = doc.splitTextToSize(String(val || '—'), contentW - 38);
-    doc.text(valLines, margin + 38, y);
-    y += Math.max(valLines.length * 4, 5);
+  // Typ-Zeile
+  setFont(12, 'bold', [128, 51, 0]);
+  doc.text((cfg?.icon || '') + ' ' + typLabel + (themaLbl ? ' \u00b7 ' + themaLbl : ''), margin, y);
+  y += 8;
+
+  // ── Rahmendaten-Tabelle ───────────────────────────────────────────────────
+  function sectionHeader(title) {
+    newPageIfNeeded(12);
+    doc.setFillColor(128, 51, 0);
+    doc.roundedRect(margin, y, cW, 7, 1, 1, 'F');
+    setFont(9, 'bold', [255, 255, 255]);
+    doc.text(title.toUpperCase(), margin + 3, y + 5);
+    y += 10;
   }
 
-  metaRow('Protokollführung', data.protokoll || '—');
-  metaRow('Freigegeben von',     freigeberName || '—');
-  if (data.nextDatum) metaRow('Nächstes Meeting', data.nextDatum.split('-').reverse().join('.') + (data.nextZeit ? ' · ' + data.nextZeit + ' Uhr' : ''));
-  y += 3;
+  function tableRow(label, value, isLast) {
+    newPageIfNeeded(8);
+    const rowH = 7;
+    doc.setFillColor(248, 245, 240);
+    doc.rect(margin, y, 45, rowH, 'F');
+    doc.setFillColor(255, 255, 255);
+    doc.rect(margin + 45, y, cW - 45, rowH, 'F');
+    doc.setDrawColor(220, 210, 200);
+    doc.setLineWidth(0.2);
+    doc.rect(margin, y, cW, rowH);
+    setFont(9, 'bold', [60, 40, 20]);
+    doc.text(label, margin + 2, y + 5);
+    setFont(9, 'normal', [26, 25, 22]);
+    const valLines = doc.splitTextToSize(String(value || '\u2014'), cW - 47);
+    doc.text(valLines, margin + 47, y + 5);
+    y += Math.max(valLines.length * 5, rowH);
+  }
 
-  // ── Teilnehmer ───────────────────────────────────────────────────────────
-  checkPage(12);
-  doc.setFillColor(245, 240, 235);
-  doc.rect(margin, y - 4, contentW, 7, 'F');
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(128, 51, 0);
-  doc.text('TEILNEHMER', margin + 2, y);
-  y += 5;
-  drawText('Anwesend: ' + present, margin, 9, 'normal');
-  if (absent !== 'keine') drawText('Abwesend: ' + absent, margin, 9, 'normal', [120, 120, 120]);
+  sectionHeader('Rahmendaten');
+  tableRow('Meeting-Typ', typLabel);
+  if (themaLbl) tableRow('Thema / Anlass', themaLbl);
+  tableRow('Datum', datumDE);
+  tableRow('Zeit', von + ' \u2013 ' + bis + ' Uhr');
+  tableRow('Ort', ort);
+  tableRow('Protokollf\u00fchrung', proto);
   y += 4;
 
-  // ── TOPs ─────────────────────────────────────────────────────────────────
-  checkPage(12);
-  doc.setFillColor(245, 240, 235);
-  doc.rect(margin, y - 4, contentW, 7, 'F');
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(128, 51, 0);
-  doc.text('TAGESORDNUNGSPUNKTE', margin + 2, y);
-  y += 6;
+  // ── Teilnehmer ───────────────────────────────────────────────────────────
+  sectionHeader('Teilnehmer');
+  tableRow('Anwesend', present);
+  if (absent !== 'keine') tableRow('Abwesend', absent);
+  y += 4;
 
-  tops.forEach((t, i) => {
-    checkPage(14);
-    // TOP Nummer + Titel
-    doc.setFillColor(255, 248, 240);
-    doc.rect(margin, y - 3, contentW, 6.5, 'F');
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(50, 50, 50);
-    doc.text((i + 1) + '.  ' + (t.title || ''), margin + 2, y + 1);
+  // ── Protokoll / TOPs ─────────────────────────────────────────────────────
+  sectionHeader('Protokoll');
+  if (tops.length === 0) {
+    setFont(10, 'normal', [150, 150, 150]);
+    doc.text('Keine TOPs erfasst', margin, y);
     y += 6;
-    // TOP Text
-    if (t.text && t.text.trim()) {
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(60, 60, 60);
-      const textLines = doc.splitTextToSize(t.text, contentW - 6);
-      checkPage(textLines.length * 4 + 3);
-      doc.text(textLines, margin + 4, y);
-      y += textLines.length * 4 + 2;
-    }
-    if (t.frist) {
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(150, 80, 0);
-      doc.text('Frist: ' + fmtDate(t.frist), margin + 4, y);
-      y += 4;
-    }
-    y += 3;
-  });
+  } else {
+    tops.forEach((t, i) => {
+      newPageIfNeeded(16);
+      // TOP-Kästchen
+      doc.setFillColor(255, 248, 240);
+      doc.setDrawColor(220, 210, 200);
+      doc.setLineWidth(0.2);
+      // Header-Zeile
+      doc.setFillColor(245, 235, 220);
+      doc.rect(margin, y, cW, 7, 'F');
+      doc.rect(margin, y, cW, 7);
+      setFont(10, 'bold', [80, 40, 0]);
+      doc.text((i + 1) + '. ' + (t.title || ''), margin + 2, y + 5);
+      // Badge
+      if (t.type === 'beschluss') {
+        doc.setFillColor(255, 245, 220);
+        doc.roundedRect(pageW - margin - 22, y + 1, 20, 5, 1, 1, 'F');
+        setFont(7, 'bold', [146, 64, 14]);
+        doc.text('BESCHLUSS', pageW - margin - 21, y + 5);
+      } else if (t.type === 'aufgabe') {
+        doc.setFillColor(234, 244, 238);
+        doc.roundedRect(pageW - margin - 18, y + 1, 16, 5, 1, 1, 'F');
+        setFont(7, 'bold', [45, 106, 79]);
+        doc.text('AUFGABE', pageW - margin - 17, y + 5);
+      }
+      y += 7;
+      // Text
+      if (t.text && t.text.trim()) {
+        doc.setFillColor(255, 252, 248);
+        const textLines = doc.splitTextToSize(t.text, cW - 6);
+        const textH = textLines.length * 5 + 4;
+        newPageIfNeeded(textH);
+        doc.rect(margin, y, cW, textH, 'F');
+        doc.rect(margin, y, cW, textH);
+        setFont(9, 'normal', [50, 50, 50]);
+        doc.text(textLines, margin + 3, y + 4);
+        y += textH;
+      } else {
+        doc.setFillColor(255, 252, 248);
+        doc.rect(margin, y, cW, 7, 'F');
+        doc.rect(margin, y, cW, 7);
+        setFont(9, 'italic', [180, 180, 180]);
+        doc.text('Kein Text eingetragen', margin + 3, y + 5);
+        y += 7;
+      }
+      // Frist
+      if (t.frist) {
+        setFont(8, 'italic', [150, 80, 0]);
+        doc.text('Frist: ' + (t.frist.split('-').reverse().join('.')), margin + 3, y + 4);
+        y += 5;
+      }
+      y += 3;
+    });
+  }
+  y += 2;
 
-  // ── Footer ───────────────────────────────────────────────────────────────
+  // ── Nächster Termin ───────────────────────────────────────────────────────
+  if (nextDatum) {
+    sectionHeader('N\u00e4chster Termin');
+    tableRow('Datum / Uhrzeit', nextDatum + (nextZeit ? ' \u00b7 ' + nextZeit + ' Uhr' : ''));
+    if (nextHinweis) tableRow('Hinweise', nextHinweis);
+    y += 4;
+  }
+
+  // ── Signatur-Zeilen ───────────────────────────────────────────────────────
+  newPageIfNeeded(30);
+  y += 4;
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  const sigW = (cW - 10) / 3;
+  const sigLabels = ['Protokollf\u00fchrung: ' + proto, 'Freigabe TL: ' + approver, 'Datum der Freigabe'];
+  sigLabels.forEach((lbl, i) => {
+    const x = margin + i * (sigW + 5);
+    doc.line(x, y + 12, x + sigW, y + 12);
+    setFont(8, 'normal', [120, 120, 120]);
+    const lblLines = doc.splitTextToSize(lbl, sigW);
+    doc.text(lblLines, x, y + 16);
+  });
+  y += 22;
+
+  // ── Footer ────────────────────────────────────────────────────────────────
   const pageCount = doc.internal.getNumberOfPages();
+  const spPath = cfg?.sp || '';
   for (let p = 1; p <= pageCount; p++) {
     doc.setPage(p);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(150, 150, 150);
-    doc.text('Praxis NeueWege · Erstellt: ' + new Date().toLocaleDateString('de-DE'), margin, 290);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.2);
+    doc.line(margin, 286, pageW - margin, 286);
+    setFont(8, 'normal', [150, 150, 150]);
+    doc.text('Erstellt mit Praxis NeueWege Meetingprotokoll-App \u00b7 Ablage: ' + spPath, margin, 290);
     doc.text('Seite ' + p + ' / ' + pageCount, pageW - margin, 290, { align: 'right' });
   }
 
   return doc.output('arraybuffer');
 }
+
 
 
 /* ──────────────────────────────────────
