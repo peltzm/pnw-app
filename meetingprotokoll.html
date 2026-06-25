@@ -767,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v1d71ce5'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -859,13 +859,31 @@ async function showApp() {
 }
 
 function _applyFreigabeRoleUI() {
+  const isTL = _isFreigabeUser();
+  // Direkt-Versenden: nur für TL/Admin
   const btn = document.getElementById('btnDirectPublish');
-  if (btn) btn.style.display = _isFreigabeUser() ? '' : 'none';
-  // Anfrage-Button: immer sichtbar, aber label je nach Rolle
-  const reqBtn = document.getElementById('btnReqApproval');
-  if (reqBtn && _isFreigabeUser()) {
-    // TL/Admin sieht Anfrage-Button ausgegraut mit Hinweis
-    reqBtn.title = 'Als TL kannst du auch direkt versenden';
+  if (btn) btn.style.display = isTL ? '' : 'none';
+  // Anfrage senden: nur für normale Fachkräfte; TL nutzt Direkt-Versenden
+  const reqCard = document.getElementById('freigabeStandardWrap');
+  const reqBtn  = document.getElementById('btnReqApproval');
+  const sDot    = document.getElementById('sDot');
+  const sText   = document.getElementById('sText');
+  if (isTL) {
+    // TL/Admin: Freigabe-Karte ausblenden, nur Direkt-Versenden anzeigen
+    if (reqBtn)  reqBtn.style.display  = 'none';
+    if (sDot)    sDot.style.display    = 'none';
+    if (sText)   sText.style.display   = 'none';
+    // Card-Titel anpassen
+    const cardTitle = document.querySelector('#freigabeStandardWrap')?.closest('.card')?.querySelector('.card-title');
+    // Hide the whole approval card for TL – they use Direkt versenden
+    const approvalCard = document.querySelector('.approval-card');
+    if (approvalCard) approvalCard.style.display = 'none';
+  } else {
+    if (reqBtn)  reqBtn.style.display  = '';
+    if (sDot)    sDot.style.display    = '';
+    if (sText)   sText.style.display   = '';
+    const approvalCard = document.querySelector('.approval-card');
+    if (approvalCard) approvalCard.style.display = '';
   }
 }
 
