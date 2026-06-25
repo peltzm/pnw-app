@@ -765,7 +765,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vc0bb9bb'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -865,8 +865,8 @@ async function sendMail(to, subject, body) {
   const toList = (Array.isArray(to) ? to : [to])
     .filter(Boolean)
     .map(addr => ({ emailAddress: { address: addr } }));
-  if (!toList.length) return;
-  await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+  if (!toList.length) throw new Error('Keine Empfänger-Adresse angegeben');
+  const resp = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -874,6 +874,10 @@ async function sendMail(to, subject, body) {
       saveToSentItems: true
     })
   });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Mail-Versand fehlgeschlagen (${resp.status}): ${errText.slice(0, 200)}`);
+  }
 }
 
 /* ──────────────────────────────────────
@@ -1635,8 +1639,15 @@ async function confirmApproval() {
 <p style="color:#666;font-size:12px;">Bitte öffne die App, gehe zu „Zur Freigabe" und gib das Protokoll frei oder lehne es ab.</p>
 <p>Mit freundlichen Grüßen<br>Praxis NeueWege</p>`;
 
-    await sendMail([tl.mail], `Freigabe erbeten: ${label} vom ${datum.split('-').reverse().join('.')}`, mailBody);
-    showToast('✓ Freigabe-Anfrage an ' + tl.full + ' gesendet', 'success');
+    // 3. Mail senden (separat – SP-Status bleibt auch wenn Mail fehlschlägt)
+    try {
+      await sendMail([tl.mail], `Freigabe erbeten: ${label} vom ${datum.split('-').reverse().join('.')}`, mailBody);
+      showToast('✓ Freigabe-Anfrage an ' + tl.full + ' gesendet', 'success');
+    } catch(mailErr) {
+      // Status ist bereits in SP gesetzt – nur Mail-Fehler melden
+      showToast('⚠️ Status gesetzt, aber Mail fehlgeschlagen: ' + mailErr.message, 'info');
+      console.error('Mail-Fehler:', mailErr);
+    }
 
     // Archiv neu laden damit Status sichtbar
     _archivLoaded = false;
