@@ -533,7 +533,7 @@
       <!-- ══ S5: FREIGABE ══ -->
       <div class="section" id="s-freigabe">
         <div class="section-title">Freigabe & Versand</div>
-        <div class="section-sub">Teamleitung auswählen · Nach Freigabe automatischer Versand und SharePoint-Ablage.</div>
+        <div class="section-sub">Freigabe-Anfrage an Teamleitung senden · Nach Freigabe automatischer Versand.</div>
         <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
 
         <div class="card">
@@ -572,7 +572,7 @@
         <div class="card">
           <div class="card-title">Mailversand nach Freigabe</div>
           <div class="alert alert-info" style="margin-bottom:1rem;">
-            Nach Freigabe erhalten alle eingeladenen Teilnehmer automatisch eine E-Mail mit dem Link zur SharePoint-Ablage.
+            Nach Freigabe durch die Teamleitung erhalten alle eingeladenen Teilnehmer automatisch eine E-Mail mit dem Link zur SharePoint-Ablage. TL und Admins können auch direkt versenden.
           </div>
           <div class="field-grid full">
             <div class="field">
@@ -607,7 +607,8 @@
             <button class="btn btn-secondary" onclick="goSection('s-tops')">← Zurück</button>
             <button class="btn btn-secondary" onclick="goSection('s-vorschau');buildPreview()">👁️ Vorschau</button>
           </div>
-          <button class="btn btn-success" onclick="confirmPublish()">🚀 Freigeben & Versenden</button>
+          <!-- Nur für TL/Admin sichtbar -->
+          <button class="btn btn-success" id="btnDirectPublish" onclick="confirmPublish()" style="display:none;">🚀 Direkt versenden</button>
         </div>
       </div>
 
@@ -766,7 +767,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v6c03d34'; // auto-updated on deploy
+const APP_VERSION = 'v14f30a3'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -826,9 +827,21 @@ async function showApp() {
   document.getElementById('appScreen').addEventListener('change', scheduleAutoSave);
   // Pre-load scribe list so it's ready immediately
   populateScribeSelect().catch(e => console.warn('scribe preload:', e));
-  // Show/hide Zur Freigabe based on role
+  // Show/hide Zur Freigabe + Direkt-Versenden based on role
   const nOffen = document.getElementById('n-offen');
   if (nOffen) nOffen.style.display = _isFreigabeUser() ? '' : 'none';
+  _applyFreigabeRoleUI();
+}
+
+function _applyFreigabeRoleUI() {
+  const btn = document.getElementById('btnDirectPublish');
+  if (btn) btn.style.display = _isFreigabeUser() ? '' : 'none';
+  // Anfrage-Button: immer sichtbar, aber label je nach Rolle
+  const reqBtn = document.getElementById('btnReqApproval');
+  if (reqBtn && _isFreigabeUser()) {
+    // TL/Admin sieht Anfrage-Button ausgegraut mit Hinweis
+    reqBtn.title = 'Als TL kannst du auch direkt versenden';
+  }
 }
 
 /* ──────────────────────────────────────
@@ -1186,6 +1199,7 @@ function goSection(id) {
     if (stdWrap) stdWrap.style.display = _isExtern ? 'none' : '';
     if (extWrap) extWrap.style.display = _isExtern ? '' : 'none';
     if (cardTitle) cardTitle.textContent = _isExtern ? 'Unterschriften' : 'Zuständige Teamleitung';
+    _applyFreigabeRoleUI();
   }
   if (id === 's-archiv') {
     loadArchiv();
@@ -1688,16 +1702,13 @@ async function executePublish() {
     const fileName = document.getElementById('fFileName').value || `Protokoll_${datum}.txt`;
     const spFolder = SP_FOLDERS[S.type] || 'Protokolle';
 
-    const present = S.participants.filter(p => p.present).map(p => p.name).join(', ');
-    const absent  = S.participants.filter(p => !p.present).map(p => p.name).join(', ') || 'keine';
-    const topsText = S.tops.map((t,i) => `${i+1}. ${t.title}\n${t.text || '(kein Text)'}${t.frist ? ' | Frist: ' + fmtDate(t.frist) : ''}`).join('\n\n');
-
-    const docContent = `MEETINGPROTOKOLL\n${'='.repeat(60)}\nTyp: ${label}\nDatum: ${fmtDate(datum)}\nZeit: ${von} – ${bis} Uhr\nOrt: ${ort}\nProtokollführung: ${proto}\n${'='.repeat(60)}\n\nTEILNEHMER\nAnwesend: ${present}\nAbwesend: ${absent}\n\nINHALT\n${topsText}\n\n${'='.repeat(60)}\nErstellt: ${new Date().toLocaleString('de-DE')}\n`;
-
-    // 2. Upload to SharePoint
-    const spPath = `${spFolder}/${fileName.replace('.pdf','.txt')}`;
-    await uploadToSharePoint(spPath, docContent, 'text/plain');
-    showToast('✓ In SharePoint gespeichert', 'success');
+    // 2. PDF generieren aus aktuellem Formularstand
+    const directData = collectDraftData();
+    const pdfFileName = fileName.replace('.txt', '.pdf');
+    const spPath = `${spFolder}/${pdfFileName}`;
+    const pdfBytes = generateProtokollPDF(directData, currentAccount?.name || 'Direkt versendet');
+    await uploadToSharePoint(spPath, pdfBytes, 'application/pdf');
+    showToast('✓ PDF in SharePoint gespeichert', 'success');
 
     // 3. Send mail to all participants
     const mails    = S.participants.filter(p => p.mail).map(p => p.mail);
