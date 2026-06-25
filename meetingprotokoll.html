@@ -744,6 +744,7 @@ const SP_FOLDERS = {
 // Draft management
 const DRAFT_LIST = 'Protokoll_Entwuerfe';
 let _currentDraftId = null;
+let _draftStatus = 'Entwurf'; // lokal gecachter Status des aktuellen Entwurfs
 let _autoSaving = false;
 let _autoSaveTimer = null;
 let _graphListIdDraft = null;
@@ -751,7 +752,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vc150f81'; // auto-updated on deploy
+const APP_VERSION = 've045d0a'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1286,6 +1287,7 @@ function selectThema(type, themaKey, el) {
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
   _currentDraftId = null; // fresh draft
+  _draftStatus = 'Entwurf';
   // Pre-load bewohner TOPs if applicable (async, cached)
   if (thema.bewohner) {
     const _ek = S.einrichtung || 'nordstern';
@@ -1669,6 +1671,7 @@ async function confirmApproval() {
           headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify({ Status: 'Eingereicht', ProtokollDaten: JSON.stringify(finalData) }) }
       );
+      _draftStatus = 'Eingereicht'; // lokal cachen
     }
 
     // 3. Mail an Teamleitung senden
@@ -1713,6 +1716,7 @@ async function resetApproval() {
   document.getElementById('sText').style.color = 'var(--text-muted)';
   document.getElementById('btnReqApproval').textContent = '📨 Anfrage senden';
   document.getElementById('btnReqApproval').onclick = requestApproval;
+  _draftStatus = 'Entwurf'; // lokal zurücksetzen
 
   try {
     // SP-Status zurück auf Entwurf
@@ -2727,10 +2731,13 @@ async function autoSaveDraft() {
     const listId = await getDraftListId();
     const token  = await getToken();
     const data   = collectDraftData();
+    // Status nicht überschreiben wenn bereits Eingereicht/Freigegeben/Versendet
+    // _draftStatus wird lokal gepflegt wenn Anfrage gesendet wird
+    const currentStatus = (_draftStatus && _draftStatus !== 'Entwurf') ? _draftStatus : 'Entwurf';
     const fields = {
       Title:        data.label || 'Protokoll Entwurf',
       ProtokollDaten: JSON.stringify(data),
-      Status:       'Entwurf',
+      Status:       currentStatus,
       Erstellt_Von: data.savedBy,
     };
     if (_currentDraftId) {
