@@ -570,42 +570,25 @@
         </div>
 
         <div class="card">
-          <div class="card-title">Mailversand nach Freigabe</div>
-          <div class="alert alert-info" style="margin-bottom:1rem;">
-            Nach Freigabe durch die Teamleitung erhalten alle eingeladenen Teilnehmer automatisch eine E-Mail mit dem Link zur SharePoint-Ablage. TL und Admins können auch direkt versenden.
-          </div>
+          <div class="card-title">Anmerkung ans Team <span style="font-weight:400;color:var(--text-hint);font-size:12px;">(optional)</span></div>
           <div class="field-grid full">
             <div class="field">
-              <label>Betreff</label>
-              <input type="text" id="fMailBetreff">
-            </div>
-          </div>
-          <div class="field-grid full">
-            <div class="field">
-              <label>Anmerkung <span style="font-weight:400;color:var(--text-hint)">(optional)</span></label>
               <textarea id="fMailNote" placeholder="Optionale Nachricht an die Empfänger …" style="min-height:60px;"></textarea>
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-title">SharePoint-Ablage</div>
-          <div class="info-card" style="margin-bottom:1rem;">
-            <div class="info-row"><span class="info-label">Bibliothek</span><span class="info-val" id="spPath">—</span></div>
-            <div class="info-row"><span class="info-label">Dateiname</span><span class="info-val" id="spFile">—</span></div>
-          </div>
-          <div class="field-grid full">
-            <div class="field">
-              <label>Dateiname anpassen</label>
-              <input type="text" id="fFileName">
-            </div>
-          </div>
-        </div>
+        <!-- Hidden fields needed by code -->
+        <input type="hidden" id="fMailBetreff">
+        <input type="hidden" id="fFileName">
+        <span id="spPath" style="display:none;"></span>
+        <span id="spFile" style="display:none;"></span>
 
         <div class="btn-row">
           <div class="btn-row-right">
             <button class="btn btn-secondary" onclick="goSection('s-tops')">← Zurück</button>
             <button class="btn btn-secondary" onclick="goSection('s-vorschau');buildPreview()">👁️ Vorschau</button>
+            <button class="btn btn-secondary" onclick="exportPDF()">⬇️ PDF exportieren</button>
           </div>
           <!-- Nur für TL/Admin sichtbar -->
           <button class="btn btn-success" id="btnDirectPublish" onclick="confirmPublish()" style="display:none;">🚀 Direkt versenden</button>
@@ -767,7 +750,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vd4e5b1f'; // auto-updated on deploy
+const APP_VERSION = 'vf447885'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2378,6 +2361,32 @@ async function freigabeAction(itemId, newStatus) {
     console.error('freigabeAction:', e);
   }
 }
+
+function exportPDF() {
+  if (!S.type) { showToast('Bitte zuerst einen Meeting-Typ auswählen.', 'info'); return; }
+  try {
+    const data = collectDraftData();
+    const freigeberName = currentAccount?.name || 'Entwurf';
+    const pdfBytes = generateProtokollPDF(data, freigeberName);
+    // Download im Browser
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const cfg  = S.type ? TYPES[S.type] : null;
+    const thema = S.thema && cfg ? cfg.themen?.[S.thema] : null;
+    const label = (cfg ? cfg.label + (thema ? '_' + thema.label : '') : 'Protokoll').replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '_');
+    const datum = (data.datum || new Date().toISOString().slice(0,10)).replace(/-/g, '');
+    a.href     = url;
+    a.download = 'Protokoll_' + label + '_' + datum + '.pdf';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('✓ PDF wird heruntergeladen', 'success');
+  } catch(e) {
+    showToast('PDF-Fehler: ' + e.message, 'info');
+    console.error('exportPDF:', e);
+  }
+}
+
 
 async function saveDraft() { showToast('Entwurf wird gespeichert …', 'info'); }
 
