@@ -754,7 +754,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v361ab3c'; // auto-updated on deploy
+const APP_VERSION = 'v4f1612f'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -2951,6 +2951,18 @@ async function deleteDraft(itemId, btn) {
     const { siteId } = await getSiteAndDrive();
     const listId = await getDraftListId();
     const token  = await getToken();
+    // Sicherheits-Check: nur Entwürfe dürfen gelöscht werden
+    const check = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}?expand=fields(select=Status)`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const checkData = await check.json();
+    const currentStatus = checkData.fields?.Status || 'Entwurf';
+    if (currentStatus !== 'Entwurf') {
+      showToast(`Löschen nicht erlaubt – Status: ${currentStatus}`, 'info');
+      btn.disabled = false; btn.textContent = '🗑';
+      return;
+    }
     await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}`,
       { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }
