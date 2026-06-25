@@ -668,7 +668,7 @@
     <p>Eine Benachrichtigung wird an <strong id="mApproverName">—</strong> gesendet. Die Teamleitung kann das Protokoll prüfen und freigeben oder zurückgeben.</p>
     <div class="field">
       <label>Nachricht (optional)</label>
-      <textarea placeholder="Bitte um Prüfung und Freigabe …" style="min-height:65px;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:inherit;width:100%;resize:vertical;"></textarea>
+      <textarea id="mApprovalNote" placeholder="Bitte um Prüfung und Freigabe …" style="min-height:65px;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:inherit;width:100%;resize:vertical;"></textarea>
     </div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('modalApproval')">Abbrechen</button>
@@ -765,7 +765,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'v98c1231'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1077,16 +1077,16 @@ const TYPES = {
 // key: 'ambulant' or 'nordstern'
 const TL_LISTS = {
   ambulant: [
-    { value: 'ng', label: 'Grund, Nadine',   full: 'Nadine Grund' },
-    { value: 'lm', label: 'Meier, Laura',    full: 'Laura Meier' },
-    { value: 'js', label: 'Schneider, Jörg', full: 'Jörg Schneider' },
-    { value: 'sp', label: 'Peltz, Sonja',    full: 'Sonja Peltz' },
+    { value: 'ng', label: 'Grund, Nadine',   full: 'Nadine Grund',     mail: 'nadine.grund@praxisneuewege.de' },
+    { value: 'lm', label: 'Meier, Laura',    full: 'Laura Meier',      mail: 'laura.meier@praxisneuewege.de' },
+    { value: 'js', label: 'Schneider, Jörg', full: 'Jörg Schneider',   mail: 'joerg.schneider@praxisneuewege.de' },
+    { value: 'sp', label: 'Peltz, Sonja',    full: 'Sonja Peltz',      mail: 'sonja.peltz@praxisneuewege.de' },
   ],
   nordstern: [
-    { value: 'jh', label: 'Herrmann, Jessica', full: 'Jessica Herrmann' },
-    { value: 'kf', label: 'Freundl, Kilian',   full: 'Kilian Freundl' },
-    { value: 'lm', label: 'Meier, Laura',      full: 'Laura Meier' },
-    { value: 'sp', label: 'Peltz, Sonja',      full: 'Sonja Peltz' },
+    { value: 'jh', label: 'Herrmann, Jessica', full: 'Jessica Herrmann', mail: 'jessica.herrmann@praxisneuewege.de' },
+    { value: 'kf', label: 'Freundl, Kilian',   full: 'Kilian Freundl',   mail: 'kilian.freundl@praxisneuewege.de' },
+    { value: 'lm', label: 'Meier, Laura',      full: 'Laura Meier',      mail: 'laura.meier@praxisneuewege.de' },
+    { value: 'sp', label: 'Peltz, Sonja',      full: 'Sonja Peltz',      mail: 'sonja.peltz@praxisneuewege.de' },
   ],
 };
 
@@ -1581,14 +1581,69 @@ function requestApproval() {
   document.getElementById('mApproverName').textContent = tl ? tl.full : sel.options[sel.selectedIndex].text;
   openModal('modalApproval');
 }
-function confirmApproval() {
+async function confirmApproval() {
   closeModal('modalApproval');
+  const sel  = document.getElementById('fApprover');
+  const ctx  = getApproverContext();
+  const tl   = (TL_LISTS[ctx] || []).find(t => t.value === sel.value);
+  if (!tl) { showToast('Teamleitung nicht gefunden', 'info'); return; }
+
+  // UI: sofort auf pending setzen
   document.getElementById('sDot').className = 's-dot pending';
-  document.getElementById('sText').textContent = 'Freigabe-Anfrage gesendet · Wartet auf Bestätigung';
+  document.getElementById('sText').textContent = 'Freigabe-Anfrage gesendet · Wartet auf Bestätigung von ' + tl.full;
   document.getElementById('sText').style.color = 'var(--warn)';
   document.getElementById('btnReqApproval').textContent = '↩ Anfrage zurückziehen';
   document.getElementById('btnReqApproval').onclick = resetApproval;
-  showToast('Freigabe-Anfrage gesendet', 'success');
+
+  try {
+    // 1. Auto-save aktuellen Stand zuerst
+    await autoSaveDraft();
+
+    // 2. Status in SP auf Eingereicht setzen
+    const { siteId } = await getSiteAndDrive();
+    const listId     = await getDraftListId();
+    const token      = await getToken();
+    const note       = document.getElementById('mApprovalNote')?.value || '';
+    const finalData  = collectDraftData();
+    finalData.approvalNote = note;
+    finalData.approvedBy   = tl.full;
+
+    if (_currentDraftId) {
+      await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${_currentDraftId}/fields`,
+        { method: 'PATCH',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ Status: 'Eingereicht', ProtokollDaten: JSON.stringify(finalData) }) }
+      );
+    }
+
+    // 3. Mail an Teamleitung senden
+    const cfg    = TYPES[S.type];
+    const thema  = S.thema ? cfg?.themen[S.thema] : null;
+    const label  = cfg?.label + (thema ? ' – ' + thema.label : '');
+    const datum  = document.getElementById('fDatum')?.value || '';
+    const sender = currentAccount?.name || currentAccount?.username || '';
+    const appUrl = window.location.href;
+    const mailBody = `<p>Hallo ${tl.full},</p>
+<p><strong>${sender}</strong> bittet um Freigabe des folgenden Protokolls:</p>
+<table style="border-collapse:collapse;margin:12px 0;">
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Typ:</td><td><strong>${label}</strong></td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#666;">Datum:</td><td>${datum.split('-').reverse().join('.')}</td></tr>
+  ${note ? '<tr><td style="padding:4px 12px 4px 0;color:#666;">Nachricht:</td><td>' + note + '</td></tr>' : ''}
+</table>
+<p><a href="${appUrl}" style="background:#803300;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;display:inline-block;">→ Protokoll in der App öffnen</a></p>
+<p style="color:#666;font-size:12px;">Bitte öffne die App, gehe zu „Zur Freigabe" und gib das Protokoll frei oder lehne es ab.</p>
+<p>Mit freundlichen Grüßen<br>Praxis NeueWege</p>`;
+
+    await sendMail([tl.mail], `Freigabe erbeten: ${label} vom ${datum.split('-').reverse().join('.')}`, mailBody);
+    showToast('✓ Freigabe-Anfrage an ' + tl.full + ' gesendet', 'success');
+
+    // Archiv neu laden damit Status sichtbar
+    _archivLoaded = false;
+  } catch(e) {
+    showToast('Fehler: ' + e.message, 'info');
+    console.error('confirmApproval:', e);
+  }
 }
 function resetApproval() {
   document.getElementById('sDot').className = 's-dot draft';
