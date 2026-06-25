@@ -765,7 +765,7 @@ let _graphListIdDraft = null;
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
                 'GroupMember.Read.All','Mail.Send','User.ReadBasic.All'];
 
-const APP_VERSION = 'vb34abf3'; // auto-updated on deploy
+const APP_VERSION = 'v0d4bee0'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -1823,6 +1823,12 @@ async function saveDraft() { showToast('Entwurf wird gespeichert …', 'info'); 
    PREVIEW
 ────────────────────────────────────── */
 function buildPreview() {
+  // Guard: kein Meeting-Typ gewählt
+  if (!S.type || !TYPES[S.type]) {
+    document.getElementById('previewContainer').innerHTML =
+      '<div style="color:var(--text-muted);padding:2rem;text-align:center;">Bitte zuerst einen Meeting-Typ und die Details ausfüllen.</div>';
+    return;
+  }
   // Show/hide Blanko button
   const _isExternPrev = S.type === 'allgemein' && S.thema === 'besprechung';
   const _blankBtn = document.getElementById('btnBlankoPrint');
@@ -2216,7 +2222,7 @@ function collectDraftData() {
     tops:        JSON.stringify(S.tops),
     participants:JSON.stringify(S.participants.map(p => ({...p}))),
     savedAt:     now.toISOString(),
-    savedBy:     currentAccount?.name || currentAccount?.username || '',
+    savedBy:     currentAccount?.username || currentAccount?.name || '',  // UPN/email preferred for matching
   };
 }
 
@@ -2323,9 +2329,15 @@ async function loadArchiv(forceReload) {
       const status    = f.Status || 'Entwurf';
       const spUrl     = data.spUrl || f.SpUrl || null;
       const erstelltVon = (f.Erstellt_Von || data.savedBy || '').toLowerCase();
-      const isMine    = erstelltVon.includes(meShort) || erstelltVon.includes(me.split('@')[0]);
+      // Match against email prefix, full email, or display name parts
+      const myNameParts = (currentAccount?.name || '').toLowerCase().split(' ');
+      const isMine = erstelltVon.includes(meShort) ||
+                     erstelltVon.includes(me) ||
+                     (myNameParts.length > 0 && myNameParts.every(p => p && erstelltVon.includes(p)));
       return { id: it.id, datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, isMine, isAdmin };
     }).filter(r => r.isAdmin || r.isMine); // Admins sehen alles, andere nur eigene
+    // Debug: log count
+    console.log('[Archiv] Items loaded:', _archivData.length, '(admin:', _isAdminUser(), 'me:', (currentAccount?.username||'').split('@')[0], ')');
 
     _archivData.sort((a,b) => b.datumSort.localeCompare(a.datumSort));
     _archivLoaded = true;
