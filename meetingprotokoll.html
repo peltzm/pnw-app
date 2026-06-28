@@ -25,9 +25,10 @@
   body { font-family: 'Kodchasan', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
 
   /* ── HEADER ── */
-  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; overflow: hidden; }
   .header-brand { display: flex; align-items: center; gap: 12px; cursor: pointer; }
-  .user-badge { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+  .user-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); min-width: 0; flex-shrink: 1; }
+  .user-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
   .user-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-mid); }
 
   /* ── LAYOUT ── */
@@ -219,7 +220,7 @@
 
   /* ── RESPONSIVE ── */
   @media (max-width: 1024px) {
-    .layout { grid-template-columns: 56px 1fr; }
+    .layout { grid-template-columns: 52px 1fr; }
     .nav-item span:not(.nav-num) { display: none; }
     .nav-section { display: none; }
     .nav-item { justify-content: center; padding: 10px; }
@@ -227,11 +228,24 @@
     .type-grid { grid-template-columns: 1fr 1fr; }
     .main { padding: 1.25rem; }
   }
-  @media (max-width: 640px) {
+  @media (max-width: 700px) {
+    /* Sidebar komplett ausblenden, volle Breite für Content */
     .layout { grid-template-columns: 1fr; }
     .sidebar { display: none; }
     .field-grid, .field-grid.triple { grid-template-columns: 1fr; }
     .type-grid { grid-template-columns: 1fr 1fr; }
+    .main { padding: 1rem; }
+    /* Header kompakt */
+    .header { padding: 0 .75rem; }
+    .header-brand { gap: 8px; }
+    .version-badge { display: none; }
+    .changelog-link { display: none; }
+    .user-name { max-width: 80px; }
+    .btn-logout { font-size: 11px; padding: 2px 7px; }
+  }
+  @media (max-width: 400px) {
+    /* Sehr schmale Phones: 1 Spalte für type-grid */
+    .type-grid { grid-template-columns: 1fr; }
   }
   input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 </style>
@@ -243,14 +257,14 @@
   <div class="header-brand" onclick="goHome()">
     <a href="https://apps.praxisneuewege.de/apps.html" style="line-height:0;"><img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:30px;width:auto;" alt="Praxis NeueWege"></a>
     <span style="font-size:14px;font-weight:600;color:var(--text);margin-left:4px;">Meetingprotokoll</span>
-    <span id="versionBadge" style="font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace;"></span>
-    <a href="changelog.html" target="_blank" style="font-size:10px;color:var(--accent-mid);text-decoration:none;margin-left:6px;opacity:0.8;" title="Changelog">Changelog ↗</a>
+    <span class="version-badge" id="versionBadge" style="font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace;"></span>
+    <a class="changelog-link" href="changelog.html" target="_blank" style="font-size:10px;color:var(--accent-mid);text-decoration:none;margin-left:6px;opacity:0.8;" title="Changelog">Changelog ↗</a>
   </div>
   <div class="user-badge" id="userBadge" style="display:none">
-    <span id="autoSaveIndicator" style="font-size:11px;color:var(--success);transition:opacity .5s;opacity:0;margin-right:8px;"></span>
-    <div class="user-dot"></div>
-    <span id="userName"></span>
-    <button onclick="logout()" style="margin-left:8px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted);">Abmelden</button>
+    <span id="autoSaveIndicator" style="font-size:11px;color:var(--success);transition:opacity .5s;opacity:0;margin-right:4px;white-space:nowrap;"></span>
+    <div class="user-dot" style="flex-shrink:0;"></div>
+    <span id="userName" class="user-name"></span>
+    <button class="btn-logout" onclick="logout()" style="flex-shrink:0;margin-left:6px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted);white-space:nowrap;">Abmelden</button>
   </div>
 </div>
 
