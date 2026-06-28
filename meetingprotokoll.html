@@ -235,7 +235,7 @@
     .sidebar { display: none; }
     .field-grid, .field-grid.triple { grid-template-columns: 1fr; }
     .type-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .main { padding: 1rem; }
+    .main { padding: 1rem; overflow: hidden; }
     /* Header kompakt */
     .header { padding: 0 .75rem; }
     .header-brand { gap: 8px; }
@@ -250,6 +250,12 @@
     .tile-sub { display: none; }
   }
 
+  .thema-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; gap:8px; }
+  .btn-draft { font-size:12px; padding:5px 12px; white-space:nowrap; flex-shrink:0; }
+  @media (max-width:400px) {
+    .thema-header { flex-direction:column; align-items:flex-start; }
+    .btn-draft { align-self:flex-start; }
+  }
   input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 </style>
 </head>
@@ -338,9 +344,9 @@
 
       <!-- ══ S1: THEMA ══ -->
       <div class="section active" id="s-typ">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px;flex-wrap:wrap;">
+        <div class="thema-header">
           <div class="section-title" style="margin:0">Thema auswählen</div>
-          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="showDraftPanel()">📂 Entwurf laden</button>
+          <button class="btn btn-secondary btn-draft" onclick="showDraftPanel()">📂 Entwurf laden</button>
         </div>
         <div class="section-sub">Teilnehmerliste und SharePoint-Ablage werden automatisch gesetzt.</div>
         <div class="progress-bar"><div class="progress-fill" style="width:20%"></div></div>
