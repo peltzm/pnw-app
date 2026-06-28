@@ -21,7 +21,7 @@
   --hdr-h:56px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;min-height:100dvh}
+html,body{height:100%;min-height:100dvh;overflow-x:hidden}
 body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
 
 /* ── HEADER ── */
@@ -77,13 +77,15 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   .app-grid{
     grid-template-columns:repeat(3,1fr);
     gap:6px;
-    padding:8px 6px 12px;
+    padding:8px 4px 12px;
     max-width:100%;
+    width:100%;
   }
   .app-card{
-    padding:8px 3px;
+    padding:8px 2px;
     gap:4px;
     aspect-ratio:1/1;
+    min-width:0;
   }
   .card-icon{font-size:24px}
   .card-name{font-size:10px;font-weight:600}
