@@ -225,7 +225,7 @@
     .nav-section { display: none; }
     .nav-item { justify-content: center; padding: 10px; }
     .nav-item.active { border-left: none; border-bottom: 2px solid var(--accent); }
-    .type-grid { grid-template-columns: 1fr 1fr; }
+    .type-grid { grid-template-columns: repeat(3, 1fr); }
     .main { padding: 1.25rem; }
   }
   @media (max-width: 700px) {
@@ -233,7 +233,7 @@
     .layout { grid-template-columns: 1fr; }
     .sidebar { display: none; }
     .field-grid, .field-grid.triple { grid-template-columns: 1fr; }
-    .type-grid { grid-template-columns: 1fr 1fr; }
+    .type-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .main { padding: 1rem; }
     /* Header kompakt */
     .header { padding: 0 .75rem; }
@@ -242,11 +242,13 @@
     .changelog-link { display: none; }
     .user-name { max-width: 80px; }
     .btn-logout { font-size: 11px; padding: 2px 7px; }
+    /* Kacheln kompakt für 3 nebeneinander */
+    .type-tile { padding: .6rem .4rem; gap: 5px; }
+    .tile-icon { font-size: 20px; }
+    .tile-label { font-size: 11px; }
+    .tile-sub { font-size: 10px; }
   }
-  @media (max-width: 400px) {
-    /* Sehr schmale Phones: 1 Spalte für type-grid */
-    .type-grid { grid-template-columns: 1fr; }
-  }
+
   input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 </style>
 </head>
