@@ -73,89 +73,99 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .expand-btn:hover{border-color:var(--accent-mid);color:var(--accent)}
 
 /* ── TREE CONTAINER ── */
-.tree-container{padding:24px 20px 48px;overflow-x:auto}
+.tree-container{padding:28px 24px 60px;overflow-x:auto;min-width:min-content}
 
-/* ── LEVEL 0: roots centered ── */
+/* ── LEVEL 0: Sonja + Markus zentriert ── */
 .level-root{
   display:flex;
   justify-content:center;
   gap:16px;
   margin-bottom:0;
-  flex-wrap:wrap;
 }
 
-/* ── VERTICAL CONNECTOR (root → manager row) ── */
-.v-connector{
+/* ── CONNECTOR: root → TL-Reihe ── */
+.root-to-tl{
   display:flex;
   justify-content:center;
-  position:relative;
 }
-.v-connector::before{
-  content:'';
-  display:block;
-  width:1px;
-  height:24px;
+.root-to-tl::before{
+  content:'';display:block;
+  width:1px;height:28px;
   background:var(--border-strong);
 }
 
-/* ── HORIZONTAL MANAGER BAR ── */
-.manager-bar-wrap{
-  position:relative;
+/* ── TL-REIHE ── */
+/* horizontal linie über allen TL-Spalten, dann je ein Tick nach unten */
+.tl-row-wrap{
   display:flex;
   justify-content:center;
+  position:relative;
 }
-/* horizontal line spanning all manager cards */
-.manager-bar-wrap::before{
-  content:'';
+/* die horizontale Linie wird per JS als absolutes Element eingefügt (nach Layout) */
+.tl-hbar{
   position:absolute;
-  top:0; left:0; right:0;
-  height:1px;
+  top:0;height:1px;
+  background:var(--border-strong);
+  pointer-events:none;
+}
+
+/* ── TL-SPALTE ── */
+.tl-col{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  margin:0 12px;
+}
+/* tick oben: horizontale Linie → TL-Card */
+.tl-col::before{
+  content:'';display:block;
+  width:1px;height:16px;
   background:var(--border-strong);
 }
 
-/* ── LEVEL 1: MANAGER ROW ── */
-.level-managers{
-  display:flex;
-  gap:24px;
-  flex-wrap:wrap;
-  justify-content:center;
-  align-items:flex-start;
+/* ── CONNECTOR: TL → FK-Liste ── */
+.tl-to-fk{
+  width:1px;height:16px;
+  background:var(--border-strong);
 }
 
-/* ── LEVEL 1 COLUMN: manager + their staff below ── */
-.manager-col{
+/* ── FK-LISTE (vertikal, mit Linie links) ── */
+.fk-list{
   display:flex;
   flex-direction:column;
   align-items:center;
   gap:0;
   position:relative;
 }
-/* tick from horizontal bar down to manager card */
-.manager-col::before{
+/* vertikale Linie links neben den FK-Cards */
+.fk-list::before{
   content:'';
-  display:block;
+  position:absolute;
+  left:50%;top:0;
   width:1px;
-  height:16px;
+  /* endet vor der letzten Card-Mitte */
+  bottom:calc(var(--card-h) / 2);
   background:var(--border-strong);
-  flex-shrink:0;
+  transform:translateX(-50%);
 }
-
-/* ── LEVEL 2: STAFF GRID under each manager ── */
-.staff-wrap{
-  margin-top:0;
+/* horizontaler Arm zu jeder FK-Card */
+.fk-item{
   display:flex;
   flex-direction:column;
   align-items:center;
-  width:100%;
+  position:relative;
+  padding-bottom:8px;
 }
-.v-to-staff{
-  width:1px;height:16px;background:var(--border-strong);
-}
-.staff-grid{
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  align-items:center;
+.fk-item:last-child{padding-bottom:0}
+/* kleiner horizontaler Tick von der Vertikallinie zur Card */
+.fk-item::before{
+  content:'';
+  position:absolute;
+  top:calc(var(--card-h) / 2);
+  left:50%;
+  transform:translate(-50%,0);
+  /* kein tick nötig wenn wir zentrierte vertikale Linie haben */
+  display:none;
 }
 
 /* ── CARDS ── */
@@ -440,12 +450,8 @@ async function loadOrg() {
 /* ── BUILD 3-LEVEL LAYOUT ── */
 function buildTree(users) {
   const inSet = new Set(users.map(u => u.id));
-
-  // Roots = users whose manager is not in the set
   const roots = users.filter(u => !u.manager || !inSet.has(u.manager.id));
-  const sortFn = arr => arr ? arr.sort((a,b) => a.displayName.localeCompare(b.displayName, 'de')) : [];
 
-  // Build children map
   const children = {};
   users.forEach(u => {
     const mid = u.manager?.id;
@@ -454,75 +460,96 @@ function buildTree(users) {
       children[mid].push(u);
     }
   });
+  const sortFn = arr => arr.sort((a,b) => a.displayName.localeCompare(b.displayName, 'de'));
   Object.values(children).forEach(sortFn);
 
-  // Precompute jungerAls
+  // jungerAls
   const withDate = users.filter(u => u.createdDateTime);
   const jungerAls = {};
   users.forEach(u => {
     if (!u.createdDateTime) { jungerAls[u.id] = null; return; }
-    const myStart = new Date(u.createdDateTime).getTime();
-    jungerAls[u.id] = withDate.filter(v => v.id !== u.id && new Date(v.createdDateTime).getTime() > myStart).length;
+    const t = new Date(u.createdDateTime).getTime();
+    jungerAls[u.id] = withDate.filter(v => v.id !== u.id && new Date(v.createdDateTime).getTime() > t).length;
   });
 
   const container = document.getElementById('treeContainer');
   container.innerHTML = '';
 
-  const wrap = document.createElement('div');
+  // Sort roots: most children first (Sonja), then others (Markus)
+  const sortedRoots = [...roots].sort((a,b) => (children[b.id]||[]).length - (children[a.id]||[]).length);
+  const primaryRoot = sortedRoots[0]; // Sonja
+  const tls = children[primaryRoot?.id] || [];
 
-  // ── LEVEL 0: all roots (Sonja + Markus) centered in one row ──
-  // Sonja first (has most children), then others
-  const sonjaFirst = [...roots].sort((a,b) => {
-    const ac = (children[a.id] || []).length;
-    const bc = (children[b.id] || []).length;
-    return bc - ac;
-  });
+  // ── EBENE 0: Roots nebeneinander zentriert ──
+  const lvl0 = document.createElement('div');
+  lvl0.className = 'level-root';
+  sortedRoots.forEach(r => lvl0.appendChild(makeRowCard(r, 0, jungerAls, 'card-root')));
+  container.appendChild(lvl0);
 
-  const levelRoot = document.createElement('div');
-  levelRoot.className = 'level-root';
-  sonjaFirst.forEach(r => levelRoot.appendChild(makeRowCard(r, 0, jungerAls, 'card-root')));
-  wrap.appendChild(levelRoot);
+  if (tls.length === 0) return;
 
-  // Find the primary root (most children = Sonja)
-  const primaryRoot = sonjaFirst[0];
-  const managers = children[primaryRoot?.id] || [];
-  if (managers.length === 0) { container.appendChild(wrap); return; }
+  // Verbindungslinie Sonja → TL-Reihe
+  const rootToTl = document.createElement('div');
+  rootToTl.className = 'root-to-tl';
+  container.appendChild(rootToTl);
 
-  // vertical line from primary root down
-  const vc = document.createElement('div');
-  vc.className = 'v-connector';
-  wrap.appendChild(vc);
+  // ── EBENE 1: TL-Spalten ──
+  const tlRowWrap = document.createElement('div');
+  tlRowWrap.className = 'tl-row-wrap';
 
-  // manager bar
-  const mBarWrap = document.createElement('div');
-  mBarWrap.className = 'manager-bar-wrap';
-  const levelManagers = document.createElement('div');
-  levelManagers.className = 'level-managers';
+  tls.forEach(tl => {
+    const tlCol = document.createElement('div');
+    tlCol.className = 'tl-col';
 
-  managers.forEach(mgr => {
-    const mgrCol = document.createElement('div');
-    mgrCol.className = 'manager-col';
-    mgrCol.appendChild(makeRowCard(mgr, 1, jungerAls, 'card-manager'));
+    // TL-Card
+    tlCol.appendChild(makeRowCard(tl, 1, jungerAls, 'card-manager'));
 
-    const staff = children[mgr.id] || [];
+    // ── EBENE 2: FK-Liste unter diesem TL ──
+    const staff = children[tl.id] || [];
     if (staff.length > 0) {
-      const staffWrap = document.createElement('div');
-      staffWrap.className = 'staff-wrap';
-      const vts = document.createElement('div');
-      vts.className = 'v-to-staff';
-      staffWrap.appendChild(vts);
-      const grid = document.createElement('div');
-      grid.className = 'staff-grid';
-      staff.forEach(s => grid.appendChild(makeRowCard(s, 2, jungerAls, 'card-staff')));
-      staffWrap.appendChild(grid);
-      mgrCol.appendChild(staffWrap);
+      // Verbindungslinie TL → FK
+      const tlToFk = document.createElement('div');
+      tlToFk.className = 'tl-to-fk';
+      tlCol.appendChild(tlToFk);
+
+      const fkList = document.createElement('div');
+      fkList.className = 'fk-list';
+      fkList.style.setProperty('--card-h', '130px'); // approx card height for connector calc
+
+      staff.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'fk-item';
+        item.appendChild(makeRowCard(s, 2, jungerAls, 'card-staff'));
+        fkList.appendChild(item);
+      });
+
+      tlCol.appendChild(fkList);
     }
-    levelManagers.appendChild(mgrCol);
+
+    tlRowWrap.appendChild(tlCol);
   });
 
-  mBarWrap.appendChild(levelManagers);
-  wrap.appendChild(mBarWrap);
-  container.appendChild(wrap);
+  container.appendChild(tlRowWrap);
+
+  // Draw horizontal bar across TL columns after layout
+  requestAnimationFrame(() => {
+    const tlCols = tlRowWrap.querySelectorAll(':scope > .tl-col');
+    if (tlCols.length < 2) return;
+    const wrapRect = tlRowWrap.getBoundingClientRect();
+    // get mid-x of first and last TL card
+    const firstCard = tlCols[0].querySelector('.row-card');
+    const lastCard  = tlCols[tlCols.length-1].querySelector('.row-card');
+    if (!firstCard || !lastCard) return;
+    const fR = firstCard.getBoundingClientRect();
+    const lR = lastCard.getBoundingClientRect();
+    const left  = (fR.left + fR.width/2) - wrapRect.left;
+    const right = (lR.left + lR.width/2) - wrapRect.left;
+    const bar = document.createElement('div');
+    bar.className = 'tl-hbar';
+    bar.style.left  = left + 'px';
+    bar.style.width = (right - left) + 'px';
+    tlRowWrap.appendChild(bar);
+  });
 
   loadPhotosAsync(users);
 }
