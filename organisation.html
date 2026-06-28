@@ -461,6 +461,7 @@ async function showApp() {
   } catch(e) {}
   loadOwnPhoto();
   await ensureSpList();
+  await preloadAllProfiles();
   await loadOrg();
 }
 
@@ -779,23 +780,33 @@ async function ensureSpList() {
 }
 
 /* ── PROFIL LADEN ── */
-async function loadProfile(mail) {
-  if (!_spSiteId || !_spListId) return null;
-  if (_profileCache[mail]) return _profileCache[mail];
+/* ── ALLE PROFILE EINMALIG LADEN & CACHEN ── */
+let _profilesLoaded = false;
+async function preloadAllProfiles() {
+  if (_profilesLoaded || !_spSiteId || !_spListId) return;
   try {
     const token = await getToken();
-    const enc = encodeURIComponent(mail);
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists/${_spListId}/items?expand=fields&$filter=fields/Email eq '${enc}'&$top=1`,
-      {headers:{Authorization:'Bearer '+token}}
-    );
-    const d = await r.json();
-    if (d.value && d.value.length > 0) {
-      _profileCache[mail] = { itemId: d.value[0].id, ...d.value[0].fields };
-      return _profileCache[mail];
+    let url = `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists/${_spListId}/items?expand=fields&$top=200`;
+    while (url) {
+      const r = await fetch(url, {headers:{Authorization:'Bearer '+token}});
+      if (!r.ok) break;
+      const d = await r.json();
+      (d.value || []).forEach(item => {
+        const mail = (item.fields?.Email || '').toLowerCase();
+        if (mail) _profileCache[mail] = { itemId: item.id, ...item.fields };
+      });
+      url = d['@odata.nextLink'] || null;
     }
-  } catch(e) { console.warn('loadProfile error', e); }
-  return null;
+    _profilesLoaded = true;
+  } catch(e) { console.warn('preloadAllProfiles error:', e); }
+}
+
+async function loadProfile(mail) {
+  if (!_spSiteId || !_spListId) return null;
+  const key = mail.toLowerCase();
+  // Wenn noch nicht alle geladen → jetzt laden
+  if (!_profilesLoaded) await preloadAllProfiles();
+  return _profileCache[key] || null;
 }
 
 /* ── PROFIL SPEICHERN ── */
@@ -830,8 +841,9 @@ async function saveProfile(mail, itemId, fields) {
     itemId = nd.id;
   }
   // Direkt in Cache schreiben — kein zweiter API-Call nötig
+  const key = mail.toLowerCase();
   const cached = { itemId, Email: mail, ...payload };
-  _profileCache[mail] = cached;
+  _profileCache[key] = cached;
   return cached;
 }
 
@@ -843,7 +855,7 @@ async function deleteProfile(mail, itemId) {
     `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists/${_spListId}/items/${itemId}`,
     {method:'DELETE', headers:{Authorization:'Bearer '+token}}
   );
-  delete _profileCache[mail];
+  delete _profileCache[mail.toLowerCase()];
 }
 
 /* ── BEARBEITUNGSBERECHTIGUNG ── */
