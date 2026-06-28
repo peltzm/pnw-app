@@ -78,15 +78,16 @@
   .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .type-tile {
     border: 2px solid var(--border); border-radius: var(--radius-lg);
-    padding: 1rem 0.75rem; cursor: pointer; text-align: center;
+    padding: 0; cursor: pointer; text-align: center;
     background: var(--surface); transition: all 0.12s;
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    aspect-ratio: 1 / 1; /* quadratisch */
   }
   .type-tile:hover { border-color: var(--accent-mid); background: var(--accent-light); }
   .type-tile.selected { border-color: var(--accent); background: var(--accent-light); }
-  .tile-icon { font-size: 24px; }
-  .tile-label { font-size: 12px; font-weight: 600; color: var(--text); }
-  .tile-sub { font-size: 11px; color: var(--text-muted); }
+  .tile-icon { font-size: 26px; flex-shrink: 0; }
+  .tile-label { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.25; padding: 0 6px; word-break: break-word; hyphens: auto; }
+  .tile-sub { font-size: 10px; color: var(--text-muted); line-height: 1.2; padding: 0 6px; }
 
   /* ── PARTICIPANT GRID ── */
   .p-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
@@ -242,11 +243,10 @@
     .changelog-link { display: none; }
     .user-name { max-width: 80px; }
     .btn-logout { font-size: 11px; padding: 2px 7px; }
-    /* Kacheln kompakt für 3 nebeneinander */
-    .type-tile { padding: .6rem .4rem; gap: 5px; }
-    .tile-icon { font-size: 20px; }
+    /* Kacheln: quadratisch via aspect-ratio, schrift etwas kleiner */
+    .tile-icon { font-size: 22px; }
     .tile-label { font-size: 11px; }
-    .tile-sub { font-size: 10px; }
+    .tile-sub { display: none; }  /* Untertitel auf Mobile weglassen */
   }
 
   input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -337,7 +337,7 @@
 
       <!-- ══ S1: THEMA ══ -->
       <div class="section active" id="s-typ">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;gap:8px;flex-wrap:wrap;">
           <div class="section-title" style="margin:0">Thema auswählen</div>
           <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;" onclick="showDraftPanel()">📂 Entwurf laden</button>
         </div>
