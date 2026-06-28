@@ -194,7 +194,6 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   <div class="user-badge" id="userBadge" style="display:none">
     <div class="user-dot"></div>
     <span id="userName"></span>
-    <button class="btn-logout" onclick="logout()">Abmelden</button>
   </div>
 </header>
 
@@ -286,8 +285,9 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 
   </div>
 
-  <footer class="page-footer">
-    Praxis NeueWege · <a href="https://www.praxisneuewege.de">praxisneuewege.de</a>
+  <footer class="page-footer" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <span>Praxis NeueWege · <a href="https://www.praxisneuewege.de">praxisneuewege.de</a></span>
+    <button id="footerLogoutBtn" class="btn-logout" onclick="logout()" style="display:none;">Abmelden</button>
   </footer>
 </div>
 
@@ -379,6 +379,7 @@ async function showApp(account) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userBadge').style.display = 'flex';
+  const flb = document.getElementById('footerLogoutBtn'); if(flb) flb.style.display = 'inline-flex';
   const name = account.name || account.username;
   document.getElementById('userName').textContent = name;
   document.getElementById('profileName').textContent = name;
