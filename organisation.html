@@ -186,6 +186,47 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .row-name{font-size:var(--name-font,12px);font-weight:700;color:var(--text);line-height:1.3;word-break:break-word}
 .row-title{font-size:var(--title-font,10px);color:var(--text-muted);line-height:1.3}
 
+/* ── PROFILE SECTION ── */
+.drawer-edit-btn{
+  font-size:11px;font-family:inherit;cursor:pointer;
+  background:none;border:1px solid var(--border);color:var(--text-muted);
+  border-radius:5px;padding:3px 9px;
+  transition:border-color .1s,color .1s;
+}
+.drawer-edit-btn:hover{border-color:var(--accent-mid);color:var(--accent)}
+.drawer-profile-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:8px;margin-bottom:4px;
+}
+.drawer-profile-item{
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius);padding:8px 4px;text-align:center;
+}
+.drawer-bool-yes{font-size:11px;font-weight:700;color:#2e7d32}
+.drawer-bool-no{font-size:11px;color:var(--text-hint)}
+.drawer-profile-text{font-size:12px;color:var(--text);line-height:1.6}
+.drawer-textarea{
+  width:100%;border:1px solid var(--border);border-radius:var(--radius);
+  padding:8px 10px;font-size:12px;font-family:inherit;color:var(--text);
+  background:var(--surface);resize:vertical;outline:none;
+  transition:border-color .12s;
+}
+.drawer-textarea:focus{border-color:var(--accent-mid)}
+.drawer-toggle{display:inline-flex;cursor:pointer;align-items:center}
+.drawer-toggle input{display:none}
+.drawer-toggle-track{
+  width:36px;height:20px;border-radius:20px;
+  background:var(--border-strong);position:relative;transition:background .15s;
+}
+.drawer-toggle input:checked + .drawer-toggle-track{background:var(--accent)}
+.drawer-toggle-thumb{
+  position:absolute;left:2px;top:2px;
+  width:16px;height:16px;border-radius:50%;background:#fff;
+  transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.drawer-toggle input:checked + .drawer-toggle-track .drawer-toggle-thumb{left:18px}
+
 /* ── NORDSTERN BADGE ── */
 .nordstern-badge{
   position:absolute;top:6px;right:6px;
@@ -333,7 +374,14 @@ const CFG = {
   tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
   redirectUri: 'https://apps.praxisneuewege.de/organisation.html'
 };
-const SCOPES = ['User.Read', 'User.ReadBasic.All'];
+const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All'];
+const SP_SITE  = 'praxisneuewegesonjapeltz978.sharepoint.com';
+const SP_LIST  = 'Mitarbeiter_Profil';
+let _spSiteId  = null;
+let _spListId  = null;
+let _currentUserId = null; // Azure AD id des eingeloggten Users
+let _currentUserMail = null;
+let _profileCache = {};   // mail -> SP-Profil-Objekt
 const APP_VERSION = 'vd52e674'; // auto-updated on deploy // auto-updated on deploy
 
 let msalInstance, currentAccount, accessToken;
@@ -396,7 +444,16 @@ async function showApp() {
   document.getElementById('userBadge').style.display = 'flex';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   document.getElementById('logoutBtn').style.display = '';
+  // Store current user identity for permission checks
+  _currentUserMail = currentAccount?.username?.toLowerCase() || '';
+  try {
+    const token = await getToken();
+    const me = await (await fetch('https://graph.microsoft.com/v1.0/me?$select=id,mail', { headers:{Authorization:'Bearer '+token} })).json();
+    _currentUserId = me.id;
+    _currentUserMail = (me.mail || _currentUserMail).toLowerCase();
+  } catch(e) {}
   loadOwnPhoto();
+  await ensureSpList();
   await loadOrg();
 }
 
@@ -693,8 +750,126 @@ function toggleAll() {
   // Not used in 3-level layout — kept for future use
 }
 
+/* ── SHAREPOINT: LISTE SICHERSTELLEN ── */
+async function ensureSpList() {
+  try {
+    const token = await getToken();
+    // Site ID holen
+    if (!_spSiteId) {
+      const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${SP_SITE}:/sites/root`, {headers:{Authorization:'Bearer '+token}});
+      // Root site
+      const rootR = await fetch(`https://graph.microsoft.com/v1.0/sites/${SP_SITE}`, {headers:{Authorization:'Bearer '+token}});
+      if (rootR.ok) { const s = await rootR.json(); _spSiteId = s.id; }
+    }
+    if (!_spSiteId) return;
+
+    // Liste suchen
+    const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists?$filter=displayName eq '${SP_LIST}'&$select=id,displayName`, {headers:{Authorization:'Bearer '+token}});
+    const ld = await lr.json();
+    if (ld.value && ld.value.length > 0) {
+      _spListId = ld.value[0].id;
+      return;
+    }
+
+    // Liste anlegen
+    const cr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists`, {
+      method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+      body: JSON.stringify({
+        displayName: SP_LIST,
+        list: { template: 'genericList' },
+        columns: [
+          { name:'Email',            text:{} },
+          { name:'Zusatzausbildung', text:{ allowMultipleLines:true } },
+          { name:'Themenschwerpunkte', text:{ allowMultipleLines:true } },
+          { name:'ISEF',             boolean:{} },
+          { name:'Teamleitung',      boolean:{} },
+          { name:'Stationaer',       boolean:{} },
+        ]
+      })
+    });
+    if (cr.ok) { const cl = await cr.json(); _spListId = cl.id; }
+  } catch(e) { console.warn('SP list init error:', e); }
+}
+
+/* ── PROFIL LADEN ── */
+async function loadProfile(mail) {
+  if (!_spSiteId || !_spListId) return null;
+  if (_profileCache[mail]) return _profileCache[mail];
+  try {
+    const token = await getToken();
+    const enc = encodeURIComponent(mail);
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists/${_spListId}/items?expand=fields&$filter=fields/Email eq '${enc}'&$top=1`,
+      {headers:{Authorization:'Bearer '+token}}
+    );
+    const d = await r.json();
+    if (d.value && d.value.length > 0) {
+      _profileCache[mail] = { itemId: d.value[0].id, ...d.value[0].fields };
+      return _profileCache[mail];
+    }
+  } catch(e) { console.warn('loadProfile error', e); }
+  return null;
+}
+
+/* ── PROFIL SPEICHERN ── */
+async function saveProfile(mail, itemId, fields) {
+  if (!_spSiteId || !_spListId) throw new Error('SP nicht initialisiert');
+  const token = await getToken();
+  const payload = {
+    Email: mail,
+    Zusatzausbildung: fields.zusatz || '',
+    Themenschwerpunkte: fields.schwerpunkte || '',
+    ISEF: !!fields.isef,
+    Teamleitung: !!fields.tl,
+    Stationaer: !!fields.stationaer
+  };
+  if (itemId) {
+    // Update
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists/${_spListId}/items/${itemId}/fields`,
+      {method:'PATCH', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'}, body:JSON.stringify(payload)}
+    );
+    if (!r.ok) throw new Error('Update fehlgeschlagen: ' + r.status);
+  } else {
+    // Create
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists/${_spListId}/items`,
+      {method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+       body:JSON.stringify({fields: payload})}
+    );
+    if (!r.ok) throw new Error('Erstellen fehlgeschlagen: ' + r.status);
+    const nd = await r.json();
+    itemId = nd.id;
+  }
+  // Cache invalidieren
+  delete _profileCache[mail];
+  return itemId;
+}
+
+/* ── PROFIL LÖSCHEN ── */
+async function deleteProfile(mail, itemId) {
+  if (!_spSiteId || !_spListId || !itemId) return;
+  const token = await getToken();
+  await fetch(
+    `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists/${_spListId}/items/${itemId}`,
+    {method:'DELETE', headers:{Authorization:'Bearer '+token}}
+  );
+  delete _profileCache[mail];
+}
+
+/* ── BEARBEITUNGSBERECHTIGUNG ── */
+function canEdit(user) {
+  if (!_currentUserMail) return false;
+  // Eigenes Profil
+  if (user.mail?.toLowerCase() === _currentUserMail) return true;
+  // TL: darf Mitarbeiter bearbeiten, deren Manager = aktueller User
+  const me = orgData.find(u => u.mail?.toLowerCase() === _currentUserMail);
+  if (!me) return false;
+  return user.manager?.id === me.id;
+}
+
 /* ── DRAWER ── */
-function openDrawer(user, roleInfo, jungerAls) {
+async function openDrawer(user, roleInfo, jungerAls) {
   document.querySelectorAll('.row-card').forEach(c => c.classList.remove('highlight'));
   const card = document.querySelector(`.row-card[data-user-id="${user.id}"]`);
   if (card) card.classList.add('highlight');
@@ -713,7 +888,9 @@ function openDrawer(user, roleInfo, jungerAls) {
     avatarHtml = `<div class="drawer-avatar" style="background:${roleInfo.color}">${initials(user.displayName)}</div>`;
   }
 
-  document.getElementById('drawerContent').innerHTML = `
+  // Drawer sofort öffnen mit Basis-Info, Profil-Section zeigt Ladeindikator
+  const dc = document.getElementById('drawerContent');
+  dc.innerHTML = `
     ${avatarHtml}
     <div class="drawer-name">${user.displayName}</div>
     <div class="drawer-role">${user.jobTitle || roleInfo.label}</div>
@@ -730,8 +907,146 @@ function openDrawer(user, roleInfo, jungerAls) {
       ${junger !== null ? `<span style="margin-top:4px;font-size:11px;color:var(--accent)">${junger === 0 ? '✦ Jüngste/r im Team' : `${junger} Teammitglied${junger === 1 ? '' : 'er'} danach dazugekommen`}</span>` : ''}
     </div>` : ''}
     ${user.manager ? `<div class="drawer-section" style="margin-top:14px"><div class="drawer-label">Vorgesetzte/r</div><div class="drawer-row" style="font-size:13px">${user.manager.displayName}</div></div>` : ''}
+    <hr style="border:none;border-top:1px solid var(--border);margin:14px 0">
+    <div id="profileSection"><div style="text-align:center;padding:12px 0;font-size:12px;color:var(--text-hint)">Profil wird geladen …</div></div>
   `;
   document.getElementById('drawer').classList.add('open');
+
+  // Profil async laden
+  const profile = user.mail ? await loadProfile(user.mail) : null;
+  renderProfileSection(user, roleInfo, profile, jungerAls);
+}
+
+function renderProfileSection(user, roleInfo, profile, jungerAls) {
+  const ps = document.getElementById('profileSection');
+  if (!ps) return;
+
+  const editable = canEdit(user);
+  const noData = !profile;
+  const bool = v => v ? '✓ Ja' : '✗ Nein';
+  const boolClass = v => v ? 'drawer-bool-yes' : 'drawer-bool-no';
+
+  ps.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="drawer-label" style="margin-bottom:0">Qualifikationen & Rolle</div>
+      ${editable ? `<button class="drawer-edit-btn" onclick="openEditForm('${user.mail}','${profile?.itemId||''}','${user.id}')">✎ Bearbeiten</button>` : ''}
+    </div>
+
+    ${noData && !editable ? `<div style="font-size:12px;color:var(--text-hint);font-style:italic">Noch keine Angaben hinterlegt.</div>` : ''}
+
+    ${!noData || editable ? `
+    <div class="drawer-profile-grid">
+      <div class="drawer-profile-item">
+        <div class="drawer-label" style="font-size:9px">ISEF</div>
+        <span class="${boolClass(profile?.ISEF)}">${bool(profile?.ISEF)}</span>
+      </div>
+      <div class="drawer-profile-item">
+        <div class="drawer-label" style="font-size:9px">Teamleitung</div>
+        <span class="${boolClass(profile?.Teamleitung)}">${bool(profile?.Teamleitung)}</span>
+      </div>
+      <div class="drawer-profile-item">
+        <div class="drawer-label" style="font-size:9px">Stationär</div>
+        <span class="${boolClass(profile?.Stationaer)}">${bool(profile?.Stationaer)}</span>
+      </div>
+    </div>
+
+    ${profile?.Zusatzausbildung ? `
+    <div class="drawer-section" style="margin-top:10px">
+      <div class="drawer-label">Zusatzausbildung / Weiterbildungen</div>
+      <div class="drawer-profile-text">${profile.Zusatzausbildung.replace(/\n/g,'<br>')}</div>
+    </div>` : (editable ? `<div class="drawer-section" style="margin-top:10px"><div class="drawer-label">Zusatzausbildung / Weiterbildungen</div><div class="drawer-profile-text" style="color:var(--text-hint);font-style:italic">Noch keine Angaben</div></div>` : '')}
+
+    ${profile?.Themenschwerpunkte ? `
+    <div class="drawer-section" style="margin-top:10px">
+      <div class="drawer-label">Themenschwerpunkte</div>
+      <div class="drawer-profile-text">${profile.Themenschwerpunkte.replace(/\n/g,'<br>')}</div>
+    </div>` : (editable ? `<div class="drawer-section" style="margin-top:10px"><div class="drawer-label">Themenschwerpunkte</div><div class="drawer-profile-text" style="color:var(--text-hint);font-style:italic">Noch keine Angaben</div></div>` : '')}
+    ` : ''}
+  `;
+}
+
+/* ── EDIT FORMULAR ── */
+function openEditForm(mail, itemId, userId) {
+  const ps = document.getElementById('profileSection');
+  if (!ps) return;
+  const profile = _profileCache[mail] || {};
+  const chk = (v,id) => `<label class="drawer-toggle"><input type="checkbox" id="${id}" ${v?'checked':''}><span class="drawer-toggle-track"><span class="drawer-toggle-thumb"></span></span></label>`;
+
+  ps.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="drawer-label" style="margin-bottom:0">Profil bearbeiten</div>
+      <button class="drawer-edit-btn" onclick="cancelEdit('${mail}','${itemId}','${userId}')">✕ Abbrechen</button>
+    </div>
+
+    <div class="drawer-profile-grid" style="margin-bottom:12px">
+      <div class="drawer-profile-item">
+        <div class="drawer-label" style="font-size:9px">ISEF</div>
+        ${chk(profile.ISEF,'ep-isef')}
+      </div>
+      <div class="drawer-profile-item">
+        <div class="drawer-label" style="font-size:9px">Teamleitung</div>
+        ${chk(profile.Teamleitung,'ep-tl')}
+      </div>
+      <div class="drawer-profile-item">
+        <div class="drawer-label" style="font-size:9px">Stationär</div>
+        ${chk(profile.Stationaer,'ep-stat')}
+      </div>
+    </div>
+
+    <div class="drawer-section" style="margin-bottom:10px">
+      <div class="drawer-label">Zusatzausbildung / Weiterbildungen</div>
+      <textarea id="ep-zusatz" class="drawer-textarea" placeholder="z.B. Traumapädagogik, systemische Beratung …" rows="3">${profile.Zusatzausbildung||''}</textarea>
+    </div>
+
+    <div class="drawer-section" style="margin-bottom:14px">
+      <div class="drawer-label">Themenschwerpunkte</div>
+      <textarea id="ep-schwerpunkte" class="drawer-textarea" placeholder="z.B. Sucht, häusliche Gewalt, Trauer …" rows="3">${profile.Themenschwerpunkte||''}</textarea>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline btn-sm" style="flex:1" onclick="submitProfile('${mail}','${itemId}','${userId}')">💾 Speichern</button>
+      ${itemId ? `<button class="btn btn-sm" style="background:var(--error-bg);color:var(--error);border:1px solid #fecaca" onclick="confirmDeleteProfile('${mail}','${itemId}','${userId}')">🗑 Löschen</button>` : ''}
+    </div>
+    <div id="ep-msg" style="font-size:11px;margin-top:8px;text-align:center"></div>
+  `;
+}
+
+async function submitProfile(mail, itemId, userId) {
+  const btn = document.querySelector('#profileSection .btn-outline');
+  if (btn) { btn.disabled = true; btn.textContent = 'Speichert …'; }
+  try {
+    const fields = {
+      zusatz:       document.getElementById('ep-zusatz')?.value || '',
+      schwerpunkte: document.getElementById('ep-schwerpunkte')?.value || '',
+      isef:         document.getElementById('ep-isef')?.checked || false,
+      tl:           document.getElementById('ep-tl')?.checked || false,
+      stationaer:   document.getElementById('ep-stat')?.checked || false,
+    };
+    const newItemId = await saveProfile(mail, itemId||null, fields);
+    const user = orgData.find(u => u.id === userId);
+    const roleInfo = user ? getRoleInfo(user, orgData.findIndex(u=>u.id===userId) > -1 ? 1 : 0) : {color:'#6b6860',label:''};
+    const profile = await loadProfile(mail);
+    renderProfileSection(user, roleInfo, profile, null);
+  } catch(e) {
+    const msg = document.getElementById('ep-msg');
+    if (msg) msg.innerHTML = `<span style="color:var(--error)">Fehler: ${e.message}</span>`;
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Speichern'; }
+  }
+}
+
+function cancelEdit(mail, itemId, userId) {
+  const user = orgData.find(u => u.id === userId);
+  const roleInfo = user ? getRoleInfo(user, 1) : {color:'#6b6860',label:''};
+  const profile = _profileCache[mail] || null;
+  renderProfileSection(user, roleInfo, profile, null);
+}
+
+async function confirmDeleteProfile(mail, itemId, userId) {
+  if (!confirm('Profildaten wirklich löschen?')) return;
+  await deleteProfile(mail, itemId);
+  const user = orgData.find(u => u.id === userId);
+  const roleInfo = user ? getRoleInfo(user, 1) : {color:'#6b6860',label:''};
+  renderProfileSection(user, roleInfo, null, null);
 }
 
 function closeDrawer() {
