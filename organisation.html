@@ -157,13 +157,19 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 
 /* ── CARDS ── */
 .row-card{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
   gap:5px;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--card-radius,12px);padding:var(--card-pad,16px 10px 12px);
   cursor:pointer;transition:border-color .15s,box-shadow .12s,transform .1s;
   position:relative;overflow:hidden;
   width:var(--card-w,130px);min-width:var(--card-w,130px);text-align:center;
+  /* feste Höhe — alle Kacheln einer Ebene gleich groß */
+  height:150px;
 }
+.row-card.card-root{ height:170px; width:calc(var(--card-w,130px) + 20px);min-width:calc(var(--card-w,130px) + 20px) }
+.row-card.card-manager{ height:150px }
+.row-card.card-staff{ height:130px }
+
 .row-card:hover{border-color:var(--accent-mid);box-shadow:0 3px 12px rgba(123,63,30,.12);transform:translateY(-2px)}
 .row-card.highlight{border-color:var(--accent);border-width:1.5px;box-shadow:0 0 0 3px var(--accent-light)}
 .row-card.dimmed{opacity:.3}
@@ -172,9 +178,6 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .row-card.card-root::before   { background:#7b3f1e }
 .row-card.card-manager::before{ background:#1565c0 }
 .row-card.card-staff::before  { background:#2e7d32 }
-.row-card.card-root{width:calc(var(--card-w,130px) + 20px);min-width:calc(var(--card-w,130px) + 20px)}
-
-/* avatar */
 .row-avatar{
   width:var(--avatar-sz,52px);height:var(--avatar-sz,52px);border-radius:50%;
   flex-shrink:0;display:flex;align-items:center;justify-content:center;
