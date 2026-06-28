@@ -434,18 +434,28 @@ function buildTree(users) {
   sortFn(roots);
   Object.values(children).forEach(sortFn);
 
+  // Precompute: how many colleagues started AFTER each user
+  // Only users with a createdDateTime count; users without are ignored in the comparison
+  const withDate = users.filter(u => u.createdDateTime);
+  const jungerAls = {};
+  users.forEach(u => {
+    if (!u.createdDateTime) { jungerAls[u.id] = null; return; }
+    const myStart = new Date(u.createdDateTime).getTime();
+    jungerAls[u.id] = withDate.filter(v => v.id !== u.id && new Date(v.createdDateTime).getTime() > myStart).length;
+  });
+
   const container = document.getElementById('treeContainer');
   container.innerHTML = '';
 
   roots.forEach(user => {
-    const group = renderGroup(user, children, 0);
+    const group = renderGroup(user, children, 0, jungerAls);
     container.appendChild(group);
   });
 
   loadPhotosAsync(users);
 }
 
-function renderGroup(user, childMap, depth) {
+function renderGroup(user, childMap, depth, jungerAls) {
   const group = document.createElement('div');
   group.className = 'tree-group';
 
@@ -453,7 +463,7 @@ function renderGroup(user, childMap, depth) {
   const node = document.createElement('div');
   node.className = 'tree-node';
 
-  const card = makeRowCard(user, depth);
+  const card = makeRowCard(user, depth, jungerAls);
   node.appendChild(card);
 
   // Kids
@@ -463,7 +473,7 @@ function renderGroup(user, childMap, depth) {
     childrenWrap = document.createElement('div');
     childrenWrap.className = 'children-wrap';
     kids.forEach(kid => {
-      childrenWrap.appendChild(renderGroup(kid, childMap, depth + 1));
+      childrenWrap.appendChild(renderGroup(kid, childMap, depth + 1, jungerAls));
     });
 
     // collapse toggle button on the card
@@ -486,7 +496,7 @@ function renderGroup(user, childMap, depth) {
 }
 
 /* ── MAKE ROW CARD ── */
-function makeRowCard(user, depth) {
+function makeRowCard(user, depth, jungerAls) {
   const roleInfo = getRoleInfo(user, depth);
 
   const card = document.createElement('div');
@@ -537,9 +547,14 @@ function makeRowCard(user, depth) {
   // since badge
   if (user.createdDateTime) {
     const days = daysSince(user.createdDateTime);
+    const junger = jungerAls?.[user.id];
     const badge = document.createElement('div');
     badge.className = 'row-since';
-    badge.textContent = days.toLocaleString('de-DE') + ' Tage';
+    const line1 = days.toLocaleString('de-DE') + ' Tage';
+    const line2 = junger !== null && junger !== undefined
+      ? (junger === 0 ? 'Jüngste/r im Team' : junger + (junger === 1 ? ' danach' : ' danach'))
+      : '';
+    badge.innerHTML = line1 + (line2 ? `<br><span style="font-size:8.5px;font-weight:400;opacity:.75">${line2}</span>` : '');
     card.appendChild(badge);
   }
 
@@ -628,6 +643,9 @@ function openDrawer(user, roleInfo) {
 
   const days = user.createdDateTime ? daysSince(user.createdDateTime) : null;
   const startDate = user.createdDateTime ? new Date(user.createdDateTime).toLocaleDateString('de-DE') : '';
+  const junger = orgData.length > 0 && user.createdDateTime
+    ? orgData.filter(v => v.createdDateTime && v.id !== user.id && new Date(v.createdDateTime).getTime() > new Date(user.createdDateTime).getTime()).length
+    : null;
 
   const srcAv = document.getElementById('avatar-' + user.id);
   let avatarHtml;
@@ -651,6 +669,7 @@ function openDrawer(user, roleInfo) {
     <div class="drawer-since">
       ${days.toLocaleString('de-DE')} Tage bei Praxis NeueWege
       <span>Dabei seit ${startDate}</span>
+      ${junger !== null ? `<span style="margin-top:4px;font-size:11px;color:var(--accent)">${junger === 0 ? '✦ Jüngste/r im Team' : `${junger} Teammitglied${junger === 1 ? '' : 'er'} danach dazugekommen`}</span>` : ''}
     </div>` : ''}
     ${user.manager ? `<div class="drawer-section" style="margin-top:14px"><div class="drawer-label">Vorgesetzte/r</div><div class="drawer-row" style="font-size:13px">${user.manager.displayName}</div></div>` : ''}
   `;
