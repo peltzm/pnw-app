@@ -72,13 +72,21 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   width:100%;
 }
 
-/* Schmale Phones (<400px): mind. 2 Spalten, max. 3 */
-@media(max-width:400px){
+/* Mobil (<600px): genau 2 Spalten */
+@media(max-width:600px){
   .app-grid{
-    grid-template-columns:repeat(3,1fr);
+    grid-template-columns:repeat(2,1fr);
+    gap:10px;
+    padding:12px 12px 16px;
+    max-width:100%;
+  }
+}
+
+/* Sehr kleine Phones (<360px): auch 2 Spalten, etwas weniger Abstand */
+@media(max-width:360px){
+  .app-grid{
     gap:8px;
     padding:10px 8px 14px;
-    max-width:100%;
   }
 }
 
