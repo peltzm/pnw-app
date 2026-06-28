@@ -90,15 +90,11 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   border-radius:var(--radius-lg);
   overflow:hidden;
   box-shadow:0 2px 16px rgba(0,0,0,.06);
-  max-width:100%;
-  display:flex;align-items:center;justify-content:center;
+  display:inline-flex;align-items:center;justify-content:center;
 }
 .map-wrapper img{
   display:block;
-  max-width:100%;
-  height:auto;
-  /* On large screens allow full A2 landscape width */
-  width:min(100%, 1400px);
+  /* JS sets explicit pixel width after load */
 }
 
 /* Zoom controls */
@@ -314,9 +310,26 @@ async function init() {
 init();
 
 // ── ZOOM ──
-let currentZoom = 100;
+let currentZoom = 100;   // percent relative to fit-width
+let fitWidthPx   = 0;    // pixel width at 100 %
+
+function onMapLoad() {
+  const img       = document.getElementById('mapImg');
+  const container = document.getElementById('mapContainer');
+  // Available width minus padding (2×20 px) and wrapper border (2×1 px)
+  const available = container.clientWidth - 42;
+  fitWidthPx = Math.min(available, img.naturalWidth);
+  currentZoom = 100;
+  applyZoom();
+}
+
+function onMapError() {
+  const wrapper = document.getElementById('mapWrapper');
+  wrapper.innerHTML = '<div style="padding:40px 24px;text-align:center;color:var(--text-muted);font-size:13px;">Karte konnte nicht geladen werden.<br>Bitte Seite neu laden.</div>';
+}
+
 function zoom(delta) {
-  currentZoom = Math.min(250, Math.max(25, currentZoom + delta));
+  currentZoom = Math.min(300, Math.max(25, currentZoom + delta));
   applyZoom();
 }
 function zoomReset() {
@@ -324,19 +337,23 @@ function zoomReset() {
   applyZoom();
 }
 function applyZoom() {
+  if (!fitWidthPx) return;
   const img = document.getElementById('mapImg');
-  img.style.width = currentZoom + '%';
-  img.style.maxWidth = 'none';
+  const px  = Math.round(fitWidthPx * currentZoom / 100);
+  img.style.width  = px + 'px';
+  img.style.height = 'auto';
   document.getElementById('zoomLabel').textContent = currentZoom + '%';
 }
 
-function onMapLoad() {
-  // Map loaded fine
-}
-function onMapError() {
-  const wrapper = document.getElementById('mapWrapper');
-  wrapper.innerHTML = '<div style="padding:40px 24px;text-align:center;color:var(--text-muted);font-size:13px;">Karte konnte nicht geladen werden.<br>Bitte Seite neu laden.</div>';
-}
+// Re-fit on window resize (reset to 100 % of new container width)
+window.addEventListener('resize', () => {
+  if (!fitWidthPx) return;
+  const container = document.getElementById('mapContainer');
+  const available = container.clientWidth - 42;
+  const img       = document.getElementById('mapImg');
+  fitWidthPx = Math.min(available, img.naturalWidth);
+  applyZoom();
+});
 
 // ── PDF EXPORT ──
 function startExport() {
