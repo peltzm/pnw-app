@@ -117,6 +117,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   gap:16px;
   flex-wrap:wrap;
   justify-content:center;
+  align-items:flex-start;
 }
 
 /* ── LEVEL 1 COLUMN: manager + their staff below ── */
@@ -150,9 +151,10 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 }
 .staff-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  grid-template-columns:repeat(auto-fill,280px);
   gap:8px;
-  width:100%;
+  justify-content:center;
+  width:auto;
 }
 
 /* ── CARDS ── */
@@ -180,14 +182,18 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   border-radius:9px 0 0 9px;
   background:var(--role-color,var(--border-strong));
 }
-/* root card slightly larger */
+/* all cards same fixed width */
+.row-card.card-root,
+.row-card.card-manager,
+.row-card.card-staff{
+  width:280px;
+  min-width:280px;
+  max-width:280px;
+}
 .row-card.card-root{
-  min-width:260px;
   border-color:var(--accent);
   border-width:1.5px;
 }
-/* manager card */
-.row-card.card-manager{min-width:200px}
 
 /* avatar */
 .row-avatar{
@@ -259,7 +265,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   .row-since{display:none}
   .tree-container{padding:12px 12px 48px}
   .level-managers{gap:8px}
-  .staff-grid{grid-template-columns:1fr}
+  .staff-grid{grid-template-columns:280px}
   #drawer{width:100%;right:-100%}
 }
 </style>
