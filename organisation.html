@@ -75,11 +75,13 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 /* ── TREE CONTAINER ── */
 .tree-container{padding:24px 20px 48px;overflow-x:auto}
 
-/* ── LEVEL 0: SONJA — zentriert ── */
+/* ── LEVEL 0: roots centered ── */
 .level-root{
   display:flex;
   justify-content:center;
+  gap:16px;
   margin-bottom:0;
+  flex-wrap:wrap;
 }
 
 /* ── VERTICAL CONNECTOR (root → manager row) ── */
@@ -114,7 +116,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 /* ── LEVEL 1: MANAGER ROW ── */
 .level-managers{
   display:flex;
-  gap:16px;
+  gap:24px;
   flex-wrap:wrap;
   justify-content:center;
   align-items:flex-start;
@@ -150,85 +152,59 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   width:1px;height:16px;background:var(--border-strong);
 }
 .staff-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,280px);
-  gap:8px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
   justify-content:center;
-  width:auto;
 }
 
 /* ── CARDS ── */
 .row-card{
   display:flex;
+  flex-direction:column;
   align-items:center;
-  gap:10px;
+  justify-content:center;
+  gap:6px;
   background:var(--surface);
   border:1px solid var(--border);
-  border-radius:10px;
-  padding:8px 12px;
+  border-radius:12px;
+  padding:16px 10px 12px;
   cursor:pointer;
   transition:border-color .15s, box-shadow .12s, transform .1s;
-  min-height:var(--card-h);
   position:relative;
   overflow:hidden;
+  width:130px;
+  min-width:130px;
+  text-align:center;
 }
-.row-card:hover{border-color:var(--accent-mid);box-shadow:0 2px 10px rgba(123,63,30,.1);transform:translateY(-1px)}
+.row-card:hover{border-color:var(--accent-mid);box-shadow:0 3px 12px rgba(123,63,30,.12);transform:translateY(-2px)}
 .row-card.highlight{border-color:var(--accent);border-width:1.5px;box-shadow:0 0 0 3px var(--accent-light)}
 .row-card.dimmed{opacity:.3}
-/* left color stripe */
+/* top color stripe */
 .row-card::before{
   content:'';position:absolute;
-  left:0;top:0;bottom:0;width:4px;
-  border-radius:9px 0 0 9px;
+  left:0;top:0;right:0;height:4px;
   background:var(--role-color,var(--border-strong));
 }
-/* all cards same fixed width */
-.row-card.card-root,
-.row-card.card-manager,
-.row-card.card-staff{
-  width:280px;
-  min-width:280px;
-  max-width:280px;
-}
-.row-card.card-root{
-  border-color:var(--accent);
-  border-width:1.5px;
-}
+/* root cards slightly wider */
+.row-card.card-root{width:150px;min-width:150px}
 
 /* avatar */
 .row-avatar{
-  width:40px;height:40px;border-radius:50%;
+  width:52px;height:52px;border-radius:50%;
   flex-shrink:0;display:flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:700;color:#fff;
-  overflow:hidden;border:1.5px solid rgba(255,255,255,.3);
-  margin-left:4px;
+  font-size:16px;font-weight:700;color:#fff;
+  overflow:hidden;
+  border:2px solid var(--border);
 }
 .row-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-.row-avatar.loading{background:var(--bg);position:relative}
-.row-avatar.loading::after{content:'';position:absolute;inset:0;margin:auto;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
-/* bigger avatar for root */
-.card-root .row-avatar{width:48px;height:48px;font-size:16px}
+.row-avatar.loading{position:relative}
+.row-avatar.loading::after{content:'';position:absolute;inset:0;margin:auto;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+.card-root .row-avatar{width:60px;height:60px;font-size:18px}
 
 /* text */
-.row-text{flex:1;min-width:0}
-.row-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row-title{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card-root .row-name{font-size:14px}
-
-/* contact links */
-.row-links{display:flex;flex-direction:column;gap:2px;flex-shrink:0;align-items:flex-end}
-.row-link{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted);text-decoration:none;white-space:nowrap}
-.row-link:hover{color:var(--accent);text-decoration:underline}
-.row-link svg{width:11px;height:11px;color:var(--accent-mid)}
-
-/* since badge */
-.row-since{
-  font-size:9.5px;font-weight:600;
-  background:var(--accent-light);color:var(--accent);
-  border-radius:20px;padding:2px 8px;
-  white-space:nowrap;flex-shrink:0;line-height:1.5;
-  text-align:center;
-}
+.row-name{font-size:12px;font-weight:700;color:var(--text);line-height:1.3;word-break:break-word}
+.row-title{font-size:10px;color:var(--text-muted);line-height:1.3}
 
 /* ── LOADING / ERROR ── */
 .loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text-muted);font-size:13px}
@@ -261,11 +237,9 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .drawer-since span{display:block;font-size:11px;font-weight:400;color:var(--text-muted);margin-top:3px}
 
 @media(max-width:700px){
-  .row-links{display:none}
-  .row-since{display:none}
   .tree-container{padding:12px 12px 48px}
-  .level-managers{gap:8px}
-  .staff-grid{grid-template-columns:280px}
+  .level-managers{gap:12px}
+  .staff-grid{gap:8px}
   #drawer{width:100%;right:-100%}
 }
 </style>
@@ -448,7 +422,7 @@ async function loadOrg() {
       users = users.concat(data.value || []);
       url = data['@odata.nextLink'] || null;
     }
-    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises') && u.manager && u.displayName !== 'Markus Peltz');
+    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises'));
     orgData = users;
     buildTree(users);
     const now = new Date();
@@ -467,11 +441,9 @@ async function loadOrg() {
 function buildTree(users) {
   const inSet = new Set(users.map(u => u.id));
 
-  // Find Sonja = user whose manager is not in the set (root)
-  // If multiple roots, pick the one with most direct reports or first alphabetically
+  // Roots = users whose manager is not in the set
   const roots = users.filter(u => !u.manager || !inSet.has(u.manager.id));
   const sortFn = arr => arr ? arr.sort((a,b) => a.displayName.localeCompare(b.displayName, 'de')) : [];
-  sortFn(roots);
 
   // Build children map
   const children = {};
@@ -496,62 +468,61 @@ function buildTree(users) {
   const container = document.getElementById('treeContainer');
   container.innerHTML = '';
 
-  // For each root (usually just Sonja), build the 3-level layout
-  roots.forEach(root => {
-    const wrap = document.createElement('div');
+  const wrap = document.createElement('div');
 
-    // ── LEVEL 0: root centered ──
-    const levelRoot = document.createElement('div');
-    levelRoot.className = 'level-root';
-    levelRoot.appendChild(makeRowCard(root, 0, jungerAls, 'card-root'));
-    wrap.appendChild(levelRoot);
-
-    const managers = children[root.id] || [];
-    if (managers.length === 0) { container.appendChild(wrap); return; }
-
-    // vertical line root → managers
-    const vc = document.createElement('div');
-    vc.className = 'v-connector';
-    wrap.appendChild(vc);
-
-    // horizontal bar above manager row
-    const mBarWrap = document.createElement('div');
-    mBarWrap.className = 'manager-bar-wrap';
-
-    const levelManagers = document.createElement('div');
-    levelManagers.className = 'level-managers';
-
-    managers.forEach(mgr => {
-      const mgrCol = document.createElement('div');
-      mgrCol.className = 'manager-col';
-
-      // manager card
-      mgrCol.appendChild(makeRowCard(mgr, 1, jungerAls, 'card-manager'));
-
-      // staff under this manager
-      const staff = children[mgr.id] || [];
-      if (staff.length > 0) {
-        const staffWrap = document.createElement('div');
-        staffWrap.className = 'staff-wrap';
-
-        const vts = document.createElement('div');
-        vts.className = 'v-to-staff';
-        staffWrap.appendChild(vts);
-
-        const grid = document.createElement('div');
-        grid.className = 'staff-grid';
-        staff.forEach(s => grid.appendChild(makeRowCard(s, 2, jungerAls, 'card-staff')));
-        staffWrap.appendChild(grid);
-        mgrCol.appendChild(staffWrap);
-      }
-
-      levelManagers.appendChild(mgrCol);
-    });
-
-    mBarWrap.appendChild(levelManagers);
-    wrap.appendChild(mBarWrap);
-    container.appendChild(wrap);
+  // ── LEVEL 0: all roots (Sonja + Markus) centered in one row ──
+  // Sonja first (has most children), then others
+  const sonjaFirst = [...roots].sort((a,b) => {
+    const ac = (children[a.id] || []).length;
+    const bc = (children[b.id] || []).length;
+    return bc - ac;
   });
+
+  const levelRoot = document.createElement('div');
+  levelRoot.className = 'level-root';
+  sonjaFirst.forEach(r => levelRoot.appendChild(makeRowCard(r, 0, jungerAls, 'card-root')));
+  wrap.appendChild(levelRoot);
+
+  // Find the primary root (most children = Sonja)
+  const primaryRoot = sonjaFirst[0];
+  const managers = children[primaryRoot?.id] || [];
+  if (managers.length === 0) { container.appendChild(wrap); return; }
+
+  // vertical line from primary root down
+  const vc = document.createElement('div');
+  vc.className = 'v-connector';
+  wrap.appendChild(vc);
+
+  // manager bar
+  const mBarWrap = document.createElement('div');
+  mBarWrap.className = 'manager-bar-wrap';
+  const levelManagers = document.createElement('div');
+  levelManagers.className = 'level-managers';
+
+  managers.forEach(mgr => {
+    const mgrCol = document.createElement('div');
+    mgrCol.className = 'manager-col';
+    mgrCol.appendChild(makeRowCard(mgr, 1, jungerAls, 'card-manager'));
+
+    const staff = children[mgr.id] || [];
+    if (staff.length > 0) {
+      const staffWrap = document.createElement('div');
+      staffWrap.className = 'staff-wrap';
+      const vts = document.createElement('div');
+      vts.className = 'v-to-staff';
+      staffWrap.appendChild(vts);
+      const grid = document.createElement('div');
+      grid.className = 'staff-grid';
+      staff.forEach(s => grid.appendChild(makeRowCard(s, 2, jungerAls, 'card-staff')));
+      staffWrap.appendChild(grid);
+      mgrCol.appendChild(staffWrap);
+    }
+    levelManagers.appendChild(mgrCol);
+  });
+
+  mBarWrap.appendChild(levelManagers);
+  wrap.appendChild(mBarWrap);
+  container.appendChild(wrap);
 
   loadPhotosAsync(users);
 }
@@ -576,48 +547,19 @@ function makeRowCard(user, depth, jungerAls, cardClass) {
   av.dataset.initials = initials(user.displayName);
   card.appendChild(av);
 
-  // text
-  const txt = document.createElement('div');
-  txt.className = 'row-text';
-  txt.innerHTML = `<div class="row-name">${user.displayName}</div><div class="row-title">${user.jobTitle || roleInfo.label}</div>`;
-  card.appendChild(txt);
+  // name
+  const nm = document.createElement('div');
+  nm.className = 'row-name';
+  nm.textContent = user.displayName;
+  card.appendChild(nm);
 
-  // contact links: name linked to mail + phone number
-  const links = document.createElement('div');
-  links.className = 'row-links';
-  if (user.mail) {
-    const a = document.createElement('a');
-    a.className = 'row-link row-link-name';
-    a.href = 'mailto:' + user.mail;
-    a.innerHTML = `${mailSvg()}<span>${user.displayName}</span>`;
-    a.addEventListener('click', e => e.stopPropagation());
-    links.appendChild(a);
-  }
-  if (user.mobilePhone) {
-    const a = document.createElement('a');
-    a.className = 'row-link';
-    a.href = 'tel:' + user.mobilePhone.replace(/\s/g,'');
-    a.innerHTML = `${phoneSvg()}<span>${user.mobilePhone}</span>`;
-    a.addEventListener('click', e => e.stopPropagation());
-    links.appendChild(a);
-  }
-  if (links.children.length > 0) card.appendChild(links);
+  // role/job title
+  const jt = document.createElement('div');
+  jt.className = 'row-title';
+  jt.textContent = user.jobTitle || roleInfo.label;
+  card.appendChild(jt);
 
-  // since badge
-  if (user.createdDateTime) {
-    const days = daysSince(user.createdDateTime);
-    const junger = jungerAls?.[user.id];
-    const badge = document.createElement('div');
-    badge.className = 'row-since';
-    const line1 = days.toLocaleString('de-DE') + ' Tage';
-    const line2 = junger !== null && junger !== undefined
-      ? (junger === 0 ? 'Jüngste/r im Team' : junger + (junger === 1 ? ' danach' : ' danach'))
-      : '';
-    badge.innerHTML = line1 + (line2 ? `<br><span style="font-size:8.5px;font-weight:400;opacity:.75">${line2}</span>` : '');
-    card.appendChild(badge);
-  }
-
-  card.addEventListener('click', () => openDrawer(user, roleInfo));
+  card.addEventListener('click', () => openDrawer(user, roleInfo, jungerAls));
   return card;
 }
 
@@ -688,16 +630,16 @@ function toggleAll() {
 }
 
 /* ── DRAWER ── */
-function openDrawer(user, roleInfo) {
+function openDrawer(user, roleInfo, jungerAls) {
   document.querySelectorAll('.row-card').forEach(c => c.classList.remove('highlight'));
   const card = document.querySelector(`.row-card[data-user-id="${user.id}"]`);
   if (card) card.classList.add('highlight');
 
   const days = user.createdDateTime ? daysSince(user.createdDateTime) : null;
   const startDate = user.createdDateTime ? new Date(user.createdDateTime).toLocaleDateString('de-DE') : '';
-  const junger = orgData.length > 0 && user.createdDateTime
+  const junger = jungerAls?.[user.id] ?? (orgData.length > 0 && user.createdDateTime
     ? orgData.filter(v => v.createdDateTime && v.id !== user.id && new Date(v.createdDateTime).getTime() > new Date(user.createdDateTime).getTime()).length
-    : null;
+    : null);
 
   const srcAv = document.getElementById('avatar-' + user.id);
   let avatarHtml;
