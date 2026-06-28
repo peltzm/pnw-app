@@ -383,7 +383,8 @@ const CFG = {
 const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All'];
 const SP_SITE  = 'praxisneuewegesonjapeltz978.sharepoint.com';
 const SP_LIST  = 'Mitarbeiter_Profil';
-let _spSiteId  = null;
+const SP_SITE_ID = '2d413d43-e9b6-41bd-8879-137937a86ba9'; // fest, ändert sich nie
+let _spSiteId  = SP_SITE_ID;
 let _spListId  = null;
 let _currentUserId = null; // Azure AD id des eingeloggten Users
 let _currentUserMail = null;
@@ -758,49 +759,22 @@ function toggleAll() {
 
 /* ── SHAREPOINT: LISTE SICHERSTELLEN ── */
 async function ensureSpList() {
+  if (_spListId) return; // bereits gecacht
   try {
     const token = await getToken();
-    // Site ID holen — korrekte Graph URL für SharePoint Online Root
-    if (!_spSiteId) {
-      const rootR = await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${SP_SITE}`,
-        {headers:{Authorization:'Bearer '+token}}
-      );
-      if (!rootR.ok) { console.warn('SP Site nicht gefunden:', rootR.status); return; }
-      const s = await rootR.json();
-      _spSiteId = s.id;
-    }
-    if (!_spSiteId) return;
-
-    // Liste suchen
+    // Nur Listen-ID holen — Site-ID ist fest eingebaut
     const lr = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists?$filter=displayName eq '${SP_LIST}'&$select=id,displayName`,
       {headers:{Authorization:'Bearer '+token}}
     );
+    if (!lr.ok) { console.warn('SP Listen-Abfrage fehlgeschlagen:', lr.status); return; }
     const ld = await lr.json();
     if (ld.value && ld.value.length > 0) {
       _spListId = ld.value[0].id;
-      return;
+      console.log('SP Liste gefunden:', SP_LIST, _spListId);
+    } else {
+      console.warn(`SP Liste "${SP_LIST}" nicht gefunden — bitte in SharePoint anlegen.`);
     }
-
-    // Liste anlegen
-    const cr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists`, {
-      method:'POST', headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-      body: JSON.stringify({
-        displayName: SP_LIST,
-        list: { template: 'genericList' },
-        columns: [
-          { name:'Email',              text:{} },
-          { name:'Zusatzausbildung',   text:{ allowMultipleLines:true } },
-          { name:'Themenschwerpunkte', text:{ allowMultipleLines:true } },
-          { name:'ISEF',               boolean:{} },
-          { name:'Teamleitung',        boolean:{} },
-          { name:'Stationaer',         boolean:{} },
-        ]
-      })
-    });
-    if (cr.ok) { const cl = await cr.json(); _spListId = cl.id; console.log('SP Liste angelegt:', _spListId); }
-    else { console.warn('SP Liste anlegen fehlgeschlagen:', cr.status, await cr.text()); }
   } catch(e) { console.warn('SP list init error:', e); }
 }
 
