@@ -83,24 +83,26 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   padding:12px;
   overflow:auto;
   background:var(--bg);
-  min-height:0; /* allow flex child to shrink below content size */
+  min-height:0;
+  /* touch-action pan ermöglicht scrollen, pinch wird per JS abgefangen */
+  touch-action:pan-x pan-y;
 }
 .map-wrapper{
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:var(--radius-lg);
-  overflow:hidden;
+  overflow:visible;
   box-shadow:0 2px 16px rgba(0,0,0,.06);
   display:block;
-  /* size by available space, keep 16:9 ratio */
   max-width:100%;
   max-height:100%;
+  transform-origin:center center;
+  transition:transform .05s linear;
 }
 .map-wrapper img{
   display:block;
-  /* fill wrapper width but never exceed available height */
   width:100%;
-  max-height:calc(100dvh - var(--hdr-h) - 80px - 24px); /* dvh - header(56px) - page-header(~80px) - padding(24px) */
+  max-height:calc(100dvh - var(--hdr-h) - 80px - 24px);
   height:auto;
   object-fit:contain;
 }
@@ -336,11 +338,12 @@ async function loadMap() {
 }
 
 // ── ZOOM ──
-// 100% = wrapper fills container width; >100% scrolls horizontally
-let currentZoom = 100;
+let currentScale = 1.0;
+const SCALE_MIN = 0.25;
+const SCALE_MAX = 4.0;
 
 function onMapLoad() {
-  currentZoom = 100;
+  currentScale = 1.0;
   applyZoom();
   initPinchZoom();
 }
@@ -351,58 +354,61 @@ function onMapError() {
 }
 
 function zoom(delta) {
-  currentZoom = Math.min(300, Math.max(25, currentZoom + delta));
+  // delta comes in as ±25 (percent steps) → convert to scale steps
+  const step = delta > 0 ? 0.25 : -0.25;
+  currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, currentScale + step));
   applyZoom();
 }
 function zoomReset() {
-  currentZoom = 100;
+  currentScale = 1.0;
   applyZoom();
 }
 function applyZoom() {
   const wrapper = document.getElementById('mapWrapper');
-  const img     = document.getElementById('mapImg');
-  if (currentZoom === 100) {
-    wrapper.style.width    = '';
-    wrapper.style.maxWidth = '';
-    img.style.maxHeight    = '';
-  } else {
-    wrapper.style.width    = currentZoom + '%';
-    wrapper.style.maxWidth = 'none';
-    img.style.maxHeight    = 'none';
-  }
-  document.getElementById('zoomLabel').textContent = currentZoom + '%';
+  if (!wrapper) return;
+  wrapper.style.transform = `scale(${currentScale})`;
+  // show as percentage
+  document.getElementById('zoomLabel').textContent = Math.round(currentScale * 100) + '%';
 }
 
 // ── PINCH-TO-ZOOM (Touch) ──
 function initPinchZoom() {
-  const el = document.getElementById('mapContainer') || document.getElementById('mapWrapper');
-  if (!el) return;
-  let startDist = 0;
-  let startZoom = 100;
+  const container = document.getElementById('mapContainer');
+  if (!container) return;
 
-  el.addEventListener('touchstart', e => {
+  let startDist  = 0;
+  let startScale = 1.0;
+
+  function getTouchDist(e) {
+    return Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+
+  container.addEventListener('touchstart', e => {
     if (e.touches.length === 2) {
-      startDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      startZoom = currentZoom;
+      startDist  = getTouchDist(e);
+      startScale = currentScale;
       e.preventDefault();
     }
   }, { passive: false });
 
-  el.addEventListener('touchmove', e => {
+  container.addEventListener('touchmove', e => {
     if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
+      const dist  = getTouchDist(e);
       const ratio = dist / startDist;
-      currentZoom = Math.min(300, Math.max(25, Math.round(startZoom * ratio)));
+      currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, startScale * ratio));
       applyZoom();
       e.preventDefault();
     }
   }, { passive: false });
+
+  container.addEventListener('touchend', e => {
+    if (e.touches.length < 2) {
+      startDist = 0;
+    }
+  }, { passive: true });
 }
 
 // ── PDF EXPORT ──
