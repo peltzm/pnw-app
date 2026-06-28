@@ -80,7 +80,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .map-container{
   flex:1;
   display:flex;align-items:flex-start;justify-content:center;
-  padding:20px;
+  padding:16px;
   overflow:auto;
   background:var(--bg);
 }
@@ -90,11 +90,13 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   border-radius:var(--radius-lg);
   overflow:hidden;
   box-shadow:0 2px 16px rgba(0,0,0,.06);
-  display:inline-flex;align-items:center;justify-content:center;
+  display:block;
+  width:100%;
 }
 .map-wrapper img{
   display:block;
-  /* JS sets explicit pixel width after load */
+  width:100%;
+  height:auto;
 }
 
 /* Zoom controls */
@@ -135,7 +137,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 @media(max-width:600px){
   .page-header{padding:12px 14px 10px}
   .page-header-left h2{font-size:15px}
-  .map-container{padding:10px}
+  .map-container{padding:8px}
 }
 </style>
 </head>
@@ -309,16 +311,15 @@ init();
 
 // ── IMAGE LOAD (fetch as blob to avoid CORS taint on canvas) ──
 const MAP_URL = 'https://raw.githubusercontent.com/peltzm/pnw-app/main/assets/gemeindekarte.png';
-let mapBlobUrl = null;   // blob URL used for both display and export
+let mapBlobUrl = null;
 
 async function loadMap() {
-  const img     = document.getElementById('mapImg');
-  const wrapper = document.getElementById('mapWrapper');
+  const img = document.getElementById('mapImg');
   try {
     const resp = await fetch(MAP_URL);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const blob  = await resp.blob();
-    mapBlobUrl  = URL.createObjectURL(blob);
+    const blob = await resp.blob();
+    mapBlobUrl = URL.createObjectURL(blob);
     img.onload  = onMapLoad;
     img.onerror = onMapError;
     img.src     = mapBlobUrl;
@@ -328,41 +329,17 @@ async function loadMap() {
 }
 
 // ── ZOOM ──
-let currentZoom = 100;   // percent relative to fit-width
-let fitWidthPx   = 0;    // pixel width at 100 %
+// 100% = wrapper fills container width; >100% scrolls horizontally
+let currentZoom = 100;
 
 function onMapLoad() {
-  // appScreen may have just become visible — layout hasn't painted yet.
-  // Use rAF twice (two frames) to ensure clientWidth is measured after paint.
-  requestAnimationFrame(() => requestAnimationFrame(fitMap));
-}
-
-function fitMap() {
-  const img       = document.getElementById('mapImg');
-  const container = document.getElementById('mapContainer');
-  let available   = container.clientWidth - 42; // minus 2×20px padding + 2px border
-
-  if (available <= 0) {
-    // Container still not laid out — observe until it is
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0].contentRect.width - 42;
-      if (w > 0) { ro.disconnect(); applyFit(img, w); }
-    });
-    ro.observe(container);
-    return;
-  }
-  applyFit(img, available);
-}
-
-function applyFit(img, available) {
-  fitWidthPx  = Math.min(available, img.naturalWidth);
   currentZoom = 100;
   applyZoom();
 }
 
 function onMapError() {
-  const wrapper = document.getElementById('mapWrapper');
-  wrapper.innerHTML = '<div style="padding:40px 24px;text-align:center;color:var(--text-muted);font-size:13px;">Karte konnte nicht geladen werden.<br>Bitte Seite neu laden.</div>';
+  document.getElementById('mapWrapper').innerHTML =
+    '<div style="padding:40px 24px;text-align:center;color:var(--text-muted);font-size:13px;">Karte konnte nicht geladen werden.<br>Bitte Seite neu laden.</div>';
 }
 
 function zoom(delta) {
@@ -374,22 +351,14 @@ function zoomReset() {
   applyZoom();
 }
 function applyZoom() {
-  if (!fitWidthPx) return;
-  const img = document.getElementById('mapImg');
-  const px  = Math.round(fitWidthPx * currentZoom / 100);
-  img.style.width  = px + 'px';
-  img.style.height = 'auto';
+  const wrapper = document.getElementById('mapWrapper');
+  if (currentZoom === 100) {
+    wrapper.style.width = '100%';
+  } else {
+    wrapper.style.width = currentZoom + '%';
+  }
   document.getElementById('zoomLabel').textContent = currentZoom + '%';
 }
-
-// Re-fit on window resize
-window.addEventListener('resize', () => {
-  if (!fitWidthPx) return;
-  const img       = document.getElementById('mapImg');
-  const container = document.getElementById('mapContainer');
-  const available = container.clientWidth - 42;
-  if (available > 0) applyFit(img, available);
-});
 
 // ── PDF EXPORT ──
 function startExport() {
