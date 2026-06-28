@@ -22,7 +22,7 @@
     --radius: 8px; --radius-lg: 12px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Kodchasan', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+  body { font-family: 'Kodchasan', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; min-height: 100vh; overflow-x: hidden; }
 
   /* ── HEADER ── */
   .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; overflow: hidden; }
@@ -34,7 +34,7 @@
   /* ── LAYOUT ── */
   .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 56px); }
   .sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 1.5rem 0; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto; }
-  .main { padding: 2rem; max-width: 800px; }
+  .main { padding: 2rem; max-width: 800px; min-width: 0; }
 
   /* ── SIDEBAR NAV ── */
   .nav-section { padding: 0 1rem 0.5rem; font-size: 10px; font-weight: 600; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 1rem; }
