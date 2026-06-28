@@ -432,7 +432,18 @@ async function loadOrg() {
       users = users.concat(data.value || []);
       url = data['@odata.nextLink'] || null;
     }
-    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises') && u.mail.toLowerCase().endsWith('@praxisneuewege.de'));
+    // Bekannte Service-Accounts / App-Mailboxen ausschließen
+    const SERVICE_NAMES = ['canva','spesen','rechnung','krankmeldung','fax','nordstern'];
+    users = users.filter(u => {
+      if (!u.mail || !u.displayName) return false;
+      if (u.displayName.startsWith('On-Premises')) return false;
+      if (!u.mail.toLowerCase().endsWith('@praxisneuewege.de')) return false;
+      const lc = u.displayName.toLowerCase();
+      if (SERVICE_NAMES.some(s => lc.startsWith(s))) return false;
+      return true;
+    });
+    // Markus Peltz als Root behandeln: Manager-Referenz entfernen damit er auf Root-Ebene landet
+    users = users.map(u => u.displayName === 'Markus Peltz' ? {...u, manager: null} : u);
     orgData = users;
     buildTree(users);
     const now = new Date();
