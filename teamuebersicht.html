@@ -332,11 +332,30 @@ let currentZoom = 100;   // percent relative to fit-width
 let fitWidthPx   = 0;    // pixel width at 100 %
 
 function onMapLoad() {
+  // appScreen may have just become visible — layout hasn't painted yet.
+  // Use rAF twice (two frames) to ensure clientWidth is measured after paint.
+  requestAnimationFrame(() => requestAnimationFrame(fitMap));
+}
+
+function fitMap() {
   const img       = document.getElementById('mapImg');
   const container = document.getElementById('mapContainer');
-  // Available width minus padding (2×20 px) and wrapper border (2×1 px)
-  const available = container.clientWidth - 42;
-  fitWidthPx = Math.min(available, img.naturalWidth);
+  let available   = container.clientWidth - 42; // minus 2×20px padding + 2px border
+
+  if (available <= 0) {
+    // Container still not laid out — observe until it is
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0].contentRect.width - 42;
+      if (w > 0) { ro.disconnect(); applyFit(img, w); }
+    });
+    ro.observe(container);
+    return;
+  }
+  applyFit(img, available);
+}
+
+function applyFit(img, available) {
+  fitWidthPx  = Math.min(available, img.naturalWidth);
   currentZoom = 100;
   applyZoom();
 }
@@ -363,14 +382,13 @@ function applyZoom() {
   document.getElementById('zoomLabel').textContent = currentZoom + '%';
 }
 
-// Re-fit on window resize (reset to 100 % of new container width)
+// Re-fit on window resize
 window.addEventListener('resize', () => {
   if (!fitWidthPx) return;
+  const img       = document.getElementById('mapImg');
   const container = document.getElementById('mapContainer');
   const available = container.clientWidth - 42;
-  const img       = document.getElementById('mapImg');
-  fitWidthPx = Math.min(available, img.naturalWidth);
-  applyZoom();
+  if (available > 0) applyFit(img, available);
 });
 
 // ── PDF EXPORT ──
