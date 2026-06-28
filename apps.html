@@ -127,6 +127,10 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .card-name{
   font-size:12px;font-weight:600;
   color:var(--text);line-height:1.2;
+  text-align:center;
+  word-break:break-word;
+  hyphens:auto;
+  width:100%;
 }
 .card-desc{
   font-size:10px;color:var(--text-muted);
@@ -299,7 +303,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
       <div class="card-desc">Organigramm und Mitarbeiterverzeichnis</div>
     </a>
 
-  <footer class="page-footer" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+  <footer class="page-footer" style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;flex-direction:column;text-align:center;">
     <span>Praxis NeueWege · <a href="https://www.praxisneuewege.de">praxisneuewege.de</a></span>
     <button id="footerLogoutBtn" class="btn-logout" onclick="logout()" style="display:none;">Abmelden</button>
   </footer>
