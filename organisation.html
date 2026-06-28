@@ -760,17 +760,23 @@ function toggleAll() {
 async function ensureSpList() {
   try {
     const token = await getToken();
-    // Site ID holen
+    // Site ID holen — korrekte Graph URL für SharePoint Online Root
     if (!_spSiteId) {
-      const sr = await fetch(`https://graph.microsoft.com/v1.0/sites/${SP_SITE}:/sites/root`, {headers:{Authorization:'Bearer '+token}});
-      // Root site
-      const rootR = await fetch(`https://graph.microsoft.com/v1.0/sites/${SP_SITE}`, {headers:{Authorization:'Bearer '+token}});
-      if (rootR.ok) { const s = await rootR.json(); _spSiteId = s.id; }
+      const rootR = await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${SP_SITE}`,
+        {headers:{Authorization:'Bearer '+token}}
+      );
+      if (!rootR.ok) { console.warn('SP Site nicht gefunden:', rootR.status); return; }
+      const s = await rootR.json();
+      _spSiteId = s.id;
     }
     if (!_spSiteId) return;
 
     // Liste suchen
-    const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists?$filter=displayName eq '${SP_LIST}'&$select=id,displayName`, {headers:{Authorization:'Bearer '+token}});
+    const lr = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_spSiteId}/lists?$filter=displayName eq '${SP_LIST}'&$select=id,displayName`,
+      {headers:{Authorization:'Bearer '+token}}
+    );
     const ld = await lr.json();
     if (ld.value && ld.value.length > 0) {
       _spListId = ld.value[0].id;
@@ -784,16 +790,17 @@ async function ensureSpList() {
         displayName: SP_LIST,
         list: { template: 'genericList' },
         columns: [
-          { name:'Email',            text:{} },
-          { name:'Zusatzausbildung', text:{ allowMultipleLines:true } },
+          { name:'Email',              text:{} },
+          { name:'Zusatzausbildung',   text:{ allowMultipleLines:true } },
           { name:'Themenschwerpunkte', text:{ allowMultipleLines:true } },
-          { name:'ISEF',             boolean:{} },
-          { name:'Teamleitung',      boolean:{} },
-          { name:'Stationaer',       boolean:{} },
+          { name:'ISEF',               boolean:{} },
+          { name:'Teamleitung',        boolean:{} },
+          { name:'Stationaer',         boolean:{} },
         ]
       })
     });
-    if (cr.ok) { const cl = await cr.json(); _spListId = cl.id; }
+    if (cr.ok) { const cl = await cr.json(); _spListId = cl.id; console.log('SP Liste angelegt:', _spListId); }
+    else { console.warn('SP Liste anlegen fehlgeschlagen:', cr.status, await cr.text()); }
   } catch(e) { console.warn('SP list init error:', e); }
 }
 
@@ -819,7 +826,11 @@ async function loadProfile(mail) {
 
 /* ── PROFIL SPEICHERN ── */
 async function saveProfile(mail, itemId, fields) {
-  if (!_spSiteId || !_spListId) throw new Error('SP nicht initialisiert');
+  if (!_spSiteId || !_spListId) {
+    // Retry init
+    await ensureSpList();
+    if (!_spSiteId || !_spListId) throw new Error('SharePoint-Liste nicht erreichbar. Bitte Seite neu laden.');
+  }
   const token = await getToken();
   const payload = {
     Email: mail,
