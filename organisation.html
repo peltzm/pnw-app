@@ -157,7 +157,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 
 /* ── CARDS ── */
 .row-card{
-  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:5px;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--card-radius,12px);padding:var(--card-pad,16px 10px 12px);
   cursor:pointer;transition:border-color .15s,box-shadow .12s,transform .1s;
@@ -392,7 +392,7 @@ let _spListId  = null;
 let _currentUserId = null; // Azure AD id des eingeloggten Users
 let _currentUserMail = null;
 let _profileCache = {};   // mail -> SP-Profil-Objekt
-const APP_VERSION = 'v55c6568'; // auto-updated on deploy // auto-updated on deploy
+const APP_VERSION = 'vd2a356e'; // auto-updated on deploy // auto-updated on deploy
 
 let msalInstance, currentAccount, accessToken;
 let orgData = [];
