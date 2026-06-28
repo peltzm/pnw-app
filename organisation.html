@@ -164,11 +164,11 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   position:relative;overflow:hidden;
   width:var(--card-w,130px);min-width:var(--card-w,130px);text-align:center;
   /* feste Höhe — alle Kacheln einer Ebene gleich groß */
-  height:150px;
+  height:115px;
 }
-.row-card.card-root{ height:170px; width:calc(var(--card-w,130px) + 20px);min-width:calc(var(--card-w,130px) + 20px) }
-.row-card.card-manager{ height:150px }
-.row-card.card-staff{ height:130px }
+.row-card.card-root{ height:130px; width:calc(var(--card-w,130px) + 20px);min-width:calc(var(--card-w,130px) + 20px) }
+.row-card.card-manager{ height:115px }
+.row-card.card-staff{ height:100px }
 
 .row-card:hover{border-color:var(--accent-mid);box-shadow:0 3px 12px rgba(123,63,30,.12);transform:translateY(-2px)}
 .row-card.highlight{border-color:var(--accent);border-width:1.5px;box-shadow:0 0 0 3px var(--accent-light)}
@@ -392,7 +392,7 @@ let _spListId  = null;
 let _currentUserId = null; // Azure AD id des eingeloggten Users
 let _currentUserMail = null;
 let _profileCache = {};   // mail -> SP-Profil-Objekt
-const APP_VERSION = 'v9d25ed5'; // auto-updated on deploy // auto-updated on deploy
+const APP_VERSION = 'vd2a356e'; // auto-updated on deploy // auto-updated on deploy
 
 let msalInstance, currentAccount, accessToken;
 let orgData = [];
