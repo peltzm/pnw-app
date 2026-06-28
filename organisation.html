@@ -448,7 +448,7 @@ async function loadOrg() {
       users = users.concat(data.value || []);
       url = data['@odata.nextLink'] || null;
     }
-    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises') && u.manager);
+    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises') && u.manager && u.displayName !== 'Markus Peltz');
     orgData = users;
     buildTree(users);
     const now = new Date();
@@ -582,28 +582,26 @@ function makeRowCard(user, depth, jungerAls, cardClass) {
   txt.innerHTML = `<div class="row-name">${user.displayName}</div><div class="row-title">${user.jobTitle || roleInfo.label}</div>`;
   card.appendChild(txt);
 
-  // contact links (hidden on mobile via CSS)
-  if (user.mail || user.mobilePhone) {
-    const links = document.createElement('div');
-    links.className = 'row-links';
-    if (user.mail) {
-      const a = document.createElement('a');
-      a.className = 'row-link';
-      a.href = 'mailto:' + user.mail;
-      a.innerHTML = `${mailSvg()}<span>${user.mail}</span>`;
-      a.addEventListener('click', e => e.stopPropagation());
-      links.appendChild(a);
-    }
-    if (user.mobilePhone) {
-      const a = document.createElement('a');
-      a.className = 'row-link';
-      a.href = 'tel:' + user.mobilePhone.replace(/\s/g,'');
-      a.innerHTML = `${phoneSvg()}<span>${user.mobilePhone}</span>`;
-      a.addEventListener('click', e => e.stopPropagation());
-      links.appendChild(a);
-    }
-    card.appendChild(links);
+  // contact links: name linked to mail + phone number
+  const links = document.createElement('div');
+  links.className = 'row-links';
+  if (user.mail) {
+    const a = document.createElement('a');
+    a.className = 'row-link row-link-name';
+    a.href = 'mailto:' + user.mail;
+    a.innerHTML = `${mailSvg()}<span>${user.displayName}</span>`;
+    a.addEventListener('click', e => e.stopPropagation());
+    links.appendChild(a);
   }
+  if (user.mobilePhone) {
+    const a = document.createElement('a');
+    a.className = 'row-link';
+    a.href = 'tel:' + user.mobilePhone.replace(/\s/g,'');
+    a.innerHTML = `${phoneSvg()}<span>${user.mobilePhone}</span>`;
+    a.addEventListener('click', e => e.stopPropagation());
+    links.appendChild(a);
+  }
+  if (links.children.length > 0) card.appendChild(links);
 
   // since badge
   if (user.createdDateTime) {
