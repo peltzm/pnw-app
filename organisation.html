@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,200;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff">
+<title>Organisation — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --radius:8px; --radius-lg:12px;
+  --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.user-photo-sm{width:24px;height:24px;border-radius:50%;object-fit:cover;border:1.5px solid var(--border)}
+.version-badge{font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-sm{padding:5px 12px;font-size:12px;min-height:30px}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;min-height:28px;border-radius:4px}
+.btn-ghost:hover{border-color:var(--accent-mid);color:var(--accent)}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:64px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* ── APP ── */
+#appScreen{display:none;flex-direction:column;min-height:calc(100dvh - var(--hdr-h))}
+
+/* ── PAGE HEADER ── */
+.page-header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header-left h2{font-size:17px;font-weight:600;color:var(--text)}
+.page-header-left p{font-size:12px;color:var(--text-muted);margin-top:1px}
+.page-header-actions{display:flex;align-items:center;gap:8px}
+
+/* ── TOOLBAR ── */
+.toolbar{padding:10px 20px;display:flex;align-items:center;gap:10px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.search-wrap{position:relative;flex:1;min-width:180px;max-width:300px}
+.search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--text-hint);pointer-events:none}
+.search-input{width:100%;height:34px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px 0 32px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);outline:none}
+.search-input:focus{border-color:var(--accent-mid)}
+.toolbar-info{font-size:11px;color:var(--text-hint);margin-left:auto}
+
+/* ── TREE CONTAINER ── */
+.tree-container{padding:28px 20px 40px;overflow-x:auto;min-height:400px;display:flex;justify-content:center}
+.tree-root{display:flex;flex-direction:column;align-items:center;gap:0;min-width:max-content}
+
+/* ── LEVEL ROW ── */
+.level-row{display:flex;align-items:flex-start;justify-content:center;gap:0;position:relative}
+
+/* ── CONNECTOR LINES ── */
+.v-line{width:1px;background:var(--border-strong);margin:0 auto}
+.v-line-top{height:20px}
+.v-line-mid{height:16px}
+
+/* horizontal bar spanning children */
+.h-bar-wrap{display:flex;justify-content:center;width:100%;position:relative}
+.h-bar{height:1px;background:var(--border-strong);position:absolute;top:0}
+
+/* each child column */
+.child-col{display:flex;flex-direction:column;align-items:center;padding:0 10px}
+
+/* ── PERSON CARD ── */
+.pcard{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px 12px 12px;
+  width:148px;
+  cursor:pointer;
+  transition:border-color .15s, box-shadow .15s, transform .1s;
+  position:relative;
+  text-align:center;
+}
+.pcard:hover{border-color:var(--accent-mid);box-shadow:0 3px 12px rgba(123,63,30,.12);transform:translateY(-1px)}
+.pcard.highlight{border-color:var(--accent);border-width:1.5px;box-shadow:0 0 0 3px var(--accent-light)}
+.pcard-top-bar{position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0}
+
+/* role label above card */
+.role-label{
+  font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  border-radius:3px;padding:2px 7px;margin-bottom:6px;display:inline-block;
+  white-space:nowrap;
+}
+.role-gf{background:#7b3f1e;color:#fff}
+.role-lv{background:#f0e6f5;color:#5a3e78;border:1px solid #d9b8f0}
+.role-tl-amb{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}
+.role-nordstern{background:#e3f2fd;color:#0d47a1;border:1px solid #90caf9}
+
+/* avatar */
+.avatar{
+  width:56px;height:56px;border-radius:50%;margin:0 auto 8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;font-weight:700;color:#fff;
+  overflow:hidden;flex-shrink:0;
+  border:2px solid var(--border);
+}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar.loading{background:var(--bg)}
+.avatar.loading::after{content:'';width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite;display:block;margin:auto}
+
+/* card content */
+.pcard-name{font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px;line-height:1.3}
+.pcard-jobtitle{font-size:10px;color:var(--text-muted);margin-bottom:8px;line-height:1.3;min-height:28px}
+.pcard-divider{border:none;border-top:1px solid var(--border);margin:0 -4px 7px}
+.pcard-info{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-muted);margin-bottom:3px;overflow:hidden}
+.pcard-info svg{width:11px;height:11px;flex-shrink:0;color:var(--accent-mid)}
+.pcard-info a{color:var(--text-muted);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left}
+.pcard-info a:hover{color:var(--accent);text-decoration:underline}
+.pcard-since{
+  margin-top:8px;font-size:9.5px;font-weight:600;
+  background:var(--accent-light);color:var(--accent);
+  border-radius:20px;padding:2px 9px;display:inline-block;
+}
+
+/* ── DETAIL DRAWER ── */
+#drawer{
+  position:fixed;right:-360px;top:var(--hdr-h);bottom:0;
+  width:320px;background:var(--surface);
+  border-left:1px solid var(--border);
+  box-shadow:-4px 0 20px rgba(0,0,0,.08);
+  transition:right .22s cubic-bezier(.4,0,.2,1);
+  z-index:90;overflow-y:auto;padding:20px;
+}
+#drawer.open{right:0}
+#drawer .close-btn{position:absolute;top:12px;right:12px;background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:18px;padding:4px}
+.drawer-avatar{width:72px;height:72px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;overflow:hidden;border:2px solid var(--border)}
+.drawer-avatar img{width:100%;height:100%;object-fit:cover}
+.drawer-name{font-size:18px;font-weight:700;text-align:center;color:var(--text)}
+.drawer-role{font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:16px}
+.drawer-section{margin-bottom:12px}
+.drawer-label{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-hint);margin-bottom:5px}
+.drawer-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);padding:6px 0;border-bottom:1px solid var(--bg)}
+.drawer-row svg{width:15px;height:15px;color:var(--accent-mid);flex-shrink:0}
+.drawer-row a{color:var(--accent);text-decoration:none}
+.drawer-row a:hover{text-decoration:underline}
+.drawer-since{text-align:center;margin-top:16px;font-size:13px;font-weight:600;color:var(--accent);background:var(--accent-light);border-radius:var(--radius);padding:10px}
+.drawer-since span{display:block;font-size:11px;font-weight:400;color:var(--text-muted);margin-top:2px}
+
+/* ── LOADING / ERROR ── */
+.loading-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--text-muted);font-size:13px}
+.spinner{width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-state{display:flex;flex-direction:column;align-items:center;padding:40px 20px;gap:8px;color:var(--error);font-size:13px;text-align:center}
+
+/* ── HIDDEN SEARCH HIGHLIGHT ── */
+.pcard.dimmed{opacity:.35}
+
+@media(max-width:600px){
+  .pcard{width:126px;padding:10px 8px 10px}
+  .avatar{width:44px;height:44px;font-size:13px}
+  .child-col{padding:0 5px}
+  .tree-container{padding:16px 8px 30px}
+  #drawer{width:100%;right:-100%}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand" onclick="location.href='index.html'">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <span>Organisation</span>
+    <span id="versionBadge" class="version-badge"></span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge">
+      <img class="user-photo-sm" id="userPhotoSm" src="" alt="" style="display:none">
+      <div class="user-dot" id="userDot"></div>
+      <span id="userName"></span>
+    </div>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <div class="login-title">Organisation</div>
+    <div class="login-desc">Organigramm &amp; Mitarbeiterverzeichnis von Praxis NeueWege. Bitte mit dem Microsoft-Konto anmelden.</div>
+    <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
+      <svg width="16" height="16" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <div class="alert alert-error" id="loginError" style="display:none"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2>Organigramm</h2>
+      <p id="lastSync">Lade Mitarbeiterdaten …</p>
+    </div>
+    <div class="page-header-actions">
+      <button class="btn btn-outline btn-sm" onclick="loadOrg()" id="refreshBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        Aktualisieren
+      </button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input class="search-input" type="search" placeholder="Name, Rolle, E-Mail …" id="searchInput" oninput="filterTree(this.value)">
+    </div>
+    <span class="toolbar-info" id="toolbarInfo"></span>
+  </div>
+
+  <div class="tree-container" id="treeContainer">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      Mitarbeiterdaten werden geladen …
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL DRAWER -->
+<div id="drawer">
+  <button class="close-btn" onclick="closeDrawer()" aria-label="Schließen">✕</button>
+  <div id="drawerContent"></div>
+</div>
+
+<script>
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/organisation.html'
+};
+
+const SCOPES = ['User.Read', 'User.ReadBasic.All'];
+const APP_VERSION = 'v00000000'; // auto-updated on deploy
+
+let msalInstance, currentAccount, accessToken;
+let orgData = []; // flat list of users
+
+function applyVersionBadge() {
+  const el = document.getElementById('versionBadge');
+  if (el) el.textContent = APP_VERSION;
+}
+
+/* ── MSAL INIT ── */
+async function initApp() {
+  const msalConfig = {
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  };
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  applyVersionBadge();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; accessToken = r.accessToken; await showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; await getToken(); await showApp(); }
+}
+
+async function login() {
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginError');
+  btn.disabled = true; errEl.style.display = 'none';
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) {
+    btn.disabled = false;
+    errEl.style.display = 'block';
+    errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message);
+  }
+}
+
+async function logout() {
+  await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri });
+}
+
+async function getToken() {
+  if (!currentAccount) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    accessToken = r.accessToken; return accessToken;
+  } catch(e) {
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES });
+  }
+}
+
+async function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  const app = document.getElementById('appScreen');
+  app.style.display = 'flex'; app.style.flexDirection = 'column';
+  const ub = document.getElementById('userBadge');
+  ub.style.display = 'flex';
+  document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
+  document.getElementById('logoutBtn').style.display = '';
+  // Load own photo for header
+  loadOwnPhoto();
+  await loadOrg();
+}
+
+async function loadOwnPhoto() {
+  try {
+    const token = await getToken();
+    const r = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (r.ok) {
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const img = document.getElementById('userPhotoSm');
+      img.src = url; img.style.display = '';
+      document.getElementById('userDot').style.display = 'none';
+    }
+  } catch(e) { /* silent */ }
+}
+
+/* ── GRAPH: LOAD ALL USERS ── */
+async function loadOrg() {
+  const token = await getToken();
+  document.getElementById('treeContainer').innerHTML = '<div class="loading-state"><div class="spinner"></div>Mitarbeiterdaten werden geladen …</div>';
+  document.getElementById('lastSync').textContent = 'Lade …';
+
+  try {
+    // Fetch all users with manager expand
+    let url = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,givenName,surname,mail,mobilePhone,jobTitle,createdDateTime&$expand=manager($select=id,displayName)&$top=50&$filter=accountEnabled eq true';
+    let users = [];
+    while (url) {
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (!r.ok) throw new Error('Graph Fehler: ' + r.status);
+      const data = await r.json();
+      users = users.concat(data.value || []);
+      url = data['@odata.nextLink'] || null;
+    }
+
+    // Filter out service/system accounts (no mail, no displayName, or guest)
+    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises'));
+
+    orgData = users;
+    buildTree(users);
+
+    const now = new Date();
+    document.getElementById('lastSync').textContent =
+      `${users.length} Mitarbeiter · Stand ${now.toLocaleDateString('de-DE')} ${now.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'})} Uhr`;
+    document.getElementById('toolbarInfo').textContent = `${users.length} Personen`;
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('treeContainer').innerHTML =
+      `<div class="error-state"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><strong>Fehler beim Laden</strong><span>${e.message}</span><button class="btn btn-outline btn-sm" onclick="loadOrg()" style="margin-top:8px">Erneut versuchen</button></div>`;
+    document.getElementById('lastSync').textContent = 'Fehler beim Laden';
+  }
+}
+
+/* ── BUILD TREE ── */
+function buildTree(users) {
+  // Build manager map: managerId -> [user, ...]
+  const byId = {};
+  users.forEach(u => byId[u.id] = u);
+
+  // Find roots = users whose manager is not in the list (or has no manager)
+  const inSet = new Set(users.map(u => u.id));
+  const roots = users.filter(u => !u.manager || !inSet.has(u.manager.id));
+
+  // Build children map
+  const children = {};
+  users.forEach(u => {
+    const mid = u.manager?.id;
+    if (mid && inSet.has(mid)) {
+      if (!children[mid]) children[mid] = [];
+      children[mid].push(u);
+    }
+  });
+
+  // Sort: by displayName
+  const sort = arr => arr ? arr.sort((a,b) => a.displayName.localeCompare(b.displayName, 'de')) : [];
+  sort(roots);
+  Object.values(children).forEach(sort);
+
+  const container = document.getElementById('treeContainer');
+  container.innerHTML = '';
+
+  const tree = document.createElement('div');
+  tree.className = 'tree-root';
+
+  // Render root level
+  const rootRow = renderLevel(roots, children, 0);
+  tree.appendChild(rootRow);
+  container.appendChild(tree);
+
+  // Load photos async
+  loadPhotosAsync(users);
+}
+
+function renderLevel(nodes, childMap, depth) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;width:100%';
+
+  if (depth > 0) {
+    // Top connector from parent
+    const vt = document.createElement('div');
+    vt.className = 'v-line v-line-top';
+    wrap.appendChild(vt);
+  }
+
+  const row = document.createElement('div');
+  row.className = 'level-row';
+  wrap.appendChild(row);
+
+  nodes.forEach((user, i) => {
+    const col = document.createElement('div');
+    col.className = 'child-col';
+
+    const card = makeCard(user, depth);
+    col.appendChild(card);
+
+    // Children of this user
+    const kids = childMap[user.id] || [];
+    if (kids.length > 0) {
+      // vertical line down from card
+      const vDown = document.createElement('div');
+      vDown.className = 'v-line';
+      vDown.style.height = '20px';
+      col.appendChild(vDown);
+
+      // Horizontal bar + children row
+      const subLevel = renderLevel(kids, childMap, depth + 1);
+      col.appendChild(subLevel);
+    }
+
+    row.appendChild(col);
+  });
+
+  // Draw horizontal bar across siblings if more than 1
+  if (nodes.length > 1) {
+    positionHBar(row);
+  }
+
+  return wrap;
+}
+
+function positionHBar(row) {
+  // We'll draw the hbar via CSS after layout using a ResizeObserver trick
+  // Instead: inject a pseudo-hbar inside the row itself
+  row.style.position = 'relative';
+  const bar = document.createElement('div');
+  bar.className = 'sibling-hbar';
+  bar.style.cssText = 'position:absolute;top:0;height:1px;background:var(--border-strong);pointer-events:none;';
+  row.appendChild(bar);
+
+  // Position after render
+  requestAnimationFrame(() => {
+    const cols = Array.from(row.querySelectorAll(':scope > .child-col'));
+    if (cols.length < 2) { bar.remove(); return; }
+    const rowRect = row.getBoundingClientRect();
+    const firstCard = cols[0].querySelector('.pcard');
+    const lastCard = cols[cols.length-1].querySelector('.pcard');
+    if (!firstCard || !lastCard) { bar.remove(); return; }
+    const f = firstCard.getBoundingClientRect();
+    const l = lastCard.getBoundingClientRect();
+    const left = (f.left + f.width/2) - rowRect.left;
+    const right = (l.left + l.width/2) - rowRect.left;
+    bar.style.left = left + 'px';
+    bar.style.width = (right - left) + 'px';
+    bar.style.top = '0px';
+  });
+}
+
+/* ── MAKE CARD ── */
+function makeCard(user, depth) {
+  const card = document.createElement('div');
+  card.className = 'pcard';
+  card.dataset.userId = user.id;
+  card.dataset.name = (user.displayName || '').toLowerCase();
+  card.dataset.email = (user.mail || '').toLowerCase();
+  card.dataset.job = (user.jobTitle || '').toLowerCase();
+
+  // color top bar by role
+  const roleInfo = getRoleInfo(user, depth);
+  const bar = document.createElement('div');
+  bar.className = 'pcard-top-bar';
+  bar.style.background = roleInfo.color;
+  card.appendChild(bar);
+
+  // role label
+  const rl = document.createElement('div');
+  rl.className = 'role-label ' + roleInfo.cls;
+  rl.textContent = roleInfo.label;
+  card.appendChild(rl);
+
+  // avatar
+  const av = document.createElement('div');
+  av.className = 'avatar loading';
+  av.id = 'avatar-' + user.id;
+  av.style.background = roleInfo.color;
+  av.dataset.initials = initials(user.displayName);
+  card.appendChild(av);
+
+  // name
+  const nm = document.createElement('div');
+  nm.className = 'pcard-name';
+  nm.textContent = user.displayName;
+  card.appendChild(nm);
+
+  // job title
+  const jt = document.createElement('div');
+  jt.className = 'pcard-jobtitle';
+  jt.textContent = user.jobTitle || '';
+  card.appendChild(jt);
+
+  // divider
+  const hr = document.createElement('hr');
+  hr.className = 'pcard-divider';
+  card.appendChild(hr);
+
+  // email
+  if (user.mail) {
+    const em = infoRow(mailIcon(), user.mail, 'mailto:' + user.mail);
+    card.appendChild(em);
+  }
+
+  // phone
+  if (user.mobilePhone) {
+    const ph = infoRow(phoneIcon(), user.mobilePhone, 'tel:' + user.mobilePhone.replace(/\s/g,''));
+    card.appendChild(ph);
+  }
+
+  // since
+  if (user.createdDateTime) {
+    const days = daysSince(user.createdDateTime);
+    const since = document.createElement('div');
+    since.className = 'pcard-since';
+    since.textContent = '● ' + days.toLocaleString('de-DE') + ' Tage bei PNW';
+    card.appendChild(since);
+  }
+
+  card.addEventListener('click', () => openDrawer(user, roleInfo));
+  return card;
+}
+
+function infoRow(iconSvg, text, href) {
+  const div = document.createElement('div');
+  div.className = 'pcard-info';
+  div.innerHTML = iconSvg;
+  const a = document.createElement('a');
+  a.href = href; a.textContent = text;
+  a.addEventListener('click', e => e.stopPropagation());
+  div.appendChild(a);
+  return div;
+}
+
+function getRoleInfo(user, depth) {
+  const title = (user.jobTitle || '').toLowerCase();
+  const name = (user.displayName || '').toLowerCase();
+  if (depth === 0) return { color:'#7b3f1e', cls:'role-gf', label:'Geschäftsführung' };
+  if (title.includes('nordstern') || title.includes('wohngruppe')) return { color:'#1565c0', cls:'role-nordstern', label:'Nordstern' };
+  if (title.includes('teamleitung') || title.includes('leitung ambulant')) return { color:'#2e7d32', cls:'role-tl-amb', label:'TL Ambulant' };
+  if (title.includes('verwaltung') || name.includes('peltz')) return { color:'#5a3e78', cls:'role-lv', label:'Verwaltung' };
+  if (title.includes('ambulant') || title.includes('spfh') || title.includes('fachkraft') || title.includes('erziehung')) return { color:'#388e3c', cls:'role-tl-amb', label:'Ambulant' };
+  return { color:'#6b6860', cls:'role-lv', label: user.jobTitle || 'Mitarbeiter' };
+}
+
+function initials(name) {
+  if (!name) return '?';
+  return name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase();
+}
+
+function daysSince(isoDate) {
+  const start = new Date(isoDate);
+  const now = new Date();
+  return Math.floor((now - start) / 86400000);
+}
+
+/* ── PHOTO LOADING ── */
+async function loadPhotosAsync(users) {
+  const token = await getToken();
+  for (const user of users) {
+    const avEl = document.getElementById('avatar-' + user.id);
+    if (!avEl) continue;
+    try {
+      const r = await fetch(`https://graph.microsoft.com/v1.0/users/${user.id}/photo/$value`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (r.ok) {
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        avEl.classList.remove('loading');
+        avEl.innerHTML = `<img src="${url}" alt="${user.displayName}">`;
+      } else {
+        setInitialsAvatar(avEl);
+      }
+    } catch(e) {
+      setInitialsAvatar(avEl);
+    }
+  }
+}
+
+function setInitialsAvatar(el) {
+  el.classList.remove('loading');
+  el.textContent = el.dataset.initials || '?';
+}
+
+/* ── DRAWER ── */
+function openDrawer(user, roleInfo) {
+  // highlight card
+  document.querySelectorAll('.pcard').forEach(c => c.classList.remove('highlight'));
+  const card = document.querySelector(`.pcard[data-user-id="${user.id}"]`);
+  if (card) card.classList.add('highlight');
+
+  const days = user.createdDateTime ? daysSince(user.createdDateTime) : null;
+  const startDate = user.createdDateTime ? new Date(user.createdDateTime).toLocaleDateString('de-DE') : '';
+
+  // Build drawer avatar (reuse photo if loaded)
+  const srcAvEl = document.getElementById('avatar-' + user.id);
+  let avatarHtml;
+  if (srcAvEl && srcAvEl.querySelector('img')) {
+    const imgSrc = srcAvEl.querySelector('img').src;
+    avatarHtml = `<div class="drawer-avatar"><img src="${imgSrc}" alt="${user.displayName}"></div>`;
+  } else {
+    avatarHtml = `<div class="drawer-avatar" style="background:${roleInfo.color}">${initials(user.displayName)}</div>`;
+  }
+
+  document.getElementById('drawerContent').innerHTML = `
+    ${avatarHtml}
+    <div class="drawer-name">${user.displayName}</div>
+    <div class="drawer-role">${user.jobTitle || roleInfo.label}</div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
+    <div class="drawer-section">
+      <div class="drawer-label">Kontakt</div>
+      ${user.mail ? `<div class="drawer-row">${mailIcon()}<a href="mailto:${user.mail}">${user.mail}</a></div>` : ''}
+      ${user.mobilePhone ? `<div class="drawer-row">${phoneIcon()}<a href="tel:${user.mobilePhone.replace(/\s/g,'')}">${user.mobilePhone}</a></div>` : ''}
+    </div>
+    ${days !== null ? `
+    <div class="drawer-since">
+      ${days.toLocaleString('de-DE')} Tage bei Praxis NeueWege
+      <span>Dabei seit ${startDate}</span>
+    </div>` : ''}
+    ${user.manager ? `
+    <div class="drawer-section" style="margin-top:14px">
+      <div class="drawer-label">Vorgesetzte/r</div>
+      <div class="drawer-row" style="font-size:13px">${user.manager.displayName || ''}</div>
+    </div>` : ''}
+  `;
+
+  document.getElementById('drawer').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.querySelectorAll('.pcard').forEach(c => c.classList.remove('highlight'));
+}
+
+/* ── SEARCH / FILTER ── */
+function filterTree(q) {
+  const term = q.trim().toLowerCase();
+  const cards = document.querySelectorAll('.pcard');
+  if (!term) {
+    cards.forEach(c => { c.classList.remove('dimmed'); c.classList.remove('highlight'); });
+    document.getElementById('toolbarInfo').textContent = orgData.length + ' Personen';
+    return;
+  }
+  let hits = 0;
+  cards.forEach(c => {
+    const match = c.dataset.name.includes(term) || c.dataset.email.includes(term) || c.dataset.job.includes(term);
+    if (match) { c.classList.remove('dimmed'); hits++; } else { c.classList.add('dimmed'); }
+  });
+  document.getElementById('toolbarInfo').textContent = `${hits} Treffer`;
+}
+
+/* ── SVG ICONS ── */
+function mailIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`;
+}
+function phoneIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.65 11a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.56 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+}
+
+/* ── INIT ── */
+initApp().catch(e => {
+  console.error(e);
+  document.getElementById('loginScreen').innerHTML += `<p style="color:var(--error);font-size:12px;margin-top:8px">Init-Fehler: ${e.message}</p>`;
+});
+</script>
+</body>
+</html>
