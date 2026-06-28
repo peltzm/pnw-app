@@ -73,24 +73,89 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .expand-btn:hover{border-color:var(--accent-mid);color:var(--accent)}
 
 /* ── TREE CONTAINER ── */
-.tree-container{padding:20px 20px 48px;max-width:680px}
+.tree-container{padding:24px 20px 48px;overflow-x:auto}
 
-/* ── TREE NODE ROW ── */
-.tree-node{
+/* ── LEVEL 0: SONJA — zentriert ── */
+.level-root{
   display:flex;
-  align-items:center;
+  justify-content:center;
+  margin-bottom:0;
+}
+
+/* ── VERTICAL CONNECTOR (root → manager row) ── */
+.v-connector{
+  display:flex;
+  justify-content:center;
   position:relative;
-  margin-bottom:var(--row-gap);
+}
+.v-connector::before{
+  content:'';
+  display:block;
+  width:1px;
+  height:24px;
+  background:var(--border-strong);
 }
 
-/* the vertical + horizontal L-connector drawn in the left gutter */
-.tree-node .connector{
+/* ── HORIZONTAL MANAGER BAR ── */
+.manager-bar-wrap{
+  position:relative;
+  display:flex;
+  justify-content:center;
+}
+/* horizontal line spanning all manager cards */
+.manager-bar-wrap::before{
+  content:'';
   position:absolute;
-  left:0; top:0; bottom:0;
-  pointer-events:none;
+  top:0; left:0; right:0;
+  height:1px;
+  background:var(--border-strong);
 }
 
-/* ── ROW CARD (horizontal compact) ── */
+/* ── LEVEL 1: MANAGER ROW ── */
+.level-managers{
+  display:flex;
+  gap:16px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+/* ── LEVEL 1 COLUMN: manager + their staff below ── */
+.manager-col{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0;
+  position:relative;
+}
+/* tick from horizontal bar down to manager card */
+.manager-col::before{
+  content:'';
+  display:block;
+  width:1px;
+  height:16px;
+  background:var(--border-strong);
+  flex-shrink:0;
+}
+
+/* ── LEVEL 2: STAFF GRID under each manager ── */
+.staff-wrap{
+  margin-top:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  width:100%;
+}
+.v-to-staff{
+  width:1px;height:16px;background:var(--border-strong);
+}
+.staff-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:8px;
+  width:100%;
+}
+
+/* ── CARDS ── */
 .row-card{
   display:flex;
   align-items:center;
@@ -99,7 +164,6 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   border:1px solid var(--border);
   border-radius:10px;
   padding:8px 12px;
-  flex:1;
   cursor:pointer;
   transition:border-color .15s, box-shadow .12s, transform .1s;
   min-height:var(--card-h);
@@ -109,18 +173,23 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .row-card:hover{border-color:var(--accent-mid);box-shadow:0 2px 10px rgba(123,63,30,.1);transform:translateY(-1px)}
 .row-card.highlight{border-color:var(--accent);border-width:1.5px;box-shadow:0 0 0 3px var(--accent-light)}
 .row-card.dimmed{opacity:.3}
-
 /* left color stripe */
 .row-card::before{
-  content:'';
-  position:absolute;
-  left:0;top:0;bottom:0;
-  width:4px;
+  content:'';position:absolute;
+  left:0;top:0;bottom:0;width:4px;
   border-radius:9px 0 0 9px;
   background:var(--role-color,var(--border-strong));
 }
+/* root card slightly larger */
+.row-card.card-root{
+  min-width:260px;
+  border-color:var(--accent);
+  border-width:1.5px;
+}
+/* manager card */
+.row-card.card-manager{min-width:200px}
 
-/* avatar in row */
+/* avatar */
 .row-avatar{
   width:40px;height:40px;border-radius:50%;
   flex-shrink:0;display:flex;align-items:center;justify-content:center;
@@ -131,11 +200,14 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .row-avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .row-avatar.loading{background:var(--bg);position:relative}
 .row-avatar.loading::after{content:'';position:absolute;inset:0;margin:auto;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+/* bigger avatar for root */
+.card-root .row-avatar{width:48px;height:48px;font-size:16px}
 
-/* text block */
+/* text */
 .row-text{flex:1;min-width:0}
 .row-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row-title{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-root .row-name{font-size:14px}
 
 /* contact links */
 .row-links{display:flex;flex-direction:column;gap:2px;flex-shrink:0;align-items:flex-end}
@@ -148,42 +220,8 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   font-size:9.5px;font-weight:600;
   background:var(--accent-light);color:var(--accent);
   border-radius:20px;padding:2px 8px;
-  white-space:nowrap;flex-shrink:0;
-}
-
-/* collapse toggle */
-.collapse-btn{
-  width:22px;height:22px;border-radius:50%;border:1px solid var(--border);
-  background:var(--surface);cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;font-size:10px;color:var(--text-muted);
-  margin-left:6px;transition:border-color .1s;
-  font-family:inherit;
-}
-.collapse-btn:hover{border-color:var(--accent-mid);color:var(--accent)}
-
-/* ── TREE LINES ── */
-/* each .tree-group is one parent+children block */
-.tree-group{margin-bottom:0}
-.tree-group .children-wrap{margin-left:var(--indent);position:relative}
-/* vertical line alongside the children */
-.tree-group .children-wrap::before{
-  content:'';
-  position:absolute;
-  left:0;top:0;
-  width:1px;
-  background:var(--border-strong);
-  bottom:calc(var(--card-h)/2 + var(--row-gap));
-}
-/* horizontal L-arm for each child */
-.tree-group .tree-node::before{
-  content:'';
-  position:absolute;
-  left:calc(-1 * var(--indent));
-  top:50%;
-  width:var(--indent);
-  height:1px;
-  background:var(--border-strong);
+  white-space:nowrap;flex-shrink:0;line-height:1.5;
+  text-align:center;
 }
 
 /* ── LOADING / ERROR ── */
@@ -216,11 +254,12 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .drawer-since{text-align:center;margin-top:16px;font-size:14px;font-weight:700;color:var(--accent);background:var(--accent-light);border-radius:var(--radius);padding:12px}
 .drawer-since span{display:block;font-size:11px;font-weight:400;color:var(--text-muted);margin-top:3px}
 
-@media(max-width:600px){
-  :root{--indent:20px;--row-gap:6px}
+@media(max-width:700px){
   .row-links{display:none}
   .row-since{display:none}
   .tree-container{padding:12px 12px 48px}
+  .level-managers{gap:8px}
+  .staff-grid{grid-template-columns:1fr}
   #drawer{width:100%;right:-100%}
 }
 </style>
@@ -418,10 +457,17 @@ async function loadOrg() {
   }
 }
 
-/* ── BUILD VERTICAL TREE ── */
+/* ── BUILD 3-LEVEL LAYOUT ── */
 function buildTree(users) {
   const inSet = new Set(users.map(u => u.id));
+
+  // Find Sonja = user whose manager is not in the set (root)
+  // If multiple roots, pick the one with most direct reports or first alphabetically
   const roots = users.filter(u => !u.manager || !inSet.has(u.manager.id));
+  const sortFn = arr => arr ? arr.sort((a,b) => a.displayName.localeCompare(b.displayName, 'de')) : [];
+  sortFn(roots);
+
+  // Build children map
   const children = {};
   users.forEach(u => {
     const mid = u.manager?.id;
@@ -430,12 +476,9 @@ function buildTree(users) {
       children[mid].push(u);
     }
   });
-  const sortFn = arr => arr ? arr.sort((a,b) => a.displayName.localeCompare(b.displayName, 'de')) : [];
-  sortFn(roots);
   Object.values(children).forEach(sortFn);
 
-  // Precompute: how many colleagues started AFTER each user
-  // Only users with a createdDateTime count; users without are ignored in the comparison
+  // Precompute jungerAls
   const withDate = users.filter(u => u.createdDateTime);
   const jungerAls = {};
   users.forEach(u => {
@@ -447,60 +490,72 @@ function buildTree(users) {
   const container = document.getElementById('treeContainer');
   container.innerHTML = '';
 
-  roots.forEach(user => {
-    const group = renderGroup(user, children, 0, jungerAls);
-    container.appendChild(group);
+  // For each root (usually just Sonja), build the 3-level layout
+  roots.forEach(root => {
+    const wrap = document.createElement('div');
+
+    // ── LEVEL 0: root centered ──
+    const levelRoot = document.createElement('div');
+    levelRoot.className = 'level-root';
+    levelRoot.appendChild(makeRowCard(root, 0, jungerAls, 'card-root'));
+    wrap.appendChild(levelRoot);
+
+    const managers = children[root.id] || [];
+    if (managers.length === 0) { container.appendChild(wrap); return; }
+
+    // vertical line root → managers
+    const vc = document.createElement('div');
+    vc.className = 'v-connector';
+    wrap.appendChild(vc);
+
+    // horizontal bar above manager row
+    const mBarWrap = document.createElement('div');
+    mBarWrap.className = 'manager-bar-wrap';
+
+    const levelManagers = document.createElement('div');
+    levelManagers.className = 'level-managers';
+
+    managers.forEach(mgr => {
+      const mgrCol = document.createElement('div');
+      mgrCol.className = 'manager-col';
+
+      // manager card
+      mgrCol.appendChild(makeRowCard(mgr, 1, jungerAls, 'card-manager'));
+
+      // staff under this manager
+      const staff = children[mgr.id] || [];
+      if (staff.length > 0) {
+        const staffWrap = document.createElement('div');
+        staffWrap.className = 'staff-wrap';
+
+        const vts = document.createElement('div');
+        vts.className = 'v-to-staff';
+        staffWrap.appendChild(vts);
+
+        const grid = document.createElement('div');
+        grid.className = 'staff-grid';
+        staff.forEach(s => grid.appendChild(makeRowCard(s, 2, jungerAls, 'card-staff')));
+        staffWrap.appendChild(grid);
+        mgrCol.appendChild(staffWrap);
+      }
+
+      levelManagers.appendChild(mgrCol);
+    });
+
+    mBarWrap.appendChild(levelManagers);
+    wrap.appendChild(mBarWrap);
+    container.appendChild(wrap);
   });
 
   loadPhotosAsync(users);
 }
 
-function renderGroup(user, childMap, depth, jungerAls) {
-  const group = document.createElement('div');
-  group.className = 'tree-group';
-
-  // Node row
-  const node = document.createElement('div');
-  node.className = 'tree-node';
-
-  const card = makeRowCard(user, depth, jungerAls);
-  node.appendChild(card);
-
-  // Kids
-  const kids = childMap[user.id] || [];
-  let childrenWrap = null;
-  if (kids.length > 0) {
-    childrenWrap = document.createElement('div');
-    childrenWrap.className = 'children-wrap';
-    kids.forEach(kid => {
-      childrenWrap.appendChild(renderGroup(kid, childMap, depth + 1, jungerAls));
-    });
-
-    // collapse toggle button on the card
-    const colBtn = document.createElement('button');
-    colBtn.className = 'collapse-btn';
-    colBtn.title = 'Ein-/Ausklappen';
-    colBtn.innerHTML = '▾';
-    colBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = childrenWrap.style.display !== 'none';
-      childrenWrap.style.display = isOpen ? 'none' : '';
-      colBtn.innerHTML = isOpen ? '▸' : '▾';
-    });
-    node.appendChild(colBtn);
-  }
-
-  group.appendChild(node);
-  if (childrenWrap) group.appendChild(childrenWrap);
-  return group;
-}
-
 /* ── MAKE ROW CARD ── */
-function makeRowCard(user, depth, jungerAls) {
+function makeRowCard(user, depth, jungerAls, cardClass) {
   const roleInfo = getRoleInfo(user, depth);
 
   const card = document.createElement('div');
-  card.className = 'row-card';
+  card.className = 'row-card' + (cardClass ? ' ' + cardClass : '');
   card.dataset.userId = user.id;
   card.dataset.name = (user.displayName || '').toLowerCase();
   card.dataset.email = (user.mail || '').toLowerCase();
@@ -625,14 +680,7 @@ function filterTree(q) {
 
 /* ── EXPAND / COLLAPSE ALL ── */
 function toggleAll() {
-  allExpanded = !allExpanded;
-  document.querySelectorAll('.children-wrap').forEach(w => {
-    w.style.display = allExpanded ? '' : 'none';
-  });
-  document.querySelectorAll('.collapse-btn').forEach(b => {
-    b.innerHTML = allExpanded ? '▾' : '▸';
-  });
-  document.getElementById('expandLabel').textContent = allExpanded ? 'Alle einklappen' : 'Alle aufklappen';
+  // Not used in 3-level layout — kept for future use
 }
 
 /* ── DRAWER ── */
