@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,200;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#ffffff">
@@ -342,6 +342,7 @@ let currentZoom = 100;
 function onMapLoad() {
   currentZoom = 100;
   applyZoom();
+  initPinchZoom();
 }
 
 function onMapError() {
@@ -361,18 +362,47 @@ function applyZoom() {
   const wrapper = document.getElementById('mapWrapper');
   const img     = document.getElementById('mapImg');
   if (currentZoom === 100) {
-    // Default: CSS handles fit-to-viewport via max-height
     wrapper.style.width    = '';
     wrapper.style.maxWidth = '';
     img.style.maxHeight    = '';
   } else {
-    // Zoom out (<100): shrink wrapper proportionally
-    // Zoom in (>100): expand wrapper, remove max-height constraint so image can grow
     wrapper.style.width    = currentZoom + '%';
     wrapper.style.maxWidth = 'none';
     img.style.maxHeight    = 'none';
   }
   document.getElementById('zoomLabel').textContent = currentZoom + '%';
+}
+
+// ── PINCH-TO-ZOOM (Touch) ──
+function initPinchZoom() {
+  const el = document.getElementById('mapContainer') || document.getElementById('mapWrapper');
+  if (!el) return;
+  let startDist = 0;
+  let startZoom = 100;
+
+  el.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      startDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      startZoom = currentZoom;
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const ratio = dist / startDist;
+      currentZoom = Math.min(300, Math.max(25, Math.round(startZoom * ratio)));
+      applyZoom();
+      e.preventDefault();
+    }
+  }, { passive: false });
 }
 
 // ── PDF EXPORT ──
