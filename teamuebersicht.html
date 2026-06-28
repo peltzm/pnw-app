@@ -100,7 +100,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   display:block;
   /* fill wrapper width but never exceed available height */
   width:100%;
-  max-height:calc(100dvh - var(--hdr-h) - 80px - 24px); /* dvh - header - page-header - padding */
+  max-height:calc(100dvh - var(--hdr-h) - 80px - 24px); /* dvh - header(56px) - page-header(~80px) - padding(24px) */
   height:auto;
   object-fit:contain;
 }
@@ -144,7 +144,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   .page-header{padding:10px 14px 8px}
   .page-header-left h2{font-size:15px}
   .map-container{padding:6px}
-  .map-wrapper img{max-height:calc(100dvh - var(--hdr-h) - 70px - 12px)}
+  .map-wrapper img{max-height:calc(100dvh - var(--hdr-h) - 60px - 12px)}
 }
 </style>
 </head>
