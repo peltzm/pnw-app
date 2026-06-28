@@ -63,19 +63,21 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 /* Desktop: 4 Spalten, 2 Zeilen */
 .app-grid{
   display:grid;
-  grid-template-columns:repeat(4,1fr);
+  /* Auto-fit: so viele Spalten wie reinpassen, mind. 150px pro Kachel */
+  grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
   gap:14px;
   padding:16px 20px 20px;
-  max-width:760px;
+  max-width:800px;
   margin:0 auto;
+  width:100%;
 }
 
-/* Mobile: 3 Spalten */
-@media(max-width:600px){
+/* Schmale Phones (<400px): mind. 2 Spalten, max. 3 */
+@media(max-width:400px){
   .app-grid{
     grid-template-columns:repeat(3,1fr);
-    gap:10px;
-    padding:12px 10px 16px;
+    gap:8px;
+    padding:10px 8px 14px;
     max-width:100%;
   }
 }
@@ -122,7 +124,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 }
 
 /* Mobile: Beschreibungen ausblenden */
-@media(max-width:600px){
+@media(max-width:500px){
   .card-desc{display:none}
   .card-name{font-size:11px}
   .app-card{gap:6px;padding:10px 6px}
