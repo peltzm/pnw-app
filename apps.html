@@ -80,7 +80,8 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
     padding:8px 4px 12px;
     max-width:100%;
     width:100%;
-    align-items:start;
+    align-items:stretch;
+    justify-items:stretch;
   }
   .app-card{
     padding:10px 4px 8px;
@@ -88,10 +89,19 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
     aspect-ratio:unset;
     min-width:0;
     height:90px;
+    width:100%;
   }
   .card-icon{font-size:22px}
   .card-name{font-size:10px;font-weight:600}
   .card-desc{display:none}
+  .page-footer{
+    text-align:center;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+  }
 }
 
 /* ── KACHEL ── */
@@ -327,7 +337,7 @@ const msalConfig = {
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
   system: { allowNativeBroker: false }
 };
-const APP_VERSION = 'v00a7e0d'; // auto-updated on deploy
+const APP_VERSION = 'v3fc8e39'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
