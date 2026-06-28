@@ -39,27 +39,33 @@ body{font-family:'Kodchasan',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-se
 
 /* FK LAYOUT */
 .fk-layout{display:flex;min-height:calc(100vh - 54px);}
-.fk-sidebar{width:256px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:54px;height:calc(100vh - 54px);overflow-y:auto;}
-.fk-sidebar-hd{padding:1.1rem 1rem .6rem;border-bottom:1px solid var(--border);}
-.fk-sidebar-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
+.fk-sidebar{width:256px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:54px;height:calc(100vh - 54px);overflow-y:auto;padding:1.5rem 0;}
 .klient-box{background:var(--accent-light);border:1px solid #e8c4a8;border-radius:var(--radius);padding:9px 11px;margin:.75rem 1rem;}
 .klient-box-name{font-size:13px;font-weight:600;color:var(--accent);}
 .klient-box-sub{font-size:11px;color:var(--text-muted);margin-top:1px;}
 .klient-box-link{font-size:11px;color:var(--accent-mid);cursor:pointer;text-decoration:underline;margin-top:3px;display:inline-block;}
-.tab{display:flex;align-items:center;gap:9px;padding:10px 1rem;cursor:pointer;border-left:3px solid transparent;transition:all .12s;min-height:48px;}
-.tab:hover{background:var(--bg);}
-.tab.active{background:var(--accent-light);border-left-color:var(--accent);}
-.tab-icon{font-size:17px;flex-shrink:0;}
+/* Nav-Sektionsüberschriften */
+.nav-section{padding:0 1rem .5rem;font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.08em;margin-top:1rem;}
+.nav-section:first-child{margin-top:0;}
+/* Nav-Items — identisch mit Protokolle */
+.tab{display:flex;align-items:center;gap:10px;padding:8px 1rem;font-size:13px;color:var(--text-muted);cursor:pointer;border-left:2px solid transparent;transition:all .12s;min-height:44px;}
+.tab:hover{background:var(--bg);color:var(--text);}
+.tab.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-light);font-weight:500;}
+.tab-icon{font-size:14px;flex-shrink:0;}
 .tab-text{flex:1;min-width:0;}
-.tab-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.tab.active .tab-name{color:var(--accent);}
-.tab-sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.tab-name{font-size:13px;font-weight:500;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tab-sub{display:none;}
+/* Nummernkreis */
+.nav-num{width:20px;height:20px;border-radius:50%;background:var(--border);font-size:10px;font-weight:600;color:var(--text-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.tab.active .nav-num{background:var(--accent);color:#fff;}
+.tab.done .nav-num{background:var(--success);color:#fff;}
 .tab-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .dot-e{background:var(--border);}
 .dot-p{background:var(--accent-mid);}
 .dot-r{background:var(--success);}
+.nav-divider{height:1px;background:var(--border);margin:.75rem 1rem;}
 .sidebar-bot{margin-top:auto;border-top:1px solid var(--border);padding:.75rem 1rem;}
-.sidebar-link{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted);cursor:pointer;padding:5px 0;}
+.sidebar-link{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted);text-decoration:none;padding:5px 0;}
 .sidebar-link:hover{color:var(--accent);}
 
 .fk-content{flex:1;overflow-y:auto;}
@@ -191,16 +197,14 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 /* Base = mobile (< 600px) */
 .fk-layout{display:flex;flex-direction:column;min-height:calc(100vh - 54px);}
 .fk-sidebar{width:100%;height:auto;position:static;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--border);background:var(--surface);display:flex;padding:0;}
-.fk-sidebar-hd,.sidebar-bot,.klient-box{display:none;}
-.tab{flex-direction:column;padding:6px 8px;border-left:none;border-bottom:3px solid transparent;min-height:52px;justify-content:center;align-items:center;flex:1;min-width:0;}
-.sidebar-section-sep,.sidebar-section-label{display:none;}
+.nav-section,.sidebar-bot,.klient-box{display:none;}
+.tab{flex-direction:column;padding:6px 8px;border-left:none;border-bottom:2px solid transparent;min-height:52px;justify-content:center;align-items:center;flex:1;min-width:0;gap:4px;}
 .tab.active{border-bottom-color:var(--accent);border-left-color:transparent;background:var(--accent-light);}
-.tab-text{display:block;}
-.tab-name{font-size:10px;color:var(--text-muted);margin-top:2px;white-space:nowrap;}
+.nav-num{width:18px;height:18px;font-size:9px;}
+.tab-name{font-size:10px;margin-top:0;white-space:nowrap;}
 .tab.active .tab-name{color:var(--accent);}
-.tab-sub{display:none;}
 .tab-dot{display:none;}
-.tab-icon{font-size:18px;}
+.tab-icon{font-size:16px;}
 /* Header: Badge + Changelog auf sehr kleinen Screens kompakter */
 @media(max-width:480px){
   .version-badge-wrap{display:none;}
@@ -245,15 +249,15 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 /* ── DESKTOP (≥ 900px) ── */
 @media(min-width:900px){
   .fk-layout{flex-direction:row;}
-  .fk-sidebar{width:256px;flex-shrink:0;flex-direction:column;height:calc(100vh - 54px);position:sticky;top:54px;overflow-y:auto;border-right:1px solid var(--border);border-bottom:none;}
-  .fk-sidebar-hd{display:block;}
+  .fk-sidebar{width:256px;flex-shrink:0;flex-direction:column;height:calc(100vh - 54px);position:sticky;top:54px;overflow-y:auto;border-right:1px solid var(--border);border-bottom:none;padding:1.5rem 0;}
+  .nav-section{display:block;}
   .sidebar-bot{display:block;}
   .klient-box{display:block;}
-  .tab{flex-direction:row;padding:9px 1rem;border-bottom:none;border-left:3px solid transparent;min-height:46px;justify-content:flex-start;align-items:center;}
+  .tab{flex-direction:row;padding:8px 1rem;border-bottom:none;border-left:2px solid transparent;min-height:44px;justify-content:flex-start;align-items:center;gap:10px;}
   .tab.active{border-left-color:var(--accent);border-bottom-color:transparent;}
-  .tab-text{display:block;}
-  .tab-dot{display:block;}
-  .tab-icon{font-size:17px;}
+  .nav-num{width:20px;height:20px;font-size:10px;}
+  .tab-dot{display:block;margin-left:auto;}
+  .tab-icon{font-size:14px;}
   .klient-banner{padding:.6rem 2rem;}
   .panel{padding:1.75rem 2rem;max-width:720px;}
   .field input,.field select,.field textarea{font-size:13px !important;padding:8px 10px;min-height:unset;}
@@ -306,43 +310,41 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
 
   <div class="fk-layout">
     <div class="fk-sidebar">
-      <div class="fk-sidebar-hd"><div class="fk-sidebar-label">Workflow</div></div>
       <div id="klientBoxSidebar" class="klient-box" style="display:none;">
         <div class="klient-box-name" id="sbName">–</div>
         <div class="klient-box-sub" id="sbSub">–</div>
         <span class="klient-box-link" onclick="showPanel('stamm')">Stammdaten</span>
       </div>
+      <div class="nav-section">Workflow</div>
       <div class="tab active" id="tab_stamm" onclick="showPanel('stamm')">
-        <div class="tab-icon">👤</div>
-        <div class="tab-text"><div class="tab-name">Stammdaten</div><div class="tab-sub" id="sub_stamm">Klientendaten eingeben</div></div>
-        <div class="tab-dot dot-e" id="dot_stamm"></div>
+        <span class="nav-num">1</span>
+        <span class="tab-name">Stammdaten</span>
+        <div class="tab-dot dot-e" id="dot_stamm" style="margin-left:auto;"></div>
       </div>
-      <div class="sidebar-section-sep" style="height:1px;background:var(--border);margin:4px 1rem;"></div>
-      <div class="sidebar-section-label" style="padding:3px 1rem 5px;font-size:10px;font-weight:600;color:var(--text-hint);text-transform:uppercase;letter-spacing:.07em;">Formulare wählen</div>
       <div class="tab" id="tab_formulare" onclick="showPanel('formulare')">
-        <div class="tab-icon">📋</div>
-        <div class="tab-text"><div class="tab-name">Auswahl</div><div class="tab-sub" id="sub_formulare">Keine ausgewählt</div></div>
-        <div class="tab-dot dot-e" id="dot_formulare"></div>
+        <span class="nav-num">2</span>
+        <span class="tab-name">Auswahl</span>
+        <div class="tab-dot dot-e" id="dot_formulare" style="margin-left:auto;"></div>
       </div>
       <div class="tab" id="tab_details" onclick="showPanel('details')" style="display:none;">
-        <div class="tab-icon">📝</div>
-        <div class="tab-text"><div class="tab-name">Details</div><div class="tab-sub" id="sub_details">Angaben ergänzen</div></div>
-        <div class="tab-dot dot-e" id="dot_details"></div>
+        <span class="nav-num">3</span>
+        <span class="tab-name">Details</span>
+        <div class="tab-dot dot-e" id="dot_details" style="margin-left:auto;"></div>
       </div>
-      <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
+      <div class="nav-divider"></div>
+      <div class="nav-section">Ausgabe</div>
       <div class="tab" id="tab_uebergabe" onclick="showPanel('uebergabe')">
-        <div class="tab-icon">🤲</div>
-        <div class="tab-text"><div class="tab-name">Übergabe</div><div class="tab-sub">An Klient weitergeben</div></div>
-        <div class="tab-dot dot-e" id="dot_uebergabe"></div>
+        <span class="tab-icon">🤲</span>
+        <span class="tab-name">Übergabe</span>
+        <div class="tab-dot dot-e" id="dot_uebergabe" style="margin-left:auto;"></div>
       </div>
-      <div style="height:1px;background:var(--border);margin:4px 1rem;"></div>
       <div class="tab" id="tab_leer" onclick="showPanel('leer')">
-        <div class="tab-icon">🖨️</div>
-        <div class="tab-text"><div class="tab-name">Drucken</div><div class="tab-sub">Drucken / Download</div></div>
-        <div class="tab-dot dot-e"></div>
+        <span class="tab-icon">🖨️</span>
+        <span class="tab-name">Drucken</span>
+        <div class="tab-dot dot-e" style="margin-left:auto;"></div>
       </div>
       <div class="sidebar-bot">
-        <a href="https://apps.praxisneuewege.de/apps.html" class="sidebar-link" style="text-decoration:none;">
+        <a href="https://apps.praxisneuewege.de/apps.html" class="sidebar-link">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           <span>← App-Central</span>
         </a>
