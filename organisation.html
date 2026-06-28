@@ -403,7 +403,7 @@ async function loadOrg() {
       users = users.concat(data.value || []);
       url = data['@odata.nextLink'] || null;
     }
-    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises'));
+    users = users.filter(u => u.mail && u.displayName && !u.displayName.startsWith('On-Premises') && u.manager);
     orgData = users;
     buildTree(users);
     const now = new Date();
