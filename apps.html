@@ -149,6 +149,23 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   box-shadow:0 1px 4px rgba(0,0,0,.22);
   pointer-events:none;
 }
+
+/* NEU banner */
+.app-card.neu{position:relative;overflow:hidden;}
+.app-card.neu::after{
+  content:'NEU';
+  position:absolute;
+  top:16px;right:-18px;
+  width:72px;
+  text-align:center;
+  font-size:8px;font-weight:700;letter-spacing:.1em;
+  color:#fff;
+  background:#2d7a3a;
+  padding:4px 0;
+  transform:rotate(45deg);
+  box-shadow:0 1px 4px rgba(0,0,0,.22);
+  pointer-events:none;
+}
 .soon-pill{
   font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
   color:var(--accent-mid);background:var(--accent-light);
@@ -231,12 +248,6 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
       <div class="card-desc">Belege erfassen und einreichen</div>
     </a>
 
-    <a class="app-card beta" href="https://apps.praxisneuewege.de/formulare.html">
-      <div class="card-icon">🧭</div>
-      <div class="card-name">Formulare</div>
-      <div class="card-desc">Klientenformulare digital erfassen und unterzeichnen</div>
-    </a>
-
     <a class="app-card" href="https://neue-wege.kilanka.de/login" target="_blank" rel="noopener">
       <div class="card-icon">
         <img src="https://raw.githubusercontent.com/peltzm/pnw-app/main/assets/kilanka.png" alt="Kilanka">
@@ -253,18 +264,23 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
       <div class="card-desc">Lohnabrechnungen via DATEV</div>
     </a>
 
-    <a class="app-card beta" href="https://apps.praxisneuewege.de/meetingprotokoll.html">
-      <div class="card-icon">📋</div>
-      <div class="card-name">Protokolle</div>
-      <div class="card-desc">Meetingprotokolle erstellen und freigeben</div>
-    </a>
-
-    <a class="app-card" href="https://apps.praxisneuewege.de/teamuebersicht.html">
+    <a class="app-card neu" href="https://apps.praxisneuewege.de/teamuebersicht.html">
       <div class="card-icon">🗺️</div>
       <div class="card-name">Team&shy;übersicht</div>
       <div class="card-desc">Einzugsgebiet und Teamkarte ansehen und exportieren</div>
     </a>
 
+    <a class="app-card beta" href="https://apps.praxisneuewege.de/formulare.html">
+      <div class="card-icon">🧭</div>
+      <div class="card-name">Formulare</div>
+      <div class="card-desc">Klientenformulare digital erfassen und unterzeichnen</div>
+    </a>
+
+    <a class="app-card beta" href="https://apps.praxisneuewege.de/meetingprotokoll.html">
+      <div class="card-icon">📋</div>
+      <div class="card-name">Protokolle</div>
+      <div class="card-desc">Meetingprotokolle erstellen und freigeben</div>
+    </a>
 
   </div>
 
