@@ -72,22 +72,22 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   width:100%;
 }
 
-/* Mobil (<600px): genau 2 Spalten */
+/* Mobil (<600px): 3 Spalten, kompaktere Kacheln */
 @media(max-width:600px){
   .app-grid{
-    grid-template-columns:repeat(2,1fr);
-    gap:10px;
-    padding:12px 12px 16px;
+    grid-template-columns:repeat(3,1fr);
+    gap:8px;
+    padding:10px 10px 16px;
     max-width:100%;
   }
-}
-
-/* Sehr kleine Phones (<360px): auch 2 Spalten, etwas weniger Abstand */
-@media(max-width:360px){
-  .app-grid{
-    gap:8px;
-    padding:10px 8px 14px;
+  .app-card{
+    padding:10px 4px;
+    gap:5px;
+    aspect-ratio:1/1;
   }
+  .card-icon{font-size:28px}
+  .card-name{font-size:11px;font-weight:600}
+  .card-desc{display:none}
 }
 
 /* ── KACHEL ── */
@@ -319,7 +319,7 @@ const msalConfig = {
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
   system: { allowNativeBroker: false }
 };
-const APP_VERSION = 'v7bdfeb9'; // auto-updated on deploy
+const APP_VERSION = 've5cf627'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
