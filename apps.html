@@ -80,15 +80,14 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
     padding:8px 4px 12px;
     max-width:100%;
     width:100%;
-    align-items:stretch;
+    align-items:start;
   }
   .app-card{
     padding:10px 4px 8px;
     gap:5px;
     aspect-ratio:unset;
     min-width:0;
-    min-height:90px;
-    height:100%;
+    height:90px;
   }
   .card-icon{font-size:22px}
   .card-name{font-size:10px;font-weight:600}
@@ -328,7 +327,7 @@ const msalConfig = {
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
   system: { allowNativeBroker: false }
 };
-const APP_VERSION = 'v1e84418'; // auto-updated on deploy
+const APP_VERSION = 'v3fc8e39'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
