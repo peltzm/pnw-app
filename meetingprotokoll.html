@@ -78,16 +78,16 @@
   .type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .type-tile {
     border: 2px solid var(--border); border-radius: var(--radius-lg);
-    padding: 0; cursor: pointer; text-align: center;
+    padding: 14px 8px; cursor: pointer; text-align: center;
     background: var(--surface); transition: all 0.12s;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-    aspect-ratio: 1 / 1; /* quadratisch */
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+    /* Gleiche Höhe in jeder Zeile via CSS grid stretch (Standard) */
   }
   .type-tile:hover { border-color: var(--accent-mid); background: var(--accent-light); }
   .type-tile.selected { border-color: var(--accent); background: var(--accent-light); }
   .tile-icon { font-size: 26px; flex-shrink: 0; }
-  .tile-label { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.25; padding: 0 6px; word-break: break-word; hyphens: auto; }
-  .tile-sub { font-size: 10px; color: var(--text-muted); line-height: 1.2; padding: 0 6px; }
+  .tile-label { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.25; word-break: break-word; hyphens: auto; }
+  .tile-sub { font-size: 10px; color: var(--text-muted); line-height: 1.2; }
 
   /* ── PARTICIPANT GRID ── */
   .p-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
@@ -243,10 +243,11 @@
     .changelog-link { display: none; }
     .user-name { max-width: 80px; }
     .btn-logout { font-size: 11px; padding: 2px 7px; }
-    /* Kacheln: quadratisch via aspect-ratio, schrift etwas kleiner */
+    /* Kacheln kompakt für 3 Spalten */
+    .type-tile { padding: 10px 6px; gap: 5px; }
     .tile-icon { font-size: 22px; }
     .tile-label { font-size: 11px; }
-    .tile-sub { display: none; }  /* Untertitel auf Mobile weglassen */
+    .tile-sub { display: none; }
   }
 
   input, select, textarea, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
