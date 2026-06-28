@@ -211,10 +211,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
     <div class="map-wrapper" id="mapWrapper">
       <img
         id="mapImg"
-        src="https://raw.githubusercontent.com/peltzm/pnw-app/main/assets/gemeindekarte.png"
         alt="Gemeindekarte Praxis NeueWege — Einzugsgebiet und Team"
-        onload="onMapLoad()"
-        onerror="onMapError()"
       >
     </div>
   </div>
@@ -296,6 +293,7 @@ async function showApp(account) {
   document.getElementById('userBadge').style.display = 'flex';
   const name = account.name || account.username;
   document.getElementById('userName').textContent = name;
+  loadMap();
 }
 
 async function init() {
@@ -308,6 +306,26 @@ async function init() {
   } catch(e) { console.error('Init:', e); }
 }
 init();
+
+// ── IMAGE LOAD (fetch as blob to avoid CORS taint on canvas) ──
+const MAP_URL = 'https://raw.githubusercontent.com/peltzm/pnw-app/main/assets/gemeindekarte.png';
+let mapBlobUrl = null;   // blob URL used for both display and export
+
+async function loadMap() {
+  const img     = document.getElementById('mapImg');
+  const wrapper = document.getElementById('mapWrapper');
+  try {
+    const resp = await fetch(MAP_URL);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const blob  = await resp.blob();
+    mapBlobUrl  = URL.createObjectURL(blob);
+    img.onload  = onMapLoad;
+    img.onerror = onMapError;
+    img.src     = mapBlobUrl;
+  } catch (e) {
+    onMapError();
+  }
+}
 
 // ── ZOOM ──
 let currentZoom = 100;   // percent relative to fit-width
@@ -381,13 +399,15 @@ async function doExport() {
 
     status.textContent = 'Karte wird verarbeitet…';
 
-    // Create canvas from image
+    // Use blob URL (already loaded, no CORS issue)
+    if (!mapBlobUrl) throw new Error('Karte noch nicht geladen.');
+
     const img = document.getElementById('mapImg');
     const naturalW = img.naturalWidth;
     const naturalH = img.naturalHeight;
 
     const canvas = document.createElement('canvas');
-    canvas.width = naturalW;
+    canvas.width  = naturalW;
     canvas.height = naturalH;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff';
@@ -398,18 +418,11 @@ async function doExport() {
 
     status.textContent = 'PDF wird erstellt…';
 
-    // A2 landscape: 594 × 420 mm
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a2'
-    });
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a2' });
 
     const pageW = pdf.internal.pageSize.getWidth();
     const pageH = pdf.internal.pageSize.getHeight();
-
-    // Scale image to fit page with margins
     const margin = 8;
     const maxW = pageW - margin * 2;
     const maxH = pageH - margin * 2;
