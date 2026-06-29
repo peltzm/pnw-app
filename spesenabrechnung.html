@@ -1686,11 +1686,34 @@ async function handleFahrtUpload(input) {
       const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
       const wb = XLSX.read(ab, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      // Header in Zeile 7 (Excel) = Index 6 (0-basiert)
-      const rows = XLSX.utils.sheet_to_json(ws, { range: 6, defval: '' });
+      // Auto-detect header row: scan rows 0-9 for a row containing 'Klient' AND 'km' keyword
+      const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1:K1');
+      let headerRowIdx = 6; // fallback: Zeile 7
+      for (let r = 0; r <= Math.min(9, headerRange.e.r); r++) {
+        let rowHasKlient = false, rowHasKm = false;
+        for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          const cell = ws[addr];
+          if (!cell) continue;
+          const v = String(cell.v || '').toLowerCase();
+          if (/klient/i.test(v)) rowHasKlient = true;
+          if (/km/i.test(v)) rowHasKm = true;
+        }
+        if (rowHasKlient && rowHasKm) { headerRowIdx = r; break; }
+      }
+      const rows = XLSX.utils.sheet_to_json(ws, { range: headerRowIdx, defval: '' });
       if (!rows.length) throw new Error('Keine Daten gefunden');
-      // Kennzeichen aus Zelle B4
-      try { const cell = ws['B4']; if (cell) kennzeichen = String(cell.v || '').trim(); } catch(e) {}
+      // Kennzeichen: erst B4, dann Spalte 'Kennzeichen' aus Datenzeilen
+      try {
+        const b4 = ws['B4']; if (b4) kennzeichen = String(b4.v || '').trim();
+        if (!kennzeichen) {
+          const kzKey = Object.keys(rows[0]).find(k => /kennzeichen/i.test(k));
+          if (kzKey) {
+            const found = rows.find(r => String(r[kzKey]||'').trim() !== '');
+            if (found) kennzeichen = String(found[kzKey]).trim();
+          }
+        }
+      } catch(e) {}
 
       const klientKey = Object.keys(rows[0]).find(k => /klient/i.test(k)) || 'Klient';
       const kmKey     = Object.keys(rows[0]).find(k => /strecke.*km|^km$/i.test(k)) ||
