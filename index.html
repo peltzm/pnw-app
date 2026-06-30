@@ -449,9 +449,9 @@
           <!-- Aktions-Buttons (nur wenn angenommen) -->
           <div id="tlAktionen" style="display:none; background:var(--accent-light); border:1px solid #e8c4a8; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
             <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:8px;">Freigabe-Modus — Teamleitung</div>
-            <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann an Sonja weiterleiten oder zurückweisen.</div>
+            <div id="tlAktionenHinweis" style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann an Sonja weiterleiten oder zurückweisen.</div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              <button class="btn" onclick="tlFreigebenAnSonja()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
+              <button class="btn" id="btnTlFreigeben" onclick="tlFreigebenAnSonja()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
               <button class="btn btn-secondary" onclick="rejectReport()" style="min-height:44px;">✗ Zurückweisen an Fachkraft</button>
             </div>
           </div>
@@ -2402,7 +2402,7 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
 
 async function approveReport() {
   if (!currentListId) { alert('Kein Bericht geladen.'); return; }
-  const btn = document.querySelector('button[onclick="approveReport()"]');
+  const btn = document.querySelector('button[onclick="approveReport()"]') || document.getElementById('btnTlFreigeben');
   btn.disabled = true;
   btn.textContent = 'Wird verarbeitet...';
   
@@ -2653,12 +2653,17 @@ function renderStatusBerichte() {
 
   const rows = items.map(item => {
     const itemId = item._itemId || item.ID;
-    let bt = '', naechstesHpg = '', fachkraft = item.Fachkraft || '';
+    let bt = '', naechstesHpg = '', fachkraft = item.Fachkraft || '', nOffeneKommentare = 0, ablehnungsgrund = '';
     try {
       const d = JSON.parse(item.FormularDaten || '{}');
       bt = btLabel(d._berichtstyp);
       naechstesHpg = d.Naechstes_HPG || '';
       if (!fachkraft) fachkraft = d.Fachkraft_NeueWege || '';
+      ablehnungsgrund = d._ablehnungsgrund || '';
+      if (d._tlKommentare && typeof d._tlKommentare === 'object') {
+        nOffeneKommentare = Object.values(d._tlKommentare)
+          .filter(c => c.status !== 'erledigt' && (c.text || '').trim()).length;
+      }
     } catch(e) {}
 
     const hpg = hpgInfo(naechstesHpg);
@@ -2667,6 +2672,12 @@ function renderStatusBerichte() {
       ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Prüfer: ${item.Assigned_Reviewer.replace(/</g,'&lt;')}</div>` : '';
     const fkHtml = fachkraft
       ? `<div style="font-size:11px; color:var(--text-muted); margin-top:1px;">Fachkraft: ${fachkraft.replace(/</g,'&lt;')}</div>` : '';
+    // Kommentar-Badge: offene TL-Kommentare
+    const kommentarHtml = nOffeneKommentare > 0
+      ? `<div style="font-size:11px; margin-top:3px; color:#92400e;">💬 ${nOffeneKommentare} offene${nOffeneKommentare === 1 ? 'r' : ''} Kommentar${nOffeneKommentare === 1 ? '' : 'e'} der TL</div>` : '';
+    // Ablehnungsgrund-Hinweis
+    const ablehnungHtml = (st === 'Abgelehnt' && ablehnungsgrund)
+      ? `<div style="font-size:11px; margin-top:3px; color:#9b1c1c;" title="${ablehnungsgrund.replace(/"/g,'&quot;')}">✗ Abgelehnt: ${ablehnungsgrund.replace(/</g,'&lt;').substring(0,60)}${ablehnungsgrund.length > 60 ? '…' : ''}</div>` : '';
     const kv = (item.Kind_Vorname||'').replace(/</g,'&lt;');
     const kn = (item.Kind_Familienname||'').replace(/</g,'&lt;');
     const ja = (item.Jugendamt||'—').replace(/</g,'&lt;');
@@ -2685,7 +2696,7 @@ function renderStatusBerichte() {
           &nbsp;·&nbsp;
           Nächstes HPG: <strong style="color:${hpg.color};">${hpg.label}</strong>
         </div>
-        ${fkHtml}${assigned}
+        ${fkHtml}${assigned}${kommentarHtml}${ablehnungHtml}
       </div>
       <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
         <span style="font-size:11px; font-weight:600; color:${statusColor(st)}; white-space:nowrap;">${st}</span>
@@ -3001,6 +3012,23 @@ function activateReviewMode() {
     document.getElementById('tlAndererPrueferName').textContent = currentAssignedReviewer;
     document.getElementById('tlAktionen').style.display = 'none';
   }
+  // ── Stationär-Sonderlogik: Freigabe-Button und Hinweistext anpassen ──
+  const btnTlF = document.getElementById('btnTlFreigeben');
+  const hinweis = document.getElementById('tlAktionenHinweis');
+  if (currentBerichtstyp === 'stationaer') {
+    if (btnTlF) {
+      btnTlF.textContent = '✓ Final freigeben & PDF erstellen';
+      btnTlF.onclick = function() { approveReport(); };
+    }
+    if (hinweis) hinweis.textContent = 'Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann final freigeben (erstellt das PDF) oder an die Fachkraft zurückweisen.';
+  } else {
+    if (btnTlF) {
+      btnTlF.textContent = '✓ Freigabe';
+      btnTlF.onclick = function() { tlFreigebenAnSonja(); };
+    }
+    if (hinweis) hinweis.textContent = 'Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann an Sonja weiterleiten oder zurückweisen.';
+  }
+
   // ── Deutliche optische Kennzeichnung des Prüfmodus ──
   // 1. Gelber Rahmen um den gesamten Bildschirm
   if (!document.getElementById('reviewFrame')) {
