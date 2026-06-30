@@ -1642,7 +1642,12 @@ async function loadDraft(id) {
       }
       window.scrollTo(0,0);
     } else if (isReviewLink && isTLUser()) {
-      // TL-Prüfmodus
+      // TL-Prüfmodus (via E-Mail-Link)
+      goTo(1);
+      activateReviewMode();
+      window.scrollTo(0,0);
+    } else if (isTLUser() && (currentItemStatus === 'Eingereicht' || currentItemStatus === 'TL angenommen')) {
+      // TL öffnet Bericht direkt (z.B. aus Listenansicht) → automatisch Review-Modus
       goTo(1);
       activateReviewMode();
       window.scrollTo(0,0);
