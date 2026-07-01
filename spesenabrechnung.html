@@ -936,14 +936,9 @@ async function ladeKlientVorschlaegeInto(elId, isSelect) {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=Klient)&$top=500`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    if (!r.ok) return;
-    const res = await r.json();
+    const items = await fetchAlleListItems(token, siteId, listId, 'expand=fields(select=Klient)');
     const namen = new Set();
-    (res.value || []).forEach(i => {
+    items.forEach(i => {
       const k = (i.fields?.Klient || '').trim();
       if (k && k !== 'kein Klient') namen.add(klientLabel(k));
     });
@@ -1013,6 +1008,24 @@ async function saveBelegToList(data, existingId = null) {
   return existingId;
 }
 
+// Paginierte Listen-Abfrage — folgt @odata.nextLink (Fix: $top=500-Limit,
+// sonst fehlen Eintraege sobald die Liste >500 Items hat → doppelte Fahrtenbuecher)
+async function fetchAlleListItems(token, siteId, listId, fieldsParam = 'expand=fields') {
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?${fieldsParam}&$top=500`;
+  let items = [];
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({}));
+      throw new Error(e.error?.message || ('HTTP ' + r.status));
+    }
+    const res = await r.json();
+    items = items.concat(res.value || []);
+    url = res['@odata.nextLink'] || null;
+  }
+  return items;
+}
+
 async function ladeBelege(monat) {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
@@ -1020,14 +1033,10 @@ async function ladeBelege(monat) {
   const myMail = _isReviewMode
     ? (_reviewFkMail || '').toLowerCase()
     : (currentAccount?.username || '').toLowerCase();
-  const url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`;
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) {
-    const e = await r.json().catch(()=>({}));
-    throw new Error('Belege konnten nicht geladen werden: ' + (e.error?.message || r.status));
-  }
-  const res = await r.json();
-  const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
+  let items;
+  try { items = await fetchAlleListItems(token, siteId, listId); }
+  catch(e) { throw new Error('Belege konnten nicht geladen werden: ' + e.message); }
+  const alle = items.map(i => ({ id: i.id, ...i.fields }));
   // Client-seitig filtern
   const gefiltert = (_isTL && !_isReviewMode) ? alle : alle.filter(b =>
     (b.Fachkraft_Mail || '').toLowerCase() === myMail ||
@@ -1577,13 +1586,9 @@ async function ladeFahrtenbuchScreen() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    const res = await r.json();
+    const items = await fetchAlleListItems(token, siteId, listId);
     const myMail = (currentAccount?.username||'').toLowerCase();
-    const alle = (res.value||[]).map(i=>({id:i.id,...i.fields}));
+    const alle = items.map(i=>({id:i.id,...i.fields}));
     const fahrt = alle.find(b =>
       b.Kategorie === 'fahrtenbuch' &&
       (b.Monat||'').startsWith(_currentMonat) &&
@@ -1771,10 +1776,8 @@ async function handleFahrtUpload(input) {
       const token2 = await getToken();
       const { siteId: sid2, listId: lid2 } = await getGraphListIds();
       const myMail = (currentAccount?.username || '').toLowerCase();
-      const checkUrl = `https://graph.microsoft.com/v1.0/sites/${sid2}/lists/${lid2}/items?expand=fields&$top=500`;
-      const checkR = await fetch(checkUrl, { headers: { Authorization: 'Bearer ' + token2 } });
-      const checkRes = await checkR.json();
-      const alleFahrt = (checkRes.value || [])
+      const checkItems = await fetchAlleListItems(token2, sid2, lid2);
+      const alleFahrt = checkItems
         .map(i => ({ id: i.id, ...i.fields }))
         .filter(b => b.Kategorie === 'fahrtenbuch'
           && (b.Monat || '').startsWith(_currentMonat)
@@ -1933,9 +1936,8 @@ async function ladeArchiv() {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
     const myMail = (currentAccount?.username||'').toLowerCase();
-    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
-    const res = await r.json();
-    const belege = (res.value||[]).map(i=>({id:i.id,...i.fields})).filter(b => (b.Fachkraft_Mail||'').toLowerCase()===myMail || _isTL);
+    const items = await fetchAlleListItems(token, siteId, listId);
+    const belege = items.map(i=>({id:i.id,...i.fields})).filter(b => (b.Fachkraft_Mail||'').toLowerCase()===myMail || _isTL);
     // Group by monat
     const monate = {};
     belege.forEach(b => { if (!b.Monat) return; monate[b.Monat] = monate[b.Monat] || []; monate[b.Monat].push(b); });
@@ -1960,11 +1962,22 @@ async function einreichen() {
   btn.disabled = true; btn.textContent = '📨 Wird eingereicht…';
   setStatus('abschlussStatus', 'uploading', 'Abrechnung wird eingereicht…');
   try {
-    const belege = await ladeBelege(_currentMonat);
+    let belege = await ladeBelege(_currentMonat);
     if (belege.length === 0) { showToast('Keine Belege vorhanden'); return; }
-    // Update all belege status to Eingereicht
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
+    // Sicherheitsnetz: Fahrtenbuch-Duplikate vor Einreichung loeschen — nur das neueste bleibt
+    const fahrtAll = belege.filter(b => b.Kategorie === 'fahrtenbuch').sort((a,b)=>parseInt(b.id)-parseInt(a.id));
+    if (fahrtAll.length > 1) {
+      const dupIds = fahrtAll.slice(1).map(b => String(b.id));
+      for (const dupId of dupIds) {
+        await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${dupId}`,
+          { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }).catch(()=>{});
+      }
+      belege = belege.filter(b => !dupIds.includes(String(b.id)));
+      console.warn(`Fahrtenbuch-Duplikate entfernt: ${dupIds.join(', ')}`);
+    }
+    // Update all belege status to Eingereicht
     await Promise.all(belege.map(b =>
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
         method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -2016,9 +2029,19 @@ async function ladeTLAbrechnungen() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
-    const res = await r.json();
-    const alle = (res.value||[]).map(i=>({id:i.id,...i.fields})).filter(b=>b.Status==='Eingereicht');
+    const items = await fetchAlleListItems(token, siteId, listId);
+    const alleRoh = items.map(i=>({id:i.id,...i.fields})).filter(b=>b.Status==='Eingereicht');
+    // Fahrtenbuch-Duplikate je Fachkraft+Monat ausblenden — nur das neueste zaehlt
+    const seenFahrt = {};
+    const alle = [];
+    alleRoh.sort((a,b)=>parseInt(b.id)-parseInt(a.id)).forEach(b => {
+      if (b.Kategorie === 'fahrtenbuch') {
+        const fk = `${(b.Fachkraft_Mail||b.Fachkraft||'').toLowerCase()}::${b.Monat}`;
+        if (seenFahrt[fk]) return;
+        seenFahrt[fk] = true;
+      }
+      alle.push(b);
+    });
     // Group by fachkraft+monat
     const gruppen = {};
     alle.forEach(b => {
@@ -3108,12 +3131,8 @@ async function ladeReviewBelege() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    const res = await r.json();
-    const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
+    const items = await fetchAlleListItems(token, siteId, listId);
+    const alle = items.map(i => ({ id: i.id, ...i.fields }));
     // Nach FK-Mail und Monat filtern
     const belege = alle.filter(b =>
       (b.Monat || '').startsWith(_reviewMonat || _currentMonat) &&
@@ -3160,9 +3179,8 @@ async function ladeMonatsdatenMitKommentaren() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
-    const res = await r.json();
-    const alle = (res.value || []).map(i => ({ id: i.id, ...i.fields }));
+    const items = await fetchAlleListItems(token, siteId, listId);
+    const alle = items.map(i => ({ id: i.id, ...i.fields }));
     const monat = _reviewMonat || _currentMonat;
     const belege = alle.filter(b =>
       (b.Monat || '').startsWith(monat) &&
@@ -3298,9 +3316,8 @@ async function freigebenUndPDF() {
     await speichereKommentare();
     setHomeStatus('uploading', '⏳ Belege werden genehmigt…');
     // Status aller Belege auf Genehmigt setzen
-    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
-    const res = await r.json();
-    const belege = (res.value||[]).map(i=>({id:i.id,...i.fields}))
+    const items = await fetchAlleListItems(token, siteId, listId);
+    const belege = items.map(i=>({id:i.id,...i.fields}))
       .filter(b => (b.Monat||'').startsWith(_reviewMonat) && (b.Fachkraft_Mail||'').toLowerCase()===_reviewFkMail.toLowerCase());
     await Promise.all(belege.map(b =>
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
@@ -3335,9 +3352,8 @@ async function ablehnen() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`, { headers: { Authorization: 'Bearer ' + token } });
-    const res = await r.json();
-    const belege = (res.value||[]).map(i=>({id:i.id,...i.fields}))
+    const items = await fetchAlleListItems(token, siteId, listId);
+    const belege = items.map(i=>({id:i.id,...i.fields}))
       .filter(b => (b.Monat||'').startsWith(_reviewMonat||_currentMonat) && (b.Fachkraft_Mail||'').toLowerCase()===(_reviewFkMail||'').toLowerCase());
     await Promise.all(belege.map(b =>
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
@@ -3394,13 +3410,9 @@ async function zeigeKorrekturHinweis() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    const res = await r.json();
+    const items = await fetchAlleListItems(token, siteId, listId);
     const myMail = (currentAccount?.username || '').toLowerCase();
-    const belege = (res.value || []).map(i => ({ id: i.id, ...i.fields }))
+    const belege = items.map(i => ({ id: i.id, ...i.fields }))
       .filter(b => (b.Fachkraft_Mail||'').toLowerCase() === myMail &&
                    (b.Monat||'').startsWith(_currentMonat));
     // Kommentare einlesen
