@@ -81,18 +81,25 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   flex:1;
   display:flex;
   align-items:flex-start;
-  justify-content:center;
+  /* KEIN justify-content:center — bei Inhalt breiter als der Container wäre der
+     linke Überstand nicht erreichbar (negativer Scrollbereich); Zentrierung
+     übernimmt margin:auto am Wrapper */
+  justify-content:flex-start;
   padding:12px;
   overflow:auto;
   background:var(--bg);
   min-height:0;
   -webkit-overflow-scrolling:touch;
+  /* Ein-Finger = natives Scrollen/Pannen; Zwei-Finger-Pinch übernimmt das JS */
+  touch-action:pan-x pan-y;
+  overscroll-behavior:contain;
 }
 .map-wrapper{
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:var(--radius-lg);
   overflow:hidden;
+  margin:0 auto; /* zentriert solange schmaler als der Container, sonst linksbündig scrollbar */
   box-shadow:0 2px 16px rgba(0,0,0,.06);
   display:block;
   /* default: fill container up to max viewport width */
