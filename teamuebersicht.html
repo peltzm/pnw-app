@@ -272,9 +272,27 @@ document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textConten
 const msalInstance = new msal.PublicClientApplication(msalConfig);
 const SCOPES = ['User.Read'];
 
+function _clearStuckInteraction() {
+  // MSAL kann nach einem geblockten Popup einen 'interaction.status' zurücklassen,
+  // an dem auch der Redirect-Login scheitert — vor dem Redirect aufräumen
+  try {
+    for (const st of [sessionStorage, localStorage]) {
+      const keys = [];
+      for (let i = 0; i < st.length; i++) {
+        const k = st.key(i);
+        if (k && k.includes('interaction.status')) keys.push(k);
+      }
+      keys.forEach(k => st.removeItem(k));
+    }
+  } catch(e) {}
+}
+
 function _popupLikelyWorks() {
   const ua = navigator.userAgent;
-  return !(/iPhone|iPad|iPod/.test(ua) || (/Safari/.test(ua) && !/Chrome|Firefox|Edge/.test(ua)));
+  // Mobile Geräte generell per Redirect anmelden: Popups werden auf Android-Chrome
+  // wie iOS häufig blockiert und hinterlassen einen hängenden interaction-Status
+  if (/Android|iPhone|iPad|iPod|Mobi/i.test(ua)) return false;
+  return !(/Safari/.test(ua) && !/Chrome|Firefox|Edge/.test(ua));
 }
 
 async function login() {
@@ -295,6 +313,7 @@ async function login() {
     }
   }
   try {
+    _clearStuckInteraction();
     await msalInstance.loginRedirect(req);
   } catch(e) {
     console.error(e); errEl.style.display = 'block'; btn.disabled = false;

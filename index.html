@@ -565,8 +565,26 @@ async function initMsal() {
 }
 
 // Ob Popups wahrscheinlich funktionieren (nicht iOS Safari)
+function _clearStuckInteraction() {
+  // MSAL kann nach einem geblockten Popup einen 'interaction.status' zurücklassen,
+  // an dem auch der Redirect-Login scheitert — vor dem Redirect aufräumen
+  try {
+    for (const st of [sessionStorage, localStorage]) {
+      const keys = [];
+      for (let i = 0; i < st.length; i++) {
+        const k = st.key(i);
+        if (k && k.includes('interaction.status')) keys.push(k);
+      }
+      keys.forEach(k => st.removeItem(k));
+    }
+  } catch(e) {}
+}
+
 function _popupLikelyWorks() {
   const ua = navigator.userAgent;
+  // Mobile Geräte generell per Redirect anmelden: Popups werden auf Android-Chrome
+  // wie iOS häufig blockiert und hinterlassen einen hängenden interaction-Status
+  if (/Android|Mobi/i.test(ua)) return false;
   const isIOS = /iPhone|iPad|iPod/.test(ua);
   const isSafariOnly = /Safari/.test(ua) && !/Chrome|Firefox|Edge/.test(ua);
   return !(isIOS || isSafariOnly);
@@ -598,6 +616,7 @@ async function login() {
   }
   // Redirect-Fallback (iOS Safari, oder falls Popup fehlschlug)
   try {
+    _clearStuckInteraction();
     await msalInstance.loginRedirect(req);
   } catch(e) {
     if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message); }
