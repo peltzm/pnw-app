@@ -489,7 +489,7 @@
               <option value="offen">Warten auf TL-Prüfung</option>
               <option value="tl_freigegeben">Warte auf / in GF-Prüfung</option>
               <option value="genehmigt">Genehmigt</option>
-              <option value="abgelehnt">Abgelehnt</option>
+              <option value="abgelehnt">In Überarbeitung (abgelehnt)</option>
               <option value="entwurf">Entwürfe</option>
               <option value="archiv">🗄 Archiv</option>
             </select>
@@ -2227,7 +2227,7 @@ function escHtml(s) {
 
 // Anzeige-Label für Statuswerte — der interne Wert in SharePoint bleibt unverändert
 function statusLabel(s) {
-  return ({ 'TL freigegeben': 'Warte auf GF-Prüfung', 'GF-Prüfung': 'in GF-Prüfung' }[s]) || s;
+  return ({ 'TL freigegeben': 'Warte auf GF-Prüfung', 'GF-Prüfung': 'in GF-Prüfung', 'Abgelehnt': 'In Überarbeitung' }[s]) || s;
 }
 
 // Alle kommentierbaren Felder in den Seiten 3–5
@@ -2831,7 +2831,7 @@ function renderStatusBerichte() {
       ? `<div style="font-size:11px; margin-top:3px; color:#92400e;">💬 ${nOffeneKommentare} offene${nOffeneKommentare === 1 ? 'r' : ''} Kommentar${nOffeneKommentare === 1 ? '' : 'e'} der TL</div>` : '';
     // Ablehnungsgrund-Hinweis
     const ablehnungHtml = (st === 'Abgelehnt' && ablehnungsgrund)
-      ? `<div style="font-size:11px; margin-top:3px; color:#9b1c1c;" title="${ablehnungsgrund.replace(/"/g,'&quot;')}">✗ Abgelehnt: ${ablehnungsgrund.replace(/</g,'&lt;').substring(0,60)}${ablehnungsgrund.length > 60 ? '…' : ''}</div>` : '';
+      ? `<div style="font-size:11px; margin-top:3px; color:#9b1c1c;" title="${ablehnungsgrund.replace(/"/g,'&quot;')}">↩ In Überarbeitung — Grund: ${ablehnungsgrund.replace(/</g,'&lt;').substring(0,60)}${ablehnungsgrund.length > 60 ? '…' : ''}</div>` : '';
     const kv = (item.Kind_Vorname||'').replace(/</g,'&lt;');
     const kn = (item.Kind_Familienname||'').replace(/</g,'&lt;');
     const ja = (item.Jugendamt||'—').replace(/</g,'&lt;');
