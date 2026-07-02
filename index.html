@@ -487,11 +487,16 @@
             <select id="statusFilter" onchange="renderStatusBerichte()" style="font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); background:white; width:100%;">
               <option value="alle">Alle Berichte</option>
               <option value="offen">Warten auf TL-Prüfung</option>
-              <option value="tl_freigegeben">TL freigegeben — warten auf Sonja</option>
+              <option value="tl_freigegeben">Bei Sonja — Freigabe/Prüfung</option>
               <option value="genehmigt">Genehmigt</option>
               <option value="abgelehnt">Abgelehnt</option>
               <option value="entwurf">Entwürfe</option>
+              <option value="archiv">🗄 Archiv</option>
             </select>
+          </div>
+          <div class="field" style="margin:0; min-width:200px; flex:1;">
+            <input id="klientFilter" type="search" placeholder="🔎 Klient oder Fachkraft suchen…" oninput="renderStatusBerichte()"
+              style="font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); background:white; width:100%; font-family:inherit;">
           </div>
           <button class="btn btn-secondary" onclick="loadStatusBerichte()" style="font-size:12px; padding:6px 12px;">↺ Aktualisieren</button>
         </div>
@@ -1220,6 +1225,55 @@ function isTLUser() {
   return false;
 }
 
+// ─── GF-ROLLE & STATUS-GUARDS ────────────────────────────────────────────────
+const SONJA_MAIL = 'sonja.peltz@praxisneuewege.de';
+function isSonjaUser() {
+  if (isAdmin()) return true;
+  return (currentAccount?.username || '').toLowerCase() === SONJA_MAIL;
+}
+
+// Nur einzelne Spalten eines Items patchen — ohne FormularDaten/Formularstand zu überschreiben
+async function patchItemFields(itemId, fields) {
+  const token = await getToken();
+  const { siteId, listId } = await getGraphListIds();
+  const resp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}/fields`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields)
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Feld-Update fehlgeschlagen');
+  }
+}
+
+// Info-Modal: Bericht ist nicht im prüfbaren Zustand → nur Ansicht
+function showReviewInfoModal(titel, text, icon) {
+  if (document.getElementById('reviewInfoModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'reviewInfoModal';
+  modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:2000; display:flex; align-items:center; justify-content:center; padding:1rem;';
+  modal.innerHTML = `
+    <div style="background:white; border-radius:12px; padding:2rem; max-width:440px; width:100%; box-shadow:0 8px 32px rgba(0,0,0,0.25); text-align:center;">
+      <div style="font-size:36px; margin-bottom:12px;">${icon || 'ℹ️'}</div>
+      <div style="font-size:17px; font-weight:700; color:#1d4ed8; margin-bottom:8px;">${titel}</div>
+      <div style="font-size:13px; color:#555; margin-bottom:24px;">${text}</div>
+      <button onclick="document.getElementById('reviewInfoModal').remove()" style="background:#1d4ed8; color:white; border:none; border-radius:8px; padding:12px 28px; font-size:14px; font-weight:600; cursor:pointer; min-height:44px;">Verstanden — nur ansehen</button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+// Sonja öffnet einen Bericht mit Status "TL freigegeben" → Übernahme sichtbar machen
+async function markGfPruefung() {
+  if (currentItemStatus !== 'TL freigegeben') return; // nur beim ersten Öffnen
+  try {
+    await patchItemFields(currentListId, { Status: 'GF-Prüfung' });
+    currentItemStatus = 'GF-Prüfung';
+  } catch(e) {
+    console.warn('GF-Prüfung-Status konnte nicht gesetzt werden:', e.message);
+  }
+}
+
 async function saveEntwurf() {
   if (!validateRequiredFields()) return;
   const btn = document.getElementById('btnSaveEntwurf');
@@ -1626,25 +1680,64 @@ async function loadDraft(id) {
     const isReviewLink = _params.get('review') === String(id);
     const isSonjaLink  = _params.get('sonja')  === String(id);
     if (isSonjaLink && isTLUser()) {
-      // GF-Modus: öffnet finalen Prüf-Link
+      // GF-Link: finale Freigabe — nur für Sonja (GF), mit Status-Guard
       goTo(1);
-      activateSonjaMode();
-      // ?direct_approve=1 → direkt zu Seite 6 und Freigabe-Button hervorheben
-      if (_params.get('direct_approve') === '1') {
-        setTimeout(() => {
-          goTo(6);
-          const approveBtn = document.querySelector('button[onclick="approveReport()"]');
-          if (approveBtn) {
-            approveBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            approveBtn.style.animation = 'pulse-green 1s ease 3';
-          }
-        }, 600);
+      if (!isSonjaUser()) {
+        showReviewInfoModal('Finale Freigabe — nur Geschäftsführung',
+          'Dieser Link ist für die finale Freigabe durch Sonja vorgesehen. Sie können den Bericht ansehen, aber nicht freigeben.', '🔒');
+      } else if (currentItemStatus === 'Genehmigt') {
+        showReviewInfoModal('Bereits final freigegeben',
+          'Dieser Bericht wurde bereits final freigegeben — es sind keine Aktionen mehr nötig.', '✅');
+      } else if (currentItemStatus !== 'TL freigegeben' && currentItemStatus !== 'GF-Prüfung') {
+        showReviewInfoModal('Noch nicht zur finalen Freigabe bereit',
+          `Der Bericht hat aktuell den Status „${escHtml(currentItemStatus)}" und liegt noch nicht zur GF-Freigabe vor.`);
+      } else {
+        activateSonjaMode();
+        markGfPruefung();
+        // ?direct_approve=1 → direkt zu Seite 6 und Freigabe-Button hervorheben
+        if (_params.get('direct_approve') === '1') {
+          setTimeout(() => {
+            goTo(6);
+            const approveBtn = document.querySelector('button[onclick="approveReport()"]');
+            if (approveBtn) {
+              approveBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              approveBtn.style.animation = 'pulse-green 1s ease 3';
+            }
+          }, 600);
+        }
       }
       window.scrollTo(0,0);
     } else if (isReviewLink && isTLUser()) {
-      // TL-Prüfmodus (via E-Mail-Link)
+      // TL-Prüf-Link (E-Mail) — Status-Guard: Links verfallen nie, der Bericht kann
+      // inzwischen weitergewandert sein
       goTo(1);
-      activateReviewMode();
+      if (currentItemStatus === 'Eingereicht' || currentItemStatus === 'TL angenommen') {
+        activateReviewMode();
+      } else if (currentItemStatus === 'TL freigegeben' || currentItemStatus === 'GF-Prüfung') {
+        if (isSonjaUser()) {
+          // Sonjas Doppelrolle: TL-Link, aber Bericht wartet auf sie als GF → GF-Modus
+          activateSonjaMode();
+          markGfPruefung();
+        } else {
+          showReviewInfoModal('Bericht liegt bei Sonja',
+            'Die TL-Prüfung ist abgeschlossen — der Bericht wartet auf die finale Freigabe durch Sonja.', '✅');
+        }
+      } else if (currentItemStatus === 'Abgelehnt') {
+        showReviewInfoModal('In Überarbeitung bei der Fachkraft',
+          'Der Bericht wurde zurückgewiesen und wird derzeit von der Fachkraft überarbeitet. Nach erneutem „Freigabe anfordern" erhalten Sie automatisch eine neue Freigabeanfrage.', '↩️');
+      } else if (currentItemStatus === 'Genehmigt') {
+        showReviewInfoModal('Bereits final freigegeben',
+          'Dieser Bericht wurde bereits final freigegeben — es sind keine Aktionen mehr nötig.', '✅');
+      } else {
+        showReviewInfoModal('Noch nicht eingereicht',
+          `Der Bericht hat aktuell den Status „${escHtml(currentItemStatus)}" und liegt nicht zur Prüfung vor.`);
+      }
+      window.scrollTo(0,0);
+    } else if (isSonjaUser() && (currentItemStatus === 'TL freigegeben' || currentItemStatus === 'GF-Prüfung')) {
+      // Sonja öffnet direkt aus der Liste → GF-Modus
+      goTo(1);
+      activateSonjaMode();
+      markGfPruefung();
       window.scrollTo(0,0);
     } else if (isTLUser() && (currentItemStatus === 'Eingereicht' || currentItemStatus === 'TL angenommen')) {
       // TL öffnet Bericht direkt (z.B. aus Listenansicht) → automatisch Review-Modus
@@ -1881,8 +1974,8 @@ async function saveToList(data, existingId = null) {
     Kind_Familienname: data.Kind_Familienname || '',
     Jugendamt: data.Jugendamt || '',
     Fachkraft: data.Fachkraft_NeueWege || '',
-    Assigned_Reviewer: data._assignedReviewer || currentAssignedReviewer || '',
-    Assigned_Reviewer_Mail: data._assignedReviewerMail || currentAssignedReviewerMail || '',
+    Assigned_Reviewer: data._assignedReviewer !== undefined ? data._assignedReviewer : (currentAssignedReviewer || ''),
+    Assigned_Reviewer_Mail: data._assignedReviewerMail !== undefined ? data._assignedReviewerMail : (currentAssignedReviewerMail || ''),
     FormularDaten: JSON.stringify(data)
   };
   if (data.Hilfebeginn) fields.Hilfebeginn = new Date(data.Hilfebeginn).toISOString();
@@ -2008,7 +2101,7 @@ async function loadMyDrafts() {
 async function loadItemById(id) {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
-  const resp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}?expand=fields(select=FormularDaten,Eingereicht_Von,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Fachkraft)`, {
+  const resp = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}?expand=fields(select=FormularDaten,Eingereicht_Von,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Fachkraft,Assigned_Reviewer,Assigned_Reviewer_Mail)`, {
     headers: { Authorization: 'Bearer ' + token }
   });
   if (!resp.ok) throw new Error('Eintrag nicht gefunden');
@@ -2540,6 +2633,12 @@ async function rejectReport() {
     const data = collectData();
     data._status = 'Abgelehnt';
     data._ablehnungsgrund = reason;
+    // Prüfer-Zuordnung zurücksetzen — die nächste Einreichung ist eine neue Prüfungsrunde
+    data._assignedReviewer = '';
+    data._assignedReviewerMail = '';
+    currentAssignedReviewer = '';
+    currentAssignedReviewerMail = '';
+    currentItemStatus = 'Abgelehnt';
     await saveToList(data, currentListId);
     
     // Offene Kommentare für die E-Mail aufbereiten
@@ -2628,14 +2727,33 @@ function renderStatusBerichte() {
 
   const statusSets = {
     offen:          ['Eingereicht', 'TL angenommen'],
-    tl_freigegeben: ['TL freigegeben'],
+    tl_freigegeben: ['TL freigegeben', 'GF-Prüfung'],
     genehmigt:      ['Genehmigt'],
     abgelehnt:      ['Abgelehnt'],
     entwurf:        ['Entwurf'],
+    archiv:         null,
     alle:           null
   };
+  const isArchiviert = i => {
+    try { return JSON.parse(i.FormularDaten || '{}')._archiviert === true; } catch(e) { return false; }
+  };
   const allowed = statusSets[filter];
-  const items = allowed ? allItems.filter(i => allowed.includes(i.Status)) : allItems;
+  let items = allItems;
+  if (filter === 'archiv') {
+    items = items.filter(isArchiviert);                    // nur archivierte
+  } else {
+    items = items.filter(i => !isArchiviert(i));           // archivierte standardmäßig ausblenden
+    if (allowed) items = items.filter(i => allowed.includes(i.Status));
+  }
+  // Zweiter Filter: Freitextsuche nach Klient oder Fachkraft
+  const q = (document.getElementById('klientFilter')?.value || '').trim().toLowerCase();
+  if (q) {
+    items = items.filter(i => {
+      let fk = i.Fachkraft || '';
+      if (!fk) { try { fk = JSON.parse(i.FormularDaten || '{}').Fachkraft_NeueWege || ''; } catch(e) {} }
+      return `${i.Kind_Vorname || ''} ${i.Kind_Familienname || ''} ${fk}`.toLowerCase().includes(q);
+    });
+  }
 
   if (items.length === 0) {
     document.getElementById('statusBerichteContent').innerHTML =
@@ -2655,22 +2773,29 @@ function renderStatusBerichte() {
     return             { label: dateStr+' ('+diff+'d)',      color:'#166534', border:'#86efac', bg:'#f0fdf4', btnBg:'#dcfce7', btnColor:'#166534' };
   }
 
-  const statusColor = s => ({
-    'Entwurf':        'var(--text-muted)',
-    'Eingereicht':    '#1d4ed8',
-    'TL angenommen':  '#92400e',
-    'TL freigegeben': '#166534',
-    'Genehmigt':      '#166534',
-    'Abgelehnt':      '#9b1c1c'
-  }[s] || 'var(--text-muted)');
+  // Pill-Badges: eindeutige Farbe je Status (Hintergrund + Text), klar getrennt
+  // von den HPG-Fristfarben der Zeilenrahmen
+  const statusBadge = s => {
+    const c = {
+      'Entwurf':        { bg:'#f3f4f6', fg:'#6b7280' },  // grau
+      'Eingereicht':    { bg:'#dbeafe', fg:'#1d4ed8' },  // blau
+      'TL angenommen':  { bg:'#fef3c7', fg:'#92400e' },  // amber
+      'TL freigegeben': { bg:'#ede9fe', fg:'#6d28d9' },  // violett — wartet auf Sonja
+      'GF-Prüfung':     { bg:'#e0e7ff', fg:'#3730a3' },  // indigo — Sonja prüft
+      'Genehmigt':      { bg:'#dcfce7', fg:'#166534' },  // grün
+      'Abgelehnt':      { bg:'#fee2e2', fg:'#9b1c1c' }   // rot
+    }[s] || { bg:'#f3f4f6', fg:'#6b7280' };
+    return `<span style="font-size:11px; font-weight:600; color:${c.fg}; background:${c.bg}; padding:3px 10px; border-radius:999px; white-space:nowrap;">${escHtml(s)}</span>`;
+  };
 
   const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || bt || '');
 
   const rows = items.map(item => {
     const itemId = item._itemId || item.ID;
-    let bt = '', naechstesHpg = '', fachkraft = item.Fachkraft || '', nOffeneKommentare = 0, ablehnungsgrund = '';
+    let bt = '', naechstesHpg = '', fachkraft = item.Fachkraft || '', nOffeneKommentare = 0, ablehnungsgrund = '', archiviert = false;
     try {
       const d = JSON.parse(item.FormularDaten || '{}');
+      archiviert = d._archiviert === true;
       bt = btLabel(d._berichtstyp);
       naechstesHpg = d.Naechstes_HPG || '';
       if (!fachkraft) fachkraft = d.Fachkraft_NeueWege || '';
@@ -2713,8 +2838,15 @@ function renderStatusBerichte() {
         </div>
         ${fkHtml}${assigned}${kommentarHtml}${ablehnungHtml}
       </div>
-      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-        <span style="font-size:11px; font-weight:600; color:${statusColor(st)}; white-space:nowrap;">${st}</span>
+      <div style="display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap;">
+        ${archiviert ? '<span style="font-size:11px; font-weight:600; color:#6b7280; background:#f3f4f6; padding:3px 10px; border-radius:999px; white-space:nowrap;">🗄 Archiviert</span>' : ''}
+        ${statusBadge(st)}
+        ${st === 'Genehmigt' && !archiviert
+          ? `<button onclick="toggleArchiv('${itemId}', true)" title="In das Archiv verschieben"
+              style="font-size:12px; padding:6px 12px; background:white; color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; min-height:36px;">🗄 Archivieren</button>` : ''}
+        ${archiviert
+          ? `<button onclick="toggleArchiv('${itemId}', false)" title="Aus dem Archiv zurückholen"
+              style="font-size:12px; padding:6px 12px; background:white; color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; min-height:36px;">↩ Wiederherstellen</button>` : ''}
         <button onclick="loadDraft('${itemId}')"
           style="font-size:12px; padding:6px 14px; background:${hpg.btnBg}; color:${hpg.btnColor};
           border:1px solid ${hpg.border}; border-radius:var(--radius); cursor:pointer; font-weight:600; min-height:36px;">Öffnen</button>
@@ -2725,6 +2857,23 @@ function renderStatusBerichte() {
   document.getElementById('statusBerichteContent').innerHTML = rows;
 }
 
+// Archiv-Flag setzen/entfernen — nur FormularDaten wird gepatcht, Status bleibt 'Genehmigt';
+// die Funktion "Final freigegebenen Bericht als Basis verwenden" findet archivierte weiterhin
+async function toggleArchiv(itemId, flag) {
+  try {
+    const item = await loadItemById(itemId);
+    const d = JSON.parse(item.FormularDaten || '{}');
+    d._archiviert = flag;
+    await patchItemFields(itemId, { FormularDaten: JSON.stringify(d) });
+    // Lokalen Cache aktualisieren und neu rendern (spart erneutes Laden aller Items)
+    const cached = (window._statusBerichteItems || []).find(i => String(i._itemId || i.ID) === String(itemId));
+    if (cached) cached.FormularDaten = JSON.stringify(d);
+    renderStatusBerichte();
+  } catch(e) {
+    alert('Archivierung fehlgeschlagen: ' + e.message);
+  }
+}
+
 // ─── TL ANNEHMEN// ─── TL ANNEHMEN ─────────────────────────────────────────────────────────────
 
 async function tlAnnehmenBericht() {
@@ -2732,6 +2881,17 @@ async function tlAnnehmenBericht() {
   const myName = currentAccount?.name || currentAccount?.username || '';
   const myMail = currentAccount?.username || '';
   try {
+    // Guard: Status frisch aus SharePoint lesen — E-Mail-Links verfallen nie und
+    // eine andere TL könnte parallel übernommen haben
+    const fresh = await loadItemById(currentListId);
+    const freshStatus = fresh.Status || 'Entwurf';
+    const freshReviewer = fresh.Assigned_Reviewer || '';
+    if (freshStatus !== 'Eingereicht' && freshStatus !== 'TL angenommen') {
+      throw new Error(`Übernahme nicht möglich — der Bericht hat inzwischen den Status „${freshStatus}". Bitte die Ansicht aktualisieren.`);
+    }
+    if (freshReviewer && freshReviewer !== myName) {
+      throw new Error(`Übernahme nicht möglich — der Bericht wird bereits geprüft von ${freshReviewer}.`);
+    }
     const data = collectData();
     data._status = 'TL angenommen';
     data._assignedReviewer = myName;
@@ -3730,7 +3890,7 @@ async function buildUebersicht() {
       container.innerHTML = '<div class="card"><div style="font-size:13px; color:var(--text-muted); text-align:center; padding:1rem;">Keine Berichte vorhanden.</div></div>';
       return;
     }
-    const statusColor = { 'Entwurf': 'var(--text-muted)', 'Eingereicht': 'var(--info)', 'Genehmigt': 'var(--success)', 'Abgelehnt': 'var(--error)' };
+    const statusColor = { 'Entwurf': 'var(--text-muted)', 'Eingereicht': 'var(--info)', 'TL angenommen': '#92400e', 'TL freigegeben': '#6d28d9', 'GF-Prüfung': '#3730a3', 'Genehmigt': 'var(--success)', 'Abgelehnt': 'var(--error)' };
     const rows = items.map(item => {
       const geaendert = (item.Modified || item.Geaendert) ? new Date(item.Modified || item.Geaendert).toLocaleDateString('de-DE') : '—';
       const sc = statusColor[item.Status] || 'var(--text-muted)';
