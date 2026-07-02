@@ -487,7 +487,7 @@
             <select id="statusFilter" onchange="renderStatusBerichte()" style="font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); background:white; width:100%;">
               <option value="alle">Alle Berichte</option>
               <option value="offen">Warten auf TL-Prüfung</option>
-              <option value="tl_freigegeben">Bei Sonja — Freigabe/Prüfung</option>
+              <option value="tl_freigegeben">Warte auf GF-Prüfung / GF prüft</option>
               <option value="genehmigt">Genehmigt</option>
               <option value="abgelehnt">Abgelehnt</option>
               <option value="entwurf">Entwürfe</option>
@@ -1541,7 +1541,7 @@ async function showDraftList() {
           <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt || '—')} · Geändert: ${geaendert}</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:11px; color:${statusColor}; font-weight:500;">${escHtml(item.Status || 'Entwurf')}</span>
+          <span style="font-size:11px; color:${statusColor}; font-weight:500;">${escHtml(statusLabel(item.Status || 'Entwurf'))}</span>
           <button onclick="loadDraft('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Öffnen</button>
           <button onclick="deleteDraft('${itemId}')" title="Löschen" style="font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">×</button>
         </div>
@@ -2225,6 +2225,11 @@ function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Anzeige-Label für Statuswerte — der interne Wert in SharePoint bleibt unverändert
+function statusLabel(s) {
+  return ({ 'TL freigegeben': 'Warte auf GF-Prüfung' }[s]) || s;
+}
+
 // Alle kommentierbaren Felder in den Seiten 3–5
 function _commentableFields() {
   const els = [];
@@ -2785,7 +2790,7 @@ function renderStatusBerichte() {
       'Genehmigt':      { bg:'#dcfce7', fg:'#166534' },  // grün
       'Abgelehnt':      { bg:'#fee2e2', fg:'#9b1c1c' }   // rot
     }[s] || { bg:'#f3f4f6', fg:'#6b7280' };
-    return `<span style="font-size:11px; font-weight:600; color:${c.fg}; background:${c.bg}; padding:3px 10px; border-radius:999px; white-space:nowrap;">${escHtml(s)}</span>`;
+    return `<span style="font-size:11px; font-weight:600; color:${c.fg}; background:${c.bg}; padding:3px 10px; border-radius:999px; white-space:nowrap;">${escHtml(statusLabel(s))}</span>`;
   };
 
   const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || bt || '');
@@ -3899,7 +3904,7 @@ async function buildUebersicht() {
           <div style="font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${_btBadge(item)}${escHtml(item.Kind_Vorname||'')} ${escHtml(item.Kind_Familienname||'')}</div>
           <div style="font-size:11px; color:var(--text-muted);">${escHtml(item.Jugendamt||'—')} · ${geaendert}</div>
         </div>
-        <span style="font-size:11px; font-weight:500; color:${sc}; white-space:nowrap;">${escHtml(item.Status||'Entwurf')}</span>
+        <span style="font-size:11px; font-weight:500; color:${sc}; white-space:nowrap;">${escHtml(statusLabel(item.Status||'Entwurf'))}</span>
         <button onclick="loadDraft('${item._itemId||item.ID}')" style="font-size:12px; padding:5px 14px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer; white-space:nowrap; min-height:36px;">Öffnen</button>
       </div>`;
     }).join('');
