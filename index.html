@@ -2812,6 +2812,15 @@ function renderStatusBerichte() {
     } catch(e) {}
 
     const hpg = hpgInfo(naechstesHpg);
+    // Genehmigte/archivierte Berichte: HPG-Dringlichkeit neutralisieren — der Bericht
+    // für das Gespräch liegt bereits vor, Rot/Gelb soll nur offene Arbeit markieren
+    if (st === 'Genehmigt' || archiviert) {
+      hpg.color = 'var(--text-muted)';
+      hpg.border = 'var(--border)';
+      hpg.bg = 'var(--surface)';
+      hpg.btnBg = 'var(--accent)';
+      hpg.btnColor = 'white';
+    }
     const st = item.Status || 'Entwurf';
     const assigned = item.Assigned_Reviewer
       ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Prüfer: ${item.Assigned_Reviewer.replace(/</g,'&lt;')}</div>` : '';
