@@ -683,6 +683,7 @@ function goToNext(n) {
 
 let _autoSaving = false;
 async function autoSaveDraft() {
+  if (_isViewOnly) return;               // Ansichtsmodus: niemals speichern
   if (_isReviewMode) return;             // TL nutzt den Zwischenspeichern-Button
   if (_autoSaving) return;               // keine parallelen Speicherläufe
   const vn = document.getElementById('Kind_Vorname')?.value?.trim();
@@ -1119,6 +1120,7 @@ function sanitizeFileName(s) {
 }
 
 async function uploadToSharePoint() {
+  if (_isViewOnly) { setStatus('error', 'Ansichtsmodus — Einreichen ist nicht möglich.'); return; }
   if (!validateRequiredFields()) return;
   setStatus('uploading', 'Dokument wird befüllt und hochgeladen...');
   document.getElementById('btnUpload').disabled = true;
@@ -1275,13 +1277,16 @@ async function markGfPruefung() {
 }
 
 async function saveEntwurf() {
+  if (_isViewOnly) { alert('Ansichtsmodus — Speichern ist nicht möglich.'); return; }
   if (!validateRequiredFields()) return;
   const btn = document.getElementById('btnSaveEntwurf');
   btn.disabled = true;
   btn.textContent = '💾 Wird gespeichert...';
   try {
     const data = collectData();
-    data._status = 'Entwurf';
+    // Status niemals zurücksetzen: ein Bericht im Workflow (Eingereicht/Abgelehnt/...)
+    // bleibt in seinem Status — 'Entwurf' nur, wenn es noch keinen Status gibt
+    data._status = currentItemStatus || 'Entwurf';
     currentListId = await saveToList(data, currentListId);
     btn.textContent = '✓ Gespeichert';
     setTimeout(() => { btn.disabled = false; btn.textContent = '💾 Entwurf speichern'; }, 2000);
@@ -1685,12 +1690,15 @@ async function loadDraft(id) {
       if (!isSonjaUser()) {
         showReviewInfoModal('Finale Freigabe — nur Geschäftsführung',
           'Dieser Link ist für die finale Freigabe durch Sonja vorgesehen. Sie können den Bericht ansehen, aber nicht freigeben.', '🔒');
+        activateViewOnlyMode('Finale Freigabe nur durch die Geschäftsführung');
       } else if (currentItemStatus === 'Genehmigt') {
         showReviewInfoModal('Bereits final freigegeben',
           'Dieser Bericht wurde bereits final freigegeben — es sind keine Aktionen mehr nötig.', '✅');
+        activateViewOnlyMode('Bericht ist final freigegeben');
       } else if (currentItemStatus !== 'TL freigegeben' && currentItemStatus !== 'GF-Prüfung') {
         showReviewInfoModal('Noch nicht zur finalen Freigabe bereit',
           `Der Bericht hat aktuell den Status „${escHtml(currentItemStatus)}" und liegt noch nicht zur GF-Freigabe vor.`);
+        activateViewOnlyMode(`Status „${statusLabel(currentItemStatus)}" — noch nicht zur GF-Freigabe bereit`);
       } else {
         activateSonjaMode();
         markGfPruefung();
@@ -1721,16 +1729,20 @@ async function loadDraft(id) {
         } else {
           showReviewInfoModal('Bericht liegt bei Sonja',
             'Die TL-Prüfung ist abgeschlossen — der Bericht wartet auf die finale Freigabe durch Sonja.', '✅');
+          activateViewOnlyMode('Bericht wartet auf die finale Freigabe durch Sonja');
         }
       } else if (currentItemStatus === 'Abgelehnt') {
         showReviewInfoModal('In Überarbeitung bei der Fachkraft',
           'Der Bericht wurde zurückgewiesen und wird derzeit von der Fachkraft überarbeitet. Nach erneutem „Freigabe anfordern" erhalten Sie automatisch eine neue Freigabeanfrage.', '↩️');
+        activateViewOnlyMode('Bericht wird von der Fachkraft überarbeitet');
       } else if (currentItemStatus === 'Genehmigt') {
         showReviewInfoModal('Bereits final freigegeben',
           'Dieser Bericht wurde bereits final freigegeben — es sind keine Aktionen mehr nötig.', '✅');
+        activateViewOnlyMode('Bericht ist final freigegeben');
       } else {
         showReviewInfoModal('Noch nicht eingereicht',
           `Der Bericht hat aktuell den Status „${escHtml(currentItemStatus)}" und liegt nicht zur Prüfung vor.`);
+        activateViewOnlyMode(`Status „${statusLabel(currentItemStatus)}" — liegt nicht zur Prüfung vor`);
       }
       window.scrollTo(0,0);
     } else if (isSonjaUser() && (currentItemStatus === 'TL freigegeben' || currentItemStatus === 'GF-Prüfung')) {
@@ -1796,6 +1808,7 @@ function resetForm() {
   // Kommentare zurücksetzen
   _tlKommentare = {};
   _isReviewMode = false;
+  _isViewOnly = false;
   currentItemStatus = null;
   currentEingereichtVon = '';
   currentVersion = 0;
@@ -2220,6 +2233,7 @@ function fillWeitereKinder(value) {
 // ─── TL-KOMMENTARE (Seiten 3–5, Word-ähnlich vereinfacht) ────────────────────
 let _tlKommentare = {};   // { fieldId: { text, von, datum, status: 'offen'|'erledigt' } }
 let _isReviewMode = false;
+let _isViewOnly = false;   // echter Ansichtsmodus: keinerlei Speicherpfade aktiv
 
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2514,6 +2528,7 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
 }
 
 async function approveReport() {
+  if (_isViewOnly) { alert('Ansichtsmodus — diese Aktion ist nicht möglich.'); return; }
   if (!currentListId) { alert('Kein Bericht geladen.'); return; }
   const btn = document.querySelector('button[onclick="approveReport()"]') || document.getElementById('btnTlFreigeben');
   btn.disabled = true;
@@ -2628,6 +2643,7 @@ async function approveReport() {
 }
 
 async function rejectReport() {
+  if (_isViewOnly) { alert('Ansichtsmodus — diese Aktion ist nicht möglich.'); return; }
   const nOffen = openCommentCount();
   const reason = prompt(nOffen > 0
     ? `Grund für die Zurückweisung (optional — ${nOffen} Kommentar(e) werden mitgesendet):`
@@ -2894,6 +2910,7 @@ async function toggleArchiv(itemId, flag) {
 // ─── TL ANNEHMEN// ─── TL ANNEHMEN ─────────────────────────────────────────────────────────────
 
 async function tlAnnehmenBericht() {
+  if (_isViewOnly) { alert('Ansichtsmodus — diese Aktion ist nicht möglich.'); return; }
   if (!currentListId) return;
   const myName = currentAccount?.name || currentAccount?.username || '';
   const myMail = currentAccount?.username || '';
@@ -2926,6 +2943,7 @@ async function tlAnnehmenBericht() {
 // ─── TL FREIGEBEN AN SONJA ───────────────────────────────────────────────────
 
 async function tlFreigebenAnSonja() {
+  if (_isViewOnly) { alert('Ansichtsmodus — diese Aktion ist nicht möglich.'); return; }
   if (!currentListId) return;
   const btn = document.querySelector('button[onclick="tlFreigebenAnSonja()"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Wird verarbeitet...'; }
@@ -3043,6 +3061,7 @@ async function tlFreigebenAnSonja() {
 // ─── SONJA: ZURÜCK AN TL ─────────────────────────────────────────────────────
 
 async function rejectBackToTL() {
+  if (_isViewOnly) { alert('Ansichtsmodus — diese Aktion ist nicht möglich.'); return; }
   const reason = prompt('Grund für die Rückgabe an die Teamleitung (wird per Mail mitgesendet):');
   if (reason === null) return;
   try {
@@ -3075,6 +3094,41 @@ async function rejectBackToTL() {
   } catch(e) {
     setStatus('error', 'Fehler: ' + e.message);
   }
+}
+
+// ─── ANSICHTSMODUS (VIEW-ONLY) ───────────────────────────────────────────────
+// Echter Nur-Lesen-Zustand: alle Felder gesperrt, alle Speicherpfade blockiert.
+// Navigation, Export und Startseite bleiben nutzbar.
+function activateViewOnlyMode(grund) {
+  _isViewOnly = true;
+  // Alle Formularfelder sperren
+  document.querySelectorAll('#mainLayout input, #mainLayout textarea, #mainLayout select')
+    .forEach(el => { el.disabled = true; });
+  // Aktions-Buttons sperren — Seitennavigation, Exportieren und Startseite ausgenommen
+  document.querySelectorAll('#mainLayout button').forEach(btn => {
+    const oc = btn.getAttribute('onclick') || '';
+    if (/goTo|goToNext|startScreen|downloadLocal/.test(oc)) return;
+    btn.disabled = true;
+    btn.style.opacity = '0.45';
+    btn.style.cursor = 'not-allowed';
+  });
+  // Prüf-Banner/-Rahmen (falls vorhanden) durch neutralen Ansichts-Banner ersetzen
+  document.getElementById('btnSaveComments')?.remove();
+  document.getElementById('reviewBanner')?.remove();
+  document.getElementById('reviewFrame')?.remove();
+  const frame = document.createElement('div');
+  frame.id = 'reviewFrame';
+  frame.style.cssText = 'position:fixed; inset:0; border:4px solid #9ca3af; pointer-events:none; z-index:998;';
+  document.body.appendChild(frame);
+  const banner = document.createElement('div');
+  banner.id = 'reviewBanner';
+  banner.style.cssText = 'position:fixed; top:0; left:0; right:0; background:#6b7280; color:#fff; z-index:999; padding:10px 16px; box-shadow:0 2px 6px rgba(0,0,0,0.25);';
+  banner.innerHTML = `<div style="text-align:center; font-size:13px;">
+    <strong>👁 ANSICHTSMODUS — ${escHtml(grund)}.</strong><br>
+    <span style="font-size:12px; opacity:0.9;">Änderungen sind nicht möglich und werden nicht gespeichert.</span>
+  </div>`;
+  document.body.appendChild(banner);
+  document.body.style.paddingTop = banner.offsetHeight + 'px';
 }
 
 // ─── SONJA PRÜFMODUS ─────────────────────────────────────────────────────────
@@ -3122,7 +3176,7 @@ function showTLAnnehmenPopup() {
       <div style="font-size:13px; color:#555; margin-bottom:24px;">Möchten Sie die Prüfung übernehmen?</div>
       <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
         <button onclick="tlAnnehmenAusPopup()" style="background:#c9a227; color:white; border:none; border-radius:8px; padding:12px 28px; font-size:14px; font-weight:600; cursor:pointer; min-height:44px;">✋ Ja, ich übernehme</button>
-        <button onclick="document.getElementById('tlAnnehmenModal').remove()" style="background:white; color:#555; border:1px solid #ccc; border-radius:8px; padding:12px 20px; font-size:14px; cursor:pointer; min-height:44px;">Nur ansehen</button>
+        <button onclick="document.getElementById('tlAnnehmenModal').remove(); activateViewOnlyMode('Prüfung nicht übernommen — zum Bearbeiten den Prüf-Link erneut öffnen und übernehmen')" style="background:white; color:#555; border:1px solid #ccc; border-radius:8px; padding:12px 20px; font-size:14px; cursor:pointer; min-height:44px;">Nur ansehen</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -3246,10 +3300,15 @@ function activateReviewMode() {
     document.body.appendChild(banner);
     document.body.style.paddingTop = banner.offsetHeight + 'px';
   }
+  // Fremder Prüfer zugeordnet → nur ansehen, nichts speichern
+  if (currentAssignedReviewer && !isMyBericht) {
+    activateViewOnlyMode(`Bericht wird geprüft von ${currentAssignedReviewer}`);
+  }
 }
 
 // Kommentare (und ggf. Korrekturen) speichern, ohne den Status zu ändern
 async function saveCommentsDraft() {
+  if (_isViewOnly) { alert('Ansichtsmodus — Speichern ist nicht möglich.'); return; }
   if (!currentListId) { alert('Kein Bericht geladen.'); return; }
   const btn = document.getElementById('btnSaveComments');
   if (btn) { btn.disabled = true; btn.textContent = 'Wird gespeichert...'; }
