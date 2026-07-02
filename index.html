@@ -2812,6 +2812,7 @@ function renderStatusBerichte() {
     } catch(e) {}
 
     const hpg = hpgInfo(naechstesHpg);
+    const st = item.Status || 'Entwurf';
     // Genehmigte/archivierte Berichte: HPG-Dringlichkeit neutralisieren — der Bericht
     // für das Gespräch liegt bereits vor, Rot/Gelb soll nur offene Arbeit markieren
     if (st === 'Genehmigt' || archiviert) {
@@ -2821,7 +2822,6 @@ function renderStatusBerichte() {
       hpg.btnBg = 'var(--accent)';
       hpg.btnColor = 'white';
     }
-    const st = item.Status || 'Entwurf';
     const assigned = item.Assigned_Reviewer
       ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Prüfer: ${item.Assigned_Reviewer.replace(/</g,'&lt;')}</div>` : '';
     const fkHtml = fachkraft
