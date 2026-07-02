@@ -487,7 +487,7 @@
             <select id="statusFilter" onchange="renderStatusBerichte()" style="font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); background:white; width:100%;">
               <option value="alle">Alle Berichte</option>
               <option value="offen">Warten auf TL-Prüfung</option>
-              <option value="tl_freigegeben">Warte auf GF-Prüfung / GF prüft</option>
+              <option value="tl_freigegeben">Warte auf / in GF-Prüfung</option>
               <option value="genehmigt">Genehmigt</option>
               <option value="abgelehnt">Abgelehnt</option>
               <option value="entwurf">Entwürfe</option>
@@ -2227,7 +2227,7 @@ function escHtml(s) {
 
 // Anzeige-Label für Statuswerte — der interne Wert in SharePoint bleibt unverändert
 function statusLabel(s) {
-  return ({ 'TL freigegeben': 'Warte auf GF-Prüfung' }[s]) || s;
+  return ({ 'TL freigegeben': 'Warte auf GF-Prüfung', 'GF-Prüfung': 'in GF-Prüfung' }[s]) || s;
 }
 
 // Alle kommentierbaren Felder in den Seiten 3–5
@@ -2852,6 +2852,9 @@ function renderStatusBerichte() {
         ${archiviert
           ? `<button onclick="toggleArchiv('${itemId}', false)" title="Aus dem Archiv zurückholen"
               style="font-size:12px; padding:6px 12px; background:white; color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; min-height:36px;">↩ Wiederherstellen</button>` : ''}
+        ${st === 'Entwurf'
+          ? `<button onclick="deleteDraft('${itemId}')" title="Entwurf löschen"
+              style="font-size:12px; padding:6px 12px; background:white; color:var(--error); border:1px solid var(--error); border-radius:var(--radius); cursor:pointer; min-height:36px;">🗑 Löschen</button>` : ''}
         <button onclick="loadDraft('${itemId}')"
           style="font-size:12px; padding:6px 14px; background:${hpg.btnBg}; color:${hpg.btnColor};
           border:1px solid ${hpg.border}; border-radius:var(--radius); cursor:pointer; font-weight:600; min-height:36px;">Öffnen</button>
@@ -4271,6 +4274,11 @@ async function deleteDraft(id) {
     if (resp.ok || resp.status === 204) {
       // Remove row from DOM
       document.getElementById('draft_row_' + id)?.remove();
+      // Auch aus dem Statuslisten-Cache entfernen und dort neu rendern
+      if (window._statusBerichteItems) {
+        window._statusBerichteItems = window._statusBerichteItems.filter(i => String(i._itemId || i.ID) !== String(id));
+        if (document.getElementById('statusBerichteContent')) renderStatusBerichte();
+      }
     } else {
       alert('Löschen fehlgeschlagen: ' + resp.status);
     }
