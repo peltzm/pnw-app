@@ -1589,11 +1589,13 @@ async function ladeFahrtenbuchScreen() {
     const items = await fetchAlleListItems(token, siteId, listId);
     const myMail = (currentAccount?.username||'').toLowerCase();
     const alle = items.map(i=>({id:i.id,...i.fields}));
-    const fahrt = alle.find(b =>
+    // Fix: absteigend nach ID sortieren — sonst gewinnt bei Duplikaten der
+    // AELTESTE Eintrag die Anzeige (inkonsistent zu Upload/Einreichen-Dedup)
+    const fahrt = alle.filter(b =>
       b.Kategorie === 'fahrtenbuch' &&
       (b.Monat||'').startsWith(_currentMonat) &&
       (b.Fachkraft_Mail||'').toLowerCase() === myMail
-    );
+    ).sort((a,b)=>parseInt(b.id)-parseInt(a.id))[0];
 
     const monatSel = document.getElementById('monatSelect');
     document.getElementById('fahrtScreenSub').textContent =
@@ -1683,6 +1685,24 @@ async function handleFahrtUpload(input) {
     const fn = file.name;
     const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
     const ab = await file.arrayBuffer();
+
+    // ── Monats-Check: Zeitraum der Datei vs. gewaehlter Monatsnachweis ──
+    // Fix: Juni-Fahrtenbuch landete unbemerkt im Juli-Nachweis
+    try {
+      const XLSXpre = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+      const wbPre = XLSXpre.read(ab, { type: 'array', cellDates: true });
+      const wsPre = wbPre.Sheets[wbPre.SheetNames[0]];
+      const von = wsPre['B2'] ? wsPre['B2'].v : null;
+      let dateiMonat = null;
+      if (von instanceof Date && !isNaN(von)) {
+        dateiMonat = `${von.getFullYear()}-${String(von.getMonth()+1).padStart(2,'0')}`;
+      }
+      if (dateiMonat && dateiMonat !== _currentMonat) {
+        const ok = confirm(`⚠️ Die Datei enthält Fahrten für ${dateiMonat}, du bist aber im Monatsnachweis ${_currentMonat}.\n\nTipp: Oben den Monat wechseln und die Datei dort hochladen.\n\nTrotzdem in ${_currentMonat} hochladen?`);
+        if (!ok) { input.value = ''; ladeFahrtenbuchScreen(); return; }
+      }
+    } catch(e) {}
+
     const uploaded = await uploadFile(path, ab, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     // ── Excel parsen ──────────────────────────────────────────────
@@ -1724,10 +1744,17 @@ async function handleFahrtUpload(input) {
       const kmKey     = Object.keys(rows[0]).find(k => /strecke.*km|^km$/i.test(k)) ||
                         Object.keys(rows[0]).find(k => /km/i.test(k)) || 'Strecke in km';
 
-      // Alle validen Zeilen (hat km-Wert > 0)
+      // Alle validen Zeilen (km > 0 UND echte Fahrt — keine Summen-/Fußzeile)
+      // Fix: Export-Fusszeile enthaelt nur die Gesamt-km und wurde als Fahrt
+      // mitgezaehlt → km-Summe verdoppelt (z.B. 3500,8 → 7001,6)
+      const beginnKey = Object.keys(rows[0]).find(k => /beginn|datum/i.test(k)) || 'Beginn';
+      const startKey  = Object.keys(rows[0]).find(k => /^start$/i.test(k)) || 'Start';
+      const zielKey   = Object.keys(rows[0]).find(k => /ziel/i.test(k)) || 'Ziel';
       const alleZeilen = rows.filter(r => {
         const km = parseFloat(String(r[kmKey]||'').replace(',','.'));
-        return km > 0;
+        if (!(km > 0)) return false;
+        // Echte Fahrt hat Beginn/Start/Ziel — Summenzeile hat nur den km-Wert
+        return [beginnKey, startKey, zielKey].some(k => String(r[k]||'').trim() !== '');
       });
 
       gesamtFahrten = alleZeilen.length;
