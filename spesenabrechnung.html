@@ -1683,11 +1683,10 @@ async function handleFahrtUpload(input) {
   if (zone) zone.innerHTML = '<div class="uz-icon spin" style="font-size:32px">⚙️</div><div style="font-size:13px;color:var(--text-muted);margin-top:8px">Lese Excel und lade hoch…</div>';
   try {
     const fn = file.name;
-    const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
     const ab = await file.arrayBuffer();
 
-    // ── Monats-Check: Zeitraum der Datei vs. gewaehlter Monatsnachweis ──
-    // Fix: Juni-Fahrtenbuch landete unbemerkt im Juli-Nachweis
+    // ── Monats-Erkennung: Zeitraum aus der Datei (B2) lesen und Upload
+    //    automatisch in den passenden Monatsnachweis einsortieren ──
     try {
       const XLSXpre = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
       const wbPre = XLSXpre.read(ab, { type: 'array', cellDates: true });
@@ -1698,11 +1697,21 @@ async function handleFahrtUpload(input) {
         dateiMonat = `${von.getFullYear()}-${String(von.getMonth()+1).padStart(2,'0')}`;
       }
       if (dateiMonat && dateiMonat !== _currentMonat) {
-        const ok = confirm(`⚠️ Die Datei enthält Fahrten für ${dateiMonat}, du bist aber im Monatsnachweis ${_currentMonat}.\n\nTipp: Oben den Monat wechseln und die Datei dort hochladen.\n\nTrotzdem in ${_currentMonat} hochladen?`);
-        if (!ok) { input.value = ''; ladeFahrtenbuchScreen(); return; }
+        const sel = document.getElementById('monatSelect');
+        const hatOption = sel && Array.from(sel.options).some(o => o.value === dateiMonat);
+        if (hatOption) {
+          sel.value = dateiMonat;
+          _currentMonat = dateiMonat;
+          _fahrtDaten = null; // State des vorher angezeigten Monats verwerfen
+          showToast(`📅 Fahrtenbuch wird in ${fmtMonat(dateiMonat)} einsortiert`, true);
+        } else {
+          const ok = confirm(`⚠️ Die Datei enthält Fahrten für ${dateiMonat} — dieser Monat ist nicht auswählbar.\n\nTrotzdem in ${_currentMonat} hochladen?`);
+          if (!ok) { input.value = ''; ladeFahrtenbuchScreen(); return; }
+        }
       }
     } catch(e) {}
 
+    const path = `${CFG.spFolder}/${_currentMonat}/${shortName()}/${fn}`;
     const uploaded = await uploadFile(path, ab, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     // ── Excel parsen ──────────────────────────────────────────────
@@ -1799,6 +1808,7 @@ async function handleFahrtUpload(input) {
 
     // Alle vorhandenen Fahrtenbuch-Einträge dieses Monats aus SharePoint holen und bereinigen
     let existingId = _fahrtDaten?.id || null;
+    let statusGesperrt = null;
     try {
       const token2 = await getToken();
       const { siteId: sid2, listId: lid2 } = await getGraphListIds();
@@ -1811,6 +1821,8 @@ async function handleFahrtUpload(input) {
           && (b.Fachkraft_Mail || '').toLowerCase() === myMail)
         .sort((a, b) => parseInt(b.id) - parseInt(a.id));
       if (alleFahrt.length > 0) {
+        const st = alleFahrt[0].Status || '';
+        if (st === 'Eingereicht' || st === 'Genehmigt') statusGesperrt = st;
         existingId = alleFahrt[0].id; // neuestes als Update-Ziel
         // Alle weiteren löschen
         for (const dup of alleFahrt.slice(1)) {
@@ -1819,6 +1831,10 @@ async function handleFahrtUpload(input) {
         }
       }
     } catch(e) { console.warn('Fahrtenbuch-Bereinigung fehlgeschlagen:', e); }
+
+    if (statusGesperrt) {
+      throw new Error(`Fahrtenbuch für ${fmtMonat(_currentMonat)} ist bereits ${statusGesperrt.toLowerCase()} — TL muss die Abrechnung erst zurückweisen, dann kann neu hochgeladen werden.`);
+    }
 
     await saveBelegToList({
       monat: _currentMonat, kategorie: 'fahrtenbuch', betrag,
