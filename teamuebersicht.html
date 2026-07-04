@@ -265,7 +265,7 @@ const msalConfig = {
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
   system: { allowNativeBroker: false }
 };
-const APP_VERSION = 'v8a764f8'; // auto-updated on deploy
+const APP_VERSION = 'v3d557ba'; // auto-updated on deploy
 
 document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
 
@@ -345,7 +345,7 @@ async function init() {
 init();
 
 // ── IMAGE LOAD (fetch as blob to avoid CORS taint on canvas) ──
-const MAP_URL = 'https://raw.githubusercontent.com/peltzm/pnw-app/main/assets/gemeindekarte.png';
+const MAP_URL = 'https://raw.githubusercontent.com/peltzm/pnw-app/main/assets/gemeindekarte.png?v=3d557ba2';
 let mapBlobUrl = null;
 
 async function loadMap() {
