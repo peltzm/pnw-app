@@ -653,7 +653,7 @@ function handleReviewLink() {
   const id = reviewId || sonjaId || editId;
   const typ = params.get('typ');
   if (!id || !typ) return false;
-  if (['verlauf','abschluss','clearing'].includes(typ)) {
+  if (['verlauf','abschluss','clearing','stationaer'].includes(typ)) {
     selectBerichtstyp(typ);
   }
   if (reviewId || sonjaId) {
@@ -1174,7 +1174,7 @@ async function uploadToSharePoint() {
     let savedId = currentListId;
     try {
       const listData = collectData();
-      listData._status = 'Eingereicht';
+      listData._status = 'Eingereicht'; listData._statusExplicit = true;
       savedId = await saveToList(listData, currentListId);
       currentListId = savedId;
     } catch(e) { console.warn('List update failed:', e); }
@@ -1977,6 +1977,29 @@ async function getGraphListIds() {
 async function saveToList(data, existingId = null) {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
+  // Status-Guard: Statuserhaltende Saves (Autosave, Entwurf, Kommentare) verwenden den
+  // FRISCHEN Server-Status statt des ggf. veralteten Tab-Status. Verhindert, dass ein
+  // stale Tab einen Workflow-Fortschritt (z.B. "TL freigegeben") auf "Eingereicht"
+  // zurückdreht. Explizite Statuswechsel setzen data._statusExplicit = true.
+  const _statusExplicit = data._statusExplicit === true;
+  delete data._statusExplicit; // nicht in FormularDaten persistieren
+  if (existingId && !_statusExplicit) {
+    try {
+      const freshResp = await fetch(
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}?expand=fields(select=Status)`,
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (freshResp.ok) {
+        const freshItem = await freshResp.json();
+        const freshStatus = freshItem.fields?.Status;
+        if (freshStatus && freshStatus !== data._status) {
+          console.warn(`Status-Guard: Server-Status "${freshStatus}" behalten (Tab hatte "${data._status}")`);
+          data._status = freshStatus;
+          currentItemStatus = freshStatus;
+        }
+      }
+    } catch(e) { /* Guard best-effort — im Zweifel bisheriges Verhalten */ }
+  }
   // Collect ziele
   const ziele = [];
   for (let i = 1; i <= zielCount; i++) {
@@ -2558,7 +2581,7 @@ async function approveReport() {
   try {
     // 1. Save corrected content back to SharePoint
     const data = collectData();
-    data._status = 'Genehmigt';
+    data._status = 'Genehmigt'; data._statusExplicit = true;
     await saveToList(data, currentListId);
     
     // 2. Upload corrected DOCX to SharePoint (overwrites)
@@ -2671,7 +2694,7 @@ async function rejectReport() {
   
   try {
     const data = collectData();
-    data._status = 'Abgelehnt';
+    data._status = 'Abgelehnt'; data._statusExplicit = true;
     data._ablehnungsgrund = reason;
     // Prüfer-Zuordnung zurücksetzen — die nächste Einreichung ist eine neue Prüfungsrunde
     data._assignedReviewer = '';
@@ -2946,7 +2969,7 @@ async function tlAnnehmenBericht() {
       throw new Error(`Übernahme nicht möglich — der Bericht wird bereits geprüft von ${freshReviewer}.`);
     }
     const data = collectData();
-    data._status = 'TL angenommen';
+    data._status = 'TL angenommen'; data._statusExplicit = true;
     data._assignedReviewer = myName;
     data._assignedReviewerMail = myMail;
     currentAssignedReviewer = myName;
@@ -2968,7 +2991,7 @@ async function tlFreigebenAnSonja() {
   if (btn) { btn.disabled = true; btn.textContent = 'Wird verarbeitet...'; }
   try {
     const data = collectData();
-    data._status = 'TL freigegeben';
+    data._status = 'TL freigegeben'; data._statusExplicit = true;
     data._assignedReviewer = currentAssignedReviewer;
     data._assignedReviewerMail = currentAssignedReviewerMail;
     currentItemStatus = 'TL freigegeben';
@@ -3038,7 +3061,7 @@ async function tlFreigebenAnSonja() {
       + '</table>'
       + hpgWarning
       + '<div style="margin-bottom:24px;">'
-      + '<a href="' + sonjaUrl + '?direct_approve=1" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2d6a4f; color:#222; background:white; margin-bottom:10px;">Final prüfen und PDF erstellen →</a>'
+      + '<a href="' + sonjaUrl + '&direct_approve=1" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #2d6a4f; color:#222; background:white; margin-bottom:10px;">Final prüfen und PDF erstellen →</a>'
       + '<a href="' + docUrl + '" style="display:block; min-width:220px; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold; text-align:center; border:2px solid #0078d4; color:#222; background:white;">Dokument in SharePoint öffnen →</a>'
       + '</div>'
       + '<p style="color:#666; font-size:13px; margin-bottom:24px;">Alle Berichte im Überblick: <a href="' + folderUrl + '" style="color:#0078d4;">Ordner in SharePoint öffnen →</a></p>'
@@ -3085,7 +3108,7 @@ async function rejectBackToTL() {
   if (reason === null) return;
   try {
     const data = collectData();
-    data._status = 'TL angenommen'; // zurück auf TL-Prüfung
+    data._status = 'TL angenommen'; data._statusExplicit = true; // zurück auf TL-Prüfung
     data._assignedReviewer = currentAssignedReviewer;
     data._assignedReviewerMail = currentAssignedReviewerMail;
     currentItemStatus = 'TL angenommen';
