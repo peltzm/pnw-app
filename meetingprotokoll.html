@@ -580,6 +580,7 @@
                 <select id="fApprover">
                   <option value="">— bitte auswählen —</option>
                 </select>
+                <div id="fApproverStatic" style="display:none;font-size:14px;font-weight:600;padding:7px 0;color:var(--text);"></div>
               </div>
               <div id="freigabeExternWrap" style="display:none">
                 <div class="field">
@@ -1297,6 +1298,7 @@ function goSection(id) {
     if (extWrap) extWrap.style.display = _isExtern ? '' : 'none';
     if (cardTitle) cardTitle.textContent = _isExtern ? 'Unterschriften' : 'Zuständige Teamleitung';
     _applyFreigabeRoleUI();
+    applyKleinteamApproverUI();
   }
   if (id === 's-archiv') {
     loadArchiv();
@@ -1597,17 +1599,42 @@ async function reloadM365() {
 
 async function onKleinteamChange(teamKey) {
   S.kleinteamTeam = teamKey || null;
-  if (!teamKey) { S.participants = []; renderParticipants(); return; }
+  if (!teamKey) { S.participants = []; renderParticipants(); applyKleinteamApproverUI(); return; }
   const team = KLEINTEAM_TEAMS.find(t => t.key === teamKey);
   if (!team) return;
   // Freigebende Teamleitung vorbelegen
   populateApproverSelect();
   const ap = document.getElementById('fApprover');
   if (ap && team.approver) ap.value = team.approver;
+  applyKleinteamApproverUI();
   // Teilnehmer der Team-Gruppe laden (Betreff/Dateiname werden dort aktualisiert)
   S.participants = [];
   delete _groupCache[team.groupKey];
   await onThemaChange(S.thema);
+}
+
+// Kleinteam: Freigabe-Dropdown ausblenden — die TL ergibt sich aus der Team-Auswahl
+function applyKleinteamApproverUI() {
+  const sel  = document.getElementById('fApprover');
+  const stat = document.getElementById('fApproverStatic');
+  if (!sel || !stat) return;
+  const thema = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
+  if (thema && thema.teamSelect) {
+    const team = KLEINTEAM_TEAMS.find(t => t.key === S.kleinteamTeam);
+    if (team) {
+      populateApproverSelect();
+      sel.value = team.approver;
+      stat.textContent = lastFirst(team.tlName) + ' · ergibt sich aus der Team-Auswahl';
+    } else {
+      sel.value = '';
+      stat.textContent = '— bitte zuerst in den Meeting-Details das Team auswählen —';
+    }
+    sel.style.display  = 'none';
+    stat.style.display = '';
+  } else {
+    sel.style.display  = '';
+    stat.style.display = 'none';
+  }
 }
 
 async function onEinrichtungChange(einrKey) {
