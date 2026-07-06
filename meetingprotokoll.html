@@ -361,7 +361,7 @@
             <div class="type-tile" onclick="selectThema('team','kleinteam',this)">
               <div class="tile-icon">👤</div>
               <div class="tile-label">Kleinteam</div>
-              <div class="tile-sub">Teilgruppe Ambulant</div>
+              <div class="tile-sub">Team Jörg · Laura · Nadine</div>
             </div>
             <div class="type-tile" onclick="selectThema('team','supervision',this)">
               <div class="tile-icon">🔍</div>
@@ -456,6 +456,17 @@
               </select>
             </div>
           </div>
+          <div class="field-grid full" id="fKleinteamWrap" style="display:none">
+            <div class="field">
+              <label>Team (Teamleitung)</label>
+              <select id="fKleinteam" onchange="onKleinteamChange(this.value)">
+                <option value="">— bitte auswählen —</option>
+                <option value="joerg">Schneider, Jörg</option>
+                <option value="laura">Meier, Laura</option>
+                <option value="nadine">Grund, Nadine</option>
+              </select>
+            </div>
+          </div>
 
         </div>
 
@@ -484,7 +495,7 @@
           <div class="p-grid" id="participantGrid"></div>
 
           <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
-            <button class="btn-add" onclick="addGuest()">+ Externen Gast hinzufügen</button>
+            <button class="btn-add" onclick="addGuest()">+ Teilnehmer hinzufügen (intern / extern)</button>
             <div id="guestArea" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
           </div>
         </div>
@@ -739,7 +750,39 @@ const GROUP_MAP = {
   allTeam:   { name: 'Ambulante Familienhilfe',   mail: 'familienhilfe@praxisneuewege.de' },
   nordstern: { name: 'Team Nordstern',             mail: 'nordsternteam@praxisneuewege.de' },
   leitungNS: { name: 'Leitungskonferenz Nordstern', mail: null },
+  // Kleinteam: E-Mail-aktivierte Sicherheitsgruppen je Teamleitung
+  // ⚠️ Mailadressen bitte mit M365 abgleichen (Annahme: team-<vorname>@)
+  teamJoerg:  { name: 'Team-Joerg',  mail: 'team-joerg@praxisneuewege.de' },
+  teamLaura:  { name: 'Team-Laura',  mail: 'team-laura@praxisneuewege.de' },
+  teamNadine: { name: 'Team-Nadine', mail: 'team-nadine@praxisneuewege.de' },
 };
+
+// Kleinteam-Teams (Auswahl über Namen der Teamleitung in den Rahmendaten)
+const KLEINTEAM_TEAMS = [
+  { key: 'joerg',  short: 'Schneider', tlName: 'Jörg Schneider', tlMail: 'joerg.schneider@praxisneuewege.de', approver: 'js', groupKey: 'teamJoerg' },
+  { key: 'laura',  short: 'Meier',     tlName: 'Laura Meier',    tlMail: 'laura.meier@praxisneuewege.de',     approver: 'lm', groupKey: 'teamLaura' },
+  { key: 'nadine', short: 'Grund',     tlName: 'Nadine Grund',   tlMail: 'nadine.grund@praxisneuewege.de',    approver: 'ng', groupKey: 'teamNadine' },
+];
+const KLEINTEAM_FIXED = ['sonja.peltz@praxisneuewege.de', 'markus.peltz@praxisneuewege.de'];
+
+// Verteiler fürs fertige Kleinteam-Protokoll:
+// Team-Gruppe (alle Mitglieder) + alle Teamleitungen + Sonja + Markus + manuell hinzugefügte Teilnehmer
+function kleinteamVerteiler(teamKey, participants) {
+  const set  = new Set();
+  const team = KLEINTEAM_TEAMS.find(t => t.key === teamKey);
+  const grp  = team ? GROUP_MAP[team.groupKey] : null;
+  if (grp && grp.mail) {
+    set.add(grp.mail.toLowerCase());
+  } else {
+    // Fallback: Einzeladressen der geladenen Teilnehmer
+    (participants || []).forEach(p => { if (p.mail) set.add(p.mail.toLowerCase()); });
+  }
+  // Manuell hinzugefügte interne/externe Teilnehmer immer direkt anschreiben
+  (participants || []).forEach(p => { if (p.guest && p.mail && p.mail.includes('@')) set.add(p.mail.toLowerCase()); });
+  KLEINTEAM_TEAMS.forEach(t => { if (t.tlMail) set.add(t.tlMail.toLowerCase()); });
+  KLEINTEAM_FIXED.forEach(m => set.add(m));
+  return [...set];
+}
 
 // Einrichtungen für stationäres Team
 const EINRICHTUNGEN = [
@@ -1103,6 +1146,10 @@ const M365_FALLBACK = {
   suedpol:    [],
   safeharbor: [],
   jwg:        [],
+  // Kleinteam-Fallback: mindestens die Teamleitung
+  teamJoerg:  [{name:'Jörg Schneider', role:'TL Ambulant', ini:'JS', scribe:true, mail:'joerg.schneider@praxisneuewege.de'}],
+  teamLaura:  [{name:'Laura Meier',    role:'TL',          ini:'LM', scribe:true, mail:'laura.meier@praxisneuewege.de'}],
+  teamNadine: [{name:'Nadine Grund',   role:'TL Ambulant', ini:'NG', scribe:true, mail:'nadine.grund@praxisneuewege.de'}],
 };
 
 /* ──────────────────────────────────────
@@ -1115,7 +1162,7 @@ const TYPES = {
     tl: 'Teamleitung Ambulant',
     themen: {
       grossteam:  { label: 'Großteam',       group: 'allTeam',    tops: ['Rückblick', 'Aktuelle Fälle', 'Organisatorisches', 'Termine', 'Diverses'] },
-      kleinteam:  { label: 'Kleinteam',      group: 'allTeam',    tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
+      kleinteam:  { label: 'Kleinteam',      group: null, teamSelect: true, tops: ['Rückblick', 'Fallbesprechungen', 'Organisatorisches', 'Diverses'] },
       supervision:{ label: 'Supervision',    group: 'allTeam',    tops: ['Falleinbringung', 'Reflexion & Analyse', 'Handlungsempfehlungen'] },
       leitung:    { label: 'Leitungsteam',   group: 'leitung',    tops: ['Rückblick', 'Aktuelle Themen', 'Personalthemen', 'Organisatorisches', 'Diverses'] },
       stationaer: { label: 'Stationäres Team', group: 'nordstern',  einrichtung: true,
@@ -1190,6 +1237,7 @@ const S = {
   type: 'team',
   thema: null,
   einrichtung: null,
+  kleinteamTeam: null,
   participants: [],
   tops: [],
   topId: 0,
@@ -1308,6 +1356,12 @@ function selectThema(type, themaKey, el) {
     document.getElementById('fFileName').value    = _f2;
   }
   document.getElementById('fMailBetreff').value = 'Protokoll ' + label + ' vom ' + fmtDate(d);
+  // Kleinteam: Team-Auswahl anzeigen und zurücksetzen
+  S.kleinteamTeam = null;
+  const ktWrap = document.getElementById('fKleinteamWrap');
+  if (ktWrap) ktWrap.style.display = thema.teamSelect ? '' : 'none';
+  const ktSel0 = document.getElementById('fKleinteam');
+  if (ktSel0) ktSel0.value = '';
   // Pre-init TOPs and reset participants
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
@@ -1414,7 +1468,19 @@ async function onThemaChange(themaKey) {
   // For einrichtung-based themen, load participants from the Einrichtung's M365 group
   const einrListResolved = (S.type === 'konferenz') ? EINRICHTUNGEN_KONFERENZ : EINRICHTUNGEN;
   const einrResolved = thema.einrichtung ? einrListResolved.find(e => e.key === (S.einrichtung || 'nordstern')) : null;
-  const groupKey = einrResolved ? einrResolved.group : thema.group;
+  let groupKey = einrResolved ? einrResolved.group : thema.group;
+  // Kleinteam: Gruppe hängt vom gewählten Team ab
+  const ktResolved = thema.teamSelect ? KLEINTEAM_TEAMS.find(t => t.key === S.kleinteamTeam) : null;
+  if (thema.teamSelect) {
+    if (!ktResolved) {
+      S.participants = [];
+      if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;">Bitte zuerst in den Meeting-Details das Team (Teamleitung) auswählen — die Mitglieder werden dann aus M365 geladen.</div>';
+      const _ti = document.getElementById('tInfoTeiln');
+      if (_ti) _ti.textContent = '— (Team wählen)';
+      return;
+    }
+    groupKey = ktResolved.groupKey;
+  }
   try {
     if (groupKey === 'allTeam') {
       members = await loadAllTeam();
@@ -1449,18 +1515,19 @@ async function onThemaChange(themaKey) {
   }
 
   // Info card
-  document.getElementById('tInfoTeiln').textContent = S.participants.length + ' Personen (' + thema.label + ')';
+  const _themaLabel = thema.label + (ktResolved ? ' ' + ktResolved.short : '');
+  document.getElementById('tInfoTeiln').textContent = S.participants.length + ' Personen (' + _themaLabel + ')';
 
   // Filename + mail
   const d = document.getElementById('fDatum').value || new Date().toISOString().slice(0,10);
-  const label = TYPES[S.type].label + ' – ' + thema.label;
+  const label = TYPES[S.type].label + ' – ' + _themaLabel;
   document.getElementById('fMailBetreff').value = `Protokoll ${label} vom ${fmtDate(d)}`;
   document.getElementById('spPath').textContent = TYPES[S.type].sp;
   document.getElementById('spFile').textContent = `Protokoll_${label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${d}.pdf`;
   document.getElementById('fFileName').value    = `Protokoll_${label.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g,'_')}_${d}.pdf`;
 
   renderParticipants();
-  showToast(`${S.participants.length} Teilnehmer geladen (${thema.label})`, 'success');
+  showToast(`${S.participants.length} Teilnehmer geladen (${_themaLabel})`, 'success');
 }
 
 /* ──────────────────────────────────────
@@ -1474,7 +1541,11 @@ function renderParticipants() {
   if (oldBar) oldBar.remove();
 
   if (!S.participants.length) {
-    g.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;">Bitte zuerst ein Thema auswählen — Teilnehmer werden dann aus M365 geladen.</div>';
+    const _ktNeeded = S.type === 'team' && S.thema === 'kleinteam' && !S.kleinteamTeam;
+    g.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;">' +
+      (_ktNeeded
+        ? 'Bitte in den Meeting-Details das Team (Teamleitung) auswählen — die Mitglieder werden dann aus M365 geladen.'
+        : 'Bitte zuerst ein Thema auswählen — Teilnehmer werden dann aus M365 geladen.') + '</div>';
     updateAllCb(); return;
   }
   S.participants.forEach((p, i) => {
@@ -1522,6 +1593,21 @@ function toggleAll() {
 async function reloadM365() {
   if (!S.thema) { showToast('Bitte zuerst Thema/Anlass auswählen.', 'info'); return; }
   delete _groupCache[TYPES[S.type].themen[S.thema].group];
+  await onThemaChange(S.thema);
+}
+
+async function onKleinteamChange(teamKey) {
+  S.kleinteamTeam = teamKey || null;
+  if (!teamKey) { S.participants = []; renderParticipants(); return; }
+  const team = KLEINTEAM_TEAMS.find(t => t.key === teamKey);
+  if (!team) return;
+  // Freigebende Teamleitung vorbelegen
+  populateApproverSelect();
+  const ap = document.getElementById('fApprover');
+  if (ap && team.approver) ap.value = team.approver;
+  // Teilnehmer der Team-Gruppe laden (Betreff/Dateiname werden dort aktualisiert)
+  S.participants = [];
+  delete _groupCache[team.groupKey];
   await onThemaChange(S.thema);
 }
 
@@ -1670,9 +1756,23 @@ function addGuest() {
   row.style.cssText = 'display:flex;gap:8px;align-items:center;';
   row.innerHTML = `
     <input type="text" placeholder="Name" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
-    <input type="text" placeholder="E-Mail" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+    <input type="text" placeholder="E-Mail (optional)" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;">
+    <button class="btn-add" style="white-space:nowrap;" onclick="confirmGuest(this)">✓ Übernehmen</button>
     <button class="btn-remove" onclick="this.parentElement.remove()">✕</button>`;
   area.appendChild(row);
+}
+
+// Übernimmt eine Gast-Zeile als Teilnehmer (intern oder extern)
+function confirmGuest(btn) {
+  const row = btn.parentElement;
+  const inputs = row.querySelectorAll('input');
+  const name = (inputs[0].value || '').trim();
+  const mail = (inputs[1].value || '').trim().toLowerCase();
+  if (!name) { showToast('Bitte einen Namen eintragen.', 'info'); return; }
+  S.participants.push({ name, fullName: name, mail, role: 'Gast', ini: initials(name), scribe: false, present: true, guest: true });
+  row.remove();
+  renderParticipants();
+  showToast('Teilnehmer hinzugefügt: ' + name, 'success');
 }
 
 /* ──────────────────────────────────────
@@ -1882,7 +1982,9 @@ async function executePublish() {
     showToast('✓ PDF in SharePoint gespeichert', 'success');
 
     // 3. Send mail to all participants
-    const mails    = S.participants.filter(p => p.mail).map(p => p.mail);
+    // Kleinteam: fester Verteiler = Team-Gruppe + alle TL + Sonja + Markus (+ Gäste)
+    let mails = S.participants.filter(p => p.mail).map(p => p.mail);
+    if (S.type === 'team' && S.thema === 'kleinteam') mails = kleinteamVerteiler(S.kleinteamTeam, S.participants);
     const mailNote = document.getElementById('fMailNote').value || '';
     const mailSubj = document.getElementById('fMailBetreff').value;
     const spUrl    = `${CFG.siteUrl}/Freigegebene Dokumente/${spPath}`;
@@ -2295,7 +2397,9 @@ async function freigabeAction(itemId, newStatus) {
       const spUrl = CFG.siteUrl + '/Freigegebene Dokumente/' + spPath;
 
       // Mail an alle Teilnehmer
-      const mails    = participants.filter(p => p.mail).map(p => p.mail);
+      // Kleinteam: fester Verteiler = Team-Gruppe + alle TL + Sonja + Markus (+ Gäste)
+      let mails = participants.filter(p => p.mail).map(p => p.mail);
+      if (data.type === 'team' && data.thema === 'kleinteam') mails = kleinteamVerteiler(data.kleinteamTeam, participants);
       const mailSubj = data.mailBetreff || ('Protokoll ' + label + ' vom ' + datumDE);
       const mailNote = data.mailNote || '';
       const partMail = '<p>Guten Tag,</p>'
@@ -2787,6 +2891,7 @@ function collectDraftData() {
     type:        S.type  || '',
     thema:       S.thema || '',
     einrichtung: S.einrichtung || '',
+    kleinteamTeam: S.kleinteamTeam || '',
     label:       cfg && thema ? cfg.label + ' – ' + thema.label : '',
     datum:       document.getElementById('fDatum')?.value       || '',
     zeitVon:     document.getElementById('fZeitVon')?.value     || '',
@@ -3142,6 +3247,7 @@ async function loadDraft(itemId, targetSection) {
     S.type        = data.type        || 'team';
     S.thema       = data.thema       || null;
     S.einrichtung = data.einrichtung || null;
+    S.kleinteamTeam = data.kleinteamTeam || null;
     S.tops        = JSON.parse(data.tops || '[]');
     S.participants= JSON.parse(data.participants || '[]');
     // Restore form fields after navigation
@@ -3180,6 +3286,13 @@ async function loadDraft(itemId, targetSection) {
       if (data.einrichtung) {
         const ef = document.getElementById('fEinrichtung');
         if (ef) { ef.value = data.einrichtung; const ew=document.getElementById('fEinrichtungWrap'); if(ew) ew.style.display=''; }
+      }
+      if (data.kleinteamTeam) {
+        S.kleinteamTeam = data.kleinteamTeam;
+        const kf = document.getElementById('fKleinteam');
+        if (kf) kf.value = data.kleinteamTeam;
+        const kw = document.getElementById('fKleinteamWrap');
+        if (kw) kw.style.display = '';
       }
       renderParticipants();
       renderTOPs();
