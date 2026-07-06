@@ -1317,6 +1317,15 @@ function markDone(n) {
    THEMA SELECTION (flat: type + thema in one click)
 ────────────────────────────────────── */
 function selectThema(type, themaKey, el) {
+  // FIX Datenverlust: Bestehenden Entwurf mit synchronem Snapshot sichern,
+  // BEVOR der Zustand (TOPs/Teilnehmer) zurückgesetzt wird. Sonst überschreibt
+  // der Autosave beim Seitenwechsel den Entwurf mit leeren TOPs bzw. legt
+  // ein leeres Duplikat an.
+  clearTimeout(_autoSaveTimer);
+  if (S.type && _currentDraftId) {
+    const _snap = collectDraftData();
+    if (_draftHasContent(_snap)) autoSaveDraft(_snap, _currentDraftId); // Snapshot des ALTEN Zustands
+  }
   document.querySelectorAll('.type-tile').forEach(t => t.classList.remove('selected'));
   el.classList.add('selected');
   // Set state
@@ -2938,15 +2947,30 @@ function collectDraftData() {
   };
 }
 
-async function autoSaveDraft() {
+// Hat der Entwurf inhaltlich relevante Daten? (Schutz gegen leere Duplikate/Überschreiben)
+function _draftHasContent(data) {
+  try {
+    const tops = JSON.parse(data.tops || '[]');
+    if (tops.some(t => (t.text || '').trim() || (t.owner || '').trim())) return true;
+    if (JSON.parse(data.participants || '[]').length > 0) return true;
+  } catch(e) {}
+  return !!((data.ort || '').trim() || (data.datum || '').trim() || (data.mailNote || '').trim());
+}
+
+async function autoSaveDraft(dataOverride, draftIdOverride) {
   if (_autoSaving) return;
-  if (!S.type) return; // Mindestvoraussetzung: Meeting-Typ gewählt
+  if (!S.type && !dataOverride) return; // Mindestvoraussetzung: Meeting-Typ gewählt
   _autoSaving = true;
   try {
+    // Snapshot-Modus: Daten und Ziel-ID wurden VOR einem State-Reset eingefroren
+    const data     = dataOverride || collectDraftData();
+    const targetId = (draftIdOverride !== undefined) ? draftIdOverride : _currentDraftId;
+    // Guard 1: Nie einen bestehenden Entwurf mit leerem Zustand überschreiben
+    // Guard 2: Keine leeren neuen Entwürfe anlegen
+    if (!_draftHasContent(data)) { _autoSaving = false; return; }
     const { siteId } = await getSiteAndDrive();
     const listId = await getDraftListId();
     const token  = await getToken();
-    const data   = collectDraftData();
     // Status nicht überschreiben wenn bereits Eingereicht/Freigegeben/Versendet
     // _draftStatus wird lokal gepflegt wenn Anfrage gesendet wird
     const currentStatus = (_draftStatus && _draftStatus !== 'Entwurf') ? _draftStatus : 'Entwurf';
@@ -2956,9 +2980,9 @@ async function autoSaveDraft() {
       Status:       currentStatus,
       Erstellt_Von: data.savedBy,
     };
-    if (_currentDraftId) {
+    if (targetId) {
       await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${_currentDraftId}/fields`,
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${targetId}/fields`,
         { method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify(fields) }
       );
@@ -2969,7 +2993,8 @@ async function autoSaveDraft() {
           body: JSON.stringify({ fields }) }
       );
       const item = await r.json();
-      _currentDraftId = item.id;
+      // Nur den Live-Zustand verknüpfen, nicht bei Snapshot-Saves
+      if (dataOverride === undefined) _currentDraftId = item.id;
     }
     // Show subtle save indicator
     const ind = document.getElementById('autoSaveIndicator');
