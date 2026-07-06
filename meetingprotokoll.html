@@ -1824,7 +1824,7 @@ async function loadInternalRoster() {
     const k = (p.mail || p.name || '').toLowerCase();
     if (k && !seen.has(k)) { seen.add(k); out.push(p); }
   });
-  out.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'));
+  out.sort((a, b) => lastFirst(a.fullName || a.name || '').localeCompare(lastFirst(b.fullName || b.name || ''), 'de'));
   _internalRoster = out;
   return out;
 }
@@ -1837,7 +1837,7 @@ function refreshInternalPicker() {
   sel.innerHTML = '<option value="">— Mitarbeiter auswählen —</option>' +
     _internalRoster
       .filter(p => !taken.has((p.mail || p.name || '').toLowerCase()))
-      .map(p => `<option value="${(p.mail || p.name)}">${p.name}${p.role ? ' · ' + p.role : ''}</option>`)
+      .map(p => `<option value="${(p.mail || p.name)}">${lastFirst(p.fullName || p.name)}</option>`)
       .join('');
 }
 
