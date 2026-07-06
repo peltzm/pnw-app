@@ -1322,6 +1322,14 @@ function selectThema(type, themaKey, el) {
   // der Autosave beim Seitenwechsel den Entwurf mit leeren TOPs bzw. legt
   // ein leeres Duplikat an.
   clearTimeout(_autoSaveTimer);
+  // FIX: Erneuter Klick auf die bereits aktive Kachel (gleicher Typ + Thema)
+  // setzt NICHTS zurück — nur weiter zu den Meeting-Details. Verhindert
+  // Datenverlust beim Zurückspringen auf Schritt 1.
+  if (S.type === type && S.thema === themaKey && (S.tops.some(t => (t.text || '').trim()) || S.participants.length)) {
+    el.classList.add('selected');
+    goSection('s-meta');
+    return;
+  }
   if (S.type && _currentDraftId) {
     const _snap = collectDraftData();
     if (_draftHasContent(_snap)) autoSaveDraft(_snap, _currentDraftId); // Snapshot des ALTEN Zustands
@@ -1822,7 +1830,7 @@ function renderTOPs() {
     el.innerHTML = `
       <div class="top-header">
         <div class="top-num">${i+1}</div>
-        <input class="top-title-in" value="${top.title}" placeholder="Tagesordnungspunkt …" onchange="S.tops[${i}].title=this.value">
+        <input class="top-title-in" value="${top.title}" placeholder="Tagesordnungspunkt …" oninput="S.tops[${i}].title=this.value" onchange="S.tops[${i}].title=this.value">
         <select class="top-type-sel" onchange="S.tops[${i}].type=this.value;renderTOPs()">
           <option value="info"      ${top.type==='info'      ?'selected':''}>ℹ Info</option>
           <option value="beschluss" ${top.type==='beschluss' ?'selected':''}>📌 Beschluss</option>
@@ -1830,7 +1838,7 @@ function renderTOPs() {
         </select>
         <button class="btn-remove" onclick="S.tops.splice(${i},1);renderTOPs()">Entfernen</button>
       </div>
-      <textarea placeholder="Protokolltext …" style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;min-height:70px;background:white;outline:none;" onchange="S.tops[${i}].text=this.value">${top.text}</textarea>
+      <textarea placeholder="Protokolltext …" style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;font-family:inherit;resize:vertical;min-height:70px;background:white;outline:none;" oninput="S.tops[${i}].text=this.value" onchange="S.tops[${i}].text=this.value">${top.text}</textarea>
       
       ${top.type==='beschluss' ? '<div class="beschluss-row">📌 Als Beschluss gekennzeichnet</div>' : ''}
       ${top.type==='aufgabe'   ? '<div class="beschluss-row" style="border-left-color:var(--success);color:var(--success);background:var(--success-bg);">✅ Als Aufgabe gekennzeichnet</div>' : ''}`;
