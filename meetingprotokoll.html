@@ -495,6 +495,15 @@
           <div class="p-grid" id="participantGrid"></div>
 
           <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+            <div id="internalPickerWrap" style="display:none;margin-bottom:12px;">
+              <label style="display:block;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--text-hint);margin-bottom:6px;">INTERNE TEILNEHMER (MITARBEITER)</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <select id="internalPicker" style="flex:1;border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:13px;font-family:inherit;background:white;">
+                  <option value="">— Mitarbeiter auswählen —</option>
+                </select>
+                <button class="btn-add" style="white-space:nowrap;" onclick="addInternalParticipant()">＋ Hinzufügen</button>
+              </div>
+            </div>
             <button class="btn-add" onclick="addGuest()">+ Teilnehmer hinzufügen (intern / extern)</button>
             <div id="guestArea" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
           </div>
@@ -1268,6 +1277,8 @@ function goSection(id) {
   if (id === 's-teiln') {
     if (S.thema && !S.participants.length) onThemaChange(S.thema).then(()=>renderParticipants());
     else renderParticipants();
+    const _thTeiln = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
+    showInternalPicker(!!(_thTeiln && _thTeiln.extern));
     renderBewohnerCard();
   }
   if (id === 's-tops') {
@@ -1480,6 +1491,9 @@ async function onThemaChange(themaKey) {
   const grid = document.getElementById('participantGrid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;display:flex;align-items:center;gap:8px;"><span class="spin"></span> Lade Teilnehmer aus M365…</div>';
 
+  // Externe Besprechung: keine automatische Gruppe — Mitarbeiter-Auswahl anbieten
+  showInternalPicker(!!thema.extern);
+
   // Load from M365 (with fallback)
   let members = [];
   // Resolve group key: stationaer uses current einrichtung
@@ -1559,12 +1573,15 @@ function renderParticipants() {
   if (oldBar) oldBar.remove();
 
   if (!S.participants.length) {
+    const _th = S.type && S.thema ? TYPES[S.type]?.themen[S.thema] : null;
     const _ktNeeded = S.type === 'team' && S.thema === 'kleinteam' && !S.kleinteamTeam;
     g.innerHTML = '<div style="grid-column:1/-1;padding:.75rem 0;color:var(--text-hint);font-size:13px;">' +
       (_ktNeeded
         ? 'Bitte in den Meeting-Details das Team (Teamleitung) auswählen — die Mitglieder werden dann aus M365 geladen.'
-        : 'Bitte zuerst ein Thema auswählen — Teilnehmer werden dann aus M365 geladen.') + '</div>';
-    updateAllCb(); return;
+        : (_th && _th.extern
+          ? 'Keine automatische Teilnehmerliste — unten interne Mitarbeiter auswählen oder externe Teilnehmer hinzufügen.'
+          : 'Bitte zuerst ein Thema auswählen — Teilnehmer werden dann aus M365 geladen.')) + '</div>';
+    updateAllCb(); refreshInternalPicker(); return;
   }
   S.participants.forEach((p, i) => {
     const item = document.createElement('div');
@@ -1577,6 +1594,7 @@ function renderParticipants() {
   });
   updateAllCb();
   updateCountBar();
+  refreshInternalPicker();
 }
 
 function updateCountBar() {
@@ -1791,6 +1809,58 @@ function printBlanko() {
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 500);
+}
+
+// ── Interne Mitarbeiter-Auswahl (z. B. Besprechungsprotokoll extern) ──
+let _internalRoster = null;
+async function loadInternalRoster() {
+  if (_internalRoster) return _internalRoster;
+  let all = [];
+  try { all = all.concat(await loadAllTeam()); } catch(e) { console.warn('Roster allTeam:', e); }
+  try { all = all.concat(await loadGroupFromM365('nordstern')); } catch(e) { console.warn('Roster nordstern:', e); }
+  if (!all.length) all = (M365_FALLBACK.allTeam || []).concat(M365_FALLBACK.nordstern || []);
+  const seen = new Set(); const out = [];
+  all.forEach(p => {
+    const k = (p.mail || p.name || '').toLowerCase();
+    if (k && !seen.has(k)) { seen.add(k); out.push(p); }
+  });
+  out.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'));
+  _internalRoster = out;
+  return out;
+}
+
+function refreshInternalPicker() {
+  const sel = document.getElementById('internalPicker');
+  const wrap = document.getElementById('internalPickerWrap');
+  if (!sel || !wrap || wrap.style.display === 'none' || !_internalRoster) return;
+  const taken = new Set(S.participants.map(p => (p.mail || p.name || '').toLowerCase()));
+  sel.innerHTML = '<option value="">— Mitarbeiter auswählen —</option>' +
+    _internalRoster
+      .filter(p => !taken.has((p.mail || p.name || '').toLowerCase()))
+      .map(p => `<option value="${(p.mail || p.name)}">${p.name}${p.role ? ' · ' + p.role : ''}</option>`)
+      .join('');
+}
+
+async function showInternalPicker(show) {
+  const wrap = document.getElementById('internalPickerWrap');
+  if (!wrap) return;
+  wrap.style.display = show ? '' : 'none';
+  if (!show) return;
+  const sel = document.getElementById('internalPicker');
+  if (!_internalRoster && sel) sel.innerHTML = '<option value="">Lade Mitarbeiter …</option>';
+  await loadInternalRoster();
+  refreshInternalPicker();
+}
+
+function addInternalParticipant() {
+  const sel = document.getElementById('internalPicker');
+  const v = (sel && sel.value || '').toLowerCase();
+  if (!v) { showToast('Bitte einen Mitarbeiter auswählen.', 'info'); return; }
+  const p = (_internalRoster || []).find(x => (x.mail || x.name || '').toLowerCase() === v);
+  if (!p) return;
+  S.participants.push({ ...p, present: true, guest: false, internal: true });
+  renderParticipants();
+  showToast('Teilnehmer hinzugefügt: ' + p.name, 'success');
 }
 
 function addGuest() {
