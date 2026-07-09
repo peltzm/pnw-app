@@ -29,8 +29,12 @@ Namenslogik: teils mit Modul-Präfix (`users/absences`, `accounting/invoices`).
 
 - **`$limit`** im Body: Standard 10, **Maximum 1000** → bei aktuellen Datenmengen reicht ein Request (Klienten: 289 gesamt, 158 aktiv)
 - **`$offset`** im Body für Folgeseiten
-- **`cursor`** im Response ist KEIN Seiten-Cursor, sondern **Delta-Sync**: erneuter Abruf mit gespeichertem Cursor liefert seit dem letzten Abruf geänderte Datensätze
+- **`$cursor`** im Body (MIT $-Präfix!): Fortsetzungs-Cursor. Der offizielle Power-BI-Connector paginiert so: `$cursor` aus der letzten Antwort in den nächsten Request-Body, Schleife bis data leer oder Cursor sich wiederholt. Gespeichert und später wiederverwendet wirkt er als **Delta-Sync** (liefert seither geänderte Datensätze). Achtung: `cursor` ohne $-Präfix bzw. als Query-Parameter wird ignoriert (kostete uns eine Testrunde).
 - **Rate Limit: 10 Anfragen / 5 Sekunden** → bei Schleifen `Start-Sleep` einbauen; gelegentliche `502 Bad Gateway` → Retry einplanen
+
+## 3a. Meta-Endpunkt `allowed-graphs`
+
+`GET /be/api/public/v2/allowed-graphs` (Bearer-Auth) liefert den **kompletten freigegebenen Graphen als JSON** — maschinenlesbare Referenz der eigenen Schnittstellen-Konfiguration. Quelle: offizieller Kilanka-Power-BI-Connector. Nützlich für: Feldreferenz ohne manuelles Kopieren aus der UI, automatischer Abgleich nach Graphen-Änderungen. Zeigt NUR freigegebene Felder, nicht den Maximal-Katalog der API — fehlende Felder findet man über die Graphen-Vorlage in der Kilanka-UI oder den Support.
 
 ## 4. Filter (`$filter` im Body)
 
@@ -97,4 +101,13 @@ Zugriff aus den Apps NIE direkt (Token wäre im Client-Code lesbar), sondern üb
 
 1. **Zuständigkeitsliste:** aktive Klienten → Hauptbetreuer/Mitbetreuer (Ergebnis 07/2026: 158 aktiv, 118 mit HB, 40 ohne = Pflegeliste; 6 Fälle mit verwaistem archiviertem Betreuer; Testklient „Mustermann" im Bestand)
 2. **Kontingent-Wochenstunden je Betreuer:** Summe der approvals ÷ Bewilligungszeitraum (vorläufig — korrekt nur für Pool-Bewilligungen, s. Punkt 8; 31 von 120 Zuordnungen ohne gepflegtes Kontingent)
-3. **Modell-/Feld-Probing:** unbekannte Felder werden ignoriert → Existenz nur über zurückgelieferte Properties prüfbar, verlässliche Referenz ist die Graphen-Konfiguration in Kilanka
+3. **Modell-/Feld-Probing:** unbekannte Felder werden ignoriert → Existenz nur über zurückgelieferte Properties prüfbar, verlässliche Referenz ist die Graphen-Konfiguration in Kilanka bzw. der Endpunkt `allowed-graphs`
+
+## 12. Power BI (offizieller Connector)
+
+Kilanka liefert einen Custom Connector als `.mez` (Publisher: Kilanka GmbH, Beta).
+
+- **Installation:** Datei nach `Dokumente\Power BI Desktop\Custom Connectors\` kopieren; in Power BI Desktop unter Optionen → Sicherheit → Datenerweiterungen das Laden ohne Zertifikatsprüfung zulassen (Connector ist unsigniert)
+- **Verbindung:** „Daten abrufen" → „Kilanka" → Hostname `https://neue-wege.kilanka.de` → Auth-Art „Key" = API-Token
+- **Verhalten:** Ruft `allowed-graphs` ab und zeigt alle freigegebenen Modelle als Navigationstabelle; paginiert selbständig per `$cursor` in 100er-Schritten
+- ⚠️ Nutzt dasselbe API-Token → bei Token-Rotation auch in Power BI aktualisieren. Spezialtypen ($date/$decimal/$interval) kommen als Records an und müssen in Power Query expandiert werden.
