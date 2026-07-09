@@ -75,8 +75,19 @@ Betroffen u.a.: `validFrom/Until`, `begin/end`, `reportDueDate`, `deletedAt` ($d
 
 **Abwesenheiten:** Rohfeld `status` = interne engl. Werte (z.B. `approved`); `type` = engl. Code bei Standard-Typen (`vacation`), **leer bei eigenen Typen** (Regenerationstage, Geburtstag). `absenceType.internalName` analog. Historie reicht mind. bis 04/2024 zurück.
 
-**Kontingente (quotas):** `type` = `single`/`agg` (Einzel-/Sammelkontingent); `limitPeriod` = `approval`/`nolimit` (Buchungslimit). `approvals` tragen `hours` als $interval mit `validFrom/Until`.
-⚠️ **OFFEN:** Das Feld für die Bewilligungsart (Poolstunden / Wochenstunden / Monatsstunden — UI-Dropdown „Bewilligung") ist im aktuellen Graphen NICHT enthalten. Ohne dieses Feld sind die hours nicht eindeutig interpretierbar (20 h gesamt vs. 20 h/Monat). Support-Anfrage läuft (Juli 2026). Umrechnungslogik nach Klärung: Woche ×1 · Monat ×12÷52 · Pool ÷Wochen des Bewilligungszeitraums.
+**Kontingente (quotas):** `type` = `single`/`agg` (Einzel-/Sammelkontingent); `limitPeriod` = `approval`/`nolimit`/`month`/`quarter` (Buchungslimit). `approvals` tragen `hours` als $interval mit `validFrom/Until`; bei Mengen-Kontingenten zählt `quantity` ($decimal) statt `hours`. Wochenstunden-Bewilligungen haben oft KEINE validFrom/Until (unbefristet) — Null-Daten einplanen.
+
+**Bewilligungsart = Feld `timeBase`** (per HAR-Mitschnitt der UI identifiziert, RPC `client.ActionQuota.save`):
+| UI | Wert | Wochenstunden-Umrechnung |
+|---|---|---|
+| Poolstunden | `pool` | hours ÷ Wochen des approval-Zeitraums |
+| Wochenstunden | `week` | hours unverändert |
+| Monatsstunden | `month_current` | hours × 12 ÷ 52 |
+| Anzahl | `quantity` | keine Stunden; `quantity`-Feld nutzen |
+
+⚠️ **STAND 07/2026: `timeBase` ist in der öffentlichen API v2 NICHT verfügbar.** Die Graphen-Konfiguration akzeptiert die Freigabe (allowed-graphs bestätigt sie), aber /clients liefert die Eigenschaft nicht aus — das Feld ist im v2-Ausgabemodell nicht angebunden. Support-Anfrage läuft (Nachtrag mit Feldname gesendet 07/2026). Bis zur Klärung sind Kontingent-Stunden nicht typsicher interpretierbar; nur Pool-Bewilligungen lassen sich über den approval-Zeitraum rechnen.
+
+**Wichtige Meta-Erkenntnis:** Die Graphen-Konfiguration validiert Feldnamen NICHT — beliebige Felder lassen sich „freigeben" und erscheinen in allowed-graphs, ohne dass die API sie liefert. Freigabe in allowed-graphs ≠ Verfügbarkeit. Verlässlicher Test: Abfrage ausführen und prüfen, ob die Eigenschaft in den Antwort-Objekten existiert (`$obj.PSObject.Properties.Name`).
 
 ## 9. Bekannte Fehlermeldungen
 
