@@ -85,7 +85,7 @@ Betroffen u.a.: `validFrom/Until`, `begin/end`, `reportDueDate`, `deletedAt` ($d
 | Monatsstunden | `month_current` | hours × 12 ÷ 52 |
 | Anzahl | `quantity` | keine Stunden; `quantity`-Feld nutzen |
 
-⚠️ **STAND 07/2026: `timeBase` ist in der öffentlichen API v2 NICHT verfügbar.** Die Graphen-Konfiguration akzeptiert die Freigabe (allowed-graphs bestätigt sie), aber /clients liefert die Eigenschaft nicht aus — das Feld ist im v2-Ausgabemodell nicht angebunden. Support-Anfrage läuft (Nachtrag mit Feldname gesendet 07/2026). Bis zur Klärung sind Kontingent-Stunden nicht typsicher interpretierbar; nur Pool-Bewilligungen lassen sich über den approval-Zeitraum rechnen.
+✅ **UPDATE 07/2026: behoben.** Nach Support-Anfrage hat Kilanka `timeBase` in der API v2 angebunden — das Feld wird jetzt ausgeliefert (Voraussetzung: `"timeBase": 1` im quotas-Block des Graphen freigegeben). Umrechnung verifiziert an Echtdaten: pool 52h/13Wo=4,0 · week 3,0 · month_current 20h×12÷52=4,6. Hinweis: Zwischen Freigabe-Akzeptanz und tatsächlicher Anbindung lagen einige Tage — das Feld war zunächst nur intern (RPC) vorhanden.
 
 **Wichtige Meta-Erkenntnis:** Die Graphen-Konfiguration validiert Feldnamen NICHT — beliebige Felder lassen sich „freigeben" und erscheinen in allowed-graphs, ohne dass die API sie liefert. Freigabe in allowed-graphs ≠ Verfügbarkeit. Verlässlicher Test: Abfrage ausführen und prüfen, ob die Eigenschaft in den Antwort-Objekten existiert (`$obj.PSObject.Properties.Name`).
 
