@@ -782,10 +782,16 @@ function prefillFromKilanka(k, groupPromise) {
       const hb = k.Betreuer.find(b => b.rolle === 'Hauptbetreuer') || k.Betreuer[0];
       _setSelect('Fachkraft_NeueWege', hb.name);
       if (typeof updateFachkraftName === 'function') updateFachkraftName();
-      k.Betreuer.filter(b => b !== hb && b.rolle === 'Mitbetreuer').slice(0, 3).forEach(b => {
+      const mbs = k.Betreuer.filter(b => b !== hb && b.rolle === 'Mitbetreuer').slice(0, 3);
+      mbs.forEach(b => {
         addFachkraft(); // Wrapper unten schränkt die neue Liste automatisch ein
         _setSelect('Fachkraft_' + (_extraFachkraftCount + 1), b.name);
       });
+      // Unterschrift-Blöcke neu aufbauen und Qualifikationen aus Kilanka vorwählen
+      if (typeof renderUnterschriftFachkraefte === 'function') renderUnterschriftFachkraefte();
+      if (typeof syncUnterschriftNamen === 'function') syncUnterschriftNamen();
+      if (hb.quali) _setSelect('FK1_Quali1', hb.quali);
+      mbs.forEach((b, i) => { if (b.quali) _setSelect('FK' + (i + 2) + '_Quali1', b.quali); });
     };
     const p = groupPromise || (typeof _groupLoadPromise !== 'undefined' ? _groupLoadPromise : null);
     if (p && typeof p.then === 'function') p.then(anwenden).catch(anwenden);
