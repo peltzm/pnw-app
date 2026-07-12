@@ -502,11 +502,16 @@ export default {
           fetchQualiMap(env, now),
         ]);
         const klienten = clientsForUser(all, auth.upn, now, qualiMap);
+        // Alle vergebenen Qualifikationen als Auswahlliste (ohne "NICHT verwenden"-Alteintraege)
+        const qualifikationen = [...new Set(Object.values(qualiMap))]
+          .filter((q) => !/^\s*nicht\s/i.test(q))
+          .sort((a, b) => a.localeCompare(b, "de"));
         return json(
           {
             nutzer: auth.upn,
             stand: new Date(clientCache.fetchedAt).toISOString(),
             anzahl: klienten.length,
+            qualifikationen,
             klienten,
           },
           200, origin
