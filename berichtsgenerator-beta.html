@@ -644,6 +644,7 @@ async function getToken() {
 // ─── KILANKA-INTEGRATION (BETA) ──────────────────────────────────────────────
 let _kilankaKlienten = [];
 let _kilankaBetreuerListe = null; // Namen der Maßnahmen-Betreuer (HB/MB/V) — schränkt Fachkraft-Selects ein
+let _kilankaQualiListe = null;    // In Kilanka vergebene Qualifikationen — ersetzt QUALI1_OPTS
 
 function _restrictFachkraftSelect(id) {
   const el = document.getElementById(id);
@@ -687,6 +688,7 @@ async function loadKilankaKlienten() {
     }
     const d = await r.json();
     _kilankaKlienten = d.klienten || [];
+    if (Array.isArray(d.qualifikationen) && d.qualifikationen.length) _kilankaQualiListe = d.qualifikationen;
     // Doppelte Anzeigenamen (mehrere Maßnahmen) erkennen -> Maßnahme im Label zeigen
     const nameCount = {};
     _kilankaKlienten.forEach(k => { nameCount[k.anzeigeName] = (nameCount[k.anzeigeName] || 0) + 1; });
@@ -4122,7 +4124,8 @@ function renderUnterschriftFachkraefte() {
   const anzahl = _anzahlFachkraefte();
   let html = '';
   for (let i = 1; i <= anzahl; i++) {
-    const q1 = `<option value="">— bitte wählen —</option>` + QUALI1_OPTS.map(o => `<option>${o}</option>`).join('');
+    const q1opts = (typeof _kilankaQualiListe !== 'undefined' && _kilankaQualiListe && _kilankaQualiListe.length) ? _kilankaQualiListe : QUALI1_OPTS;
+    const q1 = `<option value="">— bitte wählen —</option>` + q1opts.map(o => `<option>${o}</option>`).join('');
     const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere…</option>`;
     html += `
       <div class="divider" style="font-size:12px; font-weight:600; color:var(--accent); margin:6px 0 10px;">Fachkraft ${i}</div>
