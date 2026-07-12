@@ -440,7 +440,7 @@ export default {
     }
 
     if (url.pathname === "/api/health") {
-      return json({ ok: true, version: "v3.2-rootfix", ts: new Date().toISOString() }, 200, origin);
+      return json({ ok: true, version: "v3.3-clean", ts: new Date().toISOString() }, 200, origin);
     }
 
     if (url.pathname === "/api/meine-klienten" && request.method === "GET") {
