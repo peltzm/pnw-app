@@ -77,6 +77,18 @@ const CLIENT_GRAPH = {
   $limit: 1000,
 };
 
+// Users-Graph: nur ID + aktuell gültige Qualifikation (fuer Betreuer-Vorbefuellung)
+const USERS_GRAPH = {
+  id: 1,
+  deletedAt: 1,
+  workQualifications: {
+    validFrom: 1,
+    validUntil: 1,
+    qualification: { name: 1 },
+  },
+  $limit: 1000,
+};
+
 // ═══════════════════════════════════════════════════════════════
 // Kilanka-Sondertypen entpacken ($date/$datetime/$duration/$interval/$decimal)
 // ═══════════════════════════════════════════════════════════════
@@ -220,15 +232,13 @@ async function validateEntraToken(authHeader) {
 // Kilanka-Abruf mit Retry (502) und Isolate-Cache
 // ═══════════════════════════════════════════════════════════════
 let clientCache = { data: null, fetchedAt: 0 };
+let qualiCache = { map: null, fetchedAt: 0 };
 
-async function fetchKilankaClients(env) {
-  if (clientCache.data && Date.now() - clientCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
-    return clientCache.data;
-  }
-  const body = JSON.stringify(CLIENT_GRAPH);
+async function kilankaPost(env, model, graph) {
+  const body = JSON.stringify(graph);
   let lastErr;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const r = await fetch(`${KILANKA_BASE}/clients`, {
+    const r = await fetch(`${KILANKA_BASE}/${model}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${env.KILANKA_TOKEN}`,
@@ -238,9 +248,7 @@ async function fetchKilankaClients(env) {
     });
     if (r.ok) {
       const json = await r.json();
-      const data = json.data ?? json;
-      clientCache = { data, fetchedAt: Date.now() };
-      return data;
+      return json.data ?? json;
     }
     lastErr = `Kilanka ${r.status}`;
     if (r.status === 502 || r.status === 429) {
@@ -250,6 +258,38 @@ async function fetchKilankaClients(env) {
     break;
   }
   throw new Error(lastErr || "Kilanka nicht erreichbar");
+}
+
+async function fetchKilankaClients(env) {
+  if (clientCache.data && Date.now() - clientCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
+    return clientCache.data;
+  }
+  const data = await kilankaPost(env, "clients", CLIENT_GRAPH);
+  clientCache = { data, fetchedAt: Date.now() };
+  return data;
+}
+
+// Map: Kilanka user.id -> aktuell gueltige Qualifikation (Wortlaut aus Kilanka)
+async function fetchQualiMap(env, now) {
+  if (qualiCache.map && Date.now() - qualiCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
+    return qualiCache.map;
+  }
+  const map = {};
+  try {
+    const users = await kilankaPost(env, "users", USERS_GRAPH);
+    for (const u of users || []) {
+      if (kDate(u.deletedAt)) continue;
+      const gueltige = (u.workQualifications || [])
+        .filter((q) => q.qualification?.name && isCurrent(q.validFrom, q.validUntil, now))
+        .sort((a, b) => (kDate(b.validFrom)?.getTime() || 0) - (kDate(a.validFrom)?.getTime() || 0));
+      if (gueltige.length) map[String(u.id)] = gueltige[0].qualification.name;
+    }
+    qualiCache = { map, fetchedAt: Date.now() };
+  } catch (e) {
+    // Qualifikationen sind nice-to-have: bei Fehler ohne sie weitermachen
+    console.warn("Quali-Abruf fehlgeschlagen:", e.message);
+  }
+  return map;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -281,7 +321,7 @@ function pickApproval(approvals, now) {
   return { ...list[0], status: "unbekannt" };
 }
 
-function buildClientProfile(client, action, role, now) {
+function buildClientProfile(client, action, role, now, qualiMap) {
   // Kontingent: mit timeBase gültige Bewilligung suchen; Mengen-Kontingente
   // (timeBase quantity) für Fachleistungsstunden ignorieren
   let stunden = null, stundenTyp = "", kontingentHinweis = "", bewVon = null, bewBis = null;
@@ -333,6 +373,7 @@ function buildClientProfile(client, action, role, now) {
       betreuerMap.set(String(att.user.id), {
         name: m ? `${m[2]} ${m[1]}` : att.user.recName,
         rolle, rolleKurz: ROLE_SHORT[rolle],
+        quali: (qualiMap && qualiMap[String(att.user.id)]) || "",
       });
     }
   }
@@ -375,7 +416,7 @@ function buildClientProfile(client, action, role, now) {
   };
 }
 
-function clientsForUser(allClients, upn, now) {
+function clientsForUser(allClients, upn, now, qualiMap) {
   const result = [];
   for (const client of allClients) {
     if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
@@ -404,7 +445,7 @@ function clientsForUser(allClients, upn, now) {
       if (!prev || ROLE_RANK[m.role] > ROLE_RANK[prev.role]) perAction.set(key, m);
     }
     for (const m of perAction.values()) {
-      result.push(buildClientProfile(client, m.action, m.role, now));
+      result.push(buildClientProfile(client, m.action, m.role, now, qualiMap));
     }
   }
   return result.sort(
@@ -455,9 +496,12 @@ export default {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
       try {
-        const all = await fetchKilankaClients(env);
         const now = new Date();
-        const klienten = clientsForUser(all, auth.upn, now);
+        const [all, qualiMap] = await Promise.all([
+          fetchKilankaClients(env),
+          fetchQualiMap(env, now),
+        ]);
+        const klienten = clientsForUser(all, auth.upn, now, qualiMap);
         return json(
           {
             nutzer: auth.upn,
