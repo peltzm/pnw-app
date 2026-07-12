@@ -1,0 +1,6 @@
+name = "pnw-kilanka-proxy"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+# Secret KILANKA_TOKEN wird in Cloudflare verwaltet (Settings -> Variables and Secrets)
+# und bleibt bei Git-Deploys erhalten.
