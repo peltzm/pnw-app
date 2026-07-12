@@ -722,7 +722,7 @@ function _setSelect(id, val) {
   el.value = opt.value || opt.textContent;
 }
 
-function prefillFromKilanka(k) {
+function prefillFromKilanka(k, groupPromise) {
   if (!k) return;
   // S1 — Stammdaten
   _setVal('Jugendamt', k.Jugendamt);
@@ -761,6 +761,22 @@ function prefillFromKilanka(k) {
     addExtraKind();
     _setVal('Kind2_Vorname_' + extraKindCount, kind.vorname);
     _setVal('Kind2_Name_' + extraKindCount, (kind.familienname || '').toUpperCase());
+  }
+  // Fachkräfte aus Kilanka: HB = Fachkraft 1, Mitbetreuer = weitere.
+  // Erst NACH loadGroupMembers anwenden (das wählt sonst den angemeldeten Nutzer vor).
+  if (Array.isArray(k.Betreuer) && k.Betreuer.length) {
+    const anwenden = () => {
+      const hb = k.Betreuer.find(b => b.rolle === 'Hauptbetreuer') || k.Betreuer[0];
+      _setSelect('Fachkraft_NeueWege', hb.name);
+      if (typeof updateFachkraftName === 'function') updateFachkraftName();
+      k.Betreuer.filter(b => b !== hb && b.rolle === 'Mitbetreuer').slice(0, 3).forEach(b => {
+        addFachkraft();
+        _setSelect('Fachkraft_' + (_extraFachkraftCount + 1), b.name);
+      });
+    };
+    const p = groupPromise || (typeof _groupLoadPromise !== 'undefined' ? _groupLoadPromise : null);
+    if (p && typeof p.then === 'function') p.then(anwenden).catch(anwenden);
+    else anwenden();
   }
   // Hinweis bei auffälligem Kontingent (abgelaufen / künftig / Typ ungepflegt)
   if (k.Kontingent_Hinweis) {
@@ -1350,10 +1366,10 @@ function startNew() {
   // Re-apply pre-selections after reset (Hilfeart bei Clearing fest vorbelegt + gesperrt)
   applyHilfeartPreset(currentBerichtstyp);
   // Re-apply Fachkraft and TL pre-selections
-  loadGroupMembers();
+  const _glp = loadGroupMembers();
   // Kilanka-Vorbefüllung (BETA): gewählten Klienten anwenden
   const _ksel = document.getElementById('kilankaKlient');
-  if (_ksel && _ksel.value !== '') prefillFromKilanka(_kilankaKlienten[parseInt(_ksel.value, 10)]);
+  if (_ksel && _ksel.value !== '') prefillFromKilanka(_kilankaKlienten[parseInt(_ksel.value, 10)], _glp);
   goTo(1);
 }
 
