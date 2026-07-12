@@ -439,15 +439,8 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 
-    if (url.pathname === "/api/debug-token-temp") {
-      const t = env.KILANKA_TOKEN || "";
-      const info = t
-        ? { gesetzt: true, laenge: t.length, anfang: t.slice(0, 4), ende: t.slice(-4), hatLeerzeichen: /\s/.test(t) }
-        : { gesetzt: false };
-      return json(info, 200, origin);
-    }
     if (url.pathname === "/api/health") {
-      return json({ ok: true, version: "v3.3-clean", ts: new Date().toISOString() }, 200, origin);
+      return json({ ok: true, version: "v3.4-token-ok", ts: new Date().toISOString() }, 200, origin);
     }
 
     if (url.pathname === "/api/meine-klienten" && request.method === "GET") {
