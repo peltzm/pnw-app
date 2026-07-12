@@ -328,7 +328,7 @@
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
             <div class="field"><label>Stunden bewilligt</label><input type="number" inputmode="decimal" step="any" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
-            <div class="field"><label>Kontingenttyp</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Woche</option><option>Monat</option><option>Pool</option></select></div>
+            <div class="field"><label>Kontingenttyp</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Wochenstunden</option><option>Monatsstunden</option><option>Monatsstunden (30 Tage pro Monat)</option><option>Poolstunden</option></select></div>
           </div>
 
         </div>
@@ -643,6 +643,16 @@ async function getToken() {
 
 // ─── KILANKA-INTEGRATION (BETA) ──────────────────────────────────────────────
 let _kilankaKlienten = [];
+let _kilankaBetreuerListe = null; // Namen der Maßnahmen-Betreuer (HB/MB/V) — schränkt Fachkraft-Selects ein
+
+function _restrictFachkraftSelect(id) {
+  const el = document.getElementById(id);
+  if (!el || !_kilankaBetreuerListe || !_kilankaBetreuerListe.length) return;
+  const cur = el.value;
+  el.innerHTML = '<option value="">— bitte wählen —</option>' +
+    _kilankaBetreuerListe.map(n => '<option value="' + n + '">' + n + '</option>').join('');
+  if (cur && _kilankaBetreuerListe.includes(cur)) el.value = cur;
+}
 
 async function getApiToken() {
   if (!currentAccount) return null;
@@ -766,11 +776,14 @@ function prefillFromKilanka(k, groupPromise) {
   // Erst NACH loadGroupMembers anwenden (das wählt sonst den angemeldeten Nutzer vor).
   if (Array.isArray(k.Betreuer) && k.Betreuer.length) {
     const anwenden = () => {
+      // Auswahllisten auf die Betreuer der Maßnahme beschränken (inkl. Vertretungen)
+      _kilankaBetreuerListe = k.Betreuer.map(b => b.name);
+      _restrictFachkraftSelect('Fachkraft_NeueWege');
       const hb = k.Betreuer.find(b => b.rolle === 'Hauptbetreuer') || k.Betreuer[0];
       _setSelect('Fachkraft_NeueWege', hb.name);
       if (typeof updateFachkraftName === 'function') updateFachkraftName();
       k.Betreuer.filter(b => b !== hb && b.rolle === 'Mitbetreuer').slice(0, 3).forEach(b => {
-        addFachkraft();
+        addFachkraft(); // Wrapper unten schränkt die neue Liste automatisch ein
         _setSelect('Fachkraft_' + (_extraFachkraftCount + 1), b.name);
       });
     };
@@ -786,6 +799,13 @@ function prefillFromKilanka(k, groupPromise) {
     if (st) st.textContent = 'Hinweis Kontingent (' + k.anzeigeName + '): ' + k.Kontingent_Hinweis;
   }
 }
+
+// addFachkraft umhüllen: neue Selects bei aktiver Kilanka-Auswahl einschränken
+const _origAddFachkraft = addFachkraft;
+addFachkraft = function() {
+  _origAddFachkraft();
+  if (_kilankaBetreuerListe) _restrictFachkraftSelect('Fachkraft_' + (_extraFachkraftCount + 1));
+};
 
 function handleReviewLink() {
   const params = new URLSearchParams(window.location.search);
@@ -1370,6 +1390,7 @@ function startNew() {
   // Kilanka-Vorbefüllung (BETA): gewählten Klienten anwenden
   const _ksel = document.getElementById('kilankaKlient');
   if (_ksel && _ksel.value !== '') prefillFromKilanka(_kilankaKlienten[parseInt(_ksel.value, 10)], _glp);
+  else _kilankaBetreuerListe = null; // ohne Klient: volle M365-Liste wie bisher
   goTo(1);
 }
 
@@ -4730,7 +4751,8 @@ window.addEventListener('DOMContentLoaded', () => {
   // ── Konfiguration je Berichtstyp ──
   function stundenumfang(data) {
     if (!has(data.Fachleistungsstunden)) return '';
-    const typ = { Woche: 'Woche', Monat: 'Monat', Pool: 'Pool' }[data.Stunden_Typ] || data.Stunden_Typ || '';
+    const typ = data.Stunden_Typ || '';
+    if (/stunden/i.test(typ)) return `${data.Fachleistungsstunden} ${typ}`; // z.B. "6 Wochenstunden"
     return `${data.Fachleistungsstunden} h${typ ? ' / ' + typ : ''}`;
   }
 
