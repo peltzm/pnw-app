@@ -40,7 +40,12 @@ const UPN_OVERRIDES = {
 };
 
 // timeBase (Kilanka) → Kontingenttyp-Dropdown der App
-const TIMEBASE_MAP = { week: "Woche", month_current: "Monat", pool: "Pool" };
+const TIMEBASE_MAP = {
+  week: "Wochenstunden",
+  month_current: "Monatsstunden",
+  month: "Monatsstunden (30 Tage pro Monat)", // Annahme: timeBase-Wert der 30-Tage-Variante — bei Auftreten prüfen
+  pool: "Poolstunden",
+};
 
 // ── Kilanka-Graph: exakt die benötigten Felder, nichts Sensibles ──
 const CLIENT_GRAPH = {
@@ -440,7 +445,7 @@ export default {
     }
 
     if (url.pathname === "/api/health") {
-      return json({ ok: true, version: "v3.4-token-ok", ts: new Date().toISOString() }, 200, origin);
+      return json({ ok: true, version: "v3.1-git", ts: new Date().toISOString() }, 200, origin);
     }
 
     if (url.pathname === "/api/meine-klienten" && request.method === "GET") {
