@@ -101,3 +101,26 @@ Teilzeitkräfte (Soll skaliert 1:1: 20-h-Kraft → ~12,8 h/Woche am Klienten).
       919, 922 sowie Feld leer bei 918); alle übrigen tragen 09.12.2025 –
       **damit sind Stand heute alle erfassten DGUV-Prüfungen überfällig**,
       bitte Prüftermine aktualisieren
+
+## Soll-Korrektur & Team-Aggregat (Nachtrag 13.07.2026)
+
+**Problem:** Das Monats-Soll wurde naiv als Wochensoll × 52 ÷ 12 gerechnet.
+Ein Juni mit Fronleichnam und Urlaub wirkt dann wie Minderleistung
+(Beispiel: 77,8 h Ist / 107,5 h Soll = 72 %, korrigiert = 98 %).
+
+**Lösung:** `flsAuswertung(d)` — zentrale Berechnung für Einzelkarte und
+Team-Aggregat: Soll korr. = Wochensoll ÷ 5 × verfügbare Arbeitstage des
+Ist-Monats. Verfügbare Arbeitstage = Mo–Fr abzgl. Feiertage Bayern
+(`berechneArbeitstage`) abzgl. `fls.abwesenheitsTageImMonat`.
+
+**Worker-To-do:** Das Feld `fls.abwesenheitsTageImMonat` (Urlaub + Krankheit
++ Fortbildung + Regenerationstag im Ist-Monat, aus `users/absences`) muss der
+Worker noch liefern. Bis dahin korrigiert das Cockpit nur um Feiertage und
+zeigt einen entsprechenden Hinweis in der Legende.
+
+**Team-Aggregat:** Wide-Card „Team-Auslastung" für TL (eigenes Team) und GF
+(alle) — lädt per Button die Cockpit-Daten aller sichtbaren Mitarbeiter
+(Batches à 4, Cache), Tabelle sortiert nach Auslastung aufsteigend
+(kritischste zuerst), Summenzeile Σ Ist / Σ Soll korr. Berechtigung bleibt
+serverseitig im Worker (Entra-Gruppen) — das Frontend aggregiert nur, was
+die Sicht ohnehin hergibt.
