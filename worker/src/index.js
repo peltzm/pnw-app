@@ -818,6 +818,7 @@ async function buildCockpit(env, upn, now) {
   if (abs.verfuegbar && person && person.kilankaId) {
     let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
     let regenH1 = null, regenH2 = null;
+    const geplanteTermine = []; // kommende genehmigte Urlaube inkl. Datum
     for (const a of abs.data || []) {
       if (String(a.user?.id) !== person.kilankaId) continue;
       if ((a.status || "").toLowerCase() !== "approved") continue;
@@ -825,7 +826,12 @@ async function buildCockpit(env, upn, now) {
       if (!begin || begin.getFullYear() !== jahr) continue;
       const tage = decimalToNumber(a.totalDays);
       const art = classifyAbsence(a);
-      if (art === "urlaub") { begin > now ? (uGeplant += tage) : (uGenommen += tage); }
+      if (art === "urlaub") {
+        if (begin > now) {
+          uGeplant += tage;
+          geplanteTermine.push({ von: isoDate(begin), bis: isoDate(kDate(a.end) || begin), tage });
+        } else uGenommen += tage;
+      }
       else if (art === "krank") { kTage += tage; if (!letzte || begin > letzte) letzte = begin; }
       else if (art === "kindkrank") { kindKrank += tage; }
       else if (art === "regeneration") {
@@ -841,6 +847,7 @@ async function buildCockpit(env, upn, now) {
       geplantTage: Math.round(uGeplant * 2) / 2,
       restTage: null,
       regeneration: { h1: isoDate(regenH1), h2: isoDate(regenH2) },
+      geplanteTermine: geplanteTermine.sort((x, y) => x.von.localeCompare(y.von)),
     };
     krankheit = {
       jahr,
