@@ -196,3 +196,14 @@ Kontaktdaten der Fachkräfte (per E-Mail-Konvention ableiten). Die Parser
 aus Abschnitt 3 und die Gültigkeits-/Archivlogik aus Abschnitt 7 sind 1:1
 übernehmbar — `kilankaData.ts` aus dem Stammdatenblatt-Projekt ist als
 Modul dafür geschnitten.
+
+## Support-Fixes vom 13.07.2026
+
+- **quotas.deletedAt verfügbar:** Das Feld `deletedAt` wurde vom Kilanka-Support
+  an den Kontingenten (quotas) ergänzt. Worker filtert gelöschte Kontingente
+  jetzt in Berichtsgenerator- und Cockpit-Logik aus (zuvor konnten gelöschte
+  Kontingente das FLS-Soll verfälschen).
+- **SDK-Escaping verbessert:** Das gemeldete Problem, dass UDF-Namen mit
+  Sonderzeichen bei der Applet-SDK-Generierung ungültiges TypeScript erzeugten
+  (manuell reparierte sdk.ts nötig), wurde laut Support behoben. Beim nächsten
+  Applet-Build SDK neu generieren und die manuelle Reparatur entfernen.

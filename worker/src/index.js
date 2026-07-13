@@ -70,6 +70,7 @@ const CLIENT_GRAPH = {
     },
     quotas: {
       name: 1, type: 1, limitPeriod: 1, timeBase: 1,
+      deletedAt: 1, // seit 13.07. verfügbar (Kilanka-Support) — gelöschte Kontingente ausfiltern
       // ACHTUNG: "quantity" hier NIE anfragen (killt quotas-Zweig, s. Doku §4)
       approvals: { id: 1, validFrom: 1, validUntil: 1, hours: 1 }, // id seit 13.07. freigegeben → präzise Rechnungs-Zuordnung (FLS-Ist)
     },
@@ -326,6 +327,7 @@ function buildClientProfile(client, action, role, now, qualiMap) {
   // (timeBase quantity) für Fachleistungsstunden ignorieren
   let stunden = null, stundenTyp = "", kontingentHinweis = "", bewVon = null, bewBis = null;
   for (const q of action.quotas || []) {
+    if (kDate(q.deletedAt)) continue; // gelöschtes Kontingent
     if (q.timeBase === "quantity") continue;
     const appr = pickApproval(q.approvals, now);
     if (!appr || appr.stunden == null) continue;
@@ -674,6 +676,7 @@ async function buildCockpit(env, upn, now) {
       if (rang !== 3) continue; // Soll/Ist nur über Hauptbetreuung (keine Doppelzählung)
       hbClientIds.add(String(client.id));
       for (const q of action.quotas || []) {
+        if (kDate(q.deletedAt)) continue; // gelöschtes Kontingent
         if (q.timeBase === "quantity") continue;
         for (const ap of q.approvals || []) {
           if (ap.id) approvalIds.add(String(ap.id));
