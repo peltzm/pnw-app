@@ -146,3 +146,18 @@ die Sicht ohnehin hergibt.
 tatsächlichen `absenceType.name`/`internalName` des Regenerationstags in
 Kilanka prüfen (Response im Netzwerk-Tab) und das Matching in
 `classifyAbsence` anpassen — Kilanka-Typbezeichnungen sind konfigurativ.
+
+## Fixes 13.07.2026 (Nachtrag 3)
+
+- **Absences-Cache im Worker:** Transiente Kilanka-Fehler (429/5xx, z. B.
+  durch die Team-Aggregat-Abfrage mit 23 Personen) wurden 10 Minuten als
+  „Modell nicht freigegeben" gecacht → Urlaub/Krankheit erschienen bei
+  einzelnen Mitarbeitern leer. Jetzt: Fehlschläge nur 45 s halten,
+  strukturelle Fehler (400/403) von transienten unterscheiden, bei
+  transienten Fehlern vorhandene Daten stale weiterverwenden.
+- **FLS-Legende:** unterscheidet jetzt „keine Abwesenheiten im Monat" (Feld
+  = 0) von „Abwesenheitsdaten gerade nicht verfügbar" (Feld fehlt).
+- **Profilfotos aus M365:** Avatar lädt asynchron das Foto über Graph
+  (`/users/{upn}/photos/96x96/$value`, Scope User.ReadBasic.All), Blob-URL
+  pro UPN gecacht, Fallback bleiben die Initialen. Kein Foto hinterlegt →
+  Graph 404 → Initialen.
