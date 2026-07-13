@@ -122,3 +122,25 @@ Kilanka liefert einen Custom Connector als `.mez` (Publisher: Kilanka GmbH, Beta
 - **Verbindung:** „Daten abrufen" → „Kilanka" → Hostname `https://neue-wege.kilanka.de` → Auth-Art „Key" = API-Token
 - **Verhalten:** Ruft `allowed-graphs` ab und zeigt alle freigegebenen Modelle als Navigationstabelle; paginiert selbständig per `$cursor` in 100er-Schritten
 - ⚠️ Nutzt dasselbe API-Token → bei Token-Rotation auch in Power BI aktualisieren. Spezialtypen ($date/$decimal/$interval) kommen als Records an und müssen in Power Query expandiert werden.
+
+## 13. accounting/invoices als FLS-Ist-Quelle (verifiziert 13.07.2026)
+
+Probing gegen 2.719 Echt-Rechnungen (eine aktuelle ambulante je Kostenträger):
+
+- **Struktur bei allen Jugendämtern identisch** — Positionen im Feld `lines`:
+  `approval{id}`, `description`, `quantity` ($decimal), `service{name}`,
+  `costCenter`, `unitPrice`, `tax`. Kopf: `date`, `deliveryFrom/Until`
+  (= Abrechnungsmonat), `client{recName}` (eine Rechnung pro Klient/Monat),
+  `recipient{recName}` (Kostenträger), `stateType`, `paid`, `balance`.
+- **FLS-Ist-Regel:** Summe `quantity` aller Zeilen **mit gesetzter
+  `approval.id`** (FLS, SPFH §31, EB §30). `approval.id` referenziert die
+  Kontingent-Bewilligung → exakte Zuordnung zu Maßnahme und Hauptbetreuer
+  (dafür `approvals.id` im clients-Graphen freigeben).
+- **Ausschluss automatisch über fehlende approval.id:** Kilometersatz,
+  „Kilometer ohne Berechnung" (Kostenstelle 498, quantity = km!),
+  Telefon-/Handgeldpauschalen, Bürotätigkeiten-Zeile (Freising).
+- Bonus: descriptions enthalten „Kontingent genehmigt: X – Restkontingent: Y"
+  → Plausibilitäts-Check gegen berechnetes Soll.
+- Kostenstellen: 555 = Betreuung, 498 = Kilometer.
+- Sonderfälle: LA Dahme-Spreewald rein stationär (Nordstern/Tagessätze);
+  Selbstzahler (Therapie) als eigene Empfänger — für FLS ausklammern.
