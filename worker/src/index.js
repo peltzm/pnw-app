@@ -848,8 +848,8 @@ export default {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
       try {
-        const caller = auth.upn;
-        const istGf = GF_UPNS.includes(caller);
+        const caller = (auth.upn || "").trim().toLowerCase();
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
         const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
         const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
 
@@ -878,7 +878,11 @@ export default {
         }
 
         const data = await buildCockpit(env, target, new Date());
-        data.sicht = { rolle, mitarbeiter: sichtbar };
+        data.sicht = {
+          rolle,
+          mitarbeiter: sichtbar,
+          debug: { caller, istGf, reports: reports.length, anzahlSichtbar: sichtbar.length },
+        };
         return json(data, 200, origin);
       } catch (e) {
         return json({ error: `Cockpit-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);

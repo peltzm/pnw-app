@@ -333,8 +333,12 @@ function renderCockpit() { // Demo-Pfad
 function renderCards(d, own) {
   cockpitData = d;
   document.getElementById('pageTitle').textContent = own ? 'Meine Übersicht' : `Übersicht: ${d.person.name}`;
+  const rollenText = liveSicht
+    ? ` · Rolle: ${({gf:'Geschäftsführung', tl:'Teamleitung', fk:'Fachkraft'})[liveSicht.rolle] || liveSicht.rolle}` +
+      ` · ${liveSicht.mitarbeiter.length} Mitarbeiter wählbar`
+    : '';
   document.getElementById('pageSub').textContent =
-    `Stand: ${new Date().toLocaleDateString('de-DE')} · Sichtbar für ${own ? 'dich und deine Führungskraft' : 'Mitarbeiter:in und Führungskraft'}`;
+    `Stand: ${new Date().toLocaleDateString('de-DE')} · Sichtbar für ${own ? 'dich und deine Führungskraft' : 'Mitarbeiter:in und Führungskraft'}${rollenText}`;
   document.getElementById('lockNote').style.display = own ? '' : 'none';
 
   const u = d.urlaub, k = d.krankheit, fw = d.firmenwagen || {vorhanden:false}, kl = d.klienten, fls = d.fls;
@@ -578,7 +582,10 @@ async function loadLive(upn) {
     }
     const data = await r.json();
     liveCache[data.upn] = data;
-    if (!liveSicht && data.sicht) { liveSicht = data.sicht; setupLiveViewbar(); }
+    if (data.sicht) {
+      console.log('Cockpit-Sicht:', data.sicht.debug || data.sicht);
+      if (!liveSicht) { liveSicht = data.sicht; setupLiveViewbar(); }
+    }
     renderLivePerson(data);
     return true;
   } catch(e) {
