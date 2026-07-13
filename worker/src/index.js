@@ -487,8 +487,27 @@ async function fetchDirectReports(graphToken) {
   }
 }
 
+// Betreuer-Namen aus den Klienten-Zuordnungen (upn → recName).
+// Immer verfügbar — der attendants-Zweig trägt die ganze App.
+async function attendantNamen(env) {
+  const map = new Map();
+  const clients = await fetchKilankaClients(env);
+  for (const client of clients || []) {
+    if (kDate(client.deletedAt)) continue;
+    for (const action of client.actions || []) {
+      for (const att of action.attendants || []) {
+        const u = att.user;
+        if (!u || isArchived(u.recName)) continue;
+        const upn = upnForAttendant(u);
+        if (upn && !map.has(upn)) map.set(upn, u.recName);
+      }
+    }
+  }
+  return map;
+}
+
 // Alle aktiven Mitarbeitenden aus Kilanka (für die GF-Auswahlliste).
-// Fallback: aktive Betreuer aus den Klienten-Zuordnungen (immer verfügbar).
+// Fallback: Betreuer aus den Klienten-Zuordnungen (immer verfügbar).
 async function alleAktivenMitarbeiter(env) {
   const seen = new Set();
   const list = [];
@@ -504,20 +523,12 @@ async function alleAktivenMitarbeiter(env) {
       if (/^\s*nicht\s/i.test(u.recName || "")) continue; // Alteinträge
       add(upnForAttendant(u), u.recName);
     }
-  } catch (e) {
-    const now = new Date();
-    const clients = await fetchKilankaClients(env);
-    for (const client of clients || []) {
-      if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
-      for (const action of client.actions || []) {
-        if (kDate(action.deletedAt) || !isCurrent(action.validFrom, action.validUntil, now)) continue;
-        for (const att of action.attendants || []) {
-          if (!att.user || isArchived(att.user.recName)) continue;
-          if (!isCurrent(att.validFrom, att.validUntil, now)) continue;
-          add(upnForAttendant(att.user), att.user.recName);
-        }
-      }
-    }
+  } catch (e) { /* users nicht verfügbar → Fallback unten */ }
+  if (list.length === 0) {
+    // recName im users-Graphen nicht freigegeben → Namen aus den
+    // Klienten-Zuordnungen ableiten
+    const map = await attendantNamen(env);
+    for (const [upn, name] of map) add(upn, name);
   }
   return list.sort((a, b) => a.name.localeCompare(b.name, "de"));
 }
@@ -699,10 +710,21 @@ async function buildCockpit(env, upn, now) {
     }
   } catch (e) { /* users-Zweig optional */ }
 
+  if (!person) {
+    // recName im users-Graphen nicht freigegeben → Name aus attendants
+    try {
+      const nm = (await attendantNamen(env)).get(upn);
+      if (nm) {
+        person = { name: nm, kilankaId: null, rolle: "Fachkraft", team: null,
+                   qualifikation: null, eintritt: null, wochenstundenVertrag: null };
+      }
+    } catch (e) { /* optional */ }
+  }
+
   // ── c) Abwesenheiten ──
   let urlaub = null, krankheit = null;
   const abs = await fetchCockpitAbsences(env);
-  if (abs.verfuegbar && person) {
+  if (abs.verfuegbar && person && person.kilankaId) {
     let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
     for (const a of abs.data || []) {
       if (String(a.user?.id) !== person.kilankaId) continue;
