@@ -71,7 +71,7 @@ const CLIENT_GRAPH = {
     quotas: {
       name: 1, type: 1, limitPeriod: 1, timeBase: 1,
       // ACHTUNG: "quantity" hier NIE anfragen (killt quotas-Zweig, s. Doku §4)
-      approvals: { validFrom: 1, validUntil: 1, hours: 1 }, // 'id' erst wieder aufnehmen, wenn in Kilanka freigegeben UND verifiziert (Kilanka 400 am 13.07.)
+      approvals: { id: 1, validFrom: 1, validUntil: 1, hours: 1 }, // id seit 13.07. freigegeben → präzise Rechnungs-Zuordnung (FLS-Ist)
     },
   },
   $limit: 1000,
@@ -519,9 +519,10 @@ async function alleAktivenMitarbeiter(env) {
   try {
     const users = await fetchCockpitUsers(env);
     for (const u of users || []) {
-      if (kDate(u.deletedAt) || isArchived(u.recName)) continue;
-      if (/^\s*nicht\s/i.test(u.recName || "")) continue; // Alteinträge
-      add(upnForAttendant(u), u.recName);
+      const rn = userRecName(u);
+      if (kDate(u.deletedAt) || isArchived(rn)) continue;
+      if (/^\s*nicht\s/i.test(rn || "")) continue; // Alteinträge
+      add((UPN_OVERRIDES[String(u.id)] ?? deriveEmail(rn) ?? "").toLowerCase(), rn);
     }
   } catch (e) { /* users nicht verfügbar → Fallback unten */ }
   if (list.length === 0) {
@@ -539,13 +540,23 @@ async function alleAktivenMitarbeiter(env) {
 // ═══════════════════════════════════════════════════════════════
 
 // users: Stammdaten fürs Cockpit — unbekannte Felder ignoriert Kilanka still
+// Graph exakt entlang der Freigabe vom 13.07.2026:
+// kein recName (Name aus name+firstName), kein entryDate (frühester
+// Vertragsbeginn), Vertragsstunden in targetHours.weeklyHours.
 const COCKPIT_USER_GRAPH = {
-  id: 1, recName: 1, name: 1, firstName: 1, deletedAt: 1,
-  entryDate: 1, weeklyHours: 1, targetHours: 1,
-  contracts: { validFrom: 1, validUntil: 1, weeklyHours: 1, orgUnit: { name: 1 } },
+  id: 1, name: 1, firstName: 1, deletedAt: 1, weeklyHours: 1,
+  targetHours: { validFrom: 1, validUntil: 1, weeklyHours: 1, monthlyHours: 1 },
+  contracts: { validFrom: 1, validUntil: 1, orgUnit: { name: 1 } },
   workQualifications: { validFrom: 1, validUntil: 1, qualification: { name: 1 } },
   $limit: 1000,
 };
+
+// users liefert kein recName → "Nachname, Vorname" selbst bauen
+function userRecName(u) {
+  if (u.recName) return u.recName;
+  if (u.name && u.firstName) return `${u.name}, ${u.firstName}`;
+  return u.name || null;
+}
 
 const COCKPIT_ABSENCES_GRAPH = {
   begin: 1, end: 1, totalDays: 1, type: 1, status: 1,
@@ -568,7 +579,7 @@ let cockpitInvoicesCache = { data: null, fetchedAt: 0 };
 
 // Minimal-Graph: nur Felder, die nachweislich freigegeben sind (Stand 11.07.)
 const COCKPIT_USER_GRAPH_MINIMAL = {
-  id: 1, recName: 1, name: 1, firstName: 1, deletedAt: 1,
+  id: 1, name: 1, firstName: 1, deletedAt: 1,
   workQualifications: { validFrom: 1, validUntil: 1, qualification: { name: 1 } },
   $limit: 1000,
 };
@@ -690,21 +701,36 @@ async function buildCockpit(env, upn, now) {
   let person = null;
   try {
     const users = await fetchCockpitUsers(env);
-    const me = (users || []).find((u) => !kDate(u.deletedAt) && upnForAttendant(u) === upn);
+    const me = (users || []).find((u) => {
+      if (kDate(u.deletedAt)) return false;
+      const rn = userRecName(u);
+      return ((UPN_OVERRIDES[String(u.id)] ?? deriveEmail(rn) ?? "").toLowerCase()) === upn;
+    });
     if (me) {
       const vertrag = (me.contracts || []).find((ct) => isCurrent(ct.validFrom, ct.validUntil, now));
+      const soll = (me.targetHours || []).find((t) => isCurrent(t.validFrom, t.validUntil, now));
       const quali = (me.workQualifications || [])
         .filter((q) => q.qualification?.name && isCurrent(q.validFrom, q.validUntil, now))
         .sort((a, b) => (kDate(b.validFrom)?.getTime() || 0) - (kDate(a.validFrom)?.getTime() || 0))[0];
-      const wochenstunden =
-        durationToHours(vertrag?.weeklyHours) ?? durationToHours(me.weeklyHours) ?? null;
+      // Vertragsstunden: targetHours.weeklyHours, sonst monthlyHours/(52/12), sonst users.weeklyHours
+      let wochenstunden = durationToHours(soll?.weeklyHours);
+      if (wochenstunden == null) {
+        const mh = durationToHours(soll?.monthlyHours);
+        if (mh != null) wochenstunden = (mh * 12) / 52;
+      }
+      if (wochenstunden == null) wochenstunden = durationToHours(me.weeklyHours);
+      // Eintritt: frühester Vertragsbeginn (entryDate nicht im Graphen)
+      const eintritt = (me.contracts || [])
+        .map((ct) => kDate(ct.validFrom))
+        .filter(Boolean)
+        .sort((a, b) => a - b)[0] || null;
       person = {
-        name: me.recName || [me.name, me.firstName].filter(Boolean).join(", "),
+        name: userRecName(me),
         kilankaId: String(me.id),
         rolle: quali?.qualification?.name || "Fachkraft",
         team: vertrag?.orgUnit?.name || null,
         qualifikation: quali?.qualification?.name || null,
-        eintritt: isoDate(kDate(me.entryDate)),
+        eintritt: isoDate(eintritt),
         wochenstundenVertrag: wochenstunden != null ? Math.round(wochenstunden * 100) / 100 : null,
       };
     }
