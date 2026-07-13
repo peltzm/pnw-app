@@ -1,0 +1,103 @@
+# Cockpit-Modul: FLS-Quote, Regenerationstage & Dienstfahrzeug
+
+> Ablage: `docs/cockpit-kennzahlen.md` im Repo `peltzm/pnw-app`
+> Stand: 13.07.2026 · Betrifft: `mitarbeiter-cockpit-beta.html`
+
+## Zweck
+
+Das Modul zeigt jedem Mitarbeitenden im Cockpit drei Kacheln:
+
+1. **FLS-Quote** – abrechenbare Klientenzeit gegen Soll aus den Entgeltkalkulationen
+2. **Regenerationstage** – Status je Halbjahr (TVöD SuE: 2 Tage/Jahr)
+3. **Dienstfahrzeug** – Zuordnung, Rückgabetermin, DGUV-70-Status
+
+## Dateien
+
+| Datei | Inhalt |
+|---|---|
+| `mitarbeiter-cockpit-beta.html` | Alles inline (Single-File-Muster wie alle PNW-Apps): Feiertags-Helper, Kalkulations-Benchmark, Regenerationstag-Chips, Fuhrpark-Anreicherung |
+| `data/fahrzeuge.json` | Fuhrpark-Stammdaten, generiert aus `KFZ_Übersicht_PNW.xlsx`; wird zur Laufzeit per fetch geladen (graceful fallback, wenn nicht vorhanden) |
+
+Integration in die bestehende Architektur: Die Karten (Urlaub, FLS, Firmenwagen)
+werden im gemeinsamen `renderCards()` erweitert — funktioniert damit identisch
+im Demo- und im Live-Modus (Worker-Response).
+
+## Kennzahlen-Definition (Herleitung aus Entgeltkalkulationen)
+
+Beide vorliegenden Kalkulationen (eigene HzE-Kalkulation 93,46 €, Stand 04.07.2024,
+sowie KEH/Regensburg-Vorlage 92,30 €, Stand 01.11.2023) führen auf dieselbe Quote:
+
+| Kalkulation | Face-to-Face | Netto-Anwesenheit | Quote |
+|---|---|---|---|
+| Eigene HzE-Kalkulation | 995 h | 1.560 h | **63,8 %** |
+| KEH-Vorlage (implizit) | ~971 h | 1.517 h | **64,0 %** |
+
+**Definitionen im Cockpit:**
+
+- **FLS-Quote** = abgerechnete Face-to-Face-Stunden ÷ Netto-Anwesenheitsstunden
+  - Soll: **≥ 64 %** · Warnung (gelb): < 58 % · Kritisch (rot): < 50 %
+- **FLS+Fahrt-Quote** = (FLS + Fahrzeit) ÷ Netto-Anwesenheit · Soll: **≥ 80 %**
+- **Netto-Anwesenheit** = Arbeitstage im Zeitraum (Mo–Fr abzgl. Feiertage Bayern)
+  × Tagesstunden (Wochenstunden ÷ 5) − Abwesenheitstage (Urlaub, Krankheit,
+  Fortbildung, Regenerationstag)
+
+**Warum Anwesenheit als Nenner?** Auf die vertragliche Jahresstundenzahl
+(39 h × 52 = 2.028 h) gerechnet läge die Quote nur bei ~49 % – Urlaub und
+Krankheit würden die Kennzahl optisch drücken, obwohl die Leistung identisch
+ist. Der Anwesenheits-Nenner macht die Quote fair vergleichbar, auch für
+Teilzeitkräfte (Soll skaliert 1:1: 20-h-Kraft → ~12,8 h/Woche am Klienten).
+
+**Diagnose-Logik:** FLS-Quote niedrig, FLS+Fahrt im Soll → Fahrtanteil zu hoch
+(Tourenplanung/Fallverteilung prüfen). Beide niedrig → indirekte Zeiten prüfen
+(Doku, Meetings).
+
+## Feiertags-Helper Bayern (inline)
+
+- Berechnet gesetzliche Feiertage **dynamisch für jedes Jahr** – keine
+  hartcodierten Listen, keine jährliche Pflege nötig.
+- Bewegliche Feiertage (Karfreitag, Ostermontag, Himmelfahrt, Pfingstmontag,
+  Fronleichnam) über die Gauß'sche Osterformel; verifiziert gegen die
+  Referenz-Ostertermine 2024–2027.
+- **Mariä Himmelfahrt (15.08.)** ist per Default aktiv (gilt in überwiegend
+  katholischen Gemeinden – trifft auf unser gesamtes Einzugsgebiet zu).
+  Abschaltbar via `opts.mariaeHimmelfahrt = false`.
+- Augsburger Friedensfest (08.08.) per Default aus.
+- Exportiert `berechneArbeitstage(vonIso, bisIso, opts)` – Mo–Fr abzüglich
+  Feiertage, beide Grenzen inklusive. Referenzwert: **2026 = 252 Arbeitstage**.
+
+## Regenerationstage
+
+- Quelle: Kilanka-Abwesenheiten mit Typ `Regenerationstag`
+- Datenfeld im Cockpit-Response: `urlaub.regeneration = { h1: ISO|null, h2: ISO|null }`
+- Anzeige als zwei Chips: **H1 (01.01.–30.06.)** und **H2 (01.07.–31.12.)**
+- Status: „genommen am TT.MM.JJJJ" (grün) · „offen" (gelb, Halbjahr läuft noch)
+  · „nicht genommen" (rot, Halbjahr vorbei)
+
+## Fahrzeug-Kachel
+
+- Quelle: `data/fahrzeuge.json` (18 Fahrzeuge, Stand Juli 2026); Match zuerst
+  über Kennzeichen (falls der Worker eins liefert), sonst über Nachname der
+  angezeigten Person gegen das Feld `fahrer`
+- Anzeige: Fahrzeug, Kennzeichen, Finanzierungsart, km/Jahr, Rückgabedatum
+- **Warnungen:**
+  - DGUV-70-Prüfung überfällig (Datum ≤ heute) → rot
+  - Leasingrückgabe in < 90 Tagen → terrakotta, Hinweis km-Stand prüfen
+- Pflegeprozess: Bei Änderung der KFZ-Übersicht die JSON neu generieren und
+  per Zwei-Commit-Muster deployen (Feature-Commit + APP_VERSION-Bump)
+
+## Offene Punkte / To-dos
+
+- [ ] FLS-Ist bleibt limitiert: Leistungsdokumentation ist noch nicht im
+      Kilanka-API-Graphen freigegeben (Support-Anfrage offen) — bis dahin
+      Ist aus Rechnungen (invoices) des Vormonats
+- [ ] Regenerationstage im Worker-Endpunkt befüllen: Abwesenheitstyp in
+      `users/absences` identifizieren (Feldnamen gegen
+      `docs/kilanka-api-erkenntnisse.md` prüfen — stille Feldignorierung!)
+- [ ] Worker-Route für Buchhaltungs- und Abwesenheitsendpunkt im
+      `pnw-kilanka-proxy` freischalten (rollenbasiert: Mitarbeiter sieht nur
+      eigene Daten)
+- [x] `fahrzeuge.json` im Repo unter `data/` abgelegt (dieser Commit)
+- [ ] Hinweis Datenbestand: 5 Fahrzeuge ohne DGUV-70-Datum (FS-NW 916, 918,
+      919, 922 sowie Feld leer bei 918); alle übrigen tragen 09.12.2025 –
+      **damit sind Stand heute alle erfassten DGUV-Prüfungen überfällig**,
+      bitte Prüftermine aktualisieren
