@@ -71,7 +71,7 @@ const CLIENT_GRAPH = {
     quotas: {
       name: 1, type: 1, limitPeriod: 1, timeBase: 1,
       // ACHTUNG: "quantity" hier NIE anfragen (killt quotas-Zweig, s. Doku §4)
-      approvals: { validFrom: 1, validUntil: 1, hours: 1 },
+      approvals: { id: 1, validFrom: 1, validUntil: 1, hours: 1 }, // id: Brücke zu Rechnungszeilen (im Kilanka-Graphen freigeben!)
     },
   },
   $limit: 1000,
@@ -456,6 +456,239 @@ function clientsForUser(allClients, upn, now, qualiMap) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Mitarbeiter-Cockpit (mitarbeiter-cockpit-beta.html)
+// Defensiv: nicht freigegebene Kilanka-Zweige liefern null statt Fehler.
+// ═══════════════════════════════════════════════════════════════
+
+// users: Stammdaten fürs Cockpit — unbekannte Felder ignoriert Kilanka still
+const COCKPIT_USER_GRAPH = {
+  id: 1, recName: 1, name: 1, firstName: 1, deletedAt: 1,
+  entryDate: 1, weeklyHours: 1, targetHours: 1,
+  contracts: { validFrom: 1, validUntil: 1, weeklyHours: 1, orgUnit: { name: 1 } },
+  workQualifications: { validFrom: 1, validUntil: 1, qualification: { name: 1 } },
+  $limit: 1000,
+};
+
+const COCKPIT_ABSENCES_GRAPH = {
+  begin: 1, end: 1, totalDays: 1, type: 1, status: 1,
+  absenceType: { name: 1, internalName: 1 },
+  user: { id: 1, recName: 1 },
+  $limit: 1000,
+};
+
+// accounting/invoices: FLS-Ist (verifiziert 13.07.2026, s. docs/kilanka-api.md §13)
+const COCKPIT_INVOICES_GRAPH = {
+  id: 1, number: 1, deletedAt: 1,
+  deliveryFrom: 1, deliveryUntil: 1,
+  client: { id: 1 },
+  lines: { approval: { id: 1 }, quantity: 1, costCenter: 1 },
+};
+
+let cockpitUsersCache = { data: null, fetchedAt: 0 };
+let cockpitAbsencesCache = { data: null, fetchedAt: 0, verfuegbar: null };
+let cockpitInvoicesCache = { data: null, fetchedAt: 0 };
+
+async function fetchCockpitUsers(env) {
+  if (cockpitUsersCache.data && Date.now() - cockpitUsersCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
+    return cockpitUsersCache.data;
+  const data = await kilankaPost(env, "users", COCKPIT_USER_GRAPH);
+  cockpitUsersCache = { data, fetchedAt: Date.now() };
+  return data;
+}
+
+async function fetchCockpitAbsences(env) {
+  if (cockpitAbsencesCache.fetchedAt && Date.now() - cockpitAbsencesCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
+    return cockpitAbsencesCache;
+  try {
+    const data = await kilankaPost(env, "users/absences", COCKPIT_ABSENCES_GRAPH);
+    cockpitAbsencesCache = { data, fetchedAt: Date.now(), verfuegbar: true };
+  } catch (e) {
+    // Modell (noch) nicht freigegeben → Cockpit liefert null-Zweige
+    cockpitAbsencesCache = { data: null, fetchedAt: Date.now(), verfuegbar: false };
+  }
+  return cockpitAbsencesCache;
+}
+
+async function fetchCockpitInvoices(env) {
+  if (cockpitInvoicesCache.data && Date.now() - cockpitInvoicesCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
+    return cockpitInvoicesCache.data;
+  const alle = [];
+  for (let offset = 0; offset < 10000; offset += 1000) {
+    const g = { ...COCKPIT_INVOICES_GRAPH, $limit: 1000, $offset: offset };
+    const batch = await kilankaPost(env, "accounting/invoices", g);
+    if (!batch || !batch.length) break;
+    alle.push(...batch);
+    if (batch.length < 1000) break;
+    await new Promise((r) => setTimeout(r, 700)); // Rate Limit 10/5s
+  }
+  cockpitInvoicesCache = { data: alle, fetchedAt: Date.now() };
+  return alle;
+}
+
+function decimalToNumber(w) {
+  if (w == null) return 0;
+  if (typeof w === "number") return w;
+  return parseFloat(w.$decimal ?? w) || 0;
+}
+
+function classifyAbsence(a) {
+  const t = (a.type || a.absenceType?.internalName || "").toLowerCase();
+  const n = (a.absenceType?.name || "").toLowerCase();
+  if (t === "vacation" || n.includes("urlaub")) return "urlaub";
+  if (n.includes("kind")) return "kindkrank";
+  if (t === "sick" || t === "illness" || n.includes("krank")) return "krank";
+  return "sonstig";
+}
+
+async function buildCockpit(env, upn, now) {
+  const jahr = now.getFullYear();
+
+  // ── a) Klienten, FLS-Soll, approval-IDs, HB-Klienten-IDs ──
+  const clients = await fetchKilankaClients(env);
+  let hb = 0, mb = 0, v = 0, sollWochenstunden = 0;
+  const approvalIds = new Set();
+  const hbClientIds = new Set();
+  for (const client of clients || []) {
+    if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
+    let besteRolle = 0;
+    for (const action of client.actions || []) {
+      if (kDate(action.deletedAt) || !isCurrent(action.validFrom, action.validUntil, now)) continue;
+      const att = (action.attendants || []).find(
+        (a) => a.user && !isArchived(a.user.recName) &&
+               isCurrent(a.validFrom, a.validUntil, now) &&
+               ROLE_RANK[a.attendantKind?.name] &&
+               upnForAttendant(a.user) === upn
+      );
+      if (!att) continue;
+      const rang = ROLE_RANK[att.attendantKind.name];
+      if (rang > besteRolle) besteRolle = rang;
+      if (rang !== 3) continue; // Soll/Ist nur über Hauptbetreuung (keine Doppelzählung)
+      hbClientIds.add(String(client.id));
+      for (const q of action.quotas || []) {
+        if (q.timeBase === "quantity") continue;
+        for (const ap of q.approvals || []) {
+          if (ap.id) approvalIds.add(String(ap.id));
+        }
+        const appr = pickApproval(q.approvals, now);
+        if (!appr || appr.stunden == null || appr.status !== "aktuell") continue;
+        switch (q.timeBase) {
+          case "week": sollWochenstunden += appr.stunden; break;
+          case "month_current": sollWochenstunden += (appr.stunden * 12) / 52; break;
+          case "pool": {
+            const wochen = appr.von && appr.bis ? Math.max(1, (appr.bis - appr.von) / 6048e5) : null;
+            if (wochen) sollWochenstunden += appr.stunden / wochen;
+            break;
+          }
+        }
+        break; // erstes verwertbares Kontingent der Maßnahme
+      }
+    }
+    if (besteRolle === 3) hb++;
+    else if (besteRolle === 2) mb++;
+    else if (besteRolle === 1) v++;
+  }
+
+  // ── b) Stammdaten ──
+  let person = null;
+  try {
+    const users = await fetchCockpitUsers(env);
+    const me = (users || []).find((u) => !kDate(u.deletedAt) && upnForAttendant(u) === upn);
+    if (me) {
+      const vertrag = (me.contracts || []).find((ct) => isCurrent(ct.validFrom, ct.validUntil, now));
+      const quali = (me.workQualifications || [])
+        .filter((q) => q.qualification?.name && isCurrent(q.validFrom, q.validUntil, now))
+        .sort((a, b) => (kDate(b.validFrom)?.getTime() || 0) - (kDate(a.validFrom)?.getTime() || 0))[0];
+      const wochenstunden =
+        durationToHours(vertrag?.weeklyHours) ?? durationToHours(me.weeklyHours) ?? null;
+      person = {
+        name: me.recName || [me.name, me.firstName].filter(Boolean).join(", "),
+        kilankaId: String(me.id),
+        rolle: quali?.qualification?.name || "Fachkraft",
+        team: vertrag?.orgUnit?.name || null,
+        qualifikation: quali?.qualification?.name || null,
+        eintritt: isoDate(kDate(me.entryDate)),
+        wochenstundenVertrag: wochenstunden != null ? Math.round(wochenstunden * 100) / 100 : null,
+      };
+    }
+  } catch (e) { /* users-Zweig optional */ }
+
+  // ── c) Abwesenheiten ──
+  let urlaub = null, krankheit = null;
+  const abs = await fetchCockpitAbsences(env);
+  if (abs.verfuegbar && person) {
+    let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
+    for (const a of abs.data || []) {
+      if (String(a.user?.id) !== person.kilankaId) continue;
+      if ((a.status || "").toLowerCase() !== "approved") continue;
+      const begin = kDate(a.begin);
+      if (!begin || begin.getFullYear() !== jahr) continue;
+      const tage = decimalToNumber(a.totalDays);
+      const art = classifyAbsence(a);
+      if (art === "urlaub") { begin > now ? (uGeplant += tage) : (uGenommen += tage); }
+      else if (art === "krank") { kTage += tage; if (!letzte || begin > letzte) letzte = begin; }
+      else if (art === "kindkrank") { kindKrank += tage; }
+    }
+    urlaub = {
+      jahr,
+      anspruchTage: null, // Urlaubsanspruch-Feld noch nicht identifiziert (allowed-graphs prüfen)
+      genommenTage: Math.round(uGenommen * 2) / 2,
+      geplantTage: Math.round(uGeplant * 2) / 2,
+      restTage: null,
+    };
+    krankheit = {
+      jahr,
+      tage: Math.round(kTage * 2) / 2,
+      vorjahrTage: null,
+      kindKrankTage: Math.round(kindKrank * 2) / 2,
+      letzteAbwesenheit: letzte ? isoDate(letzte) : null,
+    };
+  }
+
+  // ── d) FLS-Ist aus Rechnungen (Vormonat) ──
+  let fls = { sollWochenstunden: Math.round(sollWochenstunden * 10) / 10,
+              istMonatsstunden: null, istMonat: null, istQuelle: null };
+  try {
+    const vormonat = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const monatIso = vormonat.toISOString().slice(0, 7);
+    const invoices = await fetchCockpitInvoices(env);
+    let summe = 0, treffer = 0;
+    for (const inv of invoices || []) {
+      if (kDate(inv.deletedAt)) continue;
+      const von = kDate(inv.deliveryFrom);
+      if (!von || von.toISOString().slice(0, 7) !== monatIso) continue;
+      // Präzise Zuordnung über approval.id; Fallback: HB-Klient + approval-Zeile
+      const perApproval = approvalIds.size > 0;
+      const clientMatch = hbClientIds.has(String(inv.client?.id));
+      let hit = false;
+      for (const l of inv.lines || []) {
+        const apId = l.approval?.id ? String(l.approval.id) : null;
+        if (!apId) continue; // Pauschalen/Kilometer raus
+        if (perApproval ? !approvalIds.has(apId) : !clientMatch) continue;
+        summe += decimalToNumber(l.quantity);
+        hit = true;
+      }
+      if (hit) treffer++;
+    }
+    fls.istMonatsstunden = Math.round(summe * 100) / 100;
+    fls.istMonat = monatIso;
+    fls.istQuelle = approvalIds.size > 0 ? "rechnungen (approval-id)" : "rechnungen (klient-fallback)";
+    fls.istRechnungen = treffer;
+  } catch (e) { /* Rechnungs-Zweig optional */ }
+
+  return {
+    upn,
+    person: person || { name: null, rolle: null, team: null, qualifikation: null, eintritt: null, wochenstundenVertrag: null },
+    personVerfuegbar: !!person,
+    urlaub, krankheit,
+    abwesenheitenVerfuegbar: abs.verfuegbar === true,
+    firmenwagen: { vorhanden: false, quelle: "fuhrpark-liste folgt" },
+    klienten: { aktiv: hb + mb + v, hb, mb, v },
+    fls,
+    stand: new Date().toISOString(),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HTTP-Handling
 // ═══════════════════════════════════════════════════════════════
 function corsHeaders(origin) {
@@ -518,6 +751,21 @@ export default {
         );
       } catch (e) {
         return json({ error: `Kilanka-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    if (url.pathname === "/api/mitarbeiter-cockpit" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      if (!auth.upn.endsWith(`@${MAIL_DOMAIN}`)) {
+        return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      }
+      // V1: strikt nur die eigene Sicht — Team-/GF-Sicht folgt mit Rollenprüfung
+      try {
+        const data = await buildCockpit(env, auth.upn, new Date());
+        return json(data, 200, origin);
+      } catch (e) {
+        return json({ error: `Cockpit-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
       }
     }
 

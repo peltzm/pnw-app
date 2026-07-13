@@ -336,20 +336,26 @@ function renderCockpit() {
     `Stand: ${new Date().toLocaleDateString('de-DE')} · Sichtbar für ${own ? 'dich und deine Führungskraft' : 'Mitarbeiter:in und Führungskraft'}`;
   document.getElementById('lockNote').style.display = own ? '' : 'none';
 
-  const u = d.urlaub, k = d.krankheit, fw = d.firmenwagen, kl = d.klienten, fls = d.fls;
-  const uPctGen = Math.round(u.genommenTage / u.anspruchTage * 100);
-  const uPctPlan = Math.round(u.geplantTage / u.anspruchTage * 100);
-  const prog = fw.vorhanden ? kmPrognose(fw) : null;
-  const kmChip = !fw.vorhanden ? '' : prog <= fw.kmBudgetJahr
+  const u = d.urlaub, k = d.krankheit, fw = d.firmenwagen || {vorhanden:false}, kl = d.klienten, fls = d.fls;
+  const uPctGen = (u && u.anspruchTage) ? Math.round(u.genommenTage / u.anspruchTage * 100) : 0;
+  const uPctPlan = (u && u.anspruchTage) ? Math.round(u.geplantTage / u.anspruchTage * 100) : 0;
+  const prog = (fw.vorhanden && fw.kmSeitJahresbeginn != null) ? kmPrognose(fw) : null;
+  const kmChip = (!fw.vorhanden || prog == null) ? '' : prog <= fw.kmBudgetJahr
     ? `<span class="chip chip-ok">Prognose im Budget</span>`
     : prog <= fw.kmBudgetJahr * 1.1
       ? `<span class="chip chip-warn">Prognose leicht über Budget</span>`
       : `<span class="chip chip-err">Prognose deutlich über Budget</span>`;
-  const flsIst = fls.istWochenstunden ?? fls.istDurchschnitt4Wochen;
-  const flsPct = fls.sollWochenstunden ? Math.min(120, Math.round(flsIst / fls.sollWochenstunden * 100)) : 0;
-  const flsChip = flsPct >= 95 ? `<span class="chip chip-ok">${flsPct} % Auslastung</span>`
+  const flsLive = fls.istMonatsstunden != null;
+  const flsIst = flsLive ? fls.istMonatsstunden : (fls.istWochenstunden ?? fls.istDurchschnitt4Wochen);
+  const flsSollAnzeige = flsLive
+    ? Math.round(fls.sollWochenstunden * 52 / 12 * 10) / 10   // Soll auf Monat umgerechnet
+    : fls.sollWochenstunden;
+  const flsPct = (flsIst != null && flsSollAnzeige) ? Math.min(120, Math.round(flsIst / flsSollAnzeige * 100)) : null;
+  const flsChip = flsPct == null ? ''
+    : flsPct >= 95 ? `<span class="chip chip-ok">${flsPct} % Auslastung</span>`
     : flsPct >= 80 ? `<span class="chip chip-warn">${flsPct} % Auslastung</span>`
     : `<span class="chip chip-err">${flsPct} % Auslastung</span>`;
+  const flsMonatLabel = flsLive ? new Date(fls.istMonat + '-15').toLocaleDateString('de-DE', {month:'long', year:'numeric'}) : null;
 
   document.getElementById('grid').innerHTML = `
   <!-- PROFIL -->
@@ -359,14 +365,14 @@ function renderCockpit() {
       <span class="src-badge src-kilanka">Kilanka · users</span>
     </div>
     <div class="profile-row">
-      <div class="avatar">${initials(d.person.name)}</div>
+      <div class="avatar">${initials(d.person.name || d.upn)}</div>
       <div>
-        <div class="profile-name">${esc(d.person.name)}</div>
-        <div class="profile-role">${esc(d.person.rolle)} · ${esc(d.person.team)}</div>
+        <div class="profile-name">${esc(d.person.name || d.upn)}</div>
+        <div class="profile-role">${esc(d.person.rolle || 'Fachkraft')} · ${esc(d.person.team || '—')}</div>
       </div>
     </div>
     <dl class="kv">
-      <dt>Qualifikation</dt><dd>${esc(d.person.qualifikation)}</dd>
+      <dt>Qualifikation</dt><dd>${esc(d.person.qualifikation || '—')}</dd>
       <dt>Eintritt</dt><dd>${fmtDate(d.person.eintritt)}</dd>
       <dt>Vertragl. Wochenstunden</dt><dd>${fmtNum(d.person.wochenstundenVertrag,1)} h</dd>
       <dt>E-Mail</dt><dd>${esc(d.upn)}</dd>
@@ -376,34 +382,36 @@ function renderCockpit() {
   <!-- URLAUB -->
   <div class="card c-urlaub">
     <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8c1-4-4-6-4-6S8 4 9 8"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M4 12c2-3 6-4 8-4s6 1 8 4"/></svg>Urlaub ${u.jahr}</div>
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8c1-4-4-6-4-6S8 4 9 8"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M4 12c2-3 6-4 8-4s6 1 8 4"/></svg>Urlaub ${u ? u.jahr : new Date().getFullYear()}</div>
       <span class="src-badge src-kilanka">Kilanka · absences</span>
     </div>
-    <div class="big-row"><span class="big">${u.restTage}</span><span class="big-unit">Resttage verfügbar</span></div>
-    <div class="bar">
+    ${!u ? `<div class="note" style="margin-top:0">Noch keine Daten — Modell <b>users/absences</b> ist im Kilanka-Graphen nicht freigegeben.</div>` : `
+    <div class="big-row"><span class="big">${u.restTage ?? fmtNum(u.genommenTage,1)}</span><span class="big-unit">${u.restTage != null ? 'Resttage verfügbar' : 'Tage genommen'}</span></div>
+    ${u.anspruchTage ? `<div class="bar">
       <div class="bar-fill" style="width:${uPctGen}%;background:var(--ok)"></div>
       <div class="bar-fill" style="width:${uPctPlan}%;background:#9ccc9c"></div>
-    </div>
+    </div>` : ''}
     <div class="bar-legend">
-      <span><span class="dot" style="background:var(--ok)"></span>Genommen: ${u.genommenTage}</span>
-      <span><span class="dot" style="background:#9ccc9c"></span>Geplant: ${u.geplantTage}</span>
-      <span><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage}</span>
-    </div>
+      <span><span class="dot" style="background:var(--ok)"></span>Genommen: ${fmtNum(u.genommenTage,1)}</span>
+      <span><span class="dot" style="background:#9ccc9c"></span>Geplant: ${fmtNum(u.geplantTage,1)}</span>
+      <span><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage ?? '— (Feld folgt)'}</span>
+    </div>`}
   </div>
 
   <!-- KRANKHEIT -->
   <div class="card c-krank">
     <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Krankheitstage ${k.jahr}</div>
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Krankheitstage ${k ? k.jahr : new Date().getFullYear()}</div>
       <span class="src-badge src-kilanka">Kilanka · absences</span>
     </div>
-    <div class="big-row"><span class="big">${k.tage}</span><span class="big-unit">Tage seit Jahresbeginn</span></div>
+    ${!k ? `<div class="note" style="margin-top:0">Noch keine Daten — Modell <b>users/absences</b> ist im Kilanka-Graphen nicht freigegeben.</div>` : `
+    <div class="big-row"><span class="big">${fmtNum(k.tage,1)}</span><span class="big-unit">Tage seit Jahresbeginn</span></div>
     <div class="sub-grid cols3">
-      <div class="sub-item"><div class="sl">Vorjahr</div><div class="sv">${k.vorjahrTage} Tage</div></div>
-      <div class="sub-item"><div class="sl">Kind krank</div><div class="sv">${k.kindKrankTage} Tage</div></div>
+      <div class="sub-item"><div class="sl">Vorjahr</div><div class="sv">${k.vorjahrTage != null ? fmtNum(k.vorjahrTage,1)+' Tage' : '—'}</div></div>
+      <div class="sub-item"><div class="sl">Kind krank</div><div class="sv">${fmtNum(k.kindKrankTage,1)} Tage</div></div>
       <div class="sub-item"><div class="sl">Zuletzt</div><div class="sv">${fmtDate(k.letzteAbwesenheit)}</div></div>
     </div>
-    <div class="note">Nur Tageszahlen — keine Diagnosen oder Abwesenheitsgründe.</div>
+    <div class="note">Nur Tageszahlen — keine Diagnosen oder Abwesenheitsgründe.</div>`}
   </div>
 
   <!-- FIRMENWAGEN -->
@@ -444,18 +452,20 @@ function renderCockpit() {
   <!-- FLS -->
   <div class="card c-fls">
     <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Fachleistungsstunden / Woche</div>
-      <span class="src-badge src-offen">Ist-Quelle offen</span>
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Fachleistungsstunden</div>
+      ${flsLive ? '<span class="src-badge src-kilanka">Kilanka · invoices</span>' : '<span class="src-badge src-offen">Demo</span>'}
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      <div class="big-row" style="margin:0"><span class="big">${fmtNum(flsIst,1)}</span><span class="big-unit">h Ist · Soll ${fmtNum(fls.sollWochenstunden,1)} h</span></div>
+      <div class="big-row" style="margin:0"><span class="big">${fmtNum(flsIst,1)}</span><span class="big-unit">h Ist${flsMonatLabel ? ' ('+flsMonatLabel+')' : ''} · Soll ${fmtNum(flsSollAnzeige,1)} h${flsLive ? '/Monat' : ''}</span></div>
       ${flsChip}
     </div>
-    <div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>
+    ${flsPct != null ? `<div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>` : ''}
     <div class="bar-legend">
-      <span>Soll = bewilligte Kontingent-Wochenstunden (quotas + timeBase)</span>
+      <span>Soll = bewilligte Kontingente (quotas + timeBase)${flsLive ? ', auf Monat umgerechnet' : ''}</span>
     </div>
-    <div class="note">⚠ Ist-Stunden: Leistungsdokumentation ist noch nicht im Kilanka-API-Graphen verfügbar — Wert hier ist ein Demo-Platzhalter (Ø letzte 4 Wochen). Freischaltung beim Kilanka-Support angefragt.</div>
+    ${flsLive
+      ? `<div class="note">Ist = abgerechnete Stunden aus ${fls.istRechnungen ?? '?'} Rechnung(en) · Quelle: ${esc(fls.istQuelle || 'Rechnungen')}${(fls.istQuelle||'').includes('fallback') ? ' — für die präzise Bewilligungs-Zuordnung <b>approvals.id</b> im Kilanka-Graphen freigeben' : ''}.</div>`
+      : `<div class="note">Demo-Platzhalter (Ø letzte 4 Wochen). Live: abgerechnete Stunden aus Kilanka-Rechnungen des Vormonats.</div>`}
   </div>`;
 }
 
@@ -529,10 +539,11 @@ async function showApp() {
     const r = await fetch(`${CFG.workerUrl}/api/mitarbeiter-cockpit`, { headers: { Authorization: 'Bearer ' + idToken } });
     if (r.ok) {
       const live = await r.json();
-      // Live-Antwort in die Demo-Struktur einhängen (gleiches Schema)
       DEMO_PERSONEN['live'] = live;
-      DEMO_VIEWER.fk = { name: live.person.name, self: 'live', sichtbar: ['live'] };
-      renderRolePills(); fillPersonSelect(); renderCockpit();
+      DEMO_VIEWER.fk = { name: live.person.name || live.upn, self: 'live', sichtbar: ['live'] };
+      viewerRole = 'fk';
+      document.querySelector('.viewbar').style.display = 'none'; // V1: nur eigene Sicht
+      renderCockpit();
       return;
     }
   } catch(e) { console.warn('Live-Endpunkt noch nicht verfügbar:', e.message); }
