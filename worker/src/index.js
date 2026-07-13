@@ -71,7 +71,7 @@ const CLIENT_GRAPH = {
     quotas: {
       name: 1, type: 1, limitPeriod: 1, timeBase: 1,
       // ACHTUNG: "quantity" hier NIE anfragen (killt quotas-Zweig, s. Doku §4)
-      approvals: { id: 1, validFrom: 1, validUntil: 1, hours: 1 }, // id: Brücke zu Rechnungszeilen (im Kilanka-Graphen freigeben!)
+      approvals: { validFrom: 1, validUntil: 1, hours: 1 }, // 'id' erst wieder aufnehmen, wenn in Kilanka freigegeben UND verifiziert (Kilanka 400 am 13.07.)
     },
   },
   $limit: 1000,
@@ -487,18 +487,37 @@ async function fetchDirectReports(graphToken) {
   }
 }
 
-// Alle aktiven Mitarbeitenden aus Kilanka (für die GF-Auswahlliste)
+// Alle aktiven Mitarbeitenden aus Kilanka (für die GF-Auswahlliste).
+// Fallback: aktive Betreuer aus den Klienten-Zuordnungen (immer verfügbar).
 async function alleAktivenMitarbeiter(env) {
-  const users = await fetchCockpitUsers(env);
   const seen = new Set();
   const list = [];
-  for (const u of users || []) {
-    if (kDate(u.deletedAt) || isArchived(u.recName)) continue;
-    if (/^\s*nicht\s/i.test(u.recName || "")) continue; // Alteinträge
-    const upn = upnForAttendant(u);
-    if (!upn || seen.has(upn)) continue;
+  const add = (upn, name) => {
+    if (!upn || seen.has(upn)) return;
     seen.add(upn);
-    list.push({ upn, name: u.recName || upn });
+    list.push({ upn, name: name || upn });
+  };
+  try {
+    const users = await fetchCockpitUsers(env);
+    for (const u of users || []) {
+      if (kDate(u.deletedAt) || isArchived(u.recName)) continue;
+      if (/^\s*nicht\s/i.test(u.recName || "")) continue; // Alteinträge
+      add(upnForAttendant(u), u.recName);
+    }
+  } catch (e) {
+    const now = new Date();
+    const clients = await fetchKilankaClients(env);
+    for (const client of clients || []) {
+      if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
+      for (const action of client.actions || []) {
+        if (kDate(action.deletedAt) || !isCurrent(action.validFrom, action.validUntil, now)) continue;
+        for (const att of action.attendants || []) {
+          if (!att.user || isArchived(att.user.recName)) continue;
+          if (!isCurrent(att.validFrom, att.validUntil, now)) continue;
+          add(upnForAttendant(att.user), att.user.recName);
+        }
+      }
+    }
   }
   return list.sort((a, b) => a.name.localeCompare(b.name, "de"));
 }
@@ -536,11 +555,26 @@ let cockpitUsersCache = { data: null, fetchedAt: 0 };
 let cockpitAbsencesCache = { data: null, fetchedAt: 0, verfuegbar: null };
 let cockpitInvoicesCache = { data: null, fetchedAt: 0 };
 
+// Minimal-Graph: nur Felder, die nachweislich freigegeben sind (Stand 11.07.)
+const COCKPIT_USER_GRAPH_MINIMAL = {
+  id: 1, recName: 1, name: 1, firstName: 1, deletedAt: 1,
+  workQualifications: { validFrom: 1, validUntil: 1, qualification: { name: 1 } },
+  $limit: 1000,
+};
+
 async function fetchCockpitUsers(env) {
   if (cockpitUsersCache.data && Date.now() - cockpitUsersCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
     return cockpitUsersCache.data;
-  const data = await kilankaPost(env, "users", COCKPIT_USER_GRAPH);
-  cockpitUsersCache = { data, fetchedAt: Date.now() };
+  let data, voll = true;
+  try {
+    data = await kilankaPost(env, "users", COCKPIT_USER_GRAPH);
+  } catch (e) {
+    // Erweiterte Felder (contracts/entryDate/targetHours) noch nicht freigegeben
+    // → strukturelle Validierung (Kilanka 400). Rückfall auf Minimal-Graph.
+    data = await kilankaPost(env, "users", COCKPIT_USER_GRAPH_MINIMAL);
+    voll = false;
+  }
+  cockpitUsersCache = { data, fetchedAt: Date.now(), voll };
   return data;
 }
 
@@ -592,7 +626,12 @@ async function buildCockpit(env, upn, now) {
   const jahr = now.getFullYear();
 
   // ── a) Klienten, FLS-Soll, approval-IDs, HB-Klienten-IDs ──
-  const clients = await fetchKilankaClients(env);
+  let clients;
+  try {
+    clients = await fetchKilankaClients(env);
+  } catch (e) {
+    throw new Error(`Klienten-Abruf: ${e.message}`);
+  }
   let hb = 0, mb = 0, v = 0, sollWochenstunden = 0;
   const approvalIds = new Set();
   const hbClientIds = new Set();
