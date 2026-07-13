@@ -348,9 +348,10 @@ function flsAuswertung(d) {
   if (live && fls.istMonat && fls.sollWochenstunden) {
     const mEnde = new Date(Date.UTC(+fls.istMonat.slice(0,4), +fls.istMonat.slice(5,7), 0)).toISOString().slice(0,10);
     const at = berechneArbeitstage(fls.istMonat + '-01', mEnde);
+    const abwBekannt = fls.abwesenheitsTageImMonat != null;
     const abw = fls.abwesenheitsTageImMonat ?? 0;
     const verfuegbar = Math.max(0, at - abw);
-    korr = { at, abw, verfuegbar,
+    korr = { at, abw, abwBekannt, verfuegbar,
       soll: Math.round(fls.sollWochenstunden / 5 * verfuegbar * 10) / 10 };
   }
   const soll = korr ? korr.soll
@@ -457,7 +458,7 @@ function renderCards(d, own) {
       <span class="src-badge src-kilanka">Kilanka · users</span>
     </div>
     <div class="profile-row">
-      <div class="avatar">${initials(d.person.name || d.upn)}</div>
+      <div class="avatar" id="avatarBox" style="overflow:hidden">${initials(d.person.name || d.upn)}</div>
       <div>
         <div class="profile-name">${esc(d.person.name || d.upn)}</div>
         <div class="profile-role">${esc(d.person.rolle || 'Fachkraft')} · ${esc(d.person.team || '—')}</div>
@@ -565,7 +566,7 @@ function renderCards(d, own) {
     ${flsPct != null ? `<div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>` : ''}
     <div class="bar-legend">
       <span>${flsA.korr
-        ? `Soll = Kontingente, bezogen auf ${flsA.korr.verfuegbar} verfügbare Arbeitstage (${flsA.korr.at} AT Bayern${flsA.korr.abw ? ` − ${flsA.korr.abw} Tage Urlaub/Krankheit/Fortbildung` : ' — Abwesenheitstage liefert der Worker noch nicht, Feld fls.abwesenheitsTageImMonat'})`
+        ? `Soll = Kontingente, bezogen auf ${flsA.korr.verfuegbar} verfügbare Arbeitstage (${flsA.korr.at} AT Bayern${flsA.korr.abw ? ` − ${flsA.korr.abw} Tage Urlaub/Krankheit/Fortbildung` : flsA.korr.abwBekannt ? ', keine Abwesenheiten im Monat' : ' — Abwesenheitsdaten gerade nicht verfügbar, Soll ggf. zu hoch'}`
         : `Soll = bewilligte Kontingente (quotas + timeBase)${flsLive ? ', auf Monat umgerechnet' : ''}`}</span>
     </div>
     ${d.person && d.person.wochenstundenVertrag ? `<div class="sub-grid" style="margin-top:10px">
@@ -705,6 +706,27 @@ async function loadLive(upn) {
 function renderLivePerson(d) {
   renderCards(d, d.upn === (currentAccount?.username || '').toLowerCase());
   if (liveSicht && liveSicht.mitarbeiter && liveSicht.mitarbeiter.length > 1) appendTeamCard();
+  ladeProfilFoto(d.upn);
+}
+
+/* ── Profilfoto aus M365 (Graph, Scope User.ReadBasic.All deckt Fotos ab).
+ *    Blob-URLs pro UPN gecacht; fehlendes Foto → Initialen bleiben. ── */
+const fotoCache = {};
+async function ladeProfilFoto(upn) {
+  if (demoMode || !upn) return;
+  try {
+    if (!(upn in fotoCache)) {
+      const t = await liveTokens();
+      const r = await fetch('https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(upn) + '/photos/96x96/$value',
+        { headers: { Authorization: 'Bearer ' + t.graph } });
+      fotoCache[upn] = r.ok ? URL.createObjectURL(await r.blob()) : null;
+    }
+    const box = document.getElementById('avatarBox');
+    // Person könnte inzwischen gewechselt sein → nur setzen, wenn noch aktuell
+    if (fotoCache[upn] && box && cockpitData && cockpitData.upn === upn) {
+      box.innerHTML = '<img src="' + fotoCache[upn] + '" alt="" style="width:100%;height:100%;object-fit:cover">';
+    }
+  } catch (_) { /* Foto ist optional */ }
 }
 
 /* ── Aggregierte Team-Auslastung (TL: Team, GF: alle) ── */
