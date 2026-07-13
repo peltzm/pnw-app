@@ -335,6 +335,31 @@ function berechneArbeitstage(vonIso, bisIso) { // Mo–Fr abzgl. Feiertage Bayer
   return n;
 }
 
+/* ── FLS-Auswertung mit Soll-Korrektur: Das Monats-Soll wird auf die real
+ *    verfügbaren Arbeitstage bezogen (Feiertage Bayern via berechneArbeitstage,
+ *    minus Abwesenheitstage aus dem Worker-Feld fls.abwesenheitsTageImMonat).
+ *    Ohne Korrektur sieht jeder Monat mit Feiertagen/Urlaub nach
+ *    Minderleistung aus. ── */
+function flsAuswertung(d) {
+  const fls = (d && d.fls) || {};
+  const live = fls.istMonatsstunden != null;
+  const ist = live ? fls.istMonatsstunden : (fls.istWochenstunden ?? fls.istDurchschnitt4Wochen);
+  let korr = null;
+  if (live && fls.istMonat && fls.sollWochenstunden) {
+    const mEnde = new Date(Date.UTC(+fls.istMonat.slice(0,4), +fls.istMonat.slice(5,7), 0)).toISOString().slice(0,10);
+    const at = berechneArbeitstage(fls.istMonat + '-01', mEnde);
+    const abw = fls.abwesenheitsTageImMonat ?? 0;
+    const verfuegbar = Math.max(0, at - abw);
+    korr = { at, abw, verfuegbar,
+      soll: Math.round(fls.sollWochenstunden / 5 * verfuegbar * 10) / 10 };
+  }
+  const soll = korr ? korr.soll
+    : live ? Math.round(fls.sollWochenstunden * 52 / 12 * 10) / 10
+    : fls.sollWochenstunden;
+  const pct = (ist != null && soll) ? Math.round(ist / soll * 100) : null;
+  return { live, ist, soll, korr, pct, monat: fls.istMonat || null };
+}
+
 /* ── Fuhrpark-Stammdaten (data/fahrzeuge.json, generiert aus KFZ_Übersicht_PNW.xlsx) ── */
 let FUHRPARK = null;
 fetch('data/fahrzeuge.json').then(r => r.ok ? r.json() : null).then(j => { FUHRPARK = j; })
@@ -379,6 +404,8 @@ function renderCockpit() { // Demo-Pfad
   const sel = document.getElementById('personSelect');
   const key = (v.sichtbar.length > 1 && sel.value) ? sel.value : v.sichtbar[0];
   renderCards(DEMO_PERSONEN[key], viewerRole === 'fk');
+  teamTabelleHtml = null; // Rollenwechsel im Demo: Aggregat verwerfen
+  if (v.sichtbar.length > 1) appendTeamCard();
 }
 
 function renderCards(d, own) {
@@ -413,12 +440,9 @@ function renderCards(d, own) {
     : prog <= fw.kmBudgetJahr * 1.1
       ? `<span class="chip chip-warn">Prognose leicht über Budget</span>`
       : `<span class="chip chip-err">Prognose deutlich über Budget</span>`;
-  const flsLive = fls.istMonatsstunden != null;
-  const flsIst = flsLive ? fls.istMonatsstunden : (fls.istWochenstunden ?? fls.istDurchschnitt4Wochen);
-  const flsSollAnzeige = flsLive
-    ? Math.round(fls.sollWochenstunden * 52 / 12 * 10) / 10   // Soll auf Monat umgerechnet
-    : fls.sollWochenstunden;
-  const flsPct = (flsIst != null && flsSollAnzeige) ? Math.min(120, Math.round(flsIst / flsSollAnzeige * 100)) : null;
+  const flsA = flsAuswertung(d);
+  const flsLive = flsA.live, flsIst = flsA.ist, flsSollAnzeige = flsA.soll;
+  const flsPct = flsA.pct != null ? Math.min(120, flsA.pct) : null;
   const flsChip = flsPct == null ? ''
     : flsPct >= 95 ? `<span class="chip chip-ok">${flsPct} % Auslastung</span>`
     : flsPct >= 80 ? `<span class="chip chip-warn">${flsPct} % Auslastung</span>`
@@ -540,7 +564,9 @@ function renderCards(d, own) {
     </div>
     ${flsPct != null ? `<div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>` : ''}
     <div class="bar-legend">
-      <span>Soll = bewilligte Kontingente (quotas + timeBase)${flsLive ? ', auf Monat umgerechnet' : ''}</span>
+      <span>${flsA.korr
+        ? `Soll = Kontingente, bezogen auf ${flsA.korr.verfuegbar} verfügbare Arbeitstage (${flsA.korr.at} AT Bayern${flsA.korr.abw ? ` − ${flsA.korr.abw} Tage Urlaub/Krankheit/Fortbildung` : ' — Abwesenheitstage liefert der Worker noch nicht, Feld fls.abwesenheitsTageImMonat'})`
+        : `Soll = bewilligte Kontingente (quotas + timeBase)${flsLive ? ', auf Monat umgerechnet' : ''}`}</span>
     </div>
     ${d.person && d.person.wochenstundenVertrag ? `<div class="sub-grid" style="margin-top:10px">
       <div class="sub-item"><div class="sl">Benchmark Entgeltkalkulation</div>
@@ -678,6 +704,93 @@ async function loadLive(upn) {
 
 function renderLivePerson(d) {
   renderCards(d, d.upn === (currentAccount?.username || '').toLowerCase());
+  if (liveSicht && liveSicht.mitarbeiter && liveSicht.mitarbeiter.length > 1) appendTeamCard();
+}
+
+/* ── Aggregierte Team-Auslastung (TL: Team, GF: alle) ── */
+let teamTabelleHtml = null; // überlebt Re-Renders beim Personenwechsel
+
+function appendTeamCard() {
+  const grid = document.getElementById('grid');
+  if (document.getElementById('teamCard')) return;
+  const n = liveMode ? liveSicht.mitarbeiter.length : DEMO_VIEWER[viewerRole].sichtbar.length;
+  const div = document.createElement('div');
+  div.className = 'card wide'; div.id = 'teamCard';
+  div.innerHTML = `
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>Team-Auslastung (FLS, aggregiert)</div>
+      <span class="src-badge src-kilanka">Kilanka · invoices</span>
+    </div>
+    <div id="teamTable">${teamTabelleHtml ?? `
+      <button class="btn btn-outline btn-sm" id="teamLoadBtn" onclick="ladeTeamUebersicht()">Auslastung für ${n} Mitarbeiter berechnen</button>
+      <div class="note">Lädt die Cockpit-Daten aller sichtbaren Mitarbeiter (${n} Abrufe, gecacht) und aggregiert Ist gegen das arbeitstags-korrigierte Soll.</div>`}
+    </div>`;
+  grid.appendChild(div);
+}
+
+async function fetchLivePerson(upn) {
+  if (liveCache[upn]) return liveCache[upn];
+  const t = await liveTokens();
+  const r = await fetch(CFG.workerUrl + '/api/mitarbeiter-cockpit?mitarbeiter=' + encodeURIComponent(upn),
+    { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const data = await r.json();
+  liveCache[data.upn] = data;
+  return data;
+}
+
+async function ladeTeamUebersicht() {
+  const btn = document.getElementById('teamLoadBtn');
+  if (btn) btn.disabled = true;
+  const liste = liveMode
+    ? liveSicht.mitarbeiter.map(m => ({ key: m.upn, name: m.name }))
+    : DEMO_VIEWER[viewerRole].sichtbar.map(k => ({ key: k, name: DEMO_PERSONEN[k].person.name }));
+  const rows = [];
+  for (let i = 0; i < liste.length; i += 4) { // Batches à 4 — Worker nicht fluten
+    const batch = liste.slice(i, i + 4);
+    if (btn) btn.textContent = `Lade … ${Math.min(i + batch.length, liste.length)}/${liste.length}`;
+    const res = await Promise.allSettled(batch.map(m =>
+      liveMode ? fetchLivePerson(m.key) : Promise.resolve(DEMO_PERSONEN[m.key])));
+    res.forEach((r, j) => rows.push(r.status === 'fulfilled'
+      ? { name: r.value.person?.name || batch[j].name, a: flsAuswertung(r.value) }
+      : { name: batch[j].name, fehler: (r.reason && r.reason.message) || 'Fehler' }));
+  }
+  rows.sort((x, y) => (x.a?.pct ?? 999) - (y.a?.pct ?? 999)); // kritischste zuerst
+  const ok = rows.filter(r => r.a && r.a.ist != null && r.a.soll);
+  const sumIst = ok.reduce((s, r) => s + r.a.ist, 0);
+  const sumSoll = ok.reduce((s, r) => s + r.a.soll, 0);
+  const gesamtPct = sumSoll ? Math.round(sumIst / sumSoll * 100) : null;
+  const ampel = p => p == null ? 'var(--border-strong)' : p >= 95 ? 'var(--ok)' : p >= 80 ? 'var(--warn)' : 'var(--error)';
+  const zeile = r => r.fehler
+    ? `<tr><td>${esc(r.name)}</td><td colspan="3" style="color:var(--text-muted)">${esc(r.fehler)}</td></tr>`
+    : `<tr>
+        <td>${esc(r.name)}</td>
+        <td style="text-align:right">${fmtNum(r.a.ist,1)} h</td>
+        <td style="text-align:right">${fmtNum(r.a.soll,1)} h${r.a.korr && r.a.korr.abw ? ` <span style="color:var(--text-muted)">(−${r.a.korr.abw} Abw.-Tage)</span>` : ''}</td>
+        <td style="min-width:130px"><div style="display:flex;align-items:center;gap:8px">
+          <div class="bar" style="flex:1;margin:0"><div class="bar-fill" style="width:${Math.min(r.a.pct ?? 0,100)}%;background:${ampel(r.a.pct)}"></div></div>
+          <b style="min-width:38px;text-align:right">${r.a.pct ?? '—'} %</b></div></td>
+      </tr>`;
+  const monat = ok[0]?.a?.monat ? new Date(ok[0].a.monat + '-15').toLocaleDateString('de-DE',{month:'long',year:'numeric'}) : 'Ø-Werte';
+  teamTabelleHtml = `
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px" class="team-table">
+      <thead><tr style="color:var(--text-muted);text-align:left">
+        <th style="padding:4px 6px">Mitarbeiter:in</th><th style="text-align:right">Ist (${monat})</th>
+        <th style="text-align:right">Soll korr.</th><th>Auslastung</th></tr></thead>
+      <tbody>${rows.map(zeile).join('')}</tbody>
+      <tfoot><tr style="border-top:2px solid var(--border-strong);font-weight:700">
+        <td style="padding:6px">Gesamt (${ok.length} MA)</td>
+        <td style="text-align:right">${fmtNum(sumIst,1)} h</td>
+        <td style="text-align:right">${fmtNum(sumSoll,1)} h</td>
+        <td><div style="display:flex;align-items:center;gap:8px">
+          <div class="bar" style="flex:1;margin:0"><div class="bar-fill" style="width:${Math.min(gesamtPct ?? 0,100)}%;background:${ampel(gesamtPct)}"></div></div>
+          <b style="min-width:38px;text-align:right">${gesamtPct ?? '—'} %</b></div></td>
+      </tr></tfoot>
+    </table>
+    <style>.team-table td{padding:4px 6px;border-top:1px solid var(--border)}</style>
+    <div class="note">Soll korr. = Wochensoll ÷ 5 × verfügbare Arbeitstage des Monats (Feiertage Bayern, abzgl. Abwesenheitstage sofern vom Worker geliefert). Sortiert: niedrigste Auslastung zuerst.</div>`;
+  const out = document.getElementById('teamTable');
+  if (out) out.innerHTML = teamTabelleHtml;
 }
 
 function setupLiveViewbar() {
