@@ -246,7 +246,8 @@ const DEMO_PERSONEN = {
     person: { name: 'Beispiel, Mia', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Nord',
       qualifikation: 'Sozialpädagogin (B.A.)', eintritt: '2024-03-01', wochenstundenVertrag: 32.0 },
     urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 11, geplantTage: 5, restTage: 14,
-      regeneration: { h1: '2026-03-13', h2: null } },
+      regeneration: { h1: '2026-03-13', h2: null },
+      geplanteTermine: [{ von: '2026-08-10', bis: '2026-08-14', tage: 5 }] },
     krankheit: { jahr: 2026, tage: 4, vorjahrTage: 9, kindKrankTage: 2, letzteAbwesenheit: '2026-05-12' },
     firmenwagen: { vorhanden: true, modell: 'Seat Arona 1.0 TSI', kennzeichen: 'FS-NW 214',
       kmStand: 48750, kmStandDatum: '2026-07-01', kmBudgetJahr: 25000, kmSeitJahresbeginn: 14900,
@@ -260,7 +261,8 @@ const DEMO_PERSONEN = {
     person: { name: 'Muster, Jonas', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Nord',
       qualifikation: 'Erzieher, systemischer Berater i.A.', eintritt: '2022-09-15', wochenstundenVertrag: 39.0 },
     urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 18, geplantTage: 8, restTage: 4,
-      regeneration: { h1: null, h2: null } },
+      regeneration: { h1: null, h2: null },
+      geplanteTermine: [{ von: '2026-07-27', bis: '2026-07-31', tage: 5 }, { von: '2026-10-05', bis: '2026-10-07', tage: 3 }] },
     krankheit: { jahr: 2026, tage: 12, vorjahrTage: 6, kindKrankTage: 0, letzteAbwesenheit: '2026-06-24' },
     firmenwagen: { vorhanden: true, modell: 'Skoda Kamiq 1.0 TSI', kennzeichen: 'PAF-NW 87',
       kmStand: 61300, kmStandDatum: '2026-06-28', kmBudgetJahr: 25000, kmSeitJahresbeginn: 16400 },
@@ -489,6 +491,14 @@ function renderCards(d, own) {
       <span><span class="dot" style="background:#9ccc9c"></span>Geplant: ${fmtNum(u.geplantTage,1)}</span>
       <span><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage ?? '— (Feld folgt)'}</span>
     </div>
+    ${u.geplanteTermine && u.geplanteTermine.length ? `<div style="margin-top:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.04em;margin-bottom:4px">KOMMENDE URLAUBE</div>
+      ${u.geplanteTermine.slice(0,4).map(t => `<div style="font-size:12px;display:flex;justify-content:space-between;gap:8px;padding:2px 0">
+        <span>${fmtDate(t.von)}${t.bis && t.bis !== t.von ? ' – ' + fmtDate(t.bis) : ''}</span>
+        <span style="color:var(--text-muted)">${fmtNum(t.tage,1)} Tag${t.tage === 1 ? '' : 'e'}</span>
+      </div>`).join('')}
+      ${u.geplanteTermine.length > 4 ? `<div style="font-size:11px;color:var(--text-muted)">+ ${u.geplanteTermine.length - 4} weitere</div>` : ''}
+    </div>` : ''}
     ${u.regeneration ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
       ${[['H1', u.regeneration.h1, new Date() > new Date(u.jahr+'-06-30')],
          ['H2', u.regeneration.h2, new Date() > new Date(u.jahr+'-12-31')]].map(([l, dat, vorbei]) => dat
