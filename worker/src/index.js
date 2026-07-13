@@ -456,6 +456,54 @@ function clientsForUser(allClients, upn, now, qualiMap) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Cockpit-Berechtigungen
+// GF sehen alle, Teamleitungen ihr Team (Azure-AD directReports,
+// dieselbe Hierarchie wie die Organisation-App), alle anderen nur sich.
+// ═══════════════════════════════════════════════════════════════
+const GF_UPNS = [
+  "sonja.peltz@praxisneuewege.de",
+  "markus.peltz@praxisneuewege.de",
+];
+
+// directReports des Aufrufers über SEIN Graph-Token (X-Graph-Token).
+// /me/... garantiert: Es sind zwingend die eigenen Reports — nicht fälschbar.
+async function fetchDirectReports(graphToken) {
+  if (!graphToken) return [];
+  try {
+    const r = await fetch(
+      "https://graph.microsoft.com/v1.0/me/directReports?$select=displayName,userPrincipalName,mail&$top=999",
+      { headers: { Authorization: `Bearer ${graphToken}` } }
+    );
+    if (!r.ok) return [];
+    const { value } = await r.json();
+    return (value || [])
+      .map((u) => ({
+        upn: (u.mail || u.userPrincipalName || "").toLowerCase(),
+        name: u.displayName || u.userPrincipalName || "",
+      }))
+      .filter((u) => u.upn.endsWith(`@${MAIL_DOMAIN}`));
+  } catch {
+    return [];
+  }
+}
+
+// Alle aktiven Mitarbeitenden aus Kilanka (für die GF-Auswahlliste)
+async function alleAktivenMitarbeiter(env) {
+  const users = await fetchCockpitUsers(env);
+  const seen = new Set();
+  const list = [];
+  for (const u of users || []) {
+    if (kDate(u.deletedAt) || isArchived(u.recName)) continue;
+    if (/^\s*nicht\s/i.test(u.recName || "")) continue; // Alteinträge
+    const upn = upnForAttendant(u);
+    if (!upn || seen.has(upn)) continue;
+    seen.add(upn);
+    list.push({ upn, name: u.recName || upn });
+  }
+  return list.sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Mitarbeiter-Cockpit (mitarbeiter-cockpit-beta.html)
 // Defensiv: nicht freigegebene Kilanka-Zweige liefern null statt Fehler.
 // ═══════════════════════════════════════════════════════════════
@@ -696,7 +744,7 @@ function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Graph-Token",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -760,9 +808,38 @@ export default {
       if (!auth.upn.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
-      // V1: strikt nur die eigene Sicht — Team-/GF-Sicht folgt mit Rollenprüfung
       try {
-        const data = await buildCockpit(env, auth.upn, new Date());
+        const caller = auth.upn;
+        const istGf = GF_UPNS.includes(caller);
+        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
+
+        // Sichtbare Mitarbeiter für das Dropdown
+        let sichtbar;
+        if (istGf) {
+          sichtbar = await alleAktivenMitarbeiter(env);
+          if (!sichtbar.some((m) => m.upn === caller)) {
+            sichtbar.unshift({ upn: caller, name: auth.name || caller });
+          }
+        } else {
+          const seen = new Set([caller]);
+          sichtbar = [{ upn: caller, name: auth.name || caller }];
+          for (const r of reports) {
+            if (seen.has(r.upn)) continue;
+            seen.add(r.upn);
+            sichtbar.push(r);
+          }
+        }
+
+        // Ziel: eigener Account oder berechtigte Fremd-Sicht
+        const target = (url.searchParams.get("mitarbeiter") || "").toLowerCase() || caller;
+        const erlaubt = target === caller || istGf || reports.some((r) => r.upn === target);
+        if (!erlaubt) {
+          return json({ error: "Keine Berechtigung für diese Mitarbeiter-Sicht" }, 403, origin);
+        }
+
+        const data = await buildCockpit(env, target, new Date());
+        data.sicht = { rolle, mitarbeiter: sichtbar };
         return json(data, 200, origin);
       } catch (e) {
         return json({ error: `Cockpit-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);

@@ -222,7 +222,7 @@ const CFG = {
   redirectUri: 'https://apps.praxisneuewege.de/mitarbeiter-cockpit-beta.html',
   workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
-const SCOPES = ['User.Read'];
+const SCOPES = ['User.Read', 'User.ReadBasic.All'];
 const APP_VERSION = 'BETA-fca75b7'; // auto-updated on deploy
 
 let msalInstance, currentAccount, accessToken;
@@ -323,14 +323,15 @@ function fillPersonSelect() {
   sel.value = v.sichtbar[0];
 }
 
-function renderCockpit() {
+function renderCockpit() { // Demo-Pfad
   const v = DEMO_VIEWER[viewerRole];
   const sel = document.getElementById('personSelect');
   const key = (v.sichtbar.length > 1 && sel.value) ? sel.value : v.sichtbar[0];
-  const d = DEMO_PERSONEN[key];
-  cockpitData = d;
+  renderCards(DEMO_PERSONEN[key], viewerRole === 'fk');
+}
 
-  const own = viewerRole === 'fk';
+function renderCards(d, own) {
+  cockpitData = d;
   document.getElementById('pageTitle').textContent = own ? 'Meine Übersicht' : `Übersicht: ${d.person.name}`;
   document.getElementById('pageSub').textContent =
     `Stand: ${new Date().toLocaleDateString('de-DE')} · Sichtbar für ${own ? 'dich und deine Führungskraft' : 'Mitarbeiter:in und Führungskraft'}`;
@@ -469,7 +470,16 @@ function renderCockpit() {
   </div>`;
 }
 
-function reload() { renderCockpit(); }
+function reload() {
+  if (liveMode) {
+    const sel = document.getElementById('personSelect');
+    const upn = (sel.style.display !== 'none' && sel.value) ? sel.value : null;
+    Object.keys(liveCache).forEach(k => delete liveCache[k]);
+    loadLive(upn);
+  } else {
+    renderCockpit();
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════
  * DEMO-MODUS
@@ -525,8 +535,54 @@ async function getToken() {
   } catch(e) { await msalInstance.acquireTokenRedirect({ scopes: SCOPES }); }
 }
 
-/* Angemeldet: versucht den (künftigen) Worker-Endpunkt; solange er
- * nicht existiert (404), automatisch Demo-Daten mit Hinweis. */
+/* ── Live-Modus: Worker-Endpunkt mit Team-/GF-Dropdown ── */
+let liveMode = false, liveSicht = null;
+const liveCache = {};
+
+async function liveTokens() {
+  const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+  return { id: r.idToken, graph: r.accessToken };
+}
+
+async function loadLive(upn) {
+  const grid = document.getElementById('grid');
+  if (upn && liveCache[upn]) { renderLivePerson(liveCache[upn]); return true; }
+  grid.innerHTML = '<div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div>';
+  try {
+    const t = await liveTokens();
+    const url = CFG.workerUrl + '/api/mitarbeiter-cockpit' + (upn ? '?mitarbeiter=' + encodeURIComponent(upn) : '');
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    liveCache[data.upn] = data;
+    if (!liveSicht && data.sicht) { liveSicht = data.sicht; setupLiveViewbar(); }
+    renderLivePerson(data);
+    return true;
+  } catch(e) { console.warn('Live nicht verfügbar:', e.message); return false; }
+}
+
+function renderLivePerson(d) {
+  renderCards(d, d.upn === (currentAccount?.username || '').toLowerCase());
+}
+
+function setupLiveViewbar() {
+  const bar = document.querySelector('.viewbar');
+  const sel = document.getElementById('personSelect');
+  if (!liveSicht || !liveSicht.mitarbeiter || liveSicht.mitarbeiter.length <= 1) {
+    bar.style.display = 'none'; return; // Fachkraft: nur eigene Sicht
+  }
+  bar.style.display = '';
+  document.getElementById('rolePills').style.display = 'none';
+  document.getElementById('lockNote').style.display = 'none';
+  bar.querySelector('label').textContent = 'Mitarbeiter';
+  sel.style.display = '';
+  sel.innerHTML = liveSicht.mitarbeiter.map(m =>
+    `<option value="${esc(m.upn)}">${esc(m.name)}</option>`).join('');
+  const self = (currentAccount?.username || '').toLowerCase();
+  sel.value = liveSicht.mitarbeiter.some(m => m.upn === self) ? self : liveSicht.mitarbeiter[0].upn;
+  sel.onchange = () => loadLive(sel.value);
+}
+
 async function showApp() {
   document.getElementById('loginScreen').style.display = 'none';
   const app = document.getElementById('appScreen');
@@ -534,19 +590,7 @@ async function showApp() {
   document.getElementById('userBadge').style.display = 'flex';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   document.getElementById('logoutBtn').style.display = '';
-  try {
-    const idToken = (await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount })).idToken;
-    const r = await fetch(`${CFG.workerUrl}/api/mitarbeiter-cockpit`, { headers: { Authorization: 'Bearer ' + idToken } });
-    if (r.ok) {
-      const live = await r.json();
-      DEMO_PERSONEN['live'] = live;
-      DEMO_VIEWER.fk = { name: live.person.name || live.upn, self: 'live', sichtbar: ['live'] };
-      viewerRole = 'fk';
-      document.querySelector('.viewbar').style.display = 'none'; // V1: nur eigene Sicht
-      renderCockpit();
-      return;
-    }
-  } catch(e) { console.warn('Live-Endpunkt noch nicht verfügbar:', e.message); }
+  if (await loadLive(null)) { liveMode = true; return; }
   // Fallback: Demo-Daten
   document.getElementById('demoBar').style.display = 'flex';
   renderRolePills(); fillPersonSelect(); renderCockpit();
