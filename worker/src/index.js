@@ -631,6 +631,35 @@ async function fetchCockpitInvoices(env) {
   return alle;
 }
 
+// ── Feiertage Bayern (Gauß'sche Osterformel) — identisch zum Frontend-Helper
+// in mitarbeiter-cockpit-beta.html, für das arbeitstags-korrigierte Soll ──
+function ostersonntag(jahr) {
+  const a = jahr % 19, b = Math.floor(jahr / 100), c = jahr % 100, d = Math.floor(b / 4),
+    e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3),
+    h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4,
+    l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  return new Date(Date.UTC(jahr, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1));
+}
+function feiertageBayern(jahr) { // inkl. Mariä Himmelfahrt (gesamtes Einzugsgebiet)
+  const plus = (d, t) => { const x = new Date(d); x.setUTCDate(x.getUTCDate() + t); return x; };
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const o = ostersonntag(jahr);
+  return new Set([`${jahr}-01-01`, `${jahr}-01-06`, iso(plus(o, -2)), iso(plus(o, 1)),
+    `${jahr}-05-01`, iso(plus(o, 39)), iso(plus(o, 50)), iso(plus(o, 60)),
+    `${jahr}-08-15`, `${jahr}-10-03`, `${jahr}-11-01`, `${jahr}-12-25`, `${jahr}-12-26`]);
+}
+function arbeitstageBayern(von, bis) { // Date-Objekte (UTC), Grenzen inklusive
+  if (!von || !bis || bis < von) return 0;
+  const ft = new Set();
+  for (let j = von.getUTCFullYear(); j <= bis.getUTCFullYear(); j++) feiertageBayern(j).forEach((t) => ft.add(t));
+  let n = 0;
+  for (let d = new Date(von); d <= bis; d.setUTCDate(d.getUTCDate() + 1)) {
+    const wt = d.getUTCDay();
+    if (wt !== 0 && wt !== 6 && !ft.has(d.toISOString().slice(0, 10))) n++;
+  }
+  return n;
+}
+
 function decimalToNumber(w) {
   if (w == null) return 0;
   if (typeof w === "number") return w;
@@ -640,6 +669,7 @@ function decimalToNumber(w) {
 function classifyAbsence(a) {
   const t = (a.type || a.absenceType?.internalName || "").toLowerCase();
   const n = (a.absenceType?.name || "").toLowerCase();
+  if (n.includes("regeneration") || t.includes("regeneration")) return "regeneration";
   if (t === "vacation" || n.includes("urlaub")) return "urlaub";
   if (n.includes("kind")) return "kindkrank";
   if (t === "sick" || t === "illness" || n.includes("krank")) return "krank";
@@ -776,6 +806,7 @@ async function buildCockpit(env, upn, now) {
   const abs = await fetchCockpitAbsences(env);
   if (abs.verfuegbar && person && person.kilankaId) {
     let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
+    let regenH1 = null, regenH2 = null;
     for (const a of abs.data || []) {
       if (String(a.user?.id) !== person.kilankaId) continue;
       if ((a.status || "").toLowerCase() !== "approved") continue;
@@ -786,6 +817,11 @@ async function buildCockpit(env, upn, now) {
       if (art === "urlaub") { begin > now ? (uGeplant += tage) : (uGenommen += tage); }
       else if (art === "krank") { kTage += tage; if (!letzte || begin > letzte) letzte = begin; }
       else if (art === "kindkrank") { kindKrank += tage; }
+      else if (art === "regeneration") {
+        // TVöD SuE: je 1 Tag pro Halbjahr — frühesten Termin je Halbjahr merken
+        if (begin.getUTCMonth() < 6) { if (!regenH1 || begin < regenH1) regenH1 = begin; }
+        else { if (!regenH2 || begin < regenH2) regenH2 = begin; }
+      }
     }
     urlaub = {
       jahr,
@@ -793,6 +829,7 @@ async function buildCockpit(env, upn, now) {
       genommenTage: Math.round(uGenommen * 2) / 2,
       geplantTage: Math.round(uGeplant * 2) / 2,
       restTage: null,
+      regeneration: { h1: isoDate(regenH1), h2: isoDate(regenH2) },
     };
     krankheit = {
       jahr,
@@ -832,6 +869,28 @@ async function buildCockpit(env, upn, now) {
     fls.istMonat = monatIso;
     fls.istQuelle = approvalIds.size > 0 ? "rechnungen (approval-id)" : "rechnungen (klient-fallback)";
     fls.istRechnungen = treffer;
+
+    // Abwesenheitstage im Ist-Monat — Basis für das arbeitstags-korrigierte
+    // Soll im Cockpit (fls-Soll ÷ 5 × [Arbeitstage − Abwesenheitstage]).
+    // Alle genehmigten Abwesenheiten zählen (Urlaub, Krankheit, Kind krank,
+    // Regeneration, Fortbildung/Sonstiges) — jede reduziert die Verfügbarkeit.
+    // Anteilige Zählung: Arbeitstage der Überlappung mit dem Monat (Mo–Fr,
+    // Feiertage Bayern), gedeckelt auf totalDays (halbe Tage, Teilzeitmuster).
+    if (abs.verfuegbar && person && person.kilankaId) {
+      const mStart = new Date(Date.UTC(vormonat.getUTCFullYear(), vormonat.getUTCMonth(), 1));
+      const mEnde = new Date(Date.UTC(vormonat.getUTCFullYear(), vormonat.getUTCMonth() + 1, 0));
+      let abwTage = 0;
+      for (const a of abs.data || []) {
+        if (String(a.user?.id) !== person.kilankaId) continue;
+        if ((a.status || "").toLowerCase() !== "approved") continue;
+        const b = kDate(a.begin), e = kDate(a.end) || kDate(a.begin);
+        if (!b || !e || e < mStart || b > mEnde) continue;
+        const at = arbeitstageBayern(b > mStart ? b : mStart, e < mEnde ? e : mEnde);
+        const total = decimalToNumber(a.totalDays);
+        abwTage += total > 0 ? Math.min(at, total) : at;
+      }
+      fls.abwesenheitsTageImMonat = Math.round(abwTage * 2) / 2;
+    }
   } catch (e) { /* Rechnungs-Zweig optional */ }
 
   return {
