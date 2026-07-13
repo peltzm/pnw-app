@@ -25,9 +25,17 @@
  *      Liste "Fuhrpark" (Kennzeichen, Modell, kmStand, kmStandDatum,
  *      kmBudgetJahr, ZugeordnetUPN) — Abruf clientseitig per Graph
  *      wie in der Organisation-App, NICHT über diesen Worker.
- *   5. FLS-Ist: Leistungsdokumentation ist (Stand 07/2026) nicht im
- *      freigegebenen API-Katalog → Support-Anfrage. Bis dahin liefert
- *      der Endpunkt istWochenstunden: null, istQuelle: "offen".
+ *   5. FLS-Ist: VERIFIZIERT 13.07.2026 über accounting/invoices —
+ *      Probing gegen 2.719 Echt-Rechnungen, alle Ämter einheitlich.
+ *      Regel: Ist = Summe lines.quantity aller Zeilen MIT approval.id
+ *      (FLS/SPFH §31/EB §30). Zeilen ohne approval.id ausschließen
+ *      (Kilometer [Kostenstelle 498, quantity=km!], Telefon-/Handgeld-
+ *      pauschalen, Bürotätigkeiten). Zuordnung zum Mitarbeiter über
+ *      approval.id → quotas.approvals.id → action → Hauptbetreuer
+ *      (dafür "id" in approvals des CLIENT_GRAPH ergänzen!) —
+ *      Fallback: invoice.client.id → Hauptbetreuer.
+ *      Label im Cockpit: "FLS-Ist (abgerechnet, Monat X)" — Rechnungen
+ *      laufen dem Kalender um den Abrechnungslauf hinterher.
  * ═══════════════════════════════════════════════════════════════ */
 
 // ── 1. ZUSÄTZLICHE GRAPHEN ────────────────────────────────────────
@@ -58,6 +66,43 @@ const ABSENCES_GRAPH = {
   user: { id: 1, recName: 1 },
   $limit: 1000,
 };
+
+// accounting/invoices: schlanker Graph für FLS-Ist (verifiziert 13.07.2026)
+const INVOICES_GRAPH = {
+  id: 1, number: 1, date: 1,
+  deliveryFrom: 1, deliveryUntil: 1,   // Leistungszeitraum ($date)
+  deletedAt: 1, stateType: { name: 1 },
+  client: { id: 1, recName: 1 },
+  recipient: { recName: 1 },           // Kostenträger (LA PAF, LA Kelheim, …)
+  lines: {
+    approval: { id: 1 },               // gesetzt = abrechenbare Betreuungsstunden
+    description: 1,
+    quantity: 1,                       // $decimal — Stunden (bei approval-Zeilen)
+    service: { name: 1 },
+    costCenter: 1,                     // 555 = Betreuung, 498 = Kilometer
+  },
+  $limit: 1000,                        // 2.719 Rechnungen gesamt → 3 Seiten via $offset
+};
+
+// FLS-Ist eines Monats je approval.id aufsummieren
+// (approvalIds = Set der approval-IDs aus den Maßnahmen des Mitarbeiters)
+function flsIstAusRechnungen(invoices, approvalIds, monatIso /* "2026-06" */) {
+  let summe = 0, rechnungen = 0;
+  for (const inv of invoices || []) {
+    if (kDate(inv.deletedAt)) continue;
+    const von = kDate(inv.deliveryFrom);
+    if (!von || von.toISOString().slice(0, 7) !== monatIso) continue;
+    let treffer = false;
+    for (const l of inv.lines || []) {
+      const apId = l.approval?.id;
+      if (!apId || !approvalIds.has(apId)) continue;   // Pauschalen/km fliegen raus
+      const q = parseFloat(l.quantity?.$decimal ?? l.quantity ?? 0) || 0;
+      summe += q; treffer = true;
+    }
+    if (treffer) rechnungen++;
+  }
+  return { stunden: Math.round(summe * 100) / 100, rechnungen, monat: monatIso };
+}
 
 // ── 2. AUFBEREITUNG ──────────────────────────────────────────────
 // Nutzt vorhandene Helfer aus index.js: kDate, isCurrent, isArchived,
@@ -171,8 +216,12 @@ async function buildCockpit(env, upn, now) {
     klienten: { aktiv: hb + mb + v, hb, mb, v },
     fls: {
       sollWochenstunden: Math.round(sollWochenstunden * 10) / 10,
-      istWochenstunden: null,
-      istQuelle: "offen", // Leistungsdoku nicht im API-Graphen (Support-Anfrage)
+      // Ist: flsIstAusRechnungen() mit den approval-IDs des Mitarbeiters
+      // aufrufen (approvals.id im CLIENT_GRAPH freigeben, IDs beim
+      // Klienten-Durchlauf oben einsammeln). Vormonat als Standard.
+      istMonatsstunden: null,          // ← flsIstAusRechnungen(...).stunden
+      istMonat: null,                  // ← z. B. "2026-06"
+      istQuelle: "rechnungen",         // verifiziert 13.07.2026
     },
   };
 }
