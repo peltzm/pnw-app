@@ -603,14 +603,25 @@ async function fetchCockpitUsers(env) {
 }
 
 async function fetchCockpitAbsences(env) {
-  if (cockpitAbsencesCache.fetchedAt && Date.now() - cockpitAbsencesCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
-    return cockpitAbsencesCache;
+  const alter = Date.now() - (cockpitAbsencesCache.fetchedAt || 0);
+  // Erfolgreiche Antworten: volle TTL. Fehlschläge: nur 45 s halten, damit ein
+  // transienter 429 (z. B. durch die Team-Aggregat-Abfrage) den Zweig nicht
+  // 10 Minuten lang als "Modell nicht freigegeben" erscheinen lässt.
+  if (cockpitAbsencesCache.fetchedAt) {
+    if (cockpitAbsencesCache.verfuegbar === true && alter < CACHE_TTL_MIN * 60 * 1000) return cockpitAbsencesCache;
+    if (cockpitAbsencesCache.verfuegbar === false && alter < 45 * 1000) return cockpitAbsencesCache;
+  }
   try {
     const data = await kilankaPost(env, "users/absences", COCKPIT_ABSENCES_GRAPH);
     cockpitAbsencesCache = { data, fetchedAt: Date.now(), verfuegbar: true };
   } catch (e) {
-    // Modell (noch) nicht freigegeben → Cockpit liefert null-Zweige
-    cockpitAbsencesCache = { data: null, fetchedAt: Date.now(), verfuegbar: false };
+    const strukturell = /Kilanka 4(00|03)/.test(e.message || ""); // Graph nicht freigegeben
+    if (!strukturell && cockpitAbsencesCache.verfuegbar === true && cockpitAbsencesCache.data) {
+      // Transient (429/5xx) und alte Daten vorhanden → stale weiterverwenden
+      cockpitAbsencesCache.fetchedAt = Date.now() - CACHE_TTL_MIN * 60 * 1000 + 60 * 1000; // Retry in ~1 min
+      return cockpitAbsencesCache;
+    }
+    cockpitAbsencesCache = { data: null, fetchedAt: Date.now(), verfuegbar: false, transient: !strukturell };
   }
   return cockpitAbsencesCache;
 }
