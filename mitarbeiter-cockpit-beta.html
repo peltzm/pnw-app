@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Mitarbeiter-Cockpit (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.version-badge{font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;min-height:28px;border-radius:4px}
+.btn-ghost:hover{border-color:var(--accent-mid);color:var(--accent)}
+.btn-text{background:none;border:none;color:var(--text-muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-top:12px}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:64px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* ── APP ── */
+#appScreen{display:none;flex-direction:column;min-height:calc(100dvh - var(--hdr-h))}
+.page-header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header-left h2{font-size:17px;font-weight:600;color:var(--text)}
+.page-header-left p{font-size:12px;color:var(--text-muted);margin-top:1px}
+.page-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* Demo-Hinweisleiste */
+.demo-bar{display:none;align-items:center;gap:8px;background:var(--warn-bg);border-bottom:1px solid #f3dcb8;color:var(--warn);font-size:12px;padding:7px 20px;flex-wrap:wrap}
+.demo-bar strong{font-weight:700}
+
+/* Sichtwahl (Berechtigungs-Simulation) */
+.viewbar{padding:10px 20px;display:flex;align-items:center;gap:10px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.viewbar label{font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.pill-group{display:flex;gap:6px;flex-wrap:wrap}
+.pill{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:4px 13px;font-size:12px;font-family:inherit;cursor:pointer;color:var(--text-muted);transition:all .12s}
+.pill:hover{border-color:var(--accent-mid);color:var(--accent)}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.select{height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);outline:none;max-width:240px}
+.select:focus{border-color:var(--accent-mid)}
+.lock-note{font-size:11px;color:var(--text-hint);display:flex;align-items:center;gap:5px}
+
+/* ── GRID & CARDS ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;padding:18px 20px 60px;max-width:1240px;margin:0 auto;width:100%}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;left:0;top:0;right:0;height:4px;background:var(--border-strong)}
+.card.c-profile::before{background:var(--accent)}
+.card.c-urlaub::before{background:var(--ok)}
+.card.c-krank::before{background:var(--warn)}
+.card.c-auto::before{background:#546e7a}
+.card.c-klienten::before{background:var(--blue)}
+.card.c-fls::before{background:var(--accent-mid)}
+.card.wide{grid-column:1 / -1}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px}
+.card-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.card-title svg{width:15px;height:15px;color:var(--text-muted);flex-shrink:0}
+.src-badge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-radius:4px;padding:2px 7px;white-space:nowrap}
+.src-kilanka{background:var(--accent-light);color:var(--accent)}
+.src-fuhrpark{background:#eceff1;color:#546e7a}
+.src-offen{background:var(--warn-bg);color:var(--warn)}
+
+/* Profil */
+.profile-row{display:flex;gap:14px;align-items:center;margin-bottom:12px}
+.avatar{width:64px;height:64px;border-radius:50%;background:var(--accent-mid);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0;border:2px solid var(--border);overflow:hidden}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.profile-name{font-size:16px;font-weight:700;line-height:1.3}
+.profile-role{font-size:12px;color:var(--text-muted)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:12px}
+.kv dt{color:var(--text-hint)}
+.kv dd{color:var(--text);font-weight:500;text-align:right}
+
+/* Kennzahlen */
+.big-row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.big{font-size:30px;font-weight:700;line-height:1}
+.big-unit{font-size:12px;color:var(--text-muted)}
+.sub-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:12px;margin-top:8px}
+.sub-grid.cols3{grid-template-columns:1fr 1fr 1fr}
+.sub-item .sl{color:var(--text-hint);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px}
+.sub-item .sv{font-weight:600}
+
+/* Balken */
+.bar{height:8px;border-radius:4px;background:var(--bg);border:1px solid var(--border);overflow:hidden;display:flex}
+.bar-fill{height:100%;transition:width .4s ease}
+.bar-legend{display:flex;gap:12px;font-size:10.5px;color:var(--text-muted);margin-top:5px;flex-wrap:wrap}
+.dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:1px}
+
+/* Ampel / Status */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:12px;padding:2px 10px}
+.chip-ok{background:var(--ok-bg);color:var(--ok)}
+.chip-warn{background:var(--warn-bg);color:var(--warn)}
+.chip-err{background:var(--error-bg);color:var(--error)}
+
+.kennzeichen{display:inline-block;font-family:'Kodchasan',monospace;font-weight:700;font-size:15px;border:1.5px solid var(--text);border-radius:5px;padding:1px 10px;background:#fff;letter-spacing:1px}
+.kennzeichen::before{content:'';display:inline-block;width:8px;height:16px;background:#003399;border-radius:2px 0 0 2px;margin:0 8px 0 -10px;vertical-align:-3px}
+
+.note{font-size:11px;color:var(--text-hint);margin-top:10px;line-height:1.5}
+.footer-note{max-width:1240px;margin:0 auto;padding:0 20px 40px;font-size:11px;color:var(--text-hint);line-height:1.7}
+.footer-note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
+
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:60px 20px;font-size:13px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr;padding:14px 12px 50px}
+  .viewbar,.page-header{padding-left:12px;padding-right:12px}
+  .big{font-size:26px}
+}
+@media (prefers-reduced-motion:reduce){
+  .bar-fill{transition:none}.spinner{animation-duration:1.6s}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand" onclick="location.href='apps.html'">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <span>Mitarbeiter-Cockpit</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge">
+      <div class="user-dot"></div>
+      <span id="userName"></span>
+    </div>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <div class="login-title">Mitarbeiter-Cockpit <span class="beta-badge">BETA</span></div>
+    <div class="login-desc">Persönliche Übersicht: Urlaub, Krankheitstage, Firmenwagen, Klienten und Fachleistungsstunden. Sichtbar nur für dich und deine Führungskraft.</div>
+    <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
+      <svg width="16" height="16" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <button class="btn-text" onclick="startDemo()">Demo-Modus ohne Anmeldung starten</button>
+    <div class="alert alert-error" id="loginError" style="display:none"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="demo-bar" id="demoBar">
+    <strong>Demo-Modus</strong><span>— alle Zahlen und Personen sind fiktive Beispieldaten. Live-Anbindung über den Kilanka-Proxy folgt.</span>
+  </div>
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2 id="pageTitle">Meine Übersicht</h2>
+      <p id="pageSub">Stand: —</p>
+    </div>
+    <div class="page-header-actions">
+      <button class="btn btn-outline btn-sm" onclick="reload()" id="refreshBtn" style="padding:5px 12px;font-size:12px;min-height:30px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        Aktualisieren
+      </button>
+    </div>
+  </div>
+
+  <div class="viewbar">
+    <label>Ansicht als</label>
+    <div class="pill-group" id="rolePills"></div>
+    <select class="select" id="personSelect" onchange="renderCockpit()" style="display:none"></select>
+    <span class="lock-note" id="lockNote">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Fachkräfte sehen ausschließlich die eigene Seite
+    </span>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div>
+  </div>
+
+  <div class="footer-note">
+    <strong>Datenquellen (Zielbild):</strong> Stammdaten, Sollstunden, Urlaub und Krankheitstage aus Kilanka (<code>users</code>, <code>users/absences</code>) · Klienten und FLS-Soll aus <code>clients</code> (attendants, quotas/timeBase) über den bestehenden Worker <code>pnw-kilanka-proxy</code> · Firmenwagen aus dem Fuhrpark (SharePoint-Liste/DKV, nicht in Kilanka) · FLS-Ist: Leistungsdokumentation ist noch nicht im API-Graphen freigegeben — Anfrage an Kilanka-Support offen. Berechtigung: eigene Seite für alle, Team-Sicht für Teamleitungen, Gesamtsicht für GF (Entra-ID-Gruppen, serverseitig im Worker geprüft).
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zur Organisation-App / Berichtsgenerator
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/mitarbeiter-cockpit-beta.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read'];
+const APP_VERSION = 'BETA-dev'; // auto-updated on deploy
+
+let msalInstance, currentAccount, accessToken;
+let demoMode = false;
+let viewerRole = 'fk';        // fk | tl | gf
+let cockpitData = null;       // Daten der aktuell angezeigten Person
+
+/* ═══════════════════════════════════════════════════════════
+ * DEMO-DATEN — fiktive Personen, realistische Struktur.
+ * Die Struktur entspricht 1:1 dem geplanten Worker-Response
+ * von GET /api/mitarbeiter-cockpit (siehe worker/src/cockpit-
+ * endpunkt-entwurf.js) → Zusammenführung = Fetch statt Konstante.
+ * ═══════════════════════════════════════════════════════════ */
+const DEMO_TEAMS = {
+  'Team Beispiel-Nord': ['mia.beispiel', 'jonas.muster'],
+  'Team Beispiel-Süd': ['sara.probe']
+};
+const DEMO_PERSONEN = {
+  'mia.beispiel': {
+    upn: 'mia.beispiel@praxisneuewege.de',
+    person: { name: 'Beispiel, Mia', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Nord',
+      qualifikation: 'Sozialpädagogin (B.A.)', eintritt: '2024-03-01', wochenstundenVertrag: 32.0 },
+    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 11, geplantTage: 5, restTage: 14 },
+    krankheit: { jahr: 2026, tage: 4, vorjahrTage: 9, kindKrankTage: 2, letzteAbwesenheit: '2026-05-12' },
+    firmenwagen: { vorhanden: true, modell: 'Seat Arona 1.0 TSI', kennzeichen: 'FS-NW 214',
+      kmStand: 48750, kmStandDatum: '2026-07-01', kmBudgetJahr: 25000, kmSeitJahresbeginn: 14900 },
+    klienten: { aktiv: 7, hb: 5, mb: 1, v: 1 },
+    fls: { sollWochenstunden: 26.5, istWochenstunden: null, istQuelle: 'offen',
+      istDurchschnitt4Wochen: 24.1 /* Demo-Platzhalter */ }
+  },
+  'jonas.muster': {
+    upn: 'jonas.muster@praxisneuewege.de',
+    person: { name: 'Muster, Jonas', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Nord',
+      qualifikation: 'Erzieher, systemischer Berater i.A.', eintritt: '2022-09-15', wochenstundenVertrag: 39.0 },
+    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 18, geplantTage: 8, restTage: 4 },
+    krankheit: { jahr: 2026, tage: 12, vorjahrTage: 6, kindKrankTage: 0, letzteAbwesenheit: '2026-06-24' },
+    firmenwagen: { vorhanden: true, modell: 'Skoda Kamiq 1.0 TSI', kennzeichen: 'PAF-NW 87',
+      kmStand: 61300, kmStandDatum: '2026-06-28', kmBudgetJahr: 25000, kmSeitJahresbeginn: 16400 },
+    klienten: { aktiv: 9, hb: 7, mb: 2, v: 0 },
+    fls: { sollWochenstunden: 33.0, istWochenstunden: null, istQuelle: 'offen',
+      istDurchschnitt4Wochen: 33.8 }
+  },
+  'sara.probe': {
+    upn: 'sara.probe@praxisneuewege.de',
+    person: { name: 'Probe, Sara', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Süd',
+      qualifikation: 'Sozialarbeiterin (M.A.)', eintritt: '2025-11-01', wochenstundenVertrag: 20.0 },
+    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 6, geplantTage: 0, restTage: 24 },
+    krankheit: { jahr: 2026, tage: 1, vorjahrTage: 0, kindKrankTage: 0, letzteAbwesenheit: '2026-02-03' },
+    firmenwagen: { vorhanden: false },
+    klienten: { aktiv: 4, hb: 3, mb: 1, v: 0 },
+    fls: { sollWochenstunden: 15.0, istWochenstunden: null, istQuelle: 'offen',
+      istDurchschnitt4Wochen: 13.2 }
+  }
+};
+const DEMO_VIEWER = {
+  fk: { name: 'Beispiel, Mia', self: 'mia.beispiel', sichtbar: ['mia.beispiel'] },
+  tl: { name: 'Leitung, Tobias (TL Nord)', self: 'jonas.muster', sichtbar: DEMO_TEAMS['Team Beispiel-Nord'] },
+  gf: { name: 'Geschäftsführung', self: 'mia.beispiel', sichtbar: Object.keys(DEMO_PERSONEN) }
+};
+
+/* ═══════════════════════════════════════════════════════════
+ * HILFSFUNKTIONEN
+ * ═══════════════════════════════════════════════════════════ */
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+const fmtNum = (n, d=0) => n == null ? '—' : n.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const initials = name => (name||'').split(/[,\s]+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase();
+
+/* Firmenwagen-Hochrechnung: km seit Jahresbeginn linear aufs Jahr */
+function kmPrognose(fw) {
+  const now = new Date(), start = new Date(now.getFullYear(),0,1);
+  const anteil = (now - start) / (new Date(now.getFullYear()+1,0,1) - start);
+  return anteil > 0 ? Math.round(fw.kmSeitJahresbeginn / anteil) : null;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * RENDERING
+ * ═══════════════════════════════════════════════════════════ */
+function renderRolePills() {
+  const wrap = document.getElementById('rolePills');
+  const roles = [['fk','Fachkraft'],['tl','Teamleitung'],['gf','Geschäftsführung']];
+  wrap.innerHTML = roles.map(([k,l]) =>
+    `<button class="pill ${viewerRole===k?'active':''}" onclick="setRole('${k}')">${l}</button>`).join('');
+}
+function setRole(r) {
+  viewerRole = r;
+  renderRolePills();
+  fillPersonSelect();
+  renderCockpit();
+}
+function fillPersonSelect() {
+  const sel = document.getElementById('personSelect');
+  const v = DEMO_VIEWER[viewerRole];
+  if (v.sichtbar.length <= 1) { sel.style.display = 'none'; sel.innerHTML=''; return; }
+  sel.style.display = '';
+  sel.innerHTML = v.sichtbar.map(k =>
+    `<option value="${k}">${esc(DEMO_PERSONEN[k].person.name)} — ${esc(DEMO_PERSONEN[k].person.team)}</option>`).join('');
+  sel.value = v.sichtbar[0];
+}
+
+function renderCockpit() {
+  const v = DEMO_VIEWER[viewerRole];
+  const sel = document.getElementById('personSelect');
+  const key = (v.sichtbar.length > 1 && sel.value) ? sel.value : v.sichtbar[0];
+  const d = DEMO_PERSONEN[key];
+  cockpitData = d;
+
+  const own = viewerRole === 'fk';
+  document.getElementById('pageTitle').textContent = own ? 'Meine Übersicht' : `Übersicht: ${d.person.name}`;
+  document.getElementById('pageSub').textContent =
+    `Stand: ${new Date().toLocaleDateString('de-DE')} · Sichtbar für ${own ? 'dich und deine Führungskraft' : 'Mitarbeiter:in und Führungskraft'}`;
+  document.getElementById('lockNote').style.display = own ? '' : 'none';
+
+  const u = d.urlaub, k = d.krankheit, fw = d.firmenwagen, kl = d.klienten, fls = d.fls;
+  const uPctGen = Math.round(u.genommenTage / u.anspruchTage * 100);
+  const uPctPlan = Math.round(u.geplantTage / u.anspruchTage * 100);
+  const prog = fw.vorhanden ? kmPrognose(fw) : null;
+  const kmChip = !fw.vorhanden ? '' : prog <= fw.kmBudgetJahr
+    ? `<span class="chip chip-ok">Prognose im Budget</span>`
+    : prog <= fw.kmBudgetJahr * 1.1
+      ? `<span class="chip chip-warn">Prognose leicht über Budget</span>`
+      : `<span class="chip chip-err">Prognose deutlich über Budget</span>`;
+  const flsIst = fls.istWochenstunden ?? fls.istDurchschnitt4Wochen;
+  const flsPct = fls.sollWochenstunden ? Math.min(120, Math.round(flsIst / fls.sollWochenstunden * 100)) : 0;
+  const flsChip = flsPct >= 95 ? `<span class="chip chip-ok">${flsPct} % Auslastung</span>`
+    : flsPct >= 80 ? `<span class="chip chip-warn">${flsPct} % Auslastung</span>`
+    : `<span class="chip chip-err">${flsPct} % Auslastung</span>`;
+
+  document.getElementById('grid').innerHTML = `
+  <!-- PROFIL -->
+  <div class="card c-profile">
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Persönliche Daten</div>
+      <span class="src-badge src-kilanka">Kilanka · users</span>
+    </div>
+    <div class="profile-row">
+      <div class="avatar">${initials(d.person.name)}</div>
+      <div>
+        <div class="profile-name">${esc(d.person.name)}</div>
+        <div class="profile-role">${esc(d.person.rolle)} · ${esc(d.person.team)}</div>
+      </div>
+    </div>
+    <dl class="kv">
+      <dt>Qualifikation</dt><dd>${esc(d.person.qualifikation)}</dd>
+      <dt>Eintritt</dt><dd>${fmtDate(d.person.eintritt)}</dd>
+      <dt>Vertragl. Wochenstunden</dt><dd>${fmtNum(d.person.wochenstundenVertrag,1)} h</dd>
+      <dt>E-Mail</dt><dd>${esc(d.upn)}</dd>
+    </dl>
+  </div>
+
+  <!-- URLAUB -->
+  <div class="card c-urlaub">
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8c1-4-4-6-4-6S8 4 9 8"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M4 12c2-3 6-4 8-4s6 1 8 4"/></svg>Urlaub ${u.jahr}</div>
+      <span class="src-badge src-kilanka">Kilanka · absences</span>
+    </div>
+    <div class="big-row"><span class="big">${u.restTage}</span><span class="big-unit">Resttage verfügbar</span></div>
+    <div class="bar">
+      <div class="bar-fill" style="width:${uPctGen}%;background:var(--ok)"></div>
+      <div class="bar-fill" style="width:${uPctPlan}%;background:#9ccc9c"></div>
+    </div>
+    <div class="bar-legend">
+      <span><span class="dot" style="background:var(--ok)"></span>Genommen: ${u.genommenTage}</span>
+      <span><span class="dot" style="background:#9ccc9c"></span>Geplant: ${u.geplantTage}</span>
+      <span><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage}</span>
+    </div>
+  </div>
+
+  <!-- KRANKHEIT -->
+  <div class="card c-krank">
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Krankheitstage ${k.jahr}</div>
+      <span class="src-badge src-kilanka">Kilanka · absences</span>
+    </div>
+    <div class="big-row"><span class="big">${k.tage}</span><span class="big-unit">Tage seit Jahresbeginn</span></div>
+    <div class="sub-grid cols3">
+      <div class="sub-item"><div class="sl">Vorjahr</div><div class="sv">${k.vorjahrTage} Tage</div></div>
+      <div class="sub-item"><div class="sl">Kind krank</div><div class="sv">${k.kindKrankTage} Tage</div></div>
+      <div class="sub-item"><div class="sl">Zuletzt</div><div class="sv">${fmtDate(k.letzteAbwesenheit)}</div></div>
+    </div>
+    <div class="note">Nur Tageszahlen — keine Diagnosen oder Abwesenheitsgründe.</div>
+  </div>
+
+  <!-- FIRMENWAGEN -->
+  <div class="card c-auto">
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 16H9m10 0h1a1 1 0 0 0 1-1v-4a2 2 0 0 0-1.5-1.9l-2.2-.6-2-3.5A2 2 0 0 0 13.6 4H8.4a2 2 0 0 0-1.7 1l-2 3.5-2.2.6A2 2 0 0 0 1 11v4a1 1 0 0 0 1 1h1"/><circle cx="6.5" cy="16.5" r="2"/><circle cx="17.5" cy="16.5" r="2"/></svg>Firmenwagen</div>
+      <span class="src-badge src-fuhrpark">Fuhrpark · SP-Liste</span>
+    </div>
+    ${fw.vorhanden ? `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <span class="kennzeichen">${esc(fw.kennzeichen)}</span>${kmChip}
+    </div>
+    <dl class="kv">
+      <dt>Fahrzeug</dt><dd>${esc(fw.modell)}</dd>
+      <dt>km-Stand (${fmtDate(fw.kmStandDatum)})</dt><dd>${fmtNum(fw.kmStand)} km</dd>
+      <dt>km seit Jahresbeginn</dt><dd>${fmtNum(fw.kmSeitJahresbeginn)} km</dd>
+      <dt>Leasing-Budget/Jahr</dt><dd>${fmtNum(fw.kmBudgetJahr)} km</dd>
+      <dt>Hochrechnung ${new Date().getFullYear()}</dt><dd>${fmtNum(prog)} km</dd>
+    </dl>` : `
+    <div class="note" style="margin-top:0">Kein Firmenwagen zugeordnet.</div>`}
+  </div>
+
+  <!-- KLIENTEN -->
+  <div class="card c-klienten">
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Klienten</div>
+      <span class="src-badge src-kilanka">Kilanka · clients</span>
+    </div>
+    <div class="big-row"><span class="big">${kl.aktiv}</span><span class="big-unit">aktive Klienten</span></div>
+    <div class="sub-grid cols3">
+      <div class="sub-item"><div class="sl">Hauptbetr.</div><div class="sv">${kl.hb}</div></div>
+      <div class="sub-item"><div class="sl">Mitbetr.</div><div class="sv">${kl.mb}</div></div>
+      <div class="sub-item"><div class="sl">Vertretung</div><div class="sv">${kl.v}</div></div>
+    </div>
+    <div class="note">Zählung wie im Berichtsgenerator: aktive Maßnahmen, Archiv-Klienten ausgefiltert.</div>
+  </div>
+
+  <!-- FLS -->
+  <div class="card c-fls">
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Fachleistungsstunden / Woche</div>
+      <span class="src-badge src-offen">Ist-Quelle offen</span>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="big-row" style="margin:0"><span class="big">${fmtNum(flsIst,1)}</span><span class="big-unit">h Ist · Soll ${fmtNum(fls.sollWochenstunden,1)} h</span></div>
+      ${flsChip}
+    </div>
+    <div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>
+    <div class="bar-legend">
+      <span>Soll = bewilligte Kontingent-Wochenstunden (quotas + timeBase)</span>
+    </div>
+    <div class="note">⚠ Ist-Stunden: Leistungsdokumentation ist noch nicht im Kilanka-API-Graphen verfügbar — Wert hier ist ein Demo-Platzhalter (Ø letzte 4 Wochen). Freischaltung beim Kilanka-Support angefragt.</div>
+  </div>`;
+}
+
+function reload() { renderCockpit(); }
+
+/* ═══════════════════════════════════════════════════════════
+ * DEMO-MODUS
+ * ═══════════════════════════════════════════════════════════ */
+function startDemo() {
+  demoMode = true;
+  document.getElementById('loginScreen').style.display = 'none';
+  const app = document.getElementById('appScreen');
+  app.style.display = 'flex';
+  document.getElementById('demoBar').style.display = 'flex';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userName').textContent = 'Demo';
+  renderRolePills(); fillPersonSelect(); renderCockpit();
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * MSAL — gleiche App-Registrierung wie Organisation/Berichtsgenerator.
+ * Hinweis: redirectUri dieser Seite muss in Entra ID (App-Reg →
+ * Authentifizierung → SPA) ergänzt werden, sonst AADSTS50011.
+ * ═══════════════════════════════════════════════════════════ */
+async function initApp() {
+  document.getElementById('versionBadge').textContent = APP_VERSION;
+  const msalConfig = {
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  };
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; accessToken = r.accessToken; await showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; await getToken(); await showApp(); }
+}
+async function login() {
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginError');
+  btn.disabled = true; errEl.style.display = 'none';
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) { btn.disabled = false; errEl.style.display = 'block'; errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message); }
+}
+async function logout() {
+  if (demoMode) { location.reload(); return; }
+  await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri });
+}
+async function getToken() {
+  if (!currentAccount) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    accessToken = r.accessToken; return accessToken;
+  } catch(e) { await msalInstance.acquireTokenRedirect({ scopes: SCOPES }); }
+}
+
+/* Angemeldet: versucht den (künftigen) Worker-Endpunkt; solange er
+ * nicht existiert (404), automatisch Demo-Daten mit Hinweis. */
+async function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  const app = document.getElementById('appScreen');
+  app.style.display = 'flex';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
+  document.getElementById('logoutBtn').style.display = '';
+  try {
+    const idToken = (await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount })).idToken;
+    const r = await fetch(`${CFG.workerUrl}/api/mitarbeiter-cockpit`, { headers: { Authorization: 'Bearer ' + idToken } });
+    if (r.ok) {
+      const live = await r.json();
+      // Live-Antwort in die Demo-Struktur einhängen (gleiches Schema)
+      DEMO_PERSONEN['live'] = live;
+      DEMO_VIEWER.fk = { name: live.person.name, self: 'live', sichtbar: ['live'] };
+      renderRolePills(); fillPersonSelect(); renderCockpit();
+      return;
+    }
+  } catch(e) { console.warn('Live-Endpunkt noch nicht verfügbar:', e.message); }
+  // Fallback: Demo-Daten
+  document.getElementById('demoBar').style.display = 'flex';
+  renderRolePills(); fillPersonSelect(); renderCockpit();
+}
+
+initApp();
+</script>
+</body>
+</html>
