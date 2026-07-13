@@ -540,8 +540,18 @@ let liveMode = false, liveSicht = null;
 const liveCache = {};
 
 async function liveTokens() {
-  const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
-  return { id: r.idToken, graph: r.accessToken };
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    return { id: r.idToken, graph: r.accessToken };
+  } catch (e) {
+    // Neues Scope (User.ReadBasic.All) → einmalige Zustimmung nötig:
+    // still schlägt fehl, also interaktiv nachholen (Seite lädt danach neu)
+    if (e.errorCode === 'interaction_required' || e.errorCode === 'consent_required'
+        || e.errorCode === 'login_required' || e instanceof msal.InteractionRequiredAuthError) {
+      await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account: currentAccount });
+    }
+    throw e;
+  }
 }
 
 async function loadLive(upn) {
@@ -552,13 +562,21 @@ async function loadLive(upn) {
     const t = await liveTokens();
     const url = CFG.workerUrl + '/api/mitarbeiter-cockpit' + (upn ? '?mitarbeiter=' + encodeURIComponent(upn) : '');
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).error || ''; } catch(_) {}
+      throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
+    }
     const data = await r.json();
     liveCache[data.upn] = data;
     if (!liveSicht && data.sicht) { liveSicht = data.sicht; setupLiveViewbar(); }
     renderLivePerson(data);
     return true;
-  } catch(e) { console.warn('Live nicht verfügbar:', e.message); return false; }
+  } catch(e) {
+    console.warn('Live nicht verfügbar:', e.message);
+    window._lastLiveError = e.message || String(e);
+    return false;
+  }
 }
 
 function renderLivePerson(d) {
@@ -591,8 +609,13 @@ async function showApp() {
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   document.getElementById('logoutBtn').style.display = '';
   if (await loadLive(null)) { liveMode = true; return; }
-  // Fallback: Demo-Daten
-  document.getElementById('demoBar').style.display = 'flex';
+  // Fallback: Demo-Daten — mit sichtbarer Fehlerursache
+  const bar = document.getElementById('demoBar');
+  bar.style.display = 'flex';
+  if (window._lastLiveError) {
+    bar.innerHTML = '<strong>Live-Abruf fehlgeschlagen</strong><span>— ' + esc(window._lastLiveError) +
+      ' · Es werden Demo-Daten angezeigt. Bitte Meldung an Markus weitergeben.</span>';
+  }
   renderRolePills(); fillPersonSelect(); renderCockpit();
 }
 
