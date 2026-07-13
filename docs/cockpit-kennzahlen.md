@@ -124,3 +124,25 @@ zeigt einen entsprechenden Hinweis in der Legende.
 (kritischste zuerst), Summenzeile Σ Ist / Σ Soll korr. Berechtigung bleibt
 serverseitig im Worker (Entra-Gruppen) — das Frontend aggregiert nur, was
 die Sicht ohnehin hergibt.
+
+## Worker-Patch (13.07.2026, Nachtrag 2)
+
+`worker/src/index.js` liefert jetzt:
+
+- **`fls.abwesenheitsTageImMonat`** — genehmigte Abwesenheiten aller Typen,
+  anteilig als Arbeitstags-Überlappung mit dem Ist-Monat (Mo–Fr, Feiertage
+  Bayern), gedeckelt auf `totalDays` (halbe Tage bleiben halbe Tage).
+  Damit greift die Soll-Korrektur im Cockpit vollständig.
+- **`urlaub.regeneration = { h1, h2 }`** — frühester genehmigter
+  Regenerationstag je Halbjahr; `classifyAbsence` erkennt den
+  Abwesenheitstyp über Name/internalName „regeneration". Befüllt die
+  H1/H2-Chips in der Urlaubskarte.
+- Feiertags-Helper Bayern (Gauß-Osterformel) als Port aus dem Frontend.
+
+**Deployment:** Worker wird nicht über GitHub Pages ausgerollt —
+`cd worker && npx wrangler deploy` lokal ausführen.
+
+**Prüfen nach Deploy:** Falls die Regenerations-Chips leer bleiben, den
+tatsächlichen `absenceType.name`/`internalName` des Regenerationstags in
+Kilanka prüfen (Response im Netzwerk-Tab) und das Matching in
+`classifyAbsence` anpassen — Kilanka-Typbezeichnungen sind konfigurativ.
