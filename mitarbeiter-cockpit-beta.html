@@ -539,9 +539,18 @@ async function getToken() {
 let liveMode = false, liveSicht = null;
 const liveCache = {};
 
+function tokenAblauf(jwt) { // exp-Claim in ms, 0 bei Parse-Fehler
+  try { return (JSON.parse(atob(jwt.split('.')[1])).exp || 0) * 1000; } catch(_) { return 0; }
+}
+
 async function liveTokens() {
   try {
-    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    let r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    // MSAL-Eigenheit: gecachtes ID-Token kann abgelaufen sein, obwohl das
+    // Zugriffstoken noch gilt → dann Erneuerung erzwingen
+    if (tokenAblauf(r.idToken) < Date.now() + 60000) {
+      r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount, forceRefresh: true });
+    }
     return { id: r.idToken, graph: r.accessToken };
   } catch (e) {
     // Neues Scope (User.ReadBasic.All) → einmalige Zustimmung nötig:
