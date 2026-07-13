@@ -245,10 +245,12 @@ const DEMO_PERSONEN = {
     upn: 'mia.beispiel@praxisneuewege.de',
     person: { name: 'Beispiel, Mia', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Nord',
       qualifikation: 'Sozialpädagogin (B.A.)', eintritt: '2024-03-01', wochenstundenVertrag: 32.0 },
-    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 11, geplantTage: 5, restTage: 14 },
+    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 11, geplantTage: 5, restTage: 14,
+      regeneration: { h1: '2026-03-13', h2: null } },
     krankheit: { jahr: 2026, tage: 4, vorjahrTage: 9, kindKrankTage: 2, letzteAbwesenheit: '2026-05-12' },
     firmenwagen: { vorhanden: true, modell: 'Seat Arona 1.0 TSI', kennzeichen: 'FS-NW 214',
-      kmStand: 48750, kmStandDatum: '2026-07-01', kmBudgetJahr: 25000, kmSeitJahresbeginn: 14900 },
+      kmStand: 48750, kmStandDatum: '2026-07-01', kmBudgetJahr: 25000, kmSeitJahresbeginn: 14900,
+      finanzierung: 'Leasing', rueckgabe: '2026-09-15', dguvPruefung: '2025-12-09' },
     klienten: { aktiv: 7, hb: 5, mb: 1, v: 1 },
     fls: { sollWochenstunden: 26.5, istWochenstunden: null, istQuelle: 'offen',
       istDurchschnitt4Wochen: 24.1 /* Demo-Platzhalter */ }
@@ -257,7 +259,8 @@ const DEMO_PERSONEN = {
     upn: 'jonas.muster@praxisneuewege.de',
     person: { name: 'Muster, Jonas', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Nord',
       qualifikation: 'Erzieher, systemischer Berater i.A.', eintritt: '2022-09-15', wochenstundenVertrag: 39.0 },
-    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 18, geplantTage: 8, restTage: 4 },
+    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 18, geplantTage: 8, restTage: 4,
+      regeneration: { h1: null, h2: null } },
     krankheit: { jahr: 2026, tage: 12, vorjahrTage: 6, kindKrankTage: 0, letzteAbwesenheit: '2026-06-24' },
     firmenwagen: { vorhanden: true, modell: 'Skoda Kamiq 1.0 TSI', kennzeichen: 'PAF-NW 87',
       kmStand: 61300, kmStandDatum: '2026-06-28', kmBudgetJahr: 25000, kmSeitJahresbeginn: 16400 },
@@ -269,7 +272,8 @@ const DEMO_PERSONEN = {
     upn: 'sara.probe@praxisneuewege.de',
     person: { name: 'Probe, Sara', rolle: 'Pädagogische Fachkraft', team: 'Team Beispiel-Süd',
       qualifikation: 'Sozialarbeiterin (M.A.)', eintritt: '2025-11-01', wochenstundenVertrag: 20.0 },
-    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 6, geplantTage: 0, restTage: 24 },
+    urlaub: { jahr: 2026, anspruchTage: 30, genommenTage: 6, geplantTage: 0, restTage: 24,
+      regeneration: { h1: '2026-05-22', h2: '2026-07-03' } },
     krankheit: { jahr: 2026, tage: 1, vorjahrTage: 0, kindKrankTage: 0, letzteAbwesenheit: '2026-02-03' },
     firmenwagen: { vorhanden: false },
     klienten: { aktiv: 4, hb: 3, mb: 1, v: 0 },
@@ -296,6 +300,53 @@ function kmPrognose(fw) {
   const now = new Date(), start = new Date(now.getFullYear(),0,1);
   const anteil = (now - start) / (new Date(now.getFullYear()+1,0,1) - start);
   return anteil > 0 ? Math.round(fw.kmSeitJahresbeginn / anteil) : null;
+}
+
+/* ── Kalkulations-Benchmark aus den Entgeltkalkulationen (HzE 93,46 € / KEH 92,30 €):
+ *    995 Face-to-Face-h / 1.560 Netto-Anwesenheits-h = 63,8 % ≈ KEH 971/1.517 = 64,0 % ── */
+const FLS_KALK = { quote: 0.64, quoteInklFahrt: 0.80 };
+
+/* ── Feiertage Bayern — dynamisch, Gauß'sche Osterformel (verifiziert 2024–2027) ── */
+function ostersonntag(jahr) {
+  const a=jahr%19, b=Math.floor(jahr/100), c=jahr%100, d=Math.floor(b/4), e=b%4,
+    f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30,
+    i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7, m=Math.floor((a+11*h+22*l)/451);
+  const monat=Math.floor((h+l-7*m+114)/31), tag=((h+l-7*m+114)%31)+1;
+  return new Date(Date.UTC(jahr, monat-1, tag));
+}
+function feiertageBayern(jahr) { // inkl. Mariä Himmelfahrt (überw. kath. Gemeinden — ganzes Einzugsgebiet)
+  const plus = (d,t)=>{const x=new Date(d); x.setUTCDate(x.getUTCDate()+t); return x;};
+  const iso = d=>d.toISOString().slice(0,10);
+  const o = ostersonntag(jahr);
+  return new Set([`${jahr}-01-01`,`${jahr}-01-06`,iso(plus(o,-2)),iso(plus(o,1)),`${jahr}-05-01`,
+    iso(plus(o,39)),iso(plus(o,50)),iso(plus(o,60)),`${jahr}-08-15`,`${jahr}-10-03`,
+    `${jahr}-11-01`,`${jahr}-12-25`,`${jahr}-12-26`]);
+}
+function berechneArbeitstage(vonIso, bisIso) { // Mo–Fr abzgl. Feiertage Bayern, Grenzen inklusive
+  const von = new Date(vonIso+'T00:00:00Z'), bis = new Date(bisIso+'T00:00:00Z');
+  if (bis < von) return 0;
+  const ft = new Set();
+  for (let j=von.getUTCFullYear(); j<=bis.getUTCFullYear(); j++) feiertageBayern(j).forEach(t=>ft.add(t));
+  let n = 0;
+  for (let d=new Date(von); d<=bis; d.setUTCDate(d.getUTCDate()+1)) {
+    const wt = d.getUTCDay();
+    if (wt!==0 && wt!==6 && !ft.has(d.toISOString().slice(0,10))) n++;
+  }
+  return n;
+}
+
+/* ── Fuhrpark-Stammdaten (data/fahrzeuge.json, generiert aus KFZ_Übersicht_PNW.xlsx) ── */
+let FUHRPARK = null;
+fetch('data/fahrzeuge.json').then(r => r.ok ? r.json() : null).then(j => { FUHRPARK = j; })
+  .catch(() => { FUHRPARK = null; });
+function fuhrparkMatch(fw, personName) {
+  if (!FUHRPARK) return null;
+  if (fw && fw.kennzeichen) {
+    const hit = FUHRPARK.find(f => f.kennzeichen === fw.kennzeichen);
+    if (hit) return hit;
+  }
+  const nachname = (personName || '').split(',')[0].trim().toLowerCase();
+  return nachname ? FUHRPARK.find(f => f.fahrer && f.fahrer.toLowerCase().startsWith(nachname)) ?? null : null;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -342,6 +393,18 @@ function renderCards(d, own) {
   document.getElementById('lockNote').style.display = own ? '' : 'none';
 
   const u = d.urlaub, k = d.krankheit, fw = d.firmenwagen || {vorhanden:false}, kl = d.klienten, fls = d.fls;
+  const fp = fuhrparkMatch(fw, d.person && d.person.name);
+  if (fp) Object.assign(fw, { vorhanden: true,
+    modell: fw.modell || fp.fahrzeug, kennzeichen: fw.kennzeichen || fp.kennzeichen,
+    rueckgabe: fw.rueckgabe || fp.rueckgabe, dguvPruefung: fw.dguvPruefung || fp.dguvNaechstePruefung,
+    finanzierung: fw.finanzierung || fp.finanzierung, kmBudgetJahr: fw.kmBudgetJahr || fp.kmProJahr });
+  const heute = new Date();
+  const dguvFaellig = fw.dguvPruefung && new Date(fw.dguvPruefung) <= heute;
+  const rgDatum = fw.rueckgabe ? new Date(fw.rueckgabe) : null;
+  const rgTage = rgDatum ? Math.round((rgDatum - heute) / 86400000) : null;
+  const fwWarnChips =
+    (dguvFaellig ? `<span class="chip chip-err">DGUV-70 überfällig (${fmtDate(fw.dguvPruefung)})</span>` : '') +
+    (rgTage != null && rgTage > 0 && rgTage < 90 ? `<span class="chip chip-warn">Rückgabe in ${rgTage} Tagen</span>` : '');
   const uPctGen = (u && u.anspruchTage) ? Math.round(u.genommenTage / u.anspruchTage * 100) : 0;
   const uPctPlan = (u && u.anspruchTage) ? Math.round(u.geplantTage / u.anspruchTage * 100) : 0;
   const prog = (fw.vorhanden && fw.kmSeitJahresbeginn != null) ? kmPrognose(fw) : null;
@@ -400,7 +463,15 @@ function renderCards(d, own) {
       <span><span class="dot" style="background:var(--ok)"></span>Genommen: ${fmtNum(u.genommenTage,1)}</span>
       <span><span class="dot" style="background:#9ccc9c"></span>Geplant: ${fmtNum(u.geplantTage,1)}</span>
       <span><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage ?? '— (Feld folgt)'}</span>
-    </div>`}
+    </div>
+    ${u.regeneration ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+      ${[['H1', u.regeneration.h1, new Date() > new Date(u.jahr+'-06-30')],
+         ['H2', u.regeneration.h2, new Date() > new Date(u.jahr+'-12-31')]].map(([l, dat, vorbei]) => dat
+        ? `<span class="chip chip-ok">Regenerationstag ${l}: ${fmtDate(dat)}</span>`
+        : vorbei
+          ? `<span class="chip chip-err">Regenerationstag ${l}: nicht genommen</span>`
+          : `<span class="chip chip-warn">Regenerationstag ${l}: offen</span>`).join('')}
+    </div>` : ''}`}
   </div>
 
   <!-- KRANKHEIT -->
@@ -427,7 +498,7 @@ function renderCards(d, own) {
     </div>
     ${fw.vorhanden ? `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <span class="kennzeichen">${esc(fw.kennzeichen)}</span>${kmChip}
+      <span class="kennzeichen">${esc(fw.kennzeichen)}</span>${kmChip}${fwWarnChips}
     </div>
     <dl class="kv">
       <dt>Fahrzeug</dt><dd>${esc(fw.modell)}</dd>
@@ -435,6 +506,9 @@ function renderCards(d, own) {
       <dt>km seit Jahresbeginn</dt><dd>${fmtNum(fw.kmSeitJahresbeginn)} km</dd>
       <dt>Leasing-Budget/Jahr</dt><dd>${fmtNum(fw.kmBudgetJahr)} km</dd>
       <dt>Hochrechnung ${new Date().getFullYear()}</dt><dd>${fmtNum(prog)} km</dd>
+      ${fw.finanzierung ? `<dt>Finanzierung</dt><dd>${esc(fw.finanzierung)}</dd>` : ''}
+      ${fw.rueckgabe ? `<dt>Rückgabe/Vertragsende</dt><dd>${fmtDate(fw.rueckgabe)}</dd>` : ''}
+      ${fw.dguvPruefung ? `<dt>DGUV-70-Prüfung</dt><dd>${fmtDate(fw.dguvPruefung)}</dd>` : ''}
     </dl>` : `
     <div class="note" style="margin-top:0">Kein Firmenwagen zugeordnet.</div>`}
   </div>
@@ -468,6 +542,13 @@ function renderCards(d, own) {
     <div class="bar-legend">
       <span>Soll = bewilligte Kontingente (quotas + timeBase)${flsLive ? ', auf Monat umgerechnet' : ''}</span>
     </div>
+    ${d.person && d.person.wochenstundenVertrag ? `<div class="sub-grid" style="margin-top:10px">
+      <div class="sub-item"><div class="sl">Benchmark Entgeltkalkulation</div>
+        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quote, 1)} h/Woche am Klienten</div></div>
+      <div class="sub-item"><div class="sl">inkl. Fahrtzeit</div>
+        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quoteInklFahrt, 1)} h/Woche</div></div>
+    </div>
+    <div class="note">Benchmark = 64 % bzw. 80 % der Vertragsstunden — abgeleitet aus den Entgeltkalkulationen (eigene HzE-Kalkulation 995/1.560 h, KEH-Vorlage 20 % indirekt). Nenner für Quoten: Netto-Anwesenheit (Arbeitstage Bayern via berechneArbeitstage, abzgl. Abwesenheiten).</div>` : ''}
     ${flsLive
       ? `<div class="note">Ist = abgerechnete Stunden aus ${fls.istRechnungen ?? '?'} Rechnung(en) · Quelle: ${esc(fls.istQuelle || 'Rechnungen')}${(fls.istQuelle||'').includes('fallback') ? ' — für die präzise Bewilligungs-Zuordnung <b>approvals.id</b> im Kilanka-Graphen freigeben' : ''}.</div>`
       : `<div class="note">Demo-Platzhalter (Ø letzte 4 Wochen). Live: abgerechnete Stunden aus Kilanka-Rechnungen des Vormonats.</div>`}
