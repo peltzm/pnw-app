@@ -64,7 +64,7 @@ const CLIENT_GRAPH = {
     departmentResponsible: { recName: 1 },
     fileReference: 1, reportDueDate: 1, nextMeeting: 1,
     attendants: {
-      validFrom: 1, validUntil: 1,
+      validFrom: 1, validUntil: 1, amount: 1, // amount = Verteilungsgewicht (z. B. 50/50 bei Tandem)
       user: { id: 1, recName: 1 },
       attendantKind: { name: 1 },
     },
@@ -675,6 +675,27 @@ async function buildCockpit(env, upn, now) {
       if (rang > besteRolle) besteRolle = rang;
       if (rang !== 3) continue; // Soll/Ist nur über Hauptbetreuung (keine Doppelzählung)
       hbClientIds.add(String(client.id));
+      // Anteil aus Kilanka-Zuordnung (amount, z. B. 50/100 bei geteilter Betreuung);
+      // Fallback: 1/AnzahlHauptbetreuer, sonst 1.
+      const aktuelleHbMb = (action.attendants || []).filter(
+        (a) => a.user && ["Hauptbetreuer", "Mitbetreuer"].includes(a.attendantKind?.name) &&
+               isCurrent(a.validFrom, a.validUntil, now)
+      );
+      const amtWert = (v) => {
+        const h = durationToHours(v);
+        if (h != null) return h;
+        const n = parseFloat(v?.$decimal ?? v);
+        return Number.isFinite(n) ? n : null;
+      };
+      const amounts = aktuelleHbMb.map((a) => amtWert(a.amount));
+      const meinAmt = amtWert(att.amount);
+      const summe = amounts.every((v) => v != null && v > 0) ? amounts.reduce((s, v) => s + v, 0) : null;
+      let anteil = 1;
+      if (summe && meinAmt) anteil = meinAmt / summe;
+      else {
+        const hbAnzahl = aktuelleHbMb.filter((a) => a.attendantKind?.name === "Hauptbetreuer").length;
+        if (hbAnzahl > 1) anteil = 1 / hbAnzahl;
+      }
       for (const q of action.quotas || []) {
         if (kDate(q.deletedAt)) continue; // gelöschtes Kontingent
         if (q.timeBase === "quantity") continue;
@@ -684,11 +705,11 @@ async function buildCockpit(env, upn, now) {
         const appr = pickApproval(q.approvals, now);
         if (!appr || appr.stunden == null || appr.status !== "aktuell") continue;
         switch (q.timeBase) {
-          case "week": sollWochenstunden += appr.stunden; break;
-          case "month_current": sollWochenstunden += (appr.stunden * 12) / 52; break;
+          case "week": sollWochenstunden += appr.stunden * anteil; break;
+          case "month_current": sollWochenstunden += ((appr.stunden * 12) / 52) * anteil; break;
           case "pool": {
             const wochen = appr.von && appr.bis ? Math.max(1, (appr.bis - appr.von) / 6048e5) : null;
-            if (wochen) sollWochenstunden += appr.stunden / wochen;
+            if (wochen) sollWochenstunden += (appr.stunden / wochen) * anteil;
             break;
           }
         }
