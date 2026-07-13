@@ -161,3 +161,9 @@ Kilanka prüfen (Response im Netzwerk-Tab) und das Matching in
   (`/users/{upn}/photos/96x96/$value`, Scope User.ReadBasic.All), Blob-URL
   pro UPN gecacht, Fallback bleiben die Initialen. Kein Foto hinterlegt →
   Graph 404 → Initialen.
+
+## Kommende Urlaube (Nachtrag 4)
+
+`urlaub.geplanteTermine = [{ von, bis, tage }]` — genehmigte Urlaube mit
+Beginn in der Zukunft, chronologisch sortiert. Die Urlaubskarte zeigt die
+nächsten vier Termine mit Datum und Tageszahl, weitere als „+ n weitere".
