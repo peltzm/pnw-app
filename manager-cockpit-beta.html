@@ -173,7 +173,7 @@ tr{cursor:pointer}
       <div class="loading-state" id="zielLoading" style="display:none;padding:40px 20px"><div class="spinner"></div>Stichtags-Daten für das Quartal werden geladen …</div>
       <div class="zielcards" id="zielCards"></div>
       <div class="legend">
-        Netto-Fallakquise und Fallbestand = eindeutige Fälle (Hauptbetreuung) der dem Team <b>zugeordneten Jugendämter</b> — gleiche Logik wie die Klientenentwicklungs-Übersicht; Quartalsende minus Quartalsanfang (Ziel: +2). Klick auf den Wert zeigt die Zu- und Abgänge namentlich mit Amt. Zuordnung: Jörg = Kelheim + Ingolstadt · Laura = PAF + Freising · Nadine = Neuburg-Schrobenhausen + Eichstätt. ·
+        Netto-Fallakquise und Fallbestand = eindeutige Fälle (Hauptbetreuung) der dem Team <b>zugeordneten Jugendämter</b> — gleiche Logik wie die Klientenentwicklungs-Übersicht; Quartalsende minus Quartalsanfang (Ziel: +2). Klick auf den Wert zeigt die Zu- und Abgänge namentlich mit Amt. Zuordnung: Jörg = Ingolstadt, Eichstätt, Regensburg (Stadt + LK), Neuburg-Schrobenhausen · Laura = Kelheim, Freising, Landshut (Stadt + LK) · Nadine = Pfaffenhofen, Dachau. ·
         Team-Auslastung = Fälle der zugeordneten Ämter ÷ Personal-VZÄ des Teams (Teamleitung + direkt Zugeordnete) am Quartalsende (Ziel: 7,5). ·
         Dokumentationsqualität (Ziel: 95 % pünktlich) und MA-Zufriedenheit (Ziel: 4,0 von 5) sind manuelle Eingaben und werden lokal im Browser gespeichert. ·
         Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 %, je Kriterium bei 150 % gekappt (▲) — darüber Bonus-Territorium (§5.2). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-%.
@@ -411,9 +411,9 @@ const teamVon = (rows, upn) => rows.filter(r => r.leitung?.upn === upn || r.upn 
 // Ämtern, nicht nach der Personal-Hierarchie. Zuordnung hier pflegen —
 // Muster werden tolerant gegen department.name aus Kilanka geprüft.
 const AMT_TEAMS = [
-  { tl: /schneider/i, aemter: [/kelheim/i, /ingolstadt/i] },
-  { tl: /meier/i,     aemter: [/paf|pfaffenhofen/i, /freising/i] },
-  { tl: /grund/i,     aemter: [/neuburg|schrobenhausen/i, /eichst/i] },
+  { tl: /schneider/i, aemter: [/ingolstadt/i, /eichst/i, /regensburg/i, /neuburg|schrobenhausen/i] },
+  { tl: /meier/i,     aemter: [/kelheim/i, /freising/i, /landshut/i] },
+  { tl: /grund/i,     aemter: [/paf|pfaffenhofen/i, /dachau/i] },
 ];
 const aemterFuerTL = tlName => (AMT_TEAMS.find(t => t.tl.test(tlName || '')) || {}).aemter || null;
 const amtGehoertZu = (amt, aemter) => !!amt && aemter.some(rx => rx.test(amt));
