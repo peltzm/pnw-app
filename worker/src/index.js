@@ -1027,7 +1027,7 @@ async function buildCockpit(env, upn, now) {
     nachweise,
     erhoehung, // nur TL/GF — Route entfernt das Feld für Fachkraft-Sicht
     firmenwagen: { vorhanden: false, quelle: "fuhrpark-liste folgt" },
-    klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus },
+    klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus, hbIds: [...hbClientIds] },
     fls,
     stand: new Date().toISOString(),
   };
