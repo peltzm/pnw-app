@@ -1,0 +1,52 @@
+name: Applet pnw-auslastung → Kilanka
+
+# Publisht das Auslastungs-Applet automatisch zu Kilanka,
+# sobald sich etwas unter applets/pnw-auslastung ändert.
+# Benötigte Repo-Secrets (Settings → Secrets and variables → Actions):
+#   KILANKA_APPLET_TOKEN — Applet-Token aus Kilanka (Konfiguration → Schnittstellen)
+#   KILANKA_APPLET_URL   — https://neue-wege.kilanka.de
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "applets/pnw-auslastung/**"
+      - ".github/workflows/applet-pnw-auslastung.yml"
+  workflow_dispatch: {} # manueller Start über den Actions-Tab
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: applets/pnw-auslastung
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: applets/pnw-auslastung/pnpm-lock.yaml
+
+      - name: .env aus Secrets erzeugen
+        run: |
+          if [ -z "${{ secrets.KILANKA_APPLET_TOKEN }}" ]; then
+            echo "::error::Secret KILANKA_APPLET_TOKEN fehlt (Repo-Settings → Secrets → Actions)"; exit 1
+          fi
+          printf 'KILANKA_APPLET_TOKEN=%s\nKILANKA_APPLET_URL=%s\nKILANKA_APPLET_ENV_FILE=./.env\n' \
+            "${{ secrets.KILANKA_APPLET_TOKEN }}" \
+            "${{ secrets.KILANKA_APPLET_URL || 'https://neue-wege.kilanka.de' }}" > .env
+
+      - name: Abhängigkeiten installieren
+        run: pnpm install --frozen-lockfile
+
+      - name: Bauen und zu Kilanka publishen
+        env:
+          KILANKA_APPLET_ENV_FILE: ./.env
+          CI: "true"
+        run: pnpm applet:publish

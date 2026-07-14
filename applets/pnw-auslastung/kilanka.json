@@ -1,0 +1,49 @@
+{
+    "graphs": {
+        "clients": {
+            "id": 1,
+            "recName": 1,
+            "deletedAt": 1,
+            "actions": {
+                "deletedAt": 1,
+                "validFrom": 1,
+                "validUntil": 1,
+                "attendants": {
+                    "user": {
+                        "recName": 1
+                    },
+                    "amount": 1,
+                    "validFrom": 1,
+                    "validUntil": 1,
+                    "attendantKind": {
+                        "name": 1
+                    }
+                },
+                "quotas": {
+                    "name": 1,
+                    "timeBase": 1,
+                    "approvals": {
+                        "hours": 1,
+                        "quantity": 1,
+                        "validFrom": 1,
+                        "validUntil": 1
+                    },
+                    "deletedAt": 1
+                }
+            }
+        },
+        "users": {
+            "id": 1,
+            "name": 1,
+            "firstName": 1,
+            "deletedAt": 1,
+            "weeklyHours": 1,
+            "targetHours": {
+                "validFrom": 1,
+                "validUntil": 1,
+                "weeklyHours": 1,
+                "monthlyHours": 1
+            }
+        }
+    }
+}

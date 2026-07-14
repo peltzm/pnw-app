@@ -1,0 +1,103 @@
+
+.app {
+    font-family: 'Kodchasan', 'Segoe UI', system-ui, sans-serif;
+    padding: 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    color: #1a1a1a;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem;
+}
+
+.subtitle {
+    color: #555;
+    font-size: 0.85rem;
+    margin: 0 0 1.25rem;
+    max-width: 70ch;
+}
+
+.muted {
+    color: #777;
+}
+
+.error {
+    color: #b3261e;
+    font-weight: 600;
+}
+
+.table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.82rem;
+    margin-bottom: 1rem;
+}
+
+.table th,
+.table td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid #e2e2e2;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.table thead th {
+    font-weight: 600;
+    border-bottom: 2px solid #1a1a1a;
+    position: sticky;
+    top: 0;
+    background: #fff;
+}
+
+.table tbody tr:hover {
+    background: #f4faf6;
+}
+
+.num {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.negativ {
+    color: #b3261e;
+    font-weight: 600;
+}
+
+.extrem {
+    color: #a05a00;
+    font-weight: 600;
+}
+
+.hinweis {
+    color: #777;
+    font-size: 0.78rem;
+    white-space: normal !important;
+    max-width: 26ch;
+}
+
+.pflegestand {
+    font-size: 0.78rem;
+    color: #555;
+    line-height: 1.6;
+    border-left: 3px solid #00e676;
+    padding-left: 0.75rem;
+    margin: 1rem 0;
+}
+
+.toggle {
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid #1a1a1a;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 1rem;
+}
+
+.toggle:hover {
+    background: #f0f0f0;
+}

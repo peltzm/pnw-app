@@ -1,0 +1,23 @@
+/* Kodchasan lokal einbinden — Google Fonts wird von der Applet-CSP blockiert.
+   Die .woff2-Dateien nach public/fonts/ legen (siehe README). */
+@font-face {
+    font-family: 'Kodchasan';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/kodchasan-400.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Kodchasan';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/kodchasan-600.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Kodchasan';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/kodchasan-700.woff2') format('woff2');
+}
