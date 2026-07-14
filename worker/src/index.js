@@ -779,7 +779,7 @@ async function buildCockpit(env, upn, now) {
       alleClientIds.add(String(client.id));
       if (rang !== 3) continue; // Soll/Ist nur über Hauptbetreuung (keine Doppelzählung)
       hbClientIds.add(String(client.id));
-      hbFallNamen.set(String(client.id), { name: client.recName || String(client.id), amt: action.department?.name || "" });
+      hbFallNamen.set(String(client.id), { name: client.recName || String(client.id), amt: action.department?.name || "", hilfeart: action.legalBasis?.name || "", massnahme: action.recName || "" });
       // Anteil aus Kilanka-Zuordnung (amount, z. B. 50/100 bei geteilter Betreuung);
       // Fallback: 1/AnzahlHauptbetreuer, sonst 1.
       const aktuelleHbMb = (action.attendants || []).filter(
@@ -1029,7 +1029,7 @@ async function buildCockpit(env, upn, now) {
     nachweise,
     erhoehung, // nur TL/GF — Route entfernt das Feld für Fachkraft-Sicht
     firmenwagen: { vorhanden: false, quelle: "fuhrpark-liste folgt" },
-    klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus, hbIds: [...hbClientIds], hbFaelle: [...hbFallNamen].map(([id, f]) => ({ id, name: f.name, amt: f.amt })) },
+    klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus, hbIds: [...hbClientIds], hbFaelle: [...hbFallNamen].map(([id, f]) => ({ id, name: f.name, amt: f.amt, hilfeart: f.hilfeart, massnahme: f.massnahme })) },
     fls,
     stand: new Date().toISOString(),
   };
