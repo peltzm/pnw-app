@@ -102,6 +102,8 @@ tr{cursor:pointer}
       <p id="pageSub">wird geladen …</p>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Stichtag</label>
+      <select id="stichtagFilter" onchange="reload()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)"></select>
       <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Team</label>
       <select id="teamFilter" onchange="render()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)">
         <option value="">Alle</option>
@@ -138,6 +140,20 @@ const SCOPES = ['User.Read', 'User.ReadBasic.All'];
 const APP_VERSION = 'BETA-7518ab8'; // auto-updated on deploy
 
 let msalInstance, currentAccount, daten = null;
+
+function fuelleStichtage() {
+  const sel = document.getElementById('stichtagFilter');
+  const jahr = new Date().getFullYear();
+  const quartale = [
+    [`${jahr - 1}-12-31`, `31.12.${jahr - 1}`],
+    [`${jahr}-03-31`, `31.03.${jahr}`],
+    [`${jahr}-06-30`, `30.06.${jahr}`],
+    [`${jahr}-09-30`, `30.09.${jahr}`],
+    [`${jahr}-12-31`, `31.12.${jahr}`],
+  ].filter(([iso]) => new Date(iso) <= new Date()); // nur vergangene Quartalsenden
+  sel.innerHTML = '<option value="">Heute</option>' +
+    quartale.reverse().map(([iso, label]) => `<option value="${iso}">${label}</option>`).join('');
+}
 let sortKey = 'auslastung', sortDir = -1;
 
 const fmtNum = (n, d=0) => n == null ? '—' : n.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
@@ -231,7 +247,7 @@ function render() {
   const sumKrank = rows.reduce((s,r)=>s+(r.krankheit?.tage||0),0);
   const kritisch = rows.filter(r => monate(r.nachweise?.fuehrungszeugnis) >= 36 || monate(r.nachweise?.datenschutz) >= 12).length;
   document.getElementById('kpis').innerHTML = `
-    <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">in dieser Sicht</div></div>
+    <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">= ${fmtNum(rows.reduce((s,r)=>s+(r.wochenstunden||0),0)/39, 1)} VZÄ (39 h/Wo)${rows.some(r=>r.wochenstunden==null) ? ' · ' + rows.filter(r=>r.wochenstunden==null).length + ' ohne Vertragsstunden' : ''}</div></div>
     <div class="kpi"><div class="v">${sumKli}</div><div class="l">Aktive Klienten</div><div class="s">HB + MB + Vertretung</div></div>
     <div class="kpi"><div class="v">${avgAusl != null ? avgAusl + ' %' : '—'}</div><div class="l">Ø FLS-Auslastung</div><div class="s">abgerechneter Vormonat</div></div>
     <div class="kpi"><div class="v">${fmtNum(sumKrank,1)}</div><div class="l">Krank-Tage YTD</div><div class="s">Summe Team</div></div>
@@ -266,8 +282,9 @@ function render() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('tbl').style.display = '';
   const rolleTxt = daten.rolle === 'gf' ? 'Geschäftsführung (alle Mitarbeitenden)' : 'Teamleitung (eigenes Team)';
+  const stichtagTxt = daten.stichtag ? ` · Stichtag: ${new Date(daten.stichtag).toLocaleDateString('de-DE')} (Nachweise: aktueller Stand)` : '';
   document.getElementById('pageSub').textContent =
-    `Stand: ${new Date(daten.stand).toLocaleString('de-DE')} · Sicht: ${rolleTxt}`;
+    `Stand: ${new Date(daten.stand).toLocaleString('de-DE')} · Sicht: ${rolleTxt}${stichtagTxt}`;
 }
 
 function setSort(k) {
@@ -302,7 +319,8 @@ async function laden() {
   document.getElementById('tbl').style.display = 'none';
   try {
     const t = await tokens();
-    const r = await fetch(CFG.workerUrl + '/api/manager-cockpit', {
+    const stichtag = document.getElementById('stichtagFilter').value;
+    const r = await fetch(CFG.workerUrl + '/api/manager-cockpit' + (stichtag ? '?stichtag=' + stichtag : ''), {
       headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
     });
     if (!r.ok) {
@@ -343,6 +361,7 @@ async function login() {
 }
 async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
 function showApp() {
+  fuelleStichtage();
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userName').textContent = currentAccount?.name || '';

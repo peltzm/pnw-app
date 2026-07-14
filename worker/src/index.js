@@ -1121,7 +1121,15 @@ export default {
           for (const r of reports) if (!seen.has(r.upn)) { seen.add(r.upn); liste.push(r); }
         }
         const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
-        const now = new Date();
+        // Stichtag (?stichtag=YYYY-MM-DD): kompletter Rechenkern arbeitet
+        // datumsbezogen → historische Quartals-Momentaufnahme. 12:00 UTC
+        // vermeidet Zeitzonen-Kanten. Nachweise (UDFs) sind immer aktueller Stand.
+        let now = new Date();
+        const stichtagParam = url.searchParams.get("stichtag");
+        if (stichtagParam && /^\d{4}-\d{2}-\d{2}$/.test(stichtagParam)) {
+          const st = new Date(stichtagParam + "T12:00:00Z");
+          if (!isNaN(st) && st.getUTCFullYear() >= 2024 && st <= new Date()) now = st;
+        }
         const rows = [];
         for (const m of liste) {
           const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
@@ -1130,6 +1138,7 @@ export default {
             leitung: mgrMap.get(m.upn) || null,
             name: d.person.name || m.name || m.upn,
             team: d.person.team,
+            wochenstunden: d.person.wochenstundenVertrag,
             klienten: d.klienten,
             fls: d.fls,
             urlaub: d.urlaub,
@@ -1138,7 +1147,7 @@ export default {
             erhoehung: d.erhoehung, // Endpunkt ist TL/GF-exklusiv
           });
         }
-        return json({ rolle, stand: new Date().toISOString(), rows }, 200, origin);
+        return json({ rolle, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows }, 200, origin);
       } catch (e) {
         return json({ error: `Manager-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
       }
