@@ -81,6 +81,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .card.c-auto::before{background:#546e7a}
 .card.c-klienten::before{background:var(--blue)}
 .card.c-fls::before{background:var(--accent-mid)}
+.card.c-nachweise::before{background:#6a4fa3}
 .card.wide{grid-column:1 / -1}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:12px}
 .card-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
@@ -254,7 +255,11 @@ const DEMO_PERSONEN = {
       finanzierung: 'Leasing', rueckgabe: '2026-09-15', dguvPruefung: '2025-12-09' },
     klienten: { aktiv: 7, hb: 5, mb: 1, v: 1 },
     fls: { sollWochenstunden: 26.5, istWochenstunden: null, istQuelle: 'offen',
-      istDurchschnitt4Wochen: 24.1 /* Demo-Platzhalter */ }
+      istDurchschnitt4Wochen: 24.1 /* Demo-Platzhalter */ },
+    nachweise: { fuehrungszeugnis: '2024-02-10', verfassungstreue: '2024-02-10',
+      datenschutz: '2025-11-03', fuehrerschein: '2026-01-15', behAusbildung: null,
+      weiterFortbildung: 'Systemische Beratung (laufend)' },
+    erhoehung: '2027-01-01'
   },
   'jonas.muster': {
     upn: 'jonas.muster@praxisneuewege.de',
@@ -296,6 +301,16 @@ const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('de-DE', {day:'2-d
 const fmtNum = (n, d=0) => n == null ? '—' : n.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials = name => (name||'').split(/[,\s]+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase();
+
+/* Frist-Ampel: Nachweis-Datum gegen Gültigkeitsdauer in Monaten.
+ * gelb ab warnMonate, rot ab maxMonate; fehlend = rot (Pflichtnachweis). */
+function fristChip(iso, warnMonate, maxMonate) {
+  if (!iso) return '<span class="chip chip-err">fehlt</span>';
+  const alter = (Date.now() - new Date(iso).getTime()) / (30.44 * 864e5);
+  if (alter >= maxMonate) return '<span class="chip chip-err">abgelaufen</span>';
+  if (alter >= warnMonate) return '<span class="chip chip-warn">bald fällig</span>';
+  return '<span class="chip chip-ok">gültig</span>';
+}
 
 /* Firmenwagen-Hochrechnung: km seit Jahresbeginn linear aufs Jahr */
 function kmPrognose(fw) {
@@ -589,6 +604,30 @@ function renderCards(d, own) {
     ${flsLive
       ? `<div class="note">Ist = abgerechnete Stunden aus ${fls.istRechnungen ?? '?'} Rechnung(en) · Quelle: ${esc(fls.istQuelle || 'Rechnungen')}${(fls.istQuelle||'').includes('fallback') ? ' — für die präzise Bewilligungs-Zuordnung <b>approvals.id</b> im Kilanka-Graphen freigeben' : ''}.</div>`
       : `<div class="note">Demo-Platzhalter (Ø letzte 4 Wochen). Live: abgerechnete Stunden aus Kilanka-Rechnungen des Vormonats.</div>`}
+  </div>
+
+  <!-- NACHWEISE & FRISTEN -->
+  <div class="card c-nachweise">
+    <div class="card-head">
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/></svg>Nachweise &amp; Fristen</div>
+      <span class="src-badge src-kilanka">Kilanka · udf</span>
+    </div>
+    ${!d.nachweise ? `<div class="note" style="margin-top:0">Noch keine Daten — Mitarbeiterprofil in Kilanka nicht gefunden oder Zusatzfelder leer.</div>` : `
+    <dl class="kv">
+      <dt>Führungszeugnis <span style="color:var(--text-hint)">(3 J.)</span></dt>
+      <dd>${fmtDate(d.nachweise.fuehrungszeugnis)} ${fristChip(d.nachweise.fuehrungszeugnis, 30, 36)}</dd>
+      <dt>Datenschutz <span style="color:var(--text-hint)">(jährl.)</span></dt>
+      <dd>${fmtDate(d.nachweise.datenschutz)} ${fristChip(d.nachweise.datenschutz, 11, 12)}</dd>
+      <dt>Verfassungstreue</dt>
+      <dd>${fmtDate(d.nachweise.verfassungstreue)}</dd>
+      <dt>Führerschein-Prüfung</dt>
+      <dd>${fmtDate(d.nachweise.fuehrerschein)}</dd>
+      <dt>BEH-Ausbildung</dt>
+      <dd>${fmtDate(d.nachweise.behAusbildung)}</dd>
+      ${d.erhoehung ? `<dt>Erhöhung <span style="color:var(--text-hint)">(nur TL/GF)</span></dt><dd>${fmtDate(d.erhoehung)}</dd>` : ''}
+      ${d.nachweise.weiterFortbildung ? `<dt>Weiter-/Fortbildung</dt><dd>${esc(d.nachweise.weiterFortbildung)}</dd>` : ''}
+    </dl>
+    <div class="note">Ersthelfer (jährl., Team Nordstern) und UVV (jährl.) erscheinen automatisch, sobald die Zusatzfelder in Kilanka angelegt sind.</div>`}
   </div>`;
 }
 

@@ -550,6 +550,12 @@ const COCKPIT_USER_GRAPH = {
   targetHours: { validFrom: 1, validUntil: 1, weeklyHours: 1, monthlyHours: 1 },
   contracts: { validFrom: 1, validUntil: 1, orgUnit: { name: 1 } },
   workQualifications: { validFrom: 1, validUntil: 1, qualification: { name: 1 } },
+  // Zusatzfelder: Schlüssel = exakte UI-Labels, Werte als {$date} (Doku §14).
+  // "Ersthelfer" und "UVV" ergänzen, sobald in Kilanka als Zusatzfeld angelegt.
+  udf: {
+    "Erhöhung": 1, "Führungszeugnis": 1, "Führerschein": 1, "Datenschutz": 1,
+    "Verfassungstreue": 1, "BEH Ausbildung": 1, "Weiter/Fortbildung": 1,
+  },
   $limit: 1000,
 };
 
@@ -763,7 +769,7 @@ async function buildCockpit(env, upn, now) {
   }
 
   // ── b) Stammdaten ──
-  let person = null;
+  let person = null, nachweise = null, erhoehung = null;
   try {
     const users = await fetchCockpitUsers(env);
     const me = (users || []).find((u) => {
@@ -789,6 +795,17 @@ async function buildCockpit(env, upn, now) {
         .map((ct) => kDate(ct.validFrom))
         .filter(Boolean)
         .sort((a, b) => a - b)[0] || null;
+      const u = me.udf || {};
+      const udfDatum = (k) => isoDate(kDate(u[k]));
+      nachweise = {
+        fuehrungszeugnis: udfDatum("Führungszeugnis"),
+        verfassungstreue: udfDatum("Verfassungstreue"),
+        datenschutz: udfDatum("Datenschutz"),
+        fuehrerschein: udfDatum("Führerschein"),
+        behAusbildung: udfDatum("BEH Ausbildung"),
+        weiterFortbildung: u["Weiter/Fortbildung"] || null,
+      };
+      erhoehung = udfDatum("Erhöhung"); // Sichtbarkeit wird in der Route beschränkt
       person = {
         name: userRecName(me),
         kilankaId: String(me.id),
@@ -917,6 +934,8 @@ async function buildCockpit(env, upn, now) {
     personVerfuegbar: !!person,
     urlaub, krankheit,
     abwesenheitenVerfuegbar: abs.verfuegbar === true,
+    nachweise,
+    erhoehung, // nur TL/GF — Route entfernt das Feld für Fachkraft-Sicht
     firmenwagen: { vorhanden: false, quelle: "fuhrpark-liste folgt" },
     klienten: { aktiv: hb + mb + v, hb, mb, v },
     fls,
@@ -1027,6 +1046,7 @@ export default {
         }
 
         const data = await buildCockpit(env, target, new Date());
+        if (rolle === "fk") delete data.erhoehung; // Gehaltsdaten nur für TL/GF
         data.sicht = {
           rolle,
           mitarbeiter: sichtbar,
