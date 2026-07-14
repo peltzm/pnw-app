@@ -101,7 +101,13 @@ tr{cursor:pointer}
       <h2>Team-Übersicht</h2>
       <p id="pageSub">wird geladen …</p>
     </div>
-    <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="reload()">Aktualisieren</button>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Team</label>
+      <select id="teamFilter" onchange="render()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)">
+        <option value="">Alle</option>
+      </select>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="reload()">Aktualisieren</button>
+    </div>
   </div>
   <div class="wrap">
     <div class="kpis" id="kpis"></div>
@@ -183,9 +189,30 @@ function sortWert(r, key) {
   }
 }
 
+function fuelleTeamFilter() {
+  const sel = document.getElementById('teamFilter');
+  const vorher = sel.value;
+  // Nur Leitungen anbieten, die tatsächlich jemanden führen
+  const leitungen = new Map();
+  for (const r of daten.rows) {
+    if (r.leitung?.upn) leitungen.set(r.leitung.upn, r.leitung.name || r.leitung.upn);
+  }
+  sel.innerHTML = '<option value="">Alle</option>' +
+    [...leitungen.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], 'de'))
+      .map(([upn, name]) => `<option value="${esc(upn)}">${esc(name)}</option>`).join('');
+  if ([...leitungen.keys()].includes(vorher)) sel.value = vorher;
+  // Für Teamleitungen selbst ist die Sicht ohnehin gefiltert → Dropdown ausblenden
+  if (daten.rolle !== 'gf') { sel.style.display = 'none'; sel.previousElementSibling.style.display = 'none'; }
+}
+
 function render() {
   if (!daten) return;
-  const rows = [...daten.rows].sort((a, b) => {
+  const filter = document.getElementById('teamFilter').value;
+  const basis = filter
+    ? daten.rows.filter(r => r.leitung?.upn === filter || r.upn === filter) // Team + Leitung selbst
+    : daten.rows;
+  const rows = [...basis].sort((a, b) => {
     const x = sortWert(a, sortKey), y = sortWert(b, sortKey);
     return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
   });
@@ -272,6 +299,7 @@ async function laden() {
       throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
     }
     daten = await r.json();
+    fuelleTeamFilter();
     render();
   } catch(e) {
     document.getElementById('loading').innerHTML =

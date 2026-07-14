@@ -508,6 +508,31 @@ async function attendantNamen(env) {
   return map;
 }
 
+// Vorgesetzten-Zuordnung aller Nutzer über EINE Graph-Abfrage
+// (gleiche Hierarchie-Quelle wie die Organisation-App).
+async function fetchManagerMap(graphToken) {
+  const map = new Map();
+  if (!graphToken) return map;
+  try {
+    const r = await fetch(
+      "https://graph.microsoft.com/v1.0/users?$select=userPrincipalName,mail&$expand=manager($select=displayName,userPrincipalName,mail)&$top=999",
+      { headers: { Authorization: `Bearer ${graphToken}` } }
+    );
+    if (!r.ok) return map;
+    const { value } = await r.json();
+    for (const u of value || []) {
+      const upn = (u.mail || u.userPrincipalName || "").toLowerCase();
+      const m = u.manager;
+      if (!upn || !m) continue;
+      map.set(upn, {
+        upn: (m.mail || m.userPrincipalName || "").toLowerCase(),
+        name: m.displayName || m.userPrincipalName || "",
+      });
+    }
+  } catch { /* Zuordnung optional */ }
+  return map;
+}
+
 // Alle aktiven Mitarbeitenden aus Kilanka (für die GF-Auswahlliste).
 // Fallback: Betreuer aus den Klienten-Zuordnungen (immer verfügbar).
 async function alleAktivenMitarbeiter(env) {
@@ -1030,12 +1055,14 @@ export default {
           liste = [{ upn: caller, name: auth.name || caller }];
           for (const r of reports) if (!seen.has(r.upn)) { seen.add(r.upn); liste.push(r); }
         }
+        const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
         const now = new Date();
         const rows = [];
         for (const m of liste) {
           const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
           rows.push({
             upn: m.upn,
+            leitung: mgrMap.get(m.upn) || null,
             name: d.person.name || m.name || m.upn,
             team: d.person.team,
             klienten: d.klienten,
