@@ -431,7 +431,18 @@ const istStationaer = f => STATIONAER.some(rx => rx.test(f.hilfeart || '') || rx
 // deren Maßnahmen-Amt dem Team zugeordnet ist (ein Fall = ein Team, wie im
 // Kilanka-Applet „Aktive Klient:innen je Team"). Braucht Worker mit hbFaelle+amt;
 // Fallback ohne Amt-Daten: HB-Fälle der Personal-Hierarchie (teamRows).
-const teamFallDaten = (alleRows, teamRows, aemter) => {
+const teamFallDaten = (dataset, teamRows, aemter) => {
+  // Bevorzugt: vollständige HB-Fallliste des Workers über ALLE Mitarbeitenden —
+  // damit ist die Amt-Zählung auch in der Teamleitungs-Sicht komplett.
+  if (aemter && Array.isArray(dataset.amtFaelle)) {
+    const map = new Map();
+    for (const f of dataset.amtFaelle) {
+      if (istStationaer(f)) continue; // nur ambulante Fälle
+      if (amtGehoertZu(f.amt, aemter)) map.set(String(f.id), { name: f.name, amt: f.amt });
+    }
+    return { n: map.size, map, exakt: true, amtBasis: true };
+  }
+  const alleRows = dataset.rows || [];
   const map = new Map(); // id → {name, amt}
   let hatAmt = false, exakt = false;
   const quellRows = aemter ? alleRows : teamRows;
@@ -459,9 +470,12 @@ const teamFallDaten = (alleRows, teamRows, aemter) => {
   return { n, map, exakt, amtBasis };
 };
 // Nicht zugeordnete Ämter über alle Fälle (Transparenz statt stillem „Sonstige")
-const unzugeordneteAemter = rows => {
+const unzugeordneteAemter = dataset => {
   const alle = new Set();
-  for (const r of rows) for (const f of (r.klienten?.hbFaelle || [])) {
+  const quelle = Array.isArray(dataset.amtFaelle)
+    ? dataset.amtFaelle
+    : (dataset.rows || []).flatMap(r => r.klienten?.hbFaelle || []);
+  for (const f of quelle) {
     if (istStationaer(f)) continue;
     if (f.amt && !AMT_TEAMS.some(t => amtGehoertZu(f.amt, t.aemter))) alle.add(f.amt);
   }
@@ -512,7 +526,7 @@ async function ladeZiele() {
     cards.innerHTML = eintraege
       .sort((a, b) => a[1].localeCompare(b[1], 'de'))
       .map(([upn, name]) => zielCard(upn, name, qStart, qEnde, dStart, dEnde)).join('');
-    const offen = dEnde.rolle === 'gf' ? unzugeordneteAemter(dEnde.rows) : [];
+    const offen = dEnde.rolle === 'gf' ? unzugeordneteAemter(dEnde) : [];
     if (offen.length) cards.innerHTML += '<div class="legend" style="grid-column:1/-1;color:var(--warn)">⚠ Keinem Team zugeordnete Ämter (zählen für keine Teamleitung): ' + offen.map(esc).join(' · ') + ' — Zuordnung in AMT_TEAMS ergänzen.</div>';
   } catch (e) {
     lade.style.display = 'none';
@@ -523,7 +537,7 @@ async function ladeZiele() {
 function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
   const teamE = teamVon(dEnde.rows, upn), teamS = teamVon(dStart.rows, upn);
   const aemter = aemterFuerTL(name);
-  const fEnde = teamFallDaten(dEnde.rows, teamE, aemter), fStart = teamFallDaten(dStart.rows, teamS, aemter);
+  const fEnde = teamFallDaten(dEnde, teamE, aemter), fStart = teamFallDaten(dStart, teamS, aemter);
   const fE = fEnde.n, fS = fStart.n, netto = fE - fS;
   const exakt = fEnde.exakt && fStart.exakt;
   const amtBasis = fEnde.amtBasis && fStart.amtBasis;
