@@ -499,14 +499,20 @@ async function ladeZiele() {
     const GF = ['sonja.peltz@praxisneuewege.de', 'markus.peltz@praxisneuewege.de'];
     const leitungen = new Map();
     for (const r of dEnde.rows) {
-      if (r.leitung?.upn && !GF.includes(r.leitung.upn)) leitungen.set(r.leitung.upn, r.leitung.name || r.leitung.upn);
+      if (r.leitung?.upn && !GF.includes(r.leitung.upn.toLowerCase())) leitungen.set(r.leitung.upn.toLowerCase(), r.leitung.name || r.leitung.upn);
     }
 
-    cards.innerHTML = [...leitungen.entries()]
+    // Sichtbarkeit: GF (Sonja/Markus) sehen alle Teamleitungen,
+    // Teamleitungen ausschließlich die eigene Karte, alle anderen nichts.
+    const meinUpn = (currentAccount?.username || '').toLowerCase();
+    let eintraege = [...leitungen.entries()];
+    if (dEnde.rolle !== 'gf') eintraege = eintraege.filter(([upn]) => upn === meinUpn);
+    if (!eintraege.length) { sec.style.display = 'none'; return; }
+
+    cards.innerHTML = eintraege
       .sort((a, b) => a[1].localeCompare(b[1], 'de'))
-      .map(([upn, name]) => zielCard(upn, name, qStart, qEnde, dStart, dEnde)).join('')
-      || '<div class="legend">Keine Teamleitungen in den Daten gefunden.</div>';
-    const offen = unzugeordneteAemter(dEnde.rows);
+      .map(([upn, name]) => zielCard(upn, name, qStart, qEnde, dStart, dEnde)).join('');
+    const offen = dEnde.rolle === 'gf' ? unzugeordneteAemter(dEnde.rows) : [];
     if (offen.length) cards.innerHTML += '<div class="legend" style="grid-column:1/-1;color:var(--warn)">⚠ Keinem Team zugeordnete Ämter (zählen für keine Teamleitung): ' + offen.map(esc).join(' · ') + ' — Zuordnung in AMT_TEAMS ergänzen.</div>';
   } catch (e) {
     lade.style.display = 'none';
