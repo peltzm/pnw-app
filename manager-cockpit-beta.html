@@ -87,7 +87,6 @@ tr{cursor:pointer}
 .ziel-total .lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
 .ziel-total .val{font-size:26px;font-weight:700}
 .ziel-hint{font-size:11px;color:var(--text-hint);margin-top:8px;line-height:1.5}
-.ziel-bonus{font-size:11px;color:var(--warn);font-weight:600;margin-top:6px}
 .netto-btn{background:none;border:none;font:inherit;font-weight:600;color:var(--accent);cursor:pointer;text-decoration:underline dotted;padding:0}
 .falldiff{display:none;background:var(--accent-light);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:12px}
 .falldiff.open{display:block}
@@ -566,7 +565,6 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
     </div>
     ${total == null ? '<div class="ziel-hint">Dokumentation und MA-Zufriedenheit eintragen, um den Gesamtwert zu berechnen.</div>' : ''}
     ${total != null ? '<div class="ziel-hint">Ziel-Zulage: 7,5 % × Mischgehalt × ' + fmtNum(total * 100, 0) + ' % — Auszahlung im Folgemonat des Quartals (§5.3).</div>' : ''}
-    ${roh.akquise > 1.5 ? '<div class="ziel-bonus">Übererfüllung Fallakquise &gt; 150 % → Bonus +2,5 % möglich (GF-Entscheid, §5.2 Abs. 4)</div>' : ''}
   </div>`;
 }
 
