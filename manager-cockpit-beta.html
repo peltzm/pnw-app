@@ -167,7 +167,7 @@ tr{cursor:pointer}
         Netto-Fallakquise = eindeutige Fälle des Teams (über Hauptbetreuung; Mitbetreuung/Vertretung zählen nicht) am Quartalsende minus Quartalsanfang (Ziel: +2). ·
         Team-Auslastung = eindeutige Fälle ÷ Team-VZÄ am Quartalsende (Ziel: 7,5). Team = Teamleitung + direkt zugeordnete Mitarbeitende. ·
         Dokumentationsqualität (Ziel: 95 % pünktlich) und MA-Zufriedenheit (Ziel: 4,0 von 5) sind manuelle Eingaben und werden lokal im Browser gespeichert. ·
-        Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 % (§5.2). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-%.
+        Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 %, je Kriterium bei 150 % gekappt (▲) — darüber Bonus-Territorium (§5.2). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-%.
       </div>
     </div>
   </div>
@@ -387,7 +387,11 @@ function zielInputLesen(q, upn) {
 }
 function zielInputSchreiben(q, upn, feld, wert) {
   const v = zielInputLesen(q, upn);
-  v[feld] = wert === '' ? null : Number(wert);
+  let n = wert === '' ? null : Number(wert);
+  if (n == null || !Number.isFinite(n)) n = null;
+  else if (feld === 'doku') n = Math.min(100, Math.max(0, n)); // % pünktliche Berichte
+  else if (feld === 'ma') n = Math.min(5, Math.max(1, n));     // Befragungs-Skala 1–5
+  v[feld] = n;
   localStorage.setItem(zielInputKey(q, upn), JSON.stringify(v));
   ladeZiele(); // neu rechnen (Daten kommen aus dem Cache, kein Netz)
 }
@@ -418,9 +422,13 @@ async function ladeZiele() {
     const [dStart, dEnde] = await Promise.all([holeStichtag(qStart), holeStichtag(qEnde)]);
     lade.style.display = 'none';
 
-    // Teamleitungen aus den Quartalsend-Daten ableiten
+    // Teamleitungen aus den Quartalsend-Daten ableiten — GF ausnehmen
+    // (die Vergütungsvereinbarung §5 gilt nur für Teamleitungen)
+    const GF = ['sonja.peltz@praxisneuewege.de', 'markus.peltz@praxisneuewege.de'];
     const leitungen = new Map();
-    for (const r of dEnde.rows) if (r.leitung?.upn) leitungen.set(r.leitung.upn, r.leitung.name || r.leitung.upn);
+    for (const r of dEnde.rows) {
+      if (r.leitung?.upn && !GF.includes(r.leitung.upn)) leitungen.set(r.leitung.upn, r.leitung.name || r.leitung.upn);
+    }
 
     cards.innerHTML = [...leitungen.entries()]
       .sort((a, b) => a[1].localeCompare(b[1], 'de'))
@@ -442,11 +450,19 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
   const ohneStunden = teamE.filter(r => r.wochenstunden == null).length;
   const inp = zielInputLesen(qEnde, upn);
 
-  // Erreichung je Kriterium: linear, Untergrenze 0 (§5.2), keine Kappung nach oben (vgl. Szenario 125 %)
-  const eAkquise = Math.max(0, netto / ZIEL.akquiseSoll);
-  const eAusl = proVzae == null ? null : Math.max(0, proVzae / ZIEL.auslastungSoll);
-  const eDoku = inp.doku == null ? null : Math.max(0, inp.doku / ZIEL.dokuSoll);
-  const eMa = inp.ma == null ? null : Math.max(0, inp.ma / ZIEL.maSoll);
+  // Erreichung je Kriterium: linear, Untergrenze 0 (§5.2 Abs. 2), Kappung bei 150 % —
+  // darüber ist Bonus-Territorium (GF-Entscheid, §5.2 Abs. 4), keine lineare Zulage.
+  const CAP = 1.5;
+  const roh = {
+    akquise: Math.max(0, netto / ZIEL.akquiseSoll),
+    ausl: proVzae == null ? null : Math.max(0, proVzae / ZIEL.auslastungSoll),
+    doku: inp.doku == null ? null : Math.max(0, inp.doku / ZIEL.dokuSoll),
+    ma: inp.ma == null ? null : Math.max(0, inp.ma / ZIEL.maSoll)
+  };
+  const kap = e => e == null ? null : Math.min(CAP, e);
+  const eAkquise = kap(roh.akquise), eAusl = kap(roh.ausl), eDoku = kap(roh.doku), eMa = kap(roh.ma);
+  const pctKap = (e, r) => e == null ? '—'
+    : Math.round(e * 100) + ' %' + (r > CAP ? ' <span class="zt" title="auf 150 % gekappt — darüber Bonus-Territorium (§5.2 Abs. 4)">▲</span>' : '');
 
   const alle = [eAkquise, eAusl, eDoku, eMa];
   const komplett = alle.every(e => e != null);
@@ -455,25 +471,25 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
       ZIEL.gewichte.doku * eDoku + ZIEL.gewichte.ma * eMa
     : null;
 
-  const zeile = (label, ziel, ist, err) => `
+  const zeile = (label, ziel, ist, err, rohWert) => `
     <div class="zielrow">
       <div class="zl"><b>${label}</b><br><span class="zt">Ziel: ${ziel}</span></div>
       <div class="zi">${ist}</div>
-      <div class="ze">${pct(err)}</div>
+      <div class="ze">${pctKap(err, rohWert)}</div>
     </div>`;
   const inputZeile = (label, ziel, feld, wert, attrs) => `
     <div class="zielrow">
       <div class="zl"><b>${label}</b><br><span class="zt">Ziel: ${ziel}</span></div>
       <div class="zi"><input type="number" ${attrs} value="${wert ?? ''}" placeholder="—"
         onchange="zielInputSchreiben('${esc(qEnde)}','${esc(upn)}','${feld}',this.value)"></div>
-      <div class="ze">${pct(feld === 'doku' ? eDoku : eMa)}</div>
+      <div class="ze">${pctKap(feld === 'doku' ? eDoku : eMa, feld === 'doku' ? roh.doku : roh.ma)}</div>
     </div>`;
 
   return `<div class="zielcard">
     <div class="tl-name">${esc(name)}</div>
     <div class="tl-sub">Team: ${teamE.length} Pers. · ${fmtNum(v, 2)} VZÄ · ${fE} Fälle (HB, Anfang: ${fS})${ohneStunden ? ' · ⚠ ' + ohneStunden + ' ohne Vertragsstunden' : ''}${exakt ? '' : ' · ⚠ Worker-Update ausstehend: Zählung über HB-Summe statt eindeutiger Fall-IDs'}</div>
-    ${zeile('Netto-Fallakquise <span class="zt">(30 %)</span>', '+' + ZIEL.akquiseSoll + ' Fälle', (netto > 0 ? '+' : '') + netto, eAkquise)}
-    ${zeile('Team-Auslastung <span class="zt">(30 %)</span>', fmtNum(ZIEL.auslastungSoll, 1) + ' F./VZÄ', proVzae == null ? '—' : fmtNum(proVzae, 2), eAusl)}
+    ${zeile('Netto-Fallakquise <span class="zt">(30 %)</span>', '+' + ZIEL.akquiseSoll + ' Fälle', (netto > 0 ? '+' : '') + netto, eAkquise, roh.akquise)}
+    ${zeile('Team-Auslastung <span class="zt">(30 %)</span>', fmtNum(ZIEL.auslastungSoll, 1) + ' F./VZÄ', proVzae == null ? '—' : fmtNum(proVzae, 2), eAusl, roh.ausl)}
     ${inputZeile('Dokumentation <span class="zt">(20 %)</span>', ZIEL.dokuSoll + ' % pünktlich', 'doku', inp.doku, 'min="0" max="100" step="1"')}
     ${inputZeile('MA-Zufriedenheit <span class="zt">(20 %)</span>', fmtNum(ZIEL.maSoll, 1) + ' von 5', 'ma', inp.ma, 'min="1" max="5" step="0.1"')}
     <div class="ziel-total">
@@ -482,7 +498,7 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
     </div>
     ${total == null ? '<div class="ziel-hint">Dokumentation und MA-Zufriedenheit eintragen, um den Gesamtwert zu berechnen.</div>' : ''}
     ${total != null ? '<div class="ziel-hint">Ziel-Zulage: 7,5 % × Mischgehalt × ' + fmtNum(total * 100, 0) + ' % — Auszahlung im Folgemonat des Quartals (§5.3).</div>' : ''}
-    ${eAkquise > 1.5 ? '<div class="ziel-bonus">Übererfüllung Fallakquise &gt; 150 % → Bonus +2,5 % möglich (GF-Entscheid, §5.2 Abs. 4)</div>' : ''}
+    ${roh.akquise > 1.5 ? '<div class="ziel-bonus">Übererfüllung Fallakquise &gt; 150 % → Bonus +2,5 % möglich (GF-Entscheid, §5.2 Abs. 4)</div>' : ''}
   </div>`;
 }
 
