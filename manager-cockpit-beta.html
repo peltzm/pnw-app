@@ -173,8 +173,8 @@ tr{cursor:pointer}
       <div class="loading-state" id="zielLoading" style="display:none;padding:40px 20px"><div class="spinner"></div>Stichtags-Daten für das Quartal werden geladen …</div>
       <div class="zielcards" id="zielCards"></div>
       <div class="legend">
-        Netto-Fallakquise = eindeutige Fälle des Teams (über Hauptbetreuung; Mitbetreuung/Vertretung zählen nicht) am Quartalsende minus Quartalsanfang (Ziel: +2) — Klick auf den Wert zeigt die Zu- und Abgänge namentlich. Achtung: Die Klientenentwicklungs-Übersicht ordnet Fälle über das zuständige Jugendamt den Teams zu, das Cockpit über die Hauptbetreuer:innen — Abweichungen zwischen beiden sind daher möglich. ·
-        Team-Auslastung = eindeutige Fälle ÷ Team-VZÄ am Quartalsende (Ziel: 7,5). Team = Teamleitung + direkt zugeordnete Mitarbeitende. ·
+        Netto-Fallakquise und Fallbestand = eindeutige Fälle (Hauptbetreuung) der dem Team <b>zugeordneten Jugendämter</b> — gleiche Logik wie die Klientenentwicklungs-Übersicht; Quartalsende minus Quartalsanfang (Ziel: +2). Klick auf den Wert zeigt die Zu- und Abgänge namentlich mit Amt. Zuordnung: Jörg = Kelheim + Ingolstadt · Laura = PAF + Freising · Nadine = Neuburg-Schrobenhausen + Eichstätt. ·
+        Team-Auslastung = Fälle der zugeordneten Ämter ÷ Personal-VZÄ des Teams (Teamleitung + direkt Zugeordnete) am Quartalsende (Ziel: 7,5). ·
         Dokumentationsqualität (Ziel: 95 % pünktlich) und MA-Zufriedenheit (Ziel: 4,0 von 5) sind manuelle Eingaben und werden lokal im Browser gespeichert. ·
         Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 %, je Kriterium bei 150 % gekappt (▲) — darüber Bonus-Territorium (§5.2). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-%.
       </div>
@@ -406,22 +406,55 @@ function zielInputSchreiben(q, upn, feld, wert) {
 }
 
 const teamVon = (rows, upn) => rows.filter(r => r.leitung?.upn === upn || r.upn === upn);
-// Fälle des Teams: eindeutige Fall-IDs über die Hauptbetreuung (ein Fall = ein Team,
-// MB/Vertretung zählen nicht). Liefert id→Name-Map für die Zu-/Abgangs-Liste;
-// Namen erst nach Worker-Update (hbFaelle), IDs ab hbIds, sonst Fallback HB-Summe.
-const teamFallDaten = rows => {
-  const map = new Map(); let exakt = false;
-  for (const r of rows) {
+// ── Amt→Team-Zuordnung (Paten-Jugendämter, wie in der Klientenentwicklungs-
+// Übersicht): Die Ziele der Teamleitungen richten sich nach den zugeordneten
+// Ämtern, nicht nach der Personal-Hierarchie. Zuordnung hier pflegen —
+// Muster werden tolerant gegen department.name aus Kilanka geprüft.
+const AMT_TEAMS = [
+  { tl: /schneider/i, aemter: [/kelheim/i, /ingolstadt/i] },
+  { tl: /meier/i,     aemter: [/paf|pfaffenhofen/i, /freising/i] },
+  { tl: /grund/i,     aemter: [/neuburg|schrobenhausen/i, /eichst/i] },
+];
+const aemterFuerTL = tlName => (AMT_TEAMS.find(t => t.tl.test(tlName || '')) || {}).aemter || null;
+const amtGehoertZu = (amt, aemter) => !!amt && aemter.some(rx => rx.test(amt));
+
+// Fälle eines Teams zum Stichtag: eindeutige HB-Fälle ALLER Mitarbeitenden,
+// deren Maßnahmen-Amt dem Team zugeordnet ist (ein Fall = ein Team, wie im
+// Kilanka-Applet „Aktive Klient:innen je Team"). Braucht Worker mit hbFaelle+amt;
+// Fallback ohne Amt-Daten: HB-Fälle der Personal-Hierarchie (teamRows).
+const teamFallDaten = (alleRows, teamRows, aemter) => {
+  const map = new Map(); // id → {name, amt}
+  let hatAmt = false, exakt = false;
+  const quellRows = aemter ? alleRows : teamRows;
+  for (const r of quellRows) {
     if (Array.isArray(r.klienten?.hbFaelle)) {
       exakt = true;
-      for (const f of r.klienten.hbFaelle) map.set(String(f.id), f.name || String(f.id));
-    } else if (Array.isArray(r.klienten?.hbIds)) {
+      for (const f of r.klienten.hbFaelle) {
+        if (f.amt !== undefined) hatAmt = true;
+        if (aemter && f.amt !== undefined) {
+          if (amtGehoertZu(f.amt, aemter)) map.set(String(f.id), { name: f.name, amt: f.amt });
+        } else if (!aemter) {
+          map.set(String(f.id), { name: f.name, amt: f.amt || '' });
+        }
+      }
+    } else if (!aemter && Array.isArray(r.klienten?.hbIds)) {
       exakt = true;
-      for (const id of r.klienten.hbIds) if (!map.has(String(id))) map.set(String(id), null);
+      for (const id of r.klienten.hbIds) if (!map.has(String(id))) map.set(String(id), { name: null, amt: '' });
     }
   }
-  const n = exakt ? map.size : rows.reduce((s, r) => s + (r.klienten?.hb || 0), 0);
-  return { n, map, exakt };
+  const amtBasis = !!(aemter && hatAmt);
+  // Ohne Amt-Daten im Payload (alter Worker) auf Personal-Hierarchie zurückfallen
+  if (aemter && !hatAmt) return teamFallDaten(alleRows, teamRows, null);
+  const n = exakt ? map.size : teamRows.reduce((s, r) => s + (r.klienten?.hb || 0), 0);
+  return { n, map, exakt, amtBasis };
+};
+// Nicht zugeordnete Ämter über alle Fälle (Transparenz statt stillem „Sonstige")
+const unzugeordneteAemter = rows => {
+  const alle = new Set();
+  for (const r of rows) for (const f of (r.klienten?.hbFaelle || [])) {
+    if (f.amt && !AMT_TEAMS.some(t => amtGehoertZu(f.amt, t.aemter))) alle.add(f.amt);
+  }
+  return [...alle].sort((a, b) => a.localeCompare(b, 'de'));
 };
 function toggleFallDiff(id) { document.getElementById(id)?.classList.toggle('open'); }
 const vzae = rows => rows.reduce((s, r) => s + (r.wochenstunden || 0), 0) / 39;
@@ -450,6 +483,8 @@ async function ladeZiele() {
       .sort((a, b) => a[1].localeCompare(b[1], 'de'))
       .map(([upn, name]) => zielCard(upn, name, qStart, qEnde, dStart, dEnde)).join('')
       || '<div class="legend">Keine Teamleitungen in den Daten gefunden.</div>';
+    const offen = unzugeordneteAemter(dEnde.rows);
+    if (offen.length) cards.innerHTML += '<div class="legend" style="grid-column:1/-1;color:var(--warn)">⚠ Keinem Team zugeordnete Ämter (zählen für keine Teamleitung): ' + offen.map(esc).join(' · ') + ' — Zuordnung in AMT_TEAMS ergänzen.</div>';
   } catch (e) {
     lade.style.display = 'none';
     cards.innerHTML = '<div class="legend" style="color:var(--error)">Zielerreichung nicht ladbar: ' + esc(e.message) + '</div>';
@@ -458,9 +493,11 @@ async function ladeZiele() {
 
 function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
   const teamE = teamVon(dEnde.rows, upn), teamS = teamVon(dStart.rows, upn);
-  const fEnde = teamFallDaten(teamE), fStart = teamFallDaten(teamS);
+  const aemter = aemterFuerTL(name);
+  const fEnde = teamFallDaten(dEnde.rows, teamE, aemter), fStart = teamFallDaten(dStart.rows, teamS, aemter);
   const fE = fEnde.n, fS = fStart.n, netto = fE - fS;
   const exakt = fEnde.exakt && fStart.exakt;
+  const amtBasis = fEnde.amtBasis && fStart.amtBasis;
   // Zu-/Abgänge: im Endbestand aber nicht im Anfangsbestand und umgekehrt
   const zugaenge = [...fEnde.map].filter(([id]) => !fStart.map.has(id));
   const abgaenge = [...fStart.map].filter(([id]) => !fEnde.map.has(id));
@@ -469,9 +506,9 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
   const diffHtml = exakt ? `
     <div class="falldiff" id="${diffId}">
       <h5>Zugänge (${zugaenge.length})</h5>
-      <ul>${zugaenge.length ? zugaenge.map(([id, nm]) => '<li><span class="fd-plus">+</span>' + (nm ? esc(nm) : 'Fall-ID ' + esc(id)) + '</li>').join('') : '<li>—</li>'}</ul>
+      <ul>${zugaenge.length ? zugaenge.map(([id, f]) => '<li><span class="fd-plus">+</span>' + (f.name ? esc(f.name) : 'Fall-ID ' + esc(id)) + (f.amt ? ' <span class="zt">· ' + esc(f.amt) + '</span>' : '') + '</li>').join('') : '<li>—</li>'}</ul>
       <h5>Abgänge (${abgaenge.length})</h5>
-      <ul>${abgaenge.length ? abgaenge.map(([id, nm]) => '<li><span class="fd-minus">−</span>' + (nm ? esc(nm) : 'Fall-ID ' + esc(id)) + '</li>').join('') : '<li>—</li>'}</ul>
+      <ul>${abgaenge.length ? abgaenge.map(([id, f]) => '<li><span class="fd-minus">−</span>' + (f.name ? esc(f.name) : 'Fall-ID ' + esc(id)) + (f.amt ? ' <span class="zt">· ' + esc(f.amt) + '</span>' : '') + '</li>').join('') : '<li>—</li>'}</ul>
     </div>` : '';
   const v = vzae(teamE);
   const proVzae = v > 0 ? fE / v : null;
@@ -515,7 +552,7 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
 
   return `<div class="zielcard">
     <div class="tl-name">${esc(name)}</div>
-    <div class="tl-sub">Team: ${teamE.length} Pers. · ${fmtNum(v, 2)} VZÄ · ${fE} Fälle (HB, Anfang: ${fS})${ohneStunden ? ' · ⚠ ' + ohneStunden + ' ohne Vertragsstunden' : ''}${exakt ? '' : ' · ⚠ Worker-Update ausstehend: Zählung über HB-Summe statt eindeutiger Fall-IDs'}</div>
+    <div class="tl-sub">Team: ${teamE.length} Pers. · ${fmtNum(v, 2)} VZÄ · ${fE} Fälle ${amtBasis ? '(zugeordnete Ämter' : '(HB, Personal-Hierarchie'}, Anfang: ${fS})${ohneStunden ? ' · ⚠ ' + ohneStunden + ' ohne Vertragsstunden' : ''}${amtBasis ? '' : ' · ⚠ Amt-Daten fehlen im Worker-Payload — Fallback Personal-Hierarchie'}</div>
     ${zeile('Netto-Fallakquise <span class="zt">(30 %)</span>', '+' + ZIEL.akquiseSoll + ' Fälle',
       exakt ? '<button class="netto-btn" onclick="toggleFallDiff(\'' + diffId + '\')" title="Zu- und Abgänge anzeigen">' + (netto > 0 ? '+' : '') + netto + '</button>' : (netto > 0 ? '+' : '') + netto,
       eAkquise, roh.akquise)}
