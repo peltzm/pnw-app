@@ -622,12 +622,12 @@ function renderCards(d, own) {
       <dd>${fmtDate(d.nachweise.verfassungstreue)}</dd>
       <dt>Führerschein-Prüfung</dt>
       <dd>${fmtDate(d.nachweise.fuehrerschein)}</dd>
-      <dt>BEH-Ausbildung</dt>
-      <dd>${fmtDate(d.nachweise.behAusbildung)}</dd>
+      <dt>Ersthelfer (BEH)${(d.person.team||'').match(/nordstern/i) ? ' <span style="color:var(--text-hint)">(jährl.)</span>' : ''}</dt>
+      <dd>${fmtDate(d.nachweise.behAusbildung)} ${(d.person.team||'').match(/nordstern/i) ? fristChip(d.nachweise.behAusbildung, 11, 12) : ''}</dd>
       ${d.erhoehung ? `<dt>Erhöhung <span style="color:var(--text-hint)">(nur TL/GF)</span></dt><dd>${fmtDate(d.erhoehung)}</dd>` : ''}
       ${d.nachweise.weiterFortbildung ? `<dt>Weiter-/Fortbildung</dt><dd>${esc(d.nachweise.weiterFortbildung)}</dd>` : ''}
     </dl>
-    <div class="note">Ersthelfer (jährl., Team Nordstern) und UVV (jährl.) erscheinen automatisch, sobald die Zusatzfelder in Kilanka angelegt sind.</div>`}
+    <div class="note">Ersthelfer-Ampel (jährl.) gilt nur für das Team Nordstern. UVV (jährl.) erscheint automatisch, sobald das Zusatzfeld in Kilanka angelegt ist.</div>`}
   </div>`;
 }
 
