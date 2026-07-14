@@ -167,3 +167,18 @@ Kilanka prüfen (Response im Netzwerk-Tab) und das Matching in
 `urlaub.geplanteTermine = [{ von, bis, tage }]` — genehmigte Urlaube mit
 Beginn in der Zukunft, chronologisch sortiert. Die Urlaubskarte zeigt die
 nächsten vier Termine mit Datum und Tageszahl, weitere als „+ n weitere".
+
+## Zielerreichung Teamleitungen (Manager-Cockpit)
+
+Grundlage: Leistungs- und Vergütungsvereinbarung Teamleitung Ambulante Hilfen, §5 (leistungsbezogene Zulage, quartalsweise, 100 % variabel).
+
+| Kriterium | Gewicht | 100-%-Ziel pro Quartal | Datenquelle |
+|---|---|---|---|
+| Netto-Fallakquise | 30 % | +2 Fälle netto | Δ aktive Fälle des Teams: Worker-Stichtag Quartalsende minus Quartalsanfang |
+| Team-Auslastung | 30 % | 7,5 Fälle pro VZÄ | aktive Fälle ÷ Team-VZÄ (Vertragsstunden ÷ 39) am Quartalsende |
+| Dokumentationsqualität | 20 % | 95 % pünktliche Berichte | manuelle Eingabe (localStorage, Schlüssel `pnw-ziel:<quartalsende>:<upn>`) |
+| MA-Zufriedenheit | 20 % | 4,0 (Skala 1–5) | manuelle Eingabe (localStorage, s. o.) |
+
+Berechnungsregeln (§5.2): Teilzielerreichung linear, negative Werte zählen als 0 %, nach oben keine Kappung (vgl. Vertrags-Szenario 125 %). Bei Netto-Fallakquise > 150 % zeigt die Karte den Hinweis auf den möglichen +2,5-%-Bonus (GF-Entscheid). „Team" = Teamleitung selbst plus direkt zugeordnete Mitarbeitende (identisch zum Team-Filter der Tabelle). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-% — das Mischgehalt liegt nicht im Cockpit, die Karte zeigt daher nur die Formel.
+
+Technik: eigener Stichtag-Cache im Frontend (`stichtagCache`), zwei zusätzliche `/api/manager-cockpit?stichtag=`-Abrufe pro Quartal; kein Worker-Update nötig. Offene Punkte: Netto-Fallakquise approximiert „neue Fälle minus Abgänge" über die Bestandsdifferenz — Wechsel innerhalb des Quartals (Zugang + Abgang gleicher Höhe) heben sich auf.
