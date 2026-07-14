@@ -199,14 +199,21 @@ export function berechneAuslastung(clients: ApiClient[], users: ApiUser[], heute
         for (const m of aktiveMassnahmen) {
             // Gelöschte Kontingente ausfiltern (deletedAt seit Support-Fix 13.07.2026).
             // Verifiziert an Meier, Laura: 84,5 h/Wo (mit Gelöschten) vs. 31,6 korrekt.
+            // Gelöscht = deletedAt mit IRGENDEINEM belegten Wert ($date, $datetime,
+            // String) — nicht nur, was kDate parsen kann (Sicherheitsgurt).
+            const istGeloescht = (q: Quota) =>
+                q.deletedAt != null &&
+                (typeof q.deletedAt === 'string'
+                    ? q.deletedAt !== ''
+                    : Object.values(q.deletedAt).some((v) => !!v));
             for (const q of m.quotas ?? []) {
                 if (!q) continue;
                 diagQuotasGesamt++;
-                if (Object.prototype.hasOwnProperty.call(q, 'deletedAt')) diagFeldGeliefert++;
-                if (kDate(q.deletedAt)) diagGefiltert++;
+                if (q.deletedAt != null) diagFeldGeliefert++; // belegte Werte, nicht nur Property
+                if (istGeloescht(q)) diagGefiltert++;
             }
             const quotas = (m.quotas ?? []).filter(
-                (q): q is Quota => !!q && !kDate(q.deletedAt),
+                (q): q is Quota => !!q && !istGeloescht(q),
             );
             quotaZahl += quotas.length;
             for (const q of quotas) {

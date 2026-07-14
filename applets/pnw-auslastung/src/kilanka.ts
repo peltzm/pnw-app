@@ -26,6 +26,9 @@ export function kDate(w: KDate): Date | null {
     if (!w) return null;
     if (typeof w === 'string') return w ? new Date(w) : null;
     if (typeof w === 'object' && '$date' in w && w.$date) return new Date(w.$date);
+    // Löschzeitpunkte u. Ä. kommen als $datetime (Sondertyp lt. API-Doku)
+    if (typeof w === 'object' && '$datetime' in w && (w as { $datetime?: string }).$datetime)
+        return new Date((w as { $datetime: string }).$datetime);
     return null;
 }
 
