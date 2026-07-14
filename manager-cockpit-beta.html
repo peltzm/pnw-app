@@ -240,11 +240,23 @@ function setSort(k) {
 /* ── MSAL + Laden ── */
 function tokenAblauf(jwt) { try { return (JSON.parse(atob(jwt.split('.')[1])).exp || 0) * 1000; } catch(_) { return 0; } }
 async function tokens() {
-  let r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
-  if (tokenAblauf(r.idToken) < Date.now() + 60000) {
-    r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount, forceRefresh: true });
+  try {
+    let r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    if (tokenAblauf(r.idToken) < Date.now() + 60000) {
+      r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount, forceRefresh: true });
+    }
+    return { id: r.idToken, graph: r.accessToken };
+  } catch (e) {
+    // Stille Erneuerung (iframe) scheitert u. a., wenn die Redirect-URI dieser
+    // Seite in Entra fehlt → interaktiv anmelden (zeigt dann die echte Ursache)
+    const code = e.errorCode || '';
+    if (code === 'monitor_window_timeout' || code === 'interaction_required' ||
+        code === 'consent_required' || code === 'login_required' ||
+        e instanceof msal.InteractionRequiredAuthError) {
+      await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account: currentAccount });
+    }
+    throw e;
   }
-  return { id: r.idToken, graph: r.accessToken };
 }
 
 async function laden() {
