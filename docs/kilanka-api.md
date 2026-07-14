@@ -144,3 +144,17 @@ Probing gegen 2.719 Echt-Rechnungen (eine aktuelle ambulante je Kostenträger):
 - Kostenstellen: 555 = Betreuung, 498 = Kilometer.
 - Sonderfälle: LA Dahme-Spreewald rein stationär (Nordstern/Tagessätze);
   Selbstzahler (Therapie) als eigene Empfänger — für FLS ausklammern.
+
+## 14. UDFs / Zusatzfelder (verifiziert 14.07.2026)
+
+- **Anfrageform:** `"udf": 1` → 400 „body/udf must be object". `"udf": {}` →
+  200, aber leeres Objekt. Korrekt: konkrete Schlüssel benennen:
+  `"udf": { "Führungszeugnis": 1, ... }`.
+- **Schlüssel = exakt die UI-Labels** inkl. Umlauten/Leerzeichen/Slash.
+  users: `Erhöhung`, `Führungszeugnis`, `Führerschein`, `Datenschutz`,
+  `Verfassungstreue`, `BEH Ausbildung` (alle Datum), `Weiter/Fortbildung` (Text).
+  clients u. a.: `Datenschutz`, `Entbindung SP`, `AZR- Nummer`.
+- **Wertformat:** Datumsfelder kommen als `{"$date":"YYYY-MM-DD"}`,
+  leere Felder als `null`.
+- **Quelle der Schlüsselnamen ohne Probing:** generierte Applet-`sdk.ts`
+  (enthält das komplette UDF-Schema als TypeScript-Typen).
