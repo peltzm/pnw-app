@@ -760,6 +760,7 @@ async function buildCockpit(env, upn, now) {
   let hb = 0, mb = 0, v = 0, sollWochenstunden = 0;
   const approvalIds = new Set();
   const hbClientIds = new Set();
+  const hbFallNamen = new Map(); // id → recName (für Zu-/Abgangs-Listen im Manager-Cockpit)
   const alleClientIds = new Set(); // HB+MB+V — für Status-Aggregation
   for (const client of clients || []) {
     if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
@@ -778,6 +779,7 @@ async function buildCockpit(env, upn, now) {
       alleClientIds.add(String(client.id));
       if (rang !== 3) continue; // Soll/Ist nur über Hauptbetreuung (keine Doppelzählung)
       hbClientIds.add(String(client.id));
+      hbFallNamen.set(String(client.id), client.recName || String(client.id));
       // Anteil aus Kilanka-Zuordnung (amount, z. B. 50/100 bei geteilter Betreuung);
       // Fallback: 1/AnzahlHauptbetreuer, sonst 1.
       const aktuelleHbMb = (action.attendants || []).filter(
@@ -1027,7 +1029,7 @@ async function buildCockpit(env, upn, now) {
     nachweise,
     erhoehung, // nur TL/GF — Route entfernt das Feld für Fachkraft-Sicht
     firmenwagen: { vorhanden: false, quelle: "fuhrpark-liste folgt" },
-    klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus, hbIds: [...hbClientIds] },
+    klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus, hbIds: [...hbClientIds], hbFaelle: [...hbFallNamen].map(([id, name]) => ({ id, name })) },
     fls,
     stand: new Date().toISOString(),
   };
