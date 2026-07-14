@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Manager-Cockpit (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --text:#1a1916;
+  --text-muted:#6b6860; --text-hint:#a09e99; --accent:#7b3f1e;
+  --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2; --radius:8px; --radius-lg:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-brand img{height:28px}
+.header-brand span{font-size:13px;font-weight:600}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.header-right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:inherit}
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - 56px);padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:400px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:60px;margin-bottom:1rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.4rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem;display:none}
+#appScreen{display:none}
+.page-header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h2{font-size:17px;font-weight:600}
+.page-header p{font-size:12px;color:var(--text-muted)}
+.wrap{max-width:1360px;margin:0 auto;padding:18px 20px 60px}
+/* KPI-Kacheln */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px}
+.kpi .v{font-size:26px;font-weight:700;line-height:1.15}
+.kpi .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.kpi .s{font-size:11px;color:var(--text-hint);margin-top:2px}
+/* Tabelle */
+.tablecard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:1050px;font-size:12.5px}
+th{position:sticky;top:0;background:var(--surface);text-align:right;padding:10px 10px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none}
+th:first-child,td:first-child{text-align:left;padding-left:16px}
+th.sorted{color:var(--accent)}
+td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+tr:hover td{background:var(--accent-light)}
+tr{cursor:pointer}
+.name{font-weight:600}
+.team{font-size:11px;color:var(--text-hint)}
+.chip{display:inline-block;font-size:11px;font-weight:600;border-radius:12px;padding:1px 9px}
+.chip-ok{background:var(--ok-bg);color:var(--ok)}
+.chip-warn{background:var(--warn-bg);color:var(--warn)}
+.chip-err{background:var(--error-bg);color:var(--error)}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin:0 2px;vertical-align:-1px}
+.d-ok{background:var(--ok)}.d-warn{background:#e6a23c}.d-err{background:#d9534f}.d-neutral{background:var(--border)}
+.legend{font-size:11px;color:var(--text-hint);margin-top:10px;line-height:1.7}
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:70px 20px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:640px){.wrap{padding:14px 10px 50px}}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-brand">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="PNW">
+    <span>Manager-Cockpit</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <span id="userName"></span>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="PNW">
+    <div class="login-title">Manager-Cockpit <span class="beta-badge">BETA</span></div>
+    <div class="login-desc">Aggregierte Team-Sicht: Auslastung, Klienten, Abwesenheiten und Nachweis-Fristen — nur für Teamleitungen und Geschäftsführung.</div>
+    <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
+      <svg width="16" height="16" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <div class="alert-error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="page-header">
+    <div>
+      <h2>Team-Übersicht</h2>
+      <p id="pageSub">wird geladen …</p>
+    </div>
+    <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="reload()">Aktualisieren</button>
+  </div>
+  <div class="wrap">
+    <div class="kpis" id="kpis"></div>
+    <div class="tablecard">
+      <div class="loading-state" id="loading"><div class="spinner"></div>Team-Daten werden zusammengestellt … (erster Abruf ~15 s)</div>
+      <table id="tbl" style="display:none">
+        <thead><tr id="headrow"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="legend">
+      Nachweise: FZ = Führungszeugnis (3 J.) · DS = Datenschutz (jährl.) · EH = Ersthelfer/BEH (jährl., nur Nordstern) —
+      <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
+      Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+    </div>
+  </div>
+</div>
+
+<script>
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/manager-cockpit-beta.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read', 'User.ReadBasic.All'];
+const APP_VERSION = 'BETA-dev'; // auto-updated on deploy
+
+let msalInstance, currentAccount, daten = null;
+let sortKey = 'auslastung', sortDir = -1;
+
+const fmtNum = (n, d=0) => n == null ? '—' : n.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('de-DE') : '—';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const monate = iso => iso ? (Date.now() - new Date(iso).getTime()) / (30.44 * 864e5) : Infinity;
+
+function ampel(iso, warnM, maxM, relevant=true) {
+  if (!relevant) return '<span class="dot d-neutral" title="nicht relevant"></span>';
+  const m = monate(iso);
+  const cls = m >= maxM ? 'd-err' : m >= warnM ? 'd-warn' : 'd-ok';
+  const txt = iso ? fmtDate(iso) : 'fehlt';
+  return `<span class="dot ${cls}" title="${txt}"></span>`;
+}
+
+/* Zeile → berechnete Kennzahlen */
+function kennzahlen(r) {
+  const sollMonat = r.fls?.sollWochenstunden ? Math.round(r.fls.sollWochenstunden * 52 / 12 * 10) / 10 : 0;
+  const ist = r.fls?.istMonatsstunden;
+  const auslastung = (ist != null && sollMonat) ? Math.round(ist / sollMonat * 100) : null;
+  const nordstern = /nordstern/i.test(r.team || '');
+  return { sollMonat, ist, auslastung, nordstern };
+}
+
+const SPALTEN = [
+  { k:'name',        t:'Betreuer:in' },
+  { k:'klienten',    t:'Klienten' },
+  { k:'sollMonat',   t:'Soll h/Mon' },
+  { k:'ist',         t:'Ist (Vormon.)' },
+  { k:'auslastung',  t:'Auslastung' },
+  { k:'urlaub',      t:'Urlaub gen.' },
+  { k:'krank',       t:'Krank YTD' },
+  { k:'nachweise',   t:'FZ · DS · EH' },
+  { k:'erhoehung',   t:'Erhöhung' },
+];
+
+function sortWert(r, key) {
+  const kz = kennzahlen(r);
+  switch (key) {
+    case 'name': return (r.name || '').toLowerCase();
+    case 'klienten': return r.klienten?.aktiv ?? -1;
+    case 'sollMonat': return kz.sollMonat;
+    case 'ist': return kz.ist ?? -1;
+    case 'auslastung': return kz.auslastung ?? -1;
+    case 'urlaub': return r.urlaub?.genommenTage ?? -1;
+    case 'krank': return r.krankheit?.tage ?? -1;
+    case 'nachweise': return Math.max(monate(r.nachweise?.fuehrungszeugnis), monate(r.nachweise?.datenschutz));
+    case 'erhoehung': return r.erhoehung || '';
+    default: return 0;
+  }
+}
+
+function render() {
+  if (!daten) return;
+  const rows = [...daten.rows].sort((a, b) => {
+    const x = sortWert(a, sortKey), y = sortWert(b, sortKey);
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+
+  // KPI-Kacheln
+  const mitAusl = rows.map(kennzahlen).filter(k => k.auslastung != null);
+  const avgAusl = mitAusl.length ? Math.round(mitAusl.reduce((s,k)=>s+k.auslastung,0)/mitAusl.length) : null;
+  const sumKli = rows.reduce((s,r)=>s+(r.klienten?.aktiv||0),0);
+  const sumKrank = rows.reduce((s,r)=>s+(r.krankheit?.tage||0),0);
+  const kritisch = rows.filter(r => monate(r.nachweise?.fuehrungszeugnis) >= 36 || monate(r.nachweise?.datenschutz) >= 12).length;
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">in dieser Sicht</div></div>
+    <div class="kpi"><div class="v">${sumKli}</div><div class="l">Aktive Klienten</div><div class="s">HB + MB + Vertretung</div></div>
+    <div class="kpi"><div class="v">${avgAusl != null ? avgAusl + ' %' : '—'}</div><div class="l">Ø FLS-Auslastung</div><div class="s">abgerechneter Vormonat</div></div>
+    <div class="kpi"><div class="v">${fmtNum(sumKrank,1)}</div><div class="l">Krank-Tage YTD</div><div class="s">Summe Team</div></div>
+    <div class="kpi"><div class="v" style="color:${kritisch ? 'var(--error)' : 'var(--ok)'}">${kritisch}</div><div class="l">Nachweise überfällig</div><div class="s">Führungszeugnis / Datenschutz</div></div>`;
+
+  // Kopfzeile
+  document.getElementById('headrow').innerHTML = SPALTEN.map(s =>
+    `<th class="${s.k===sortKey?'sorted':''}" onclick="setSort('${s.k}')">${s.t}${s.k===sortKey ? (sortDir<0?' ↓':' ↑') : ''}</th>`).join('');
+
+  // Zeilen
+  document.getElementById('tbody').innerHTML = rows.map(r => {
+    const kz = kennzahlen(r);
+    const auslChip = kz.auslastung == null ? '—'
+      : `<span class="chip ${kz.auslastung>=95?'chip-ok':kz.auslastung>=80?'chip-warn':'chip-err'}">${kz.auslastung} %</span>`;
+    return `<tr onclick="location.href='mitarbeiter-cockpit-beta.html'">
+      <td><span class="name">${esc(r.name)}</span><br><span class="team">${esc(r.team || '')}</span></td>
+      <td>${r.klienten?.aktiv ?? '—'} <span class="team">(${r.klienten?.hb ?? 0}/${r.klienten?.mb ?? 0}/${r.klienten?.v ?? 0})</span></td>
+      <td>${fmtNum(kz.sollMonat,1)}</td>
+      <td>${fmtNum(kz.ist,1)}</td>
+      <td>${auslChip}</td>
+      <td>${r.urlaub ? fmtNum(r.urlaub.genommenTage,1) + (r.urlaub.geplantTage ? ' <span class="team">+' + fmtNum(r.urlaub.geplantTage,1) + ' gepl.</span>' : '') : '—'}</td>
+      <td>${r.krankheit ? fmtNum(r.krankheit.tage,1) : '—'}</td>
+      <td style="text-align:center">${ampel(r.nachweise?.fuehrungszeugnis, 30, 36)}${ampel(r.nachweise?.datenschutz, 11, 12)}${ampel(r.nachweise?.behAusbildung, 11, 12, kz.nordstern)}</td>
+      <td>${fmtDate(r.erhoehung)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('tbl').style.display = '';
+  const rolleTxt = daten.rolle === 'gf' ? 'Geschäftsführung (alle Mitarbeitenden)' : 'Teamleitung (eigenes Team)';
+  document.getElementById('pageSub').textContent =
+    `Stand: ${new Date(daten.stand).toLocaleString('de-DE')} · Sicht: ${rolleTxt}`;
+}
+
+function setSort(k) {
+  if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = k === 'name' ? 1 : -1; }
+  render();
+}
+
+/* ── MSAL + Laden ── */
+function tokenAblauf(jwt) { try { return (JSON.parse(atob(jwt.split('.')[1])).exp || 0) * 1000; } catch(_) { return 0; } }
+async function tokens() {
+  let r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+  if (tokenAblauf(r.idToken) < Date.now() + 60000) {
+    r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount, forceRefresh: true });
+  }
+  return { id: r.idToken, graph: r.accessToken };
+}
+
+async function laden() {
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('tbl').style.display = 'none';
+  try {
+    const t = await tokens();
+    const r = await fetch(CFG.workerUrl + '/api/manager-cockpit', {
+      headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
+    });
+    if (!r.ok) {
+      let detail = ''; try { detail = (await r.json()).error || ''; } catch(_) {}
+      throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
+    }
+    daten = await r.json();
+    render();
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      '<div style="text-align:center;color:var(--error)">Abruf fehlgeschlagen: ' + esc(e.message) +
+      '<br><span style="color:var(--text-muted);font-size:12px">403 = Sicht ist Teamleitungen und GF vorbehalten.</span></div>';
+  }
+}
+function reload() { laden(); }
+
+async function initApp() {
+  document.getElementById('versionBadge').textContent = APP_VERSION;
+  msalInstance = new msal.PublicClientApplication({
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  });
+  await msalInstance.initialize();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; showApp(); }
+}
+async function login() {
+  const errEl = document.getElementById('loginError');
+  document.getElementById('loginBtn').disabled = true; errEl.style.display = 'none';
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) { document.getElementById('loginBtn').disabled = false; errEl.style.display = 'block'; errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message); }
+}
+async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userName').textContent = currentAccount?.name || '';
+  document.getElementById('logoutBtn').style.display = '';
+  laden();
+}
+initApp();
+</script>
+</body>
+</html>

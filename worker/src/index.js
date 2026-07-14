@@ -1009,6 +1009,49 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/manager-cockpit" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
+        return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      }
+      try {
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
+        if (rolle === "fk") {
+          return json({ error: "Manager-Cockpit ist Teamleitungen und GF vorbehalten" }, 403, origin);
+        }
+        let liste;
+        if (istGf) liste = await alleAktivenMitarbeiter(env);
+        else {
+          const seen = new Set([caller]);
+          liste = [{ upn: caller, name: auth.name || caller }];
+          for (const r of reports) if (!seen.has(r.upn)) { seen.add(r.upn); liste.push(r); }
+        }
+        const now = new Date();
+        const rows = [];
+        for (const m of liste) {
+          const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
+          rows.push({
+            upn: m.upn,
+            name: d.person.name || m.name || m.upn,
+            team: d.person.team,
+            klienten: d.klienten,
+            fls: d.fls,
+            urlaub: d.urlaub,
+            krankheit: d.krankheit,
+            nachweise: d.nachweise,
+            erhoehung: d.erhoehung, // Endpunkt ist TL/GF-exklusiv
+          });
+        }
+        return json({ rolle, stand: new Date().toISOString(), rows }, 200, origin);
+      } catch (e) {
+        return json({ error: `Manager-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
     if (url.pathname === "/api/mitarbeiter-cockpit" && request.method === "GET") {
       const auth = await validateEntraToken(request.headers.get("Authorization"));
       if (!auth.ok) return json({ error: auth.error }, 401, origin);
