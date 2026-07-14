@@ -88,6 +88,15 @@ tr{cursor:pointer}
 .ziel-total .val{font-size:26px;font-weight:700}
 .ziel-hint{font-size:11px;color:var(--text-hint);margin-top:8px;line-height:1.5}
 .ziel-bonus{font-size:11px;color:var(--warn);font-weight:600;margin-top:6px}
+.netto-btn{background:none;border:none;font:inherit;font-weight:600;color:var(--accent);cursor:pointer;text-decoration:underline dotted;padding:0}
+.falldiff{display:none;background:var(--accent-light);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:12px}
+.falldiff.open{display:block}
+.falldiff h5{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);margin:6px 0 2px}
+.falldiff h5:first-child{margin-top:0}
+.falldiff ul{list-style:none;margin:0;padding:0}
+.falldiff li{padding:1px 0}
+.fd-plus{color:var(--ok);font-weight:700;margin-right:4px}
+.fd-minus{color:var(--error);font-weight:700;margin-right:4px}
 @media (max-width:640px){.wrap{padding:14px 10px 50px}}
 </style>
 </head>
@@ -164,7 +173,7 @@ tr{cursor:pointer}
       <div class="loading-state" id="zielLoading" style="display:none;padding:40px 20px"><div class="spinner"></div>Stichtags-Daten für das Quartal werden geladen …</div>
       <div class="zielcards" id="zielCards"></div>
       <div class="legend">
-        Netto-Fallakquise = eindeutige Fälle des Teams (über Hauptbetreuung; Mitbetreuung/Vertretung zählen nicht) am Quartalsende minus Quartalsanfang (Ziel: +2). ·
+        Netto-Fallakquise = eindeutige Fälle des Teams (über Hauptbetreuung; Mitbetreuung/Vertretung zählen nicht) am Quartalsende minus Quartalsanfang (Ziel: +2) — Klick auf den Wert zeigt die Zu- und Abgänge namentlich. Achtung: Die Klientenentwicklungs-Übersicht ordnet Fälle über das zuständige Jugendamt den Teams zu, das Cockpit über die Hauptbetreuer:innen — Abweichungen zwischen beiden sind daher möglich. ·
         Team-Auslastung = eindeutige Fälle ÷ Team-VZÄ am Quartalsende (Ziel: 7,5). Team = Teamleitung + direkt zugeordnete Mitarbeitende. ·
         Dokumentationsqualität (Ziel: 95 % pünktlich) und MA-Zufriedenheit (Ziel: 4,0 von 5) sind manuelle Eingaben und werden lokal im Browser gespeichert. ·
         Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 %, je Kriterium bei 150 % gekappt (▲) — darüber Bonus-Territorium (§5.2). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-%.
@@ -398,16 +407,23 @@ function zielInputSchreiben(q, upn, feld, wert) {
 
 const teamVon = (rows, upn) => rows.filter(r => r.leitung?.upn === upn || r.upn === upn);
 // Fälle des Teams: eindeutige Fall-IDs über die Hauptbetreuung (ein Fall = ein Team,
-// MB/Vertretung zählen nicht — konsistent zur Klientenentwicklungs-Übersicht).
-// Fallback ohne Worker-Update (kein hbIds-Feld): Summe der HB-Zählungen.
-const teamFaelle = rows => {
-  if (rows.some(r => Array.isArray(r.klienten?.hbIds))) {
-    const ids = new Set();
-    for (const r of rows) for (const id of (r.klienten?.hbIds || [])) ids.add(id);
-    return { n: ids.size, exakt: true };
+// MB/Vertretung zählen nicht). Liefert id→Name-Map für die Zu-/Abgangs-Liste;
+// Namen erst nach Worker-Update (hbFaelle), IDs ab hbIds, sonst Fallback HB-Summe.
+const teamFallDaten = rows => {
+  const map = new Map(); let exakt = false;
+  for (const r of rows) {
+    if (Array.isArray(r.klienten?.hbFaelle)) {
+      exakt = true;
+      for (const f of r.klienten.hbFaelle) map.set(String(f.id), f.name || String(f.id));
+    } else if (Array.isArray(r.klienten?.hbIds)) {
+      exakt = true;
+      for (const id of r.klienten.hbIds) if (!map.has(String(id))) map.set(String(id), null);
+    }
   }
-  return { n: rows.reduce((s, r) => s + (r.klienten?.hb || 0), 0), exakt: false };
+  const n = exakt ? map.size : rows.reduce((s, r) => s + (r.klienten?.hb || 0), 0);
+  return { n, map, exakt };
 };
+function toggleFallDiff(id) { document.getElementById(id)?.classList.toggle('open'); }
 const vzae = rows => rows.reduce((s, r) => s + (r.wochenstunden || 0), 0) / 39;
 const pct = e => e == null ? '—' : Math.round(e * 100) + ' %';
 
@@ -442,9 +458,21 @@ async function ladeZiele() {
 
 function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
   const teamE = teamVon(dEnde.rows, upn), teamS = teamVon(dStart.rows, upn);
-  const fEnde = teamFaelle(teamE), fStart = teamFaelle(teamS);
+  const fEnde = teamFallDaten(teamE), fStart = teamFallDaten(teamS);
   const fE = fEnde.n, fS = fStart.n, netto = fE - fS;
   const exakt = fEnde.exakt && fStart.exakt;
+  // Zu-/Abgänge: im Endbestand aber nicht im Anfangsbestand und umgekehrt
+  const zugaenge = [...fEnde.map].filter(([id]) => !fStart.map.has(id));
+  const abgaenge = [...fStart.map].filter(([id]) => !fEnde.map.has(id));
+  const diffId = 'fd-' + upn.replace(/[^a-z0-9]/gi, '_') + '-' + qEnde;
+  const fallEintrag = (nm, id) => `<li>${nm ? esc(nm) : 'Fall-ID ' + esc(id) + ' <span class="zt">(Name nach Worker-Update)</span>'}</li>`;
+  const diffHtml = exakt ? `
+    <div class="falldiff" id="${diffId}">
+      <h5>Zugänge (${zugaenge.length})</h5>
+      <ul>${zugaenge.length ? zugaenge.map(([id, nm]) => '<li><span class="fd-plus">+</span>' + (nm ? esc(nm) : 'Fall-ID ' + esc(id)) + '</li>').join('') : '<li>—</li>'}</ul>
+      <h5>Abgänge (${abgaenge.length})</h5>
+      <ul>${abgaenge.length ? abgaenge.map(([id, nm]) => '<li><span class="fd-minus">−</span>' + (nm ? esc(nm) : 'Fall-ID ' + esc(id)) + '</li>').join('') : '<li>—</li>'}</ul>
+    </div>` : '';
   const v = vzae(teamE);
   const proVzae = v > 0 ? fE / v : null;
   const ohneStunden = teamE.filter(r => r.wochenstunden == null).length;
@@ -488,7 +516,10 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
   return `<div class="zielcard">
     <div class="tl-name">${esc(name)}</div>
     <div class="tl-sub">Team: ${teamE.length} Pers. · ${fmtNum(v, 2)} VZÄ · ${fE} Fälle (HB, Anfang: ${fS})${ohneStunden ? ' · ⚠ ' + ohneStunden + ' ohne Vertragsstunden' : ''}${exakt ? '' : ' · ⚠ Worker-Update ausstehend: Zählung über HB-Summe statt eindeutiger Fall-IDs'}</div>
-    ${zeile('Netto-Fallakquise <span class="zt">(30 %)</span>', '+' + ZIEL.akquiseSoll + ' Fälle', (netto > 0 ? '+' : '') + netto, eAkquise, roh.akquise)}
+    ${zeile('Netto-Fallakquise <span class="zt">(30 %)</span>', '+' + ZIEL.akquiseSoll + ' Fälle',
+      exakt ? '<button class="netto-btn" onclick="toggleFallDiff(\'' + diffId + '\')" title="Zu- und Abgänge anzeigen">' + (netto > 0 ? '+' : '') + netto + '</button>' : (netto > 0 ? '+' : '') + netto,
+      eAkquise, roh.akquise)}
+    ${diffHtml}
     ${zeile('Team-Auslastung <span class="zt">(30 %)</span>', fmtNum(ZIEL.auslastungSoll, 1) + ' F./VZÄ', proVzae == null ? '—' : fmtNum(proVzae, 2), eAusl, roh.ausl)}
     ${inputZeile('Dokumentation <span class="zt">(20 %)</span>', ZIEL.dokuSoll + ' % pünktlich', 'doku', inp.doku, 'min="0" max="100" step="1"')}
     ${inputZeile('MA-Zufriedenheit <span class="zt">(20 %)</span>', fmtNum(ZIEL.maSoll, 1) + ' von 5', 'ma', inp.ma, 'min="1" max="5" step="0.1"')}
