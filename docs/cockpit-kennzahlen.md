@@ -174,11 +174,13 @@ Grundlage: Leistungs- und Vergütungsvereinbarung Teamleitung Ambulante Hilfen, 
 
 | Kriterium | Gewicht | 100-%-Ziel pro Quartal | Datenquelle |
 |---|---|---|---|
-| Netto-Fallakquise | 30 % | +2 Fälle netto | Δ aktive Fälle des Teams: Worker-Stichtag Quartalsende minus Quartalsanfang |
-| Team-Auslastung | 30 % | 7,5 Fälle pro VZÄ | aktive Fälle ÷ Team-VZÄ (Vertragsstunden ÷ 39) am Quartalsende |
+| Netto-Fallakquise | 30 % | +2 Fälle netto | Δ eindeutige HB-Fälle der dem Team zugeordneten Jugendämter: Stichtag Quartalsende minus Quartalsanfang |
+| Team-Auslastung | 30 % | 7,5 Fälle pro VZÄ | Fälle der zugeordneten Ämter ÷ Personal-VZÄ des Teams (Vertragsstunden ÷ 39) am Quartalsende |
 | Dokumentationsqualität | 20 % | 95 % pünktliche Berichte | manuelle Eingabe (localStorage, Schlüssel `pnw-ziel:<quartalsende>:<upn>`) |
 | MA-Zufriedenheit | 20 % | 4,0 (Skala 1–5) | manuelle Eingabe (localStorage, s. o.) |
 
 Berechnungsregeln (§5.2): Teilzielerreichung linear, negative Werte zählen als 0 %, nach oben keine Kappung (vgl. Vertrags-Szenario 125 %). Bei Netto-Fallakquise > 150 % zeigt die Karte den Hinweis auf den möglichen +2,5-%-Bonus (GF-Entscheid). „Team" = Teamleitung selbst plus direkt zugeordnete Mitarbeitende (identisch zum Team-Filter der Tabelle). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-% — das Mischgehalt liegt nicht im Cockpit, die Karte zeigt daher nur die Formel.
 
-Technik: eigener Stichtag-Cache im Frontend (`stichtagCache`), zwei zusätzliche `/api/manager-cockpit?stichtag=`-Abrufe pro Quartal; kein Worker-Update nötig. Offene Punkte: Netto-Fallakquise approximiert „neue Fälle minus Abgänge" über die Bestandsdifferenz — Wechsel innerhalb des Quartals (Zugang + Abgang gleicher Höhe) heben sich auf.
+Team-Zuordnung der Fälle: über das Jugendamt der Maßnahme (`hbFaelle[].amt` = `department.name` aus dem Worker), Mapping in der Frontend-Konstante `AMT_TEAMS` — Jörg = Ingolstadt, Eichstätt, Regensburg (Stadt + LK), Neuburg-Schrobenhausen · Laura = Kelheim, Freising, Landshut (Stadt + LK) · Nadine = Pfaffenhofen, Dachau. Gleiche Logik wie das Kilanka-Applet „Aktive Klient:innen je Team"; nicht zugeordnete Ämter werden unter den Karten als Warnung ausgewiesen. Mitbetreuung/Vertretung zählen nicht; jeder Fall zählt genau einmal (Set über Fall-IDs). Klick auf den Netto-Wert klappt die Zu- und Abgänge namentlich mit Amt auf. Erreichung je Kriterium bei 150 % gekappt (darüber Bonus-Territorium §5.2 Abs. 4); Eingaben validiert (Doku 0–100, MA 1–5); GF-Konten erscheinen nicht als Karte.
+
+Technik: eigener Stichtag-Cache im Frontend (`stichtagCache`), zwei zusätzliche `/api/manager-cockpit?stichtag=`-Abrufe pro Quartal. Einschränkungen: (1) Netto-Fallakquise approximiert „neue Fälle minus Abgänge" über die Bestandsdifferenz — Zugang + Abgang gleicher Höhe im Quartal heben sich auf. (2) In der reinen Teamleitungs-Sicht liefert der Worker nur die AD-eigenen Mitarbeitenden; Fälle der zugeordneten Ämter, die von Fachkräften anderer Teams hauptbetreut werden, fehlen dort — vollständig ist die Amt-Zählung in der GF-Sicht.
