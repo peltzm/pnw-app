@@ -594,6 +594,7 @@ function userRecName(u) {
 const COCKPIT_ABSENCES_GRAPH = {
   begin: 1, end: 1, totalDays: 1, type: 1, status: 1,
   absenceType: { name: 1, internalName: 1 },
+  vacationEntitlement: { description: 1 }, // Urlaubsanspruch (Text, Zahl wird geparst)
   user: { id: 1, recName: 1 },
   $limit: 1000,
 };
@@ -718,6 +719,34 @@ function classifyAbsence(a) {
   return "sonstig";
 }
 
+// Klienten-Status (UDFs): Datenschutz, Schweigepflichtentbindung, Bewilligungs-Status
+const CLIENT_STATUS_GRAPH = {
+  id: 1, deletedAt: 1,
+  udf: { "Datenschutz": 1, "Entbindung SP": 1, "Bewilligungs-Status": { recName: 1 } },
+  $limit: 1000,
+};
+let clientStatusCache = { map: null, fetchedAt: 0 };
+async function fetchClientStatusMap(env) {
+  if (clientStatusCache.map && Date.now() - clientStatusCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
+    return clientStatusCache.map;
+  const map = new Map();
+  try {
+    const data = await kilankaPost(env, "clients", CLIENT_STATUS_GRAPH);
+    for (const cl of data || []) {
+      if (kDate(cl.deletedAt)) continue;
+      const u = cl.udf || {};
+      map.set(String(cl.id), {
+        ds: !!kDate(u["Datenschutz"]),
+        spe: !!kDate(u["Entbindung SP"]),
+        bew: /bewilligt/i.test(u["Bewilligungs-Status"]?.recName || ""),
+        bewText: u["Bewilligungs-Status"]?.recName || null,
+      });
+    }
+  } catch (e) { /* Status optional */ }
+  clientStatusCache = { map, fetchedAt: Date.now() };
+  return map;
+}
+
 async function buildCockpit(env, upn, now) {
   const jahr = now.getFullYear();
 
@@ -731,6 +760,7 @@ async function buildCockpit(env, upn, now) {
   let hb = 0, mb = 0, v = 0, sollWochenstunden = 0;
   const approvalIds = new Set();
   const hbClientIds = new Set();
+  const alleClientIds = new Set(); // HB+MB+V — für Status-Aggregation
   for (const client of clients || []) {
     if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
     let besteRolle = 0;
@@ -745,6 +775,7 @@ async function buildCockpit(env, upn, now) {
       if (!att) continue;
       const rang = ROLE_RANK[att.attendantKind.name];
       if (rang > besteRolle) besteRolle = rang;
+      alleClientIds.add(String(client.id));
       if (rang !== 3) continue; // Soll/Ist nur über Hauptbetreuung (keine Doppelzählung)
       hbClientIds.add(String(client.id));
       // Anteil aus Kilanka-Zuordnung (amount, z. B. 50/100 bei geteilter Betreuung);
@@ -792,6 +823,25 @@ async function buildCockpit(env, upn, now) {
     else if (besteRolle === 2) mb++;
     else if (besteRolle === 1) v++;
   }
+
+  // Klienten-Status (UDF) über die betreuten Klienten aggregieren
+  let klientenStatus = null;
+  try {
+    const statusMap = await fetchClientStatusMap(env);
+    if (statusMap.size) {
+      const zaehle = (f) => {
+        let x = 0, y = 0;
+        for (const id of alleClientIds) {
+          const s = statusMap.get(id);
+          if (!s) continue;
+          y++;
+          if (f(s)) x++;
+        }
+        return [x, y];
+      };
+      klientenStatus = { ds: zaehle((s) => s.ds), spe: zaehle((s) => s.spe), bew: zaehle((s) => s.bew) };
+    }
+  } catch (e) { /* optional */ }
 
   // ── b) Stammdaten ──
   let person = null, nachweise = null, erhoehung = null;
@@ -859,7 +909,7 @@ async function buildCockpit(env, upn, now) {
   const abs = await fetchCockpitAbsences(env);
   if (abs.verfuegbar && person && person.kilankaId) {
     let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
-    let regenH1 = null, regenH2 = null;
+    let regenH1 = null, regenH2 = null, anspruch = null;
     const geplanteTermine = []; // kommende genehmigte Urlaube inkl. Datum
     for (const a of abs.data || []) {
       if (String(a.user?.id) !== person.kilankaId) continue;
@@ -873,6 +923,9 @@ async function buildCockpit(env, upn, now) {
           uGeplant += tage;
           geplanteTermine.push({ von: isoDate(begin), bis: isoDate(kDate(a.end) || begin), tage });
         } else uGenommen += tage;
+        // Urlaubsanspruch aus vacationEntitlement.description (Standard 30)
+        const m2 = /(\d{1,2})/.exec(a.vacationEntitlement?.description || "");
+        if (m2) anspruch = Math.max(anspruch || 0, parseInt(m2[1], 10));
       }
       else if (art === "krank") { kTage += tage; if (!letzte || begin > letzte) letzte = begin; }
       else if (art === "kindkrank") { kindKrank += tage; }
@@ -882,12 +935,13 @@ async function buildCockpit(env, upn, now) {
         else { if (!regenH2 || begin < regenH2) regenH2 = begin; }
       }
     }
+    if (anspruch == null || anspruch < 20 || anspruch > 45) anspruch = 30; // Plausibilitätsrahmen
     urlaub = {
       jahr,
-      anspruchTage: null, // Urlaubsanspruch-Feld noch nicht identifiziert (allowed-graphs prüfen)
+      anspruchTage: anspruch,
       genommenTage: Math.round(uGenommen * 2) / 2,
       geplantTage: Math.round(uGeplant * 2) / 2,
-      restTage: null,
+      restTage: Math.round((anspruch - uGenommen - uGeplant) * 2) / 2,
       regeneration: { h1: isoDate(regenH1), h2: isoDate(regenH2) },
       geplanteTermine: geplanteTermine.sort((x, y) => x.von.localeCompare(y.von)),
     };
@@ -950,6 +1004,17 @@ async function buildCockpit(env, upn, now) {
         abwTage += total > 0 ? Math.min(at, total) : at;
       }
       fls.abwesenheitsTageImMonat = Math.round(abwTage * 2) / 2;
+      // Benchmark aus Entgeltkalkulation: 64 % (am Klienten) / 80 % (inkl. Fahrt)
+      // der Vertragsstunden, bezogen auf Netto-Anwesenheit
+      const atMonat = arbeitstageBayern(mStart, mEnde);
+      const nettoAT = Math.max(0, atMonat - abwTage);
+      fls.arbeitstageMonat = atMonat;
+      fls.nettoArbeitstage = Math.round(nettoAT * 2) / 2;
+      if (person && person.wochenstundenVertrag) {
+        const tagesStd = person.wochenstundenVertrag / 5;
+        fls.benchmark64 = Math.round(nettoAT * tagesStd * 0.64 * 10) / 10;
+        fls.benchmark80 = Math.round(nettoAT * tagesStd * 0.8 * 10) / 10;
+      }
     }
   } catch (e) { /* Rechnungs-Zweig optional */ }
 
@@ -962,7 +1027,7 @@ async function buildCockpit(env, upn, now) {
     nachweise,
     erhoehung, // nur TL/GF — Route entfernt das Feld für Fachkraft-Sicht
     firmenwagen: { vorhanden: false, quelle: "fuhrpark-liste folgt" },
-    klienten: { aktiv: hb + mb + v, hb, mb, v },
+    klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus },
     fls,
     stand: new Date().toISOString(),
   };

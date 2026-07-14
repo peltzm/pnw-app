@@ -492,7 +492,7 @@ function renderCards(d, own) {
   <!-- URLAUB -->
   <div class="card c-urlaub">
     <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8c1-4-4-6-4-6S8 4 9 8"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M4 12c2-3 6-4 8-4s6 1 8 4"/></svg>Urlaub ${u ? u.jahr : new Date().getFullYear()}</div>
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 8c1-4-4-6-4-6S8 4 9 8"/><path d="M12 8v13"/><path d="M5 21h14"/><path d="M4 12c2-3 6-4 8-4s6 1 8 4"/></svg>Abwesenheiten ${u ? u.jahr : new Date().getFullYear()}</div>
       <span class="src-badge src-kilanka">Kilanka · absences</span>
     </div>
     ${!u ? `<div class="note" style="margin-top:0">Noch keine Daten — Modell <b>users/absences</b> ist im Kilanka-Graphen nicht freigegeben.</div>` : `
@@ -517,27 +517,19 @@ function renderCards(d, own) {
     ${u.regeneration ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
       ${[['H1', u.regeneration.h1, new Date() > new Date(u.jahr+'-06-30')],
          ['H2', u.regeneration.h2, new Date() > new Date(u.jahr+'-12-31')]].map(([l, dat, vorbei]) => dat
-        ? `<span class="chip chip-ok">Regenerationstag ${l}: ${fmtDate(dat)}</span>`
+        ? `<span class="chip chip-ok">Regeneration ${l}: ${fmtDate(dat)}</span>`
         : vorbei
-          ? `<span class="chip chip-err">Regenerationstag ${l}: nicht genommen</span>`
-          : `<span class="chip chip-warn">Regenerationstag ${l}: offen</span>`).join('')}
+          ? `<span class="chip chip-err">Regeneration ${l}: nicht genommen</span>`
+          : `<span class="chip chip-warn">Regeneration ${l}: offen</span>`).join('')}
+    </div>` : ''}
+    ${k ? `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px">
+      <div class="sub-grid cols3">
+        <div class="sub-item"><div class="sl">Krank YTD</div><div class="sv">${fmtNum(k.tage,1)} Tage</div></div>
+        <div class="sub-item"><div class="sl">Kind krank</div><div class="sv">${fmtNum(k.kindKrankTage,1)} Tage</div></div>
+        <div class="sub-item"><div class="sl">Zuletzt</div><div class="sv">${fmtDate(k.letzteAbwesenheit)}</div></div>
+      </div>
+      <div class="note">Nur Tageszahlen — keine Diagnosen oder Abwesenheitsgründe.</div>
     </div>` : ''}`}
-  </div>
-
-  <!-- KRANKHEIT -->
-  <div class="card c-krank">
-    <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Krankheitstage ${k ? k.jahr : new Date().getFullYear()}</div>
-      <span class="src-badge src-kilanka">Kilanka · absences</span>
-    </div>
-    ${!k ? `<div class="note" style="margin-top:0">Noch keine Daten — Modell <b>users/absences</b> ist im Kilanka-Graphen nicht freigegeben.</div>` : `
-    <div class="big-row"><span class="big">${fmtNum(k.tage,1)}</span><span class="big-unit">Tage seit Jahresbeginn</span></div>
-    <div class="sub-grid cols3">
-      <div class="sub-item"><div class="sl">Vorjahr</div><div class="sv">${k.vorjahrTage != null ? fmtNum(k.vorjahrTage,1)+' Tage' : '—'}</div></div>
-      <div class="sub-item"><div class="sl">Kind krank</div><div class="sv">${fmtNum(k.kindKrankTage,1)} Tage</div></div>
-      <div class="sub-item"><div class="sl">Zuletzt</div><div class="sv">${fmtDate(k.letzteAbwesenheit)}</div></div>
-    </div>
-    <div class="note">Nur Tageszahlen — keine Diagnosen oder Abwesenheitsgründe.</div>`}
   </div>
 
   <!-- FIRMENWAGEN -->
@@ -575,7 +567,10 @@ function renderCards(d, own) {
       <div class="sub-item"><div class="sl">Mitbetr.</div><div class="sv">${kl.mb}</div></div>
       <div class="sub-item"><div class="sl">Vertretung</div><div class="sv">${kl.v}</div></div>
     </div>
-    <div class="note">Zählung wie im Berichtsgenerator: aktive Maßnahmen, Archiv-Klienten ausgefiltert.</div>
+    ${kl.status ? `<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+      ${[['Bewilligung', kl.status.bew], ['Datenschutz', kl.status.ds], ['Schweigepflicht', kl.status.spe]].map(([l, s]) =>
+        `<span class="chip ${s[1] > 0 && s[0] === s[1] ? 'chip-ok' : 'chip-err'}" title="${l}: ${s[0]} von ${s[1]} erteilt">${l} ${s[0]}/${s[1]}</span>`).join('')}
+    </div>` : ''}
   </div>
 
   <!-- FLS -->
@@ -589,21 +584,14 @@ function renderCards(d, own) {
       ${flsChip}
     </div>
     ${flsPct != null ? `<div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>` : ''}
-    <div class="bar-legend">
-      <span>${flsA.korr
-        ? `Soll = Kontingente, bezogen auf ${flsA.korr.verfuegbar} verfügbare Arbeitstage (${flsA.korr.at} AT Bayern${flsA.korr.abw ? ` − ${flsA.korr.abw} Tage Urlaub/Krankheit/Fortbildung` : flsA.korr.abwBekannt ? ', keine Abwesenheiten im Monat' : ' — Abwesenheitsdaten gerade nicht verfügbar, Soll ggf. zu hoch'}`
-        : `Soll = bewilligte Kontingente (quotas + timeBase)${flsLive ? ', auf Monat umgerechnet' : ''}`}</span>
-    </div>
+
     ${d.person && d.person.wochenstundenVertrag ? `<div class="sub-grid" style="margin-top:10px">
-      <div class="sub-item"><div class="sl">Benchmark Entgeltkalkulation</div>
-        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quote, 1)} h/Woche am Klienten</div></div>
+      <div class="sub-item"><div class="sl">Benchmark am Klienten</div>
+        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quote, 1)} h/Wo</div></div>
       <div class="sub-item"><div class="sl">inkl. Fahrtzeit</div>
-        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quoteInklFahrt, 1)} h/Woche</div></div>
-    </div>
-    <div class="note">Benchmark = 64 % bzw. 80 % der Vertragsstunden — abgeleitet aus den Entgeltkalkulationen (eigene HzE-Kalkulation 995/1.560 h, KEH-Vorlage 20 % indirekt). Nenner für Quoten: Netto-Anwesenheit (Arbeitstage Bayern via berechneArbeitstage, abzgl. Abwesenheiten).</div>` : ''}
-    ${flsLive
-      ? `<div class="note">Ist = abgerechnete Stunden aus ${fls.istRechnungen ?? '?'} Rechnung(en) · Quelle: ${esc(fls.istQuelle || 'Rechnungen')}${(fls.istQuelle||'').includes('fallback') ? ' — für die präzise Bewilligungs-Zuordnung <b>approvals.id</b> im Kilanka-Graphen freigeben' : ''}.</div>`
-      : `<div class="note">Demo-Platzhalter (Ø letzte 4 Wochen). Live: abgerechnete Stunden aus Kilanka-Rechnungen des Vormonats.</div>`}
+        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quoteInklFahrt, 1)} h/Wo</div></div>
+    </div>` : ''}
+
   </div>
 
   <!-- NACHWEISE & FRISTEN -->
