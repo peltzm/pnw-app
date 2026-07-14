@@ -147,6 +147,12 @@ export function App() {
                     </table>
 
                     <p className={styles.pflegestand}>
+                        v1.0.2 · deletedAt geliefert: {auswertung.diagnose.deletedAtGeliefert}/
+                        {auswertung.diagnose.quotasGesamt}
+                        {auswertung.diagnose.deletedAtGeliefert === 0
+                            ? ' ⚠ Feld fehlt — quotas.deletedAt in der APPLET-Schnittstelle freigeben!'
+                            : ` · gelöschte Kontingente ausgefiltert: ${auswertung.diagnose.geloeschtGefiltert}`}
+                        <br />
                         Zuordnungen: {auswertung.detail.length} · ohne gepflegtes Kontingent:{' '}
                         {auswertung.ohneKontingent} · mehrere Kontingente (Verdacht Altlasten):{' '}
                         {auswertung.mehrereKontingente}

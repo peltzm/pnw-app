@@ -103,6 +103,7 @@ export interface Auswertung {
     detail: DetailZeile[];
     summen: SummenZeile[];
     ohneKontingent: number;
+    diagnose: { quotasGesamt: number; deletedAtGeliefert: number; geloeschtGefiltert: number };
     mehrereKontingente: number;
     bezugGefunden: string[];
     bezugFehlend: string[];
@@ -136,6 +137,7 @@ export function berechneAuslastung(clients: ApiClient[], users: ApiUser[], heute
         if (u.name && u.firstName) sollStd.set(`${u.name}, ${u.firstName}`, std);
     }
 
+    let diagQuotasGesamt = 0, diagFeldGeliefert = 0, diagGefiltert = 0;
     const detail: DetailZeile[] = [];
     const bezugGefunden: string[] = [];
 
@@ -197,6 +199,12 @@ export function berechneAuslastung(clients: ApiClient[], users: ApiUser[], heute
         for (const m of aktiveMassnahmen) {
             // Gelöschte Kontingente ausfiltern (deletedAt seit Support-Fix 13.07.2026).
             // Verifiziert an Meier, Laura: 84,5 h/Wo (mit Gelöschten) vs. 31,6 korrekt.
+            for (const q of m.quotas ?? []) {
+                if (!q) continue;
+                diagQuotasGesamt++;
+                if (Object.prototype.hasOwnProperty.call(q, 'deletedAt')) diagFeldGeliefert++;
+                if (kDate(q.deletedAt)) diagGefiltert++;
+            }
             const quotas = (m.quotas ?? []).filter(
                 (q): q is Quota => !!q && !kDate(q.deletedAt),
             );
@@ -315,6 +323,11 @@ export function berechneAuslastung(clients: ApiClient[], users: ApiUser[], heute
         detail: detail.sort((a, b) => a.betreuer.localeCompare(b.betreuer) || a.klient.localeCompare(b.klient)),
         summen,
         ohneKontingent: detail.filter((z) => z.hinweis.startsWith('kein aktuelles Kontingent')).length,
+        diagnose: {
+            quotasGesamt: diagQuotasGesamt,
+            deletedAtGeliefert: diagFeldGeliefert,
+            geloeschtGefiltert: diagGefiltert,
+        },
         mehrereKontingente: detail.filter((z) => z.hinweis.includes('mehrere Kontingente')).length,
         bezugGefunden,
         bezugFehlend,
