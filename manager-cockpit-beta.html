@@ -87,6 +87,12 @@ tr{cursor:pointer}
 .ziel-total .lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
 .ziel-total .val{font-size:26px;font-weight:700}
 .ziel-hint{font-size:11px;color:var(--text-hint);margin-top:8px;line-height:1.5}
+.ziel-gehalt{display:grid;grid-template-columns:1fr 110px;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px}
+.ziel-gehalt .zl{color:var(--text-muted)}
+.ziel-gehalt input{width:100%;height:28px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-family:inherit;text-align:right;background:var(--accent-light)}
+.ziel-zulage{display:flex;align-items:baseline;justify-content:space-between;margin-top:8px}
+.ziel-zulage .lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.ziel-zulage .val{font-size:18px;font-weight:700;color:var(--accent)}
 .netto-btn{background:none;border:none;font:inherit;font-weight:600;color:var(--accent);cursor:pointer;text-decoration:underline dotted;padding:0}
 .falldiff{display:none;background:var(--accent-light);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:12px}
 .falldiff.open{display:block}
@@ -175,7 +181,7 @@ tr{cursor:pointer}
         Netto-Fallakquise und Fallbestand = eindeutige Fälle (Hauptbetreuung) der dem Team <b>zugeordneten Jugendämter</b> — gleiche Logik wie die Klientenentwicklungs-Übersicht; Quartalsende minus Quartalsanfang (Ziel: +2). Klick auf den Wert zeigt die Zu- und Abgänge namentlich mit Amt. Zuordnung: Jörg = Ingolstadt, Eichstätt, Regensburg (Stadt + LK), Neuburg-Schrobenhausen · Laura = Kelheim, Freising, Landshut (Stadt + LK) · Nadine = Pfaffenhofen, Dachau. ·
         Team-Auslastung = Fälle der zugeordneten Ämter ÷ Personal-VZÄ des Teams (Teamleitung + direkt Zugeordnete) am Quartalsende (Ziel: 7,5). ·
         Dokumentationsqualität (Ziel: 95 % pünktlich) und MA-Zufriedenheit (Ziel: 4,0 von 5) sind manuelle Eingaben und werden lokal im Browser gespeichert. ·
-        Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 %, je Kriterium bei 150 % gekappt (▲) — darüber Bonus-Territorium (§5.2). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-%.
+        Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 %, je Kriterium bei 150 % gekappt (▲) — darüber Bonus-Territorium (§5.2). Ziel-Zulage = 7,5 % × eingetragenes Mischgehalt × Ziel-% (Mischgehalt wird lokal im Browser gespeichert).
       </div>
     </div>
   </div>
@@ -456,6 +462,18 @@ const unzugeordneteAemter = rows => {
   return [...alle].sort((a, b) => a.localeCompare(b, 'de'));
 };
 function toggleFallDiff(id) { document.getElementById(id)?.classList.toggle('open'); }
+
+// Mischgehalt (brutto/Monat) je Teamleitung — quartalsunabhängig, lokal im Browser
+const gehaltLesen = upn => {
+  const v = Number(localStorage.getItem('pnw-ziel-gehalt:' + upn));
+  return Number.isFinite(v) && v > 0 ? v : null;
+};
+function gehaltSchreiben(upn, wert) {
+  const n = Number(wert);
+  if (Number.isFinite(n) && n > 0) localStorage.setItem('pnw-ziel-gehalt:' + upn, String(n));
+  else localStorage.removeItem('pnw-ziel-gehalt:' + upn);
+  ladeZiele(); // neu rechnen aus dem Cache
+}
 const vzae = rows => rows.reduce((s, r) => s + (r.wochenstunden || 0), 0) / 39;
 const pct = e => e == null ? '—' : Math.round(e * 100) + ' %';
 
@@ -528,12 +546,14 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
   const pctKap = (e, r) => e == null ? '—'
     : Math.round(e * 100) + ' %' + (r > CAP ? ' <span class="zt" title="auf 150 % gekappt — darüber Bonus-Territorium (§5.2 Abs. 4)">▲</span>' : '');
 
+  const gehalt = gehaltLesen(upn);
   const alle = [eAkquise, eAusl, eDoku, eMa];
   const komplett = alle.every(e => e != null);
   const total = komplett
     ? ZIEL.gewichte.akquise * eAkquise + ZIEL.gewichte.auslastung * eAusl +
       ZIEL.gewichte.doku * eDoku + ZIEL.gewichte.ma * eMa
     : null;
+  const zulage = (total != null && gehalt != null) ? 0.075 * gehalt * total : null;
 
   const zeile = (label, ziel, ist, err, rohWert) => `
     <div class="zielrow">
@@ -564,7 +584,14 @@ function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
       <span class="val" style="color:${total == null ? 'var(--text-hint)' : total >= 1 ? 'var(--ok)' : total >= 0.6 ? 'var(--warn)' : 'var(--error)'}">${total == null ? '—' : fmtNum(total * 100, 0) + ' %'}</span>
     </div>
     ${total == null ? '<div class="ziel-hint">Dokumentation und MA-Zufriedenheit eintragen, um den Gesamtwert zu berechnen.</div>' : ''}
-    ${total != null ? '<div class="ziel-hint">Ziel-Zulage: 7,5 % × Mischgehalt × ' + fmtNum(total * 100, 0) + ' % — Auszahlung im Folgemonat des Quartals (§5.3).</div>' : ''}
+    <div class="ziel-gehalt">
+      <div class="zl"><b>Mischgehalt</b> <span class="zt">brutto/Monat, §4</span></div>
+      <input type="number" min="0" step="1" value="${gehalt ?? ''}" placeholder="€"
+        onchange="gehaltSchreiben('${esc(upn)}', this.value)">
+    </div>
+    ${zulage != null ? `<div class="ziel-zulage"><span class="lbl">Ziel-Zulage/Monat</span><span class="val">${fmtNum(zulage, 0)} €</span></div>
+      <div class="ziel-hint">7,5 % × ${fmtNum(gehalt, 0)} € × ${fmtNum(total * 100, 0)} % — quartalsweise nachträglich, Auszahlung im Folgemonat (§5.3).</div>`
+      : (gehalt != null && total == null ? '<div class="ziel-hint">Zulage erscheint, sobald der Ziel-%-Wert vollständig ist.</div>' : '')}
   </div>`;
 }
 
