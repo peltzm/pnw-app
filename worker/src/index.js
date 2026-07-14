@@ -747,6 +747,36 @@ async function fetchClientStatusMap(env) {
   return map;
 }
 
+// Alle HB-Fälle über ALLE Mitarbeitenden zum Stichtag (id, Name, Amt, Hilfeart,
+// Maßnahme) — Grundlage der Amt-basierten Zielerreichung im Manager-Cockpit,
+// unabhängig davon, wessen Team in der Tabellen-Sicht steht.
+async function alleHbFaelle(env, now) {
+  const clients = await fetchKilankaClients(env);
+  const map = new Map();
+  for (const client of clients || []) {
+    if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
+    for (const action of client.actions || []) {
+      if (kDate(action.deletedAt) || !isCurrent(action.validFrom, action.validUntil, now)) continue;
+      const hatHB = (action.attendants || []).some(
+        (a) => a.user && !isArchived(a.user.recName) &&
+               isCurrent(a.validFrom, a.validUntil, now) &&
+               a.attendantKind?.name === "Hauptbetreuer"
+      );
+      if (!hatHB) continue;
+      if (!map.has(String(client.id))) {
+        map.set(String(client.id), {
+          id: String(client.id),
+          name: client.recName || String(client.id),
+          amt: action.department?.name || "",
+          hilfeart: action.legalBasis?.name || "",
+          massnahme: action.recName || "",
+        });
+      }
+    }
+  }
+  return [...map.values()];
+}
+
 async function buildCockpit(env, upn, now) {
   const jahr = now.getFullYear();
 
@@ -1149,7 +1179,9 @@ export default {
             erhoehung: d.erhoehung, // Endpunkt ist TL/GF-exklusiv
           });
         }
-        return json({ rolle, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows }, 200, origin);
+        let amtFaelle = [];
+        try { amtFaelle = await alleHbFaelle(env, now); } catch (e) { /* Ziel-Basis optional */ }
+        return json({ rolle, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows, amtFaelle }, 200, origin);
       } catch (e) {
         return json({ error: `Manager-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
       }
