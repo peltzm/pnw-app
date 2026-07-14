@@ -66,6 +66,28 @@ tr{cursor:pointer}
 .loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:70px 20px}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Zielerreichung Teamleitungen */
+.zielsection{margin-top:28px}
+.ziel-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.ziel-head h3{font-size:15px;font-weight:600}
+.ziel-head p{font-size:11px;color:var(--text-hint)}
+.zielcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.zielcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
+.zielcard .tl-name{font-size:14px;font-weight:600;margin-bottom:2px}
+.zielcard .tl-sub{font-size:11px;color:var(--text-hint);margin-bottom:10px}
+.zielrow{display:grid;grid-template-columns:1fr 78px 64px;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px}
+.zielrow:last-of-type{border-bottom:none}
+.zielrow .zl{color:var(--text-muted)}
+.zielrow .zl b{color:var(--text);font-weight:600}
+.zielrow .zl .zt{font-size:10.5px;color:var(--text-hint)}
+.zielrow .zi{text-align:right;font-weight:600}
+.zielrow input{width:100%;height:28px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-family:inherit;text-align:right;background:var(--accent-light)}
+.zielrow .ze{text-align:right}
+.ziel-total{display:flex;align-items:baseline;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:2px solid var(--border)}
+.ziel-total .lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.ziel-total .val{font-size:26px;font-weight:700}
+.ziel-hint{font-size:11px;color:var(--text-hint);margin-top:8px;line-height:1.5}
+.ziel-bonus{font-size:11px;color:var(--warn);font-weight:600;margin-top:6px}
 @media (max-width:640px){.wrap{padding:14px 10px 50px}}
 </style>
 </head>
@@ -125,6 +147,28 @@ tr{cursor:pointer}
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+    </div>
+
+    <!-- Zielerreichung Teamleitungen (Leistungs- und Vergütungsvereinbarung §5) -->
+    <div class="zielsection" id="zielSection" style="display:none">
+      <div class="ziel-head">
+        <div>
+          <h3>Zielerreichung Teamleitungen</h3>
+          <p>Leistungsbezogene Zulage gem. Vergütungsvereinbarung §5 — Gewichtung 30/30/20/20, quartalsweise</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Quartal</label>
+          <select id="quartalFilter" onchange="ladeZiele()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)"></select>
+        </div>
+      </div>
+      <div class="loading-state" id="zielLoading" style="display:none;padding:40px 20px"><div class="spinner"></div>Stichtags-Daten für das Quartal werden geladen …</div>
+      <div class="zielcards" id="zielCards"></div>
+      <div class="legend">
+        Netto-Fallakquise = aktive Fälle des Teams am Quartalsende minus Quartalsanfang (Ziel: +2). ·
+        Team-Auslastung = aktive Fälle ÷ Team-VZÄ am Quartalsende (Ziel: 7,5). Team = Teamleitung + direkt zugeordnete Mitarbeitende. ·
+        Dokumentationsqualität (Ziel: 95 % pünktlich) und MA-Zufriedenheit (Ziel: 4,0 von 5) sind manuelle Eingaben und werden lokal im Browser gespeichert. ·
+        Teilzielerreichung wird linear angerechnet, negative Werte zählen als 0 % (§5.2). Ziel-Zulage = 7,5 % × Mischgehalt × Ziel-%.
+      </div>
     </div>
   </div>
 </div>
@@ -292,6 +336,144 @@ function setSort(k) {
   render();
 }
 
+/* ── Zielerreichung Teamleitungen (Vergütungsvereinbarung §5) ── */
+const ZIEL = {
+  gewichte: { akquise: 0.30, auslastung: 0.30, doku: 0.20, ma: 0.20 },
+  akquiseSoll: 2,      // +2 Fälle netto pro Quartal
+  auslastungSoll: 7.5, // Fälle pro VZÄ (Stichtag Quartalsende)
+  dokuSoll: 95,        // % pünktliche Berichte
+  maSoll: 4.0          // Befragung, Skala 1–5
+};
+const stichtagCache = new Map(); // iso → Antwort des Workers
+
+// Abgeschlossene Quartale (Ende ≤ heute); Anfang = Vorquartals-Ende
+function abgeschlosseneQuartale() {
+  const heute = new Date(), res = [];
+  for (let j = heute.getFullYear() - 1; j <= heute.getFullYear(); j++) {
+    const enden = [`${j}-03-31`, `${j}-06-30`, `${j}-09-30`, `${j}-12-31`];
+    enden.forEach((ende, i) => {
+      if (new Date(ende) > heute) return;
+      const start = i === 0 ? `${j - 1}-12-31` : enden[i - 1];
+      res.push({ start, ende, label: `Q${i + 1}/${j}` });
+    });
+  }
+  return res;
+}
+
+function fuelleQuartale() {
+  const sel = document.getElementById('quartalFilter');
+  if (sel.options.length) return;
+  const qs = abgeschlosseneQuartale().reverse(); // jüngstes zuerst
+  sel.innerHTML = qs.map((q, i) =>
+    `<option value="${q.start}|${q.ende}" ${i === 0 ? 'selected' : ''}>${q.label}</option>`).join('');
+}
+
+async function holeStichtag(iso) {
+  if (stichtagCache.has(iso)) return stichtagCache.get(iso);
+  const t = await tokens();
+  const r = await fetch(CFG.workerUrl + '/api/manager-cockpit?stichtag=' + iso, {
+    headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
+  });
+  if (!r.ok) throw new Error('Stichtag ' + iso + ': HTTP ' + r.status);
+  const d = await r.json();
+  stichtagCache.set(iso, d);
+  return d;
+}
+
+// Manuelle Eingaben (Doku-Qualität, MA-Zufriedenheit) lokal im Browser halten
+const zielInputKey = (q, upn) => `pnw-ziel:${q}:${upn}`;
+function zielInputLesen(q, upn) {
+  try { return JSON.parse(localStorage.getItem(zielInputKey(q, upn))) || {}; } catch (_) { return {}; }
+}
+function zielInputSchreiben(q, upn, feld, wert) {
+  const v = zielInputLesen(q, upn);
+  v[feld] = wert === '' ? null : Number(wert);
+  localStorage.setItem(zielInputKey(q, upn), JSON.stringify(v));
+  ladeZiele(); // neu rechnen (Daten kommen aus dem Cache, kein Netz)
+}
+
+const teamVon = (rows, upn) => rows.filter(r => r.leitung?.upn === upn || r.upn === upn);
+const faelle = rows => rows.reduce((s, r) => s + (r.klienten?.aktiv || 0), 0);
+const vzae = rows => rows.reduce((s, r) => s + (r.wochenstunden || 0), 0) / 39;
+const pct = e => e == null ? '—' : Math.round(e * 100) + ' %';
+
+async function ladeZiele() {
+  const sec = document.getElementById('zielSection');
+  sec.style.display = '';
+  fuelleQuartale();
+  const [qStart, qEnde] = document.getElementById('quartalFilter').value.split('|');
+  const lade = document.getElementById('zielLoading'), cards = document.getElementById('zielCards');
+  try {
+    if (!stichtagCache.has(qStart) || !stichtagCache.has(qEnde)) { lade.style.display = 'flex'; cards.innerHTML = ''; }
+    const [dStart, dEnde] = await Promise.all([holeStichtag(qStart), holeStichtag(qEnde)]);
+    lade.style.display = 'none';
+
+    // Teamleitungen aus den Quartalsend-Daten ableiten
+    const leitungen = new Map();
+    for (const r of dEnde.rows) if (r.leitung?.upn) leitungen.set(r.leitung.upn, r.leitung.name || r.leitung.upn);
+
+    cards.innerHTML = [...leitungen.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], 'de'))
+      .map(([upn, name]) => zielCard(upn, name, qStart, qEnde, dStart, dEnde)).join('')
+      || '<div class="legend">Keine Teamleitungen in den Daten gefunden.</div>';
+  } catch (e) {
+    lade.style.display = 'none';
+    cards.innerHTML = '<div class="legend" style="color:var(--error)">Zielerreichung nicht ladbar: ' + esc(e.message) + '</div>';
+  }
+}
+
+function zielCard(upn, name, qStart, qEnde, dStart, dEnde) {
+  const teamE = teamVon(dEnde.rows, upn), teamS = teamVon(dStart.rows, upn);
+  const fE = faelle(teamE), fS = faelle(teamS), netto = fE - fS;
+  const v = vzae(teamE);
+  const proVzae = v > 0 ? fE / v : null;
+  const ohneStunden = teamE.filter(r => r.wochenstunden == null).length;
+  const inp = zielInputLesen(qEnde, upn);
+
+  // Erreichung je Kriterium: linear, Untergrenze 0 (§5.2), keine Kappung nach oben (vgl. Szenario 125 %)
+  const eAkquise = Math.max(0, netto / ZIEL.akquiseSoll);
+  const eAusl = proVzae == null ? null : Math.max(0, proVzae / ZIEL.auslastungSoll);
+  const eDoku = inp.doku == null ? null : Math.max(0, inp.doku / ZIEL.dokuSoll);
+  const eMa = inp.ma == null ? null : Math.max(0, inp.ma / ZIEL.maSoll);
+
+  const alle = [eAkquise, eAusl, eDoku, eMa];
+  const komplett = alle.every(e => e != null);
+  const total = komplett
+    ? ZIEL.gewichte.akquise * eAkquise + ZIEL.gewichte.auslastung * eAusl +
+      ZIEL.gewichte.doku * eDoku + ZIEL.gewichte.ma * eMa
+    : null;
+
+  const zeile = (label, ziel, ist, err) => `
+    <div class="zielrow">
+      <div class="zl"><b>${label}</b><br><span class="zt">Ziel: ${ziel}</span></div>
+      <div class="zi">${ist}</div>
+      <div class="ze">${pct(err)}</div>
+    </div>`;
+  const inputZeile = (label, ziel, feld, wert, attrs) => `
+    <div class="zielrow">
+      <div class="zl"><b>${label}</b><br><span class="zt">Ziel: ${ziel}</span></div>
+      <div class="zi"><input type="number" ${attrs} value="${wert ?? ''}" placeholder="—"
+        onchange="zielInputSchreiben('${esc(qEnde)}','${esc(upn)}','${feld}',this.value)"></div>
+      <div class="ze">${pct(feld === 'doku' ? eDoku : eMa)}</div>
+    </div>`;
+
+  return `<div class="zielcard">
+    <div class="tl-name">${esc(name)}</div>
+    <div class="tl-sub">Team: ${teamE.length} Pers. · ${fmtNum(v, 2)} VZÄ · ${fE} aktive Fälle (Anfang: ${fS})${ohneStunden ? ' · ⚠ ' + ohneStunden + ' ohne Vertragsstunden' : ''}</div>
+    ${zeile('Netto-Fallakquise <span class="zt">(30 %)</span>', '+' + ZIEL.akquiseSoll + ' Fälle', (netto > 0 ? '+' : '') + netto, eAkquise)}
+    ${zeile('Team-Auslastung <span class="zt">(30 %)</span>', fmtNum(ZIEL.auslastungSoll, 1) + ' F./VZÄ', proVzae == null ? '—' : fmtNum(proVzae, 2), eAusl)}
+    ${inputZeile('Dokumentation <span class="zt">(20 %)</span>', ZIEL.dokuSoll + ' % pünktlich', 'doku', inp.doku, 'min="0" max="100" step="1"')}
+    ${inputZeile('MA-Zufriedenheit <span class="zt">(20 %)</span>', fmtNum(ZIEL.maSoll, 1) + ' von 5', 'ma', inp.ma, 'min="1" max="5" step="0.1"')}
+    <div class="ziel-total">
+      <span class="lbl">Ziel-% gesamt</span>
+      <span class="val" style="color:${total == null ? 'var(--text-hint)' : total >= 1 ? 'var(--ok)' : total >= 0.6 ? 'var(--warn)' : 'var(--error)'}">${total == null ? '—' : fmtNum(total * 100, 0) + ' %'}</span>
+    </div>
+    ${total == null ? '<div class="ziel-hint">Dokumentation und MA-Zufriedenheit eintragen, um den Gesamtwert zu berechnen.</div>' : ''}
+    ${total != null ? '<div class="ziel-hint">Ziel-Zulage: 7,5 % × Mischgehalt × ' + fmtNum(total * 100, 0) + ' % — Auszahlung im Folgemonat des Quartals (§5.3).</div>' : ''}
+    ${eAkquise > 1.5 ? '<div class="ziel-bonus">Übererfüllung Fallakquise &gt; 150 % → Bonus +2,5 % möglich (GF-Entscheid, §5.2 Abs. 4)</div>' : ''}
+  </div>`;
+}
+
 /* ── MSAL + Laden ── */
 function tokenAblauf(jwt) { try { return (JSON.parse(atob(jwt.split('.')[1])).exp || 0) * 1000; } catch(_) { return 0; } }
 async function tokens() {
@@ -330,6 +512,7 @@ async function laden() {
     daten = await r.json();
     fuelleTeamFilter();
     render();
+    ladeZiele(); // Zielerreichungs-Bereich (nutzt eigenen Stichtag-Cache)
   } catch(e) {
     document.getElementById('loading').innerHTML =
       '<div style="text-align:center;color:var(--error)">Abruf fehlgeschlagen: ' + esc(e.message) +
