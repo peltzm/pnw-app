@@ -111,7 +111,9 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 
 /* ── Tabellen ── */
 table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;font-size:12.5px}
-th{background:var(--bg);color:var(--text-muted);text-align:left;padding:8px 12px;font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)}
+th{background:var(--bg);color:var(--text-muted);text-align:left;padding:8px 12px;font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--accent)}
+th .sortpfeil{font-size:8px;margin-left:4px;color:var(--accent-mid)}
 td{padding:8px 12px;border-top:1px solid var(--border);vertical-align:middle}
 tr.klick{cursor:pointer} tr.klick:hover td{background:var(--accent-light)}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
@@ -200,6 +202,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     </div>
     <div class="page-header-actions">
       <button class="btn btn-outline btn-sm" onclick="neuesFahrzeug()">+ Fahrzeug</button>
+      <button class="btn btn-outline btn-sm" onclick="csvExport()" title="Exportiert die aktuelle Ansicht als CSV — unter Verwaltung: alle Stammdaten">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        CSV
+      </button>
       <button class="btn btn-outline btn-sm" onclick="reload()" id="refreshBtn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
         Aktualisieren
@@ -734,7 +740,93 @@ function renderPrognose(){
   document.querySelectorAll('#view-prognose tr.klick').forEach(el=>el.addEventListener('click',()=>oeffneDialog(el.dataset.fin)));
 }
 
-function renderAll(){ renderFlotte(); renderKosten(); renderPrognose(); }
+function renderAll(){ renderFlotte(); renderKosten(); renderPrognose(); machSortierbar(); }
+
+/* ═══════════════════════════════════════════════════════════
+ * SORTIERUNG — Klick auf Spaltenkopf, erkennt Zahlen/€/km/Datum
+ * ═══════════════════════════════════════════════════════════ */
+function machSortierbar(){
+  document.querySelectorAll('#appScreen table').forEach(table=>{
+    table.querySelectorAll('thead th').forEach((th,idx)=>{
+      if(th.dataset.sortierbar) return;
+      th.dataset.sortierbar='1';
+      th.addEventListener('click',()=>sortiereTabelle(table,idx,th));
+    });
+  });
+}
+function sortWert(s){
+  s=s.replace(/[▲▼]/g,'').trim();
+  const dm=s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);          // deutsches Datum → JJJJMMTT
+  if(dm) return +(dm[3]+dm[2]+dm[1]);
+  const num=s.replace(/−/g,'-').replace(/\u00a0/g,'').match(/-?\d[\d.,]*/); // Minus nur direkt vor Ziffer (FS-NW 913 ≠ −913)
+  if(!num) return null;
+  const n=parseFloat(num[0].replace(/\./g,'').replace(',','.'));           // 1.234,56 → 1234.56
+  return isNaN(n)?null:n;
+}
+function sortiereTabelle(table,idx,th){
+  const asc=th.dataset.sort!=='asc';
+  table.querySelectorAll('thead th').forEach(h=>{h.removeAttribute('data-sort');const p=h.querySelector('.sortpfeil');if(p)p.remove();});
+  th.dataset.sort=asc?'asc':'desc';
+  th.insertAdjacentHTML('beforeend','<span class="sortpfeil">'+(asc?'▲':'▼')+'</span>');
+  const tbody=table.querySelector('tbody');
+  const rows=[...tbody.querySelectorAll('tr')];
+  rows.sort((a,b)=>{
+    const ta=(a.children[idx]?.textContent||'').trim(), tb=(b.children[idx]?.textContent||'').trim();
+    const na=sortWert(ta), nb=sortWert(tb);
+    let r;
+    if(na!=null&&nb!=null) r=na-nb;
+    else if(na!=null) r=-1;                                   // Zahlen vor Text/leer
+    else if(nb!=null) r=1;
+    else r=ta.localeCompare(tb,'de',{numeric:true,sensitivity:'base'});
+    return asc?r:-r;
+  });
+  rows.forEach(r=>tbody.appendChild(r));                      // Klick-Handler bleiben erhalten
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * CSV-EXPORT — aktuelle Ansicht; Verwaltung = alle Stammdaten
+ * (Semikolon-getrennt, UTF-8 mit BOM für Excel)
+ * ═══════════════════════════════════════════════════════════ */
+function csvExport(){
+  const view=document.querySelector('.view.active');
+  const datum=new Date().toISOString().slice(0,10);
+  if(!view||view.id==='view-verwaltung'){ stammdatenCsv(datum); return; }
+  const tables=[...view.querySelectorAll('table')];
+  if(!tables.length){ stammdatenCsv(datum); return; }
+  let csv='\uFEFF';
+  tables.forEach((table,i)=>{
+    if(i) csv+='\n';
+    table.querySelectorAll('tr').forEach(tr=>{
+      csv+=[...tr.children].map(c=>{
+        const t=c.textContent.replace(/[▲▼]/g,'').replace(/\s+/g,' ').trim();
+        return '"'+t.replace(/"/g,'""')+'"';
+      }).join(';')+'\n';
+    });
+  });
+  csvDownload(csv,'fuhrpark-'+view.id.replace('view-','')+'-'+datum+'.csv');
+}
+function stammdatenCsv(datum){
+  let csv='\uFEFF'+SCHEMA.map(s=>'"'+s.label+'"').join(';')+'\n';
+  const sortiert=[...fahrzeuge].sort((a,b)=>String(a.kennzeichen||'').localeCompare(String(b.kennzeichen||''),'de'));
+  for(const f of sortiert){
+    csv+=SCHEMA.map(s=>{
+      let v=f[s.key];
+      if(v===true) v='ja'; else if(v===false) v='nein';
+      else if(v==null) v='';
+      else if(typeof v==='number') v=String(v).replace('.',',');
+      else if(s.typ==='datum'&&/^\d{4}-\d{2}-\d{2}/.test(v)) v=fDat(v);
+      return '"'+String(v).replace(/"/g,'""')+'"';
+    }).join(';')+'\n';
+  }
+  csvDownload(csv,'fuhrpark-stammdaten-'+datum+'.csv');
+}
+function csvDownload(text,name){
+  const blob=new Blob([text],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
 
 /* ═══════════════════════════════════════════════════════════
  * DIALOG — Anzeigen / Bearbeiten / Neuanlage / km erfassen
