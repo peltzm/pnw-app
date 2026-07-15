@@ -304,6 +304,11 @@ const initials = name => (name||'').split(/[,\s]+/).filter(Boolean).slice(0,2).m
 
 /* Frist-Ampel: Nachweis-Datum gegen Gültigkeitsdauer in Monaten.
  * gelb ab warnMonate, rot ab maxMonate; fehlend = rot (Pflichtnachweis). */
+// Einmal-Nachweise (Datenschutz, Verfassungstreue): vorhanden = dauerhaft gültig
+function vorhandenChip(iso) {
+  return iso ? '<span class="chip chip-ok">gültig</span>' : '<span class="chip chip-err">fehlt</span>';
+}
+
 function fristChip(iso, warnMonate, maxMonate) {
   if (!iso) return '<span class="chip chip-err">fehlt</span>';
   const alter = (Date.now() - new Date(iso).getTime()) / (30.44 * 864e5);
@@ -602,16 +607,16 @@ function renderCards(d, own) {
     </div>
     ${!d.nachweise ? `<div class="note" style="margin-top:0">Noch keine Daten — Mitarbeiterprofil in Kilanka nicht gefunden oder Zusatzfelder leer.</div>` : `
     <dl class="kv">
-      <dt>Führungszeugnis <span style="color:var(--text-hint)">(3 J.)</span></dt>
-      <dd>${fmtDate(d.nachweise.fuehrungszeugnis)} ${fristChip(d.nachweise.fuehrungszeugnis, 30, 36)}</dd>
-      <dt>Datenschutz <span style="color:var(--text-hint)">(jährl.)</span></dt>
-      <dd>${fmtDate(d.nachweise.datenschutz)} ${fristChip(d.nachweise.datenschutz, 11, 12)}</dd>
-      <dt>Verfassungstreue</dt>
-      <dd>${fmtDate(d.nachweise.verfassungstreue)}</dd>
-      <dt>Führerschein-Prüfung</dt>
-      <dd>${fmtDate(d.nachweise.fuehrerschein)}</dd>
+      <dt>Führungszeugnis <span style="color:var(--text-hint)">(5 J.)</span></dt>
+      <dd>${fmtDate(d.nachweise.fuehrungszeugnis)} ${fristChip(d.nachweise.fuehrungszeugnis, 54, 60)}</dd>
+      <dt>Datenschutz <span style="color:var(--text-hint)">(einmalig)</span></dt>
+      <dd>${fmtDate(d.nachweise.datenschutz)} ${vorhandenChip(d.nachweise.datenschutz)}</dd>
+      <dt>Verfassungstreue <span style="color:var(--text-hint)">(einmalig)</span></dt>
+      <dd>${fmtDate(d.nachweise.verfassungstreue)} ${vorhandenChip(d.nachweise.verfassungstreue)}</dd>
+      <dt>Führerschein <span style="color:var(--text-hint)">(jährl. Prüfung)</span></dt>
+      <dd>${fmtDate(d.nachweise.fuehrerschein)} ${fristChip(d.nachweise.fuehrerschein, 11, 12)}</dd>
       <dt>Ersthelfer (BEH)${(d.person.team||'').match(/nordstern/i) ? ' <span style="color:var(--text-hint)">(jährl.)</span>' : ''}</dt>
-      <dd>${fmtDate(d.nachweise.behAusbildung)} ${(d.person.team||'').match(/nordstern/i) ? fristChip(d.nachweise.behAusbildung, 11, 12) : ''}</dd>
+      <dd>${fmtDate(d.nachweise.behAusbildung)} ${(d.person.team||'').match(/nordstern/i) ? fristChip(d.nachweise.behAusbildung, 9, 12) : ''}</dd>
       ${d.erhoehung ? `<dt>Erhöhung <span style="color:var(--text-hint)">(nur TL/GF)</span></dt><dd>${fmtDate(d.erhoehung)}</dd>` : ''}
       ${d.nachweise.weiterFortbildung ? `<dt>Weiter-/Fortbildung</dt><dd>${esc(d.nachweise.weiterFortbildung)}</dd>` : ''}
     </dl>
