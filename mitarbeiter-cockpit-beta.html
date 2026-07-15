@@ -223,7 +223,7 @@ const CFG = {
   redirectUri: 'https://apps.praxisneuewege.de/mitarbeiter-cockpit-beta.html',
   workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
-const SCOPES = ['User.Read', 'User.ReadBasic.All'];
+const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.Read.All']; // Sites.Read.All: Firmenwagen live aus SP-Liste PNW-Fahrzeuge
 const APP_VERSION = 'BETA-e213b7a'; // auto-updated on deploy
 
 let msalInstance, currentAccount, accessToken;
@@ -304,6 +304,11 @@ const initials = name => (name||'').split(/[,\s]+/).filter(Boolean).slice(0,2).m
 
 /* Frist-Ampel: Nachweis-Datum gegen Gültigkeitsdauer in Monaten.
  * gelb ab warnMonate, rot ab maxMonate; fehlend = rot (Pflichtnachweis). */
+function toggleStatusListe(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
 // Einmal-Nachweise (Datenschutz, Verfassungstreue): vorhanden = dauerhaft gültig
 function vorhandenChip(iso) {
   return iso ? '<span class="chip chip-ok">gültig</span>' : '<span class="chip chip-err">fehlt</span>';
@@ -387,6 +392,34 @@ function flsAuswertung(d) {
 let FUHRPARK = null;
 fetch('data/fahrzeuge.json').then(r => r.ok ? r.json() : null).then(j => { FUHRPARK = j; })
   .catch(() => { FUHRPARK = null; });
+
+/* Live-Fuhrpark: SharePoint-Liste PNW-Fahrzeuge (Datenquelle der Fuhrpark-App).
+   Liest mit dem Graph-Token des angemeldeten Nutzers; scheitert der Zugriff
+   (fehlende Listen-Berechtigung), bleibt der JSON-Fallback aktiv. */
+let SP_FUHRPARK = null;
+async function ladeFuhrparkLive(graphToken) {
+  if (SP_FUHRPARK) return SP_FUHRPARK;
+  const g = async (pfad) => {
+    const r = await fetch('https://graph.microsoft.com/v1.0' + pfad,
+      { headers: { Authorization: 'Bearer ' + graphToken } });
+    if (!r.ok) throw new Error('Graph HTTP ' + r.status);
+    return r.json();
+  };
+  const site = await g('/sites/praxisneuewegesonjapeltz978.sharepoint.com:/');
+  const items = await g('/sites/' + site.id + "/lists/PNW-Fahrzeuge/items?expand=fields($select=Title,Hersteller,Modell,FzStatus,Rueckgabe,Finanzierung,KmProJahr,KmStand,KmStandDatum,DGUVPruefung,Fahrer,Privatnutzung,EigenanteilMonat)&$top=200");
+  SP_FUHRPARK = (items.value || []).map(i => i.fields || {});
+  return SP_FUHRPARK;
+}
+function spFuhrparkMatch(personName) {
+  if (!SP_FUHRPARK) return null;
+  const nachname = (personName || '').split(',')[0].trim().toLowerCase();
+  if (!nachname) return null;
+  const treffer = SP_FUHRPARK.filter(f =>
+    (f.Fahrer || '').toLowerCase().startsWith(nachname));
+  if (!treffer.length) return null;
+  // aktives Fahrzeug bevorzugen
+  return treffer.find(f => (f.FzStatus || '').toLowerCase() === 'aktiv') || treffer[0];
+}
 function fuhrparkMatch(fw, personName) {
   if (!FUHRPARK) return null;
   if (fw && fw.kennzeichen) {
@@ -443,7 +476,23 @@ function renderCards(d, own) {
   document.getElementById('lockNote').style.display = own ? '' : 'none';
 
   const u = d.urlaub, k = d.krankheit, fw = d.firmenwagen || {vorhanden:false}, kl = d.klienten, fls = d.fls;
-  const fp = fuhrparkMatch(fw, d.person && d.person.name);
+  // 1. Wahl: Live-Daten aus der SharePoint-Liste (Fahrzeugverwaltungs-App)
+  const sp = spFuhrparkMatch(d.person && d.person.name);
+  if (sp) {
+    Object.assign(fw, { vorhanden: true, live: true,
+      modell: [sp.Hersteller, sp.Modell].filter(Boolean).join(' ') || fw.modell,
+      kennzeichen: sp.Title || fw.kennzeichen,
+      rueckgabe: sp.Rueckgabe ? sp.Rueckgabe.slice(0, 10) : fw.rueckgabe,
+      dguvPruefung: sp.DGUVPruefung ? sp.DGUVPruefung.slice(0, 10) : fw.dguvPruefung,
+      finanzierung: sp.Finanzierung || fw.finanzierung,
+      kmBudgetJahr: sp.KmProJahr || fw.kmBudgetJahr,
+      kmStand: sp.KmStand ?? fw.kmStand,
+      kmStandDatum: sp.KmStandDatum ? sp.KmStandDatum.slice(0, 10) : fw.kmStandDatum,
+      privatnutzung: sp.Privatnutzung || fw.privatnutzung,
+      eigenanteilMonat: sp.EigenanteilMonat ?? fw.eigenanteilMonat });
+  }
+  // 2. Wahl: statischer JSON-Bestand (Fallback ohne Listen-Berechtigung)
+  const fp = sp ? null : fuhrparkMatch(fw, d.person && d.person.name);
   if (fp) Object.assign(fw, { vorhanden: true,
     modell: fw.modell || fp.fahrzeug, kennzeichen: fw.kennzeichen || fp.kennzeichen,
     rueckgabe: fw.rueckgabe || fp.rueckgabe, dguvPruefung: fw.dguvPruefung || fp.dguvNaechstePruefung,
@@ -492,6 +541,27 @@ function renderCards(d, own) {
       <dt>Vertragl. Wochenstunden</dt><dd>${fmtNum(d.person.wochenstundenVertrag,1)} h</dd>
       <dt>E-Mail</dt><dd>${esc(d.upn)}</dd>
     </dl>
+    <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.04em">NACHWEISE &amp; FRISTEN</div>
+        <span class="src-badge src-kilanka">Kilanka · udf</span>
+      </div>
+      ${!d.nachweise ? `<div class="note" style="margin-top:0">Noch keine Daten — Mitarbeiterprofil in Kilanka nicht gefunden oder Zusatzfelder leer.</div>` : `
+      <dl class="kv">
+        <dt>Führungszeugnis <span style="color:var(--text-hint)">(5 J.)</span></dt>
+        <dd>${fmtDate(d.nachweise.fuehrungszeugnis)} ${fristChip(d.nachweise.fuehrungszeugnis, 54, 60)}</dd>
+        <dt>Datenschutz <span style="color:var(--text-hint)">(einmalig)</span></dt>
+        <dd>${fmtDate(d.nachweise.datenschutz)} ${vorhandenChip(d.nachweise.datenschutz)}</dd>
+        <dt>Verfassungstreue <span style="color:var(--text-hint)">(einmalig)</span></dt>
+        <dd>${fmtDate(d.nachweise.verfassungstreue)} ${vorhandenChip(d.nachweise.verfassungstreue)}</dd>
+        <dt>Führerschein <span style="color:var(--text-hint)">(jährl. Prüfung)</span></dt>
+        <dd>${fmtDate(d.nachweise.fuehrerschein)} ${fristChip(d.nachweise.fuehrerschein, 11, 12)}</dd>
+        <dt>Ersthelfer (BEH)${(d.person.team||'').match(/nordstern/i) ? ' <span style="color:var(--text-hint)">(jährl.)</span>' : ''}</dt>
+        <dd>${fmtDate(d.nachweise.behAusbildung)} ${(d.person.team||'').match(/nordstern/i) ? fristChip(d.nachweise.behAusbildung, 9, 12) : ''}</dd>
+        ${d.erhoehung ? `<dt>Erhöhung <span style="color:var(--text-hint)">(nur TL/GF)</span></dt><dd>${fmtDate(d.erhoehung)}</dd>` : ''}
+        ${d.nachweise.weiterFortbildung ? `<dt>Weiter-/Fortbildung</dt><dd>${esc(d.nachweise.weiterFortbildung)}</dd>` : ''}
+      </dl>`}
+    </div>
   </div>
 
   <!-- URLAUB -->
@@ -509,8 +579,9 @@ function renderCards(d, own) {
     <div class="bar-legend">
       <span><span class="dot" style="background:var(--ok)"></span>Genommen: ${fmtNum(u.genommenTage,1)}</span>
       <span><span class="dot" style="background:#9ccc9c"></span>Geplant: ${fmtNum(u.geplantTage,1)}</span>
-      <span><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage ?? '— (Feld folgt)'}</span>
+      <span title="${esc(u.anspruchQuelle || 'Kein Anspruchs-Text in Kilanka — Standard 30 Tage')}"><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage ?? '— (Feld folgt)'}</span>
     </div>
+    ${u.restTage != null && u.restTage < 0 ? `<div class="note" style="color:var(--warn)">⚠ Mehr Urlaub gebucht als Anspruch erfasst — vermutlich fehlt der Übertrag aus dem Vorjahr im Kilanka-Feld „Urlaubsanspruch" (aktuell hinterlegt: ${esc(u.anspruchQuelle || 'kein Text, Standard 30')}).</div>` : ''}
     ${u.geplanteTermine && u.geplanteTermine.length ? `<div style="margin-top:10px">
       <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.04em;margin-bottom:4px">KOMMENDE URLAUBE</div>
       ${u.geplanteTermine.slice(0,4).map(t => `<div style="font-size:12px;display:flex;justify-content:space-between;gap:8px;padding:2px 0">
@@ -541,7 +612,7 @@ function renderCards(d, own) {
   <div class="card c-auto">
     <div class="card-head">
       <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 16H9m10 0h1a1 1 0 0 0 1-1v-4a2 2 0 0 0-1.5-1.9l-2.2-.6-2-3.5A2 2 0 0 0 13.6 4H8.4a2 2 0 0 0-1.7 1l-2 3.5-2.2.6A2 2 0 0 0 1 11v4a1 1 0 0 0 1 1h1"/><circle cx="6.5" cy="16.5" r="2"/><circle cx="17.5" cy="16.5" r="2"/></svg>Firmenwagen</div>
-      <span class="src-badge src-fuhrpark">Fuhrpark · SP-Liste</span>
+      <span class="src-badge src-fuhrpark">${fw.live ? 'Fuhrpark · SP-Liste (live)' : 'Fuhrpark · SP-Liste'}</span>
     </div>
     ${fw.vorhanden ? `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
@@ -573,9 +644,20 @@ function renderCards(d, own) {
       <div class="sub-item"><div class="sl">Vertretung</div><div class="sv">${kl.v}</div></div>
     </div>
     ${kl.status ? `<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-      ${[['Bewilligung', kl.status.bew], ['Datenschutz', kl.status.ds], ['Schweigepflicht', kl.status.spe]].map(([l, s]) =>
-        `<span class="chip ${s[1] > 0 && s[0] === s[1] ? 'chip-ok' : 'chip-err'}" title="${l}: ${s[0]} von ${s[1]} erteilt">${l} ${s[0]}/${s[1]}</span>`).join('')}
-    </div>` : ''}
+      ${[['Bewilligung', 'bew'], ['Datenschutz', 'ds'], ['Schweigepflicht', 'spe']].map(([l, key]) => {
+        const s = kl.status[key];
+        const ok = s.ok ?? s[0], ges = s.gesamt ?? s[1], fehlt = s.fehlt || [];
+        const voll = ges > 0 && ok === ges;
+        return `<button class="chip ${voll ? 'chip-ok' : 'chip-err'}" style="border:none;font:inherit;cursor:${fehlt.length ? 'pointer' : 'default'}"
+          title="${l}: ${ok} von ${ges} erteilt${fehlt.length ? ' — klicken zeigt die fehlenden' : ''}"
+          onclick="toggleStatusListe('stl-${key}')">${l} ${ok}/${ges}</button>`;
+      }).join('')}
+    </div>
+    ${[['Bewilligung fehlt bei', 'bew'], ['Datenschutz fehlt bei', 'ds'], ['Schweigepflicht fehlt bei', 'spe']].map(([l, key]) => {
+      const fehlt = (kl.status[key] && kl.status[key].fehlt) || [];
+      return fehlt.length ? `<div id="stl-${key}" style="display:none;background:var(--bg);border-radius:8px;padding:8px 12px;margin-top:6px;font-size:12px">
+        <b>${l}:</b> ${fehlt.map(esc).join(' · ')}</div>` : '';
+    }).join('')}` : ''}
   </div>
 
   <!-- FLS -->
@@ -599,29 +681,7 @@ function renderCards(d, own) {
 
   </div>
 
-  <!-- NACHWEISE & FRISTEN -->
-  <div class="card c-nachweise">
-    <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/></svg>Nachweise &amp; Fristen</div>
-      <span class="src-badge src-kilanka">Kilanka · udf</span>
-    </div>
-    ${!d.nachweise ? `<div class="note" style="margin-top:0">Noch keine Daten — Mitarbeiterprofil in Kilanka nicht gefunden oder Zusatzfelder leer.</div>` : `
-    <dl class="kv">
-      <dt>Führungszeugnis <span style="color:var(--text-hint)">(5 J.)</span></dt>
-      <dd>${fmtDate(d.nachweise.fuehrungszeugnis)} ${fristChip(d.nachweise.fuehrungszeugnis, 54, 60)}</dd>
-      <dt>Datenschutz <span style="color:var(--text-hint)">(einmalig)</span></dt>
-      <dd>${fmtDate(d.nachweise.datenschutz)} ${vorhandenChip(d.nachweise.datenschutz)}</dd>
-      <dt>Verfassungstreue <span style="color:var(--text-hint)">(einmalig)</span></dt>
-      <dd>${fmtDate(d.nachweise.verfassungstreue)} ${vorhandenChip(d.nachweise.verfassungstreue)}</dd>
-      <dt>Führerschein <span style="color:var(--text-hint)">(jährl. Prüfung)</span></dt>
-      <dd>${fmtDate(d.nachweise.fuehrerschein)} ${fristChip(d.nachweise.fuehrerschein, 11, 12)}</dd>
-      <dt>Ersthelfer (BEH)${(d.person.team||'').match(/nordstern/i) ? ' <span style="color:var(--text-hint)">(jährl.)</span>' : ''}</dt>
-      <dd>${fmtDate(d.nachweise.behAusbildung)} ${(d.person.team||'').match(/nordstern/i) ? fristChip(d.nachweise.behAusbildung, 9, 12) : ''}</dd>
-      ${d.erhoehung ? `<dt>Erhöhung <span style="color:var(--text-hint)">(nur TL/GF)</span></dt><dd>${fmtDate(d.erhoehung)}</dd>` : ''}
-      ${d.nachweise.weiterFortbildung ? `<dt>Weiter-/Fortbildung</dt><dd>${esc(d.nachweise.weiterFortbildung)}</dd>` : ''}
-    </dl>
-    <div class="note">Ersthelfer-Ampel (jährl.) gilt nur für das Team Nordstern.</div>`}
-  </div>`;
+`;
 }
 
 function reload() {
@@ -723,6 +783,9 @@ async function loadLive(upn) {
   grid.innerHTML = '<div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div>';
   try {
     const t = await liveTokens();
+    if (!SP_FUHRPARK) {
+      try { await ladeFuhrparkLive(t.graph); } catch (e) { console.warn('Fuhrpark-Liste nicht lesbar:', e.message); }
+    }
     const url = CFG.workerUrl + '/api/mitarbeiter-cockpit' + (upn ? '?mitarbeiter=' + encodeURIComponent(upn) : '');
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
     if (!r.ok) {
