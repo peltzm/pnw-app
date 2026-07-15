@@ -207,3 +207,22 @@ Modul dafür geschnitten.
   Sonderzeichen bei der Applet-SDK-Generierung ungültiges TypeScript erzeugten
   (manuell reparierte sdk.ts nötig), wurde laut Support behoben. Beim nächsten
   Applet-Build SDK neu generieren und die manuelle Reparatur entfernen.
+
+## Update 15.07.2026 — offizieller `/documentation`-Endpunkt
+
+`GET /be/api/public/v2/documentation` liefert eine OpenAPI-Spec (Version
+2.0.0-wip) als offizielle Feldreferenz → vollständige Auswertung in
+**docs/kilanka-api-referenz-offiziell.md**. Wichtigste Konsequenzen für diese
+Doku: (1) `$filter` mit Operator-Katalog existiert offiziell (serverseitiges
+Filtern statt Vollabzug — Feld-Verdrahtung per Testrequest klären).
+(2) `quotas.timeBase` steht offiziell im `/clients`-Graphen → der
+timeBase-Widerspruch aus §8/kilanka-api.md löst sich Richtung „verfügbar",
+Retest gegen Prod ausstehend. (3) `approvals.quantity` ist offiziell
+dokumentiert — der Killt-quotas-Befund vom 11.07. ist damit vermutlich ein
+behobener bzw. behebbarer Bug, bis zum Retest gilt weiter: nicht anfragen.
+(4) Neu entdeckte Modelle/Felder: `/rosters` (Dienstpläne), `/contacts`
+eigenständig, `quotas.corrections`, `users.contracts`/`targetHours`,
+Abwesenheits-Workflow inkl. AU-Daten, `invoices.lines.approval` + Mahnwesen/
+Zahlungen, `clients.careLevels` (SGB-XI-relevant). Die Spec ist ein
+Maximal-Katalog — Freischaltung weiterhin über `allowed-graphs` bzw.
+Response-Probing verifizieren.
