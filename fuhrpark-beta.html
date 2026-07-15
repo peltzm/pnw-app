@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Fuhrpark (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb; --auto:#546e7a;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-solid{background:var(--accent);color:#fff}
+.btn-solid:hover{background:#68351a}
+.btn-sm{padding:5px 12px;font-size:12px;min-height:30px}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;min-height:28px;border-radius:4px;cursor:pointer;font-family:inherit}
+.btn-ghost:hover{border-color:var(--accent-mid);color:var(--accent)}
+.btn-text{background:none;border:none;color:var(--text-muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-top:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:64px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* ── APP ── */
+#appScreen{display:none;flex-direction:column;min-height:calc(100dvh - var(--hdr-h))}
+.page-header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header-left h2{font-size:17px;font-weight:600;color:var(--text)}
+.page-header-left p{font-size:12px;color:var(--text-muted);margin-top:1px}
+.page-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+.demo-bar{display:none;align-items:center;gap:8px;background:var(--warn-bg);border-bottom:1px solid #f3dcb8;color:var(--warn);font-size:12px;padding:7px 20px;flex-wrap:wrap}
+.demo-bar strong{font-weight:700}
+
+.viewbar{padding:10px 20px;display:flex;align-items:center;gap:10px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.viewbar label{font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.pill-group{display:flex;gap:6px;flex-wrap:wrap}
+.pill{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:4px 13px;font-size:12px;font-family:inherit;cursor:pointer;color:var(--text-muted);transition:all .12s}
+.pill:hover{border-color:var(--accent-mid);color:var(--accent)}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── KPI-Leiste ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;max-width:1240px;margin:0 auto;width:100%;padding:16px 20px 0}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 15px}
+.kpi .big{font-size:26px;font-weight:700;line-height:1.15}
+.kpi .sl{color:var(--text-hint);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+
+/* ── GRID & CARDS ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;padding:18px 20px 40px;max-width:1240px;margin:0 auto;width:100%}
+.tablewrap{max-width:1240px;margin:0 auto;width:100%;padding:18px 20px 40px;overflow-x:auto}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;left:0;top:0;right:0;height:4px;background:var(--auto)}
+.card.klick{cursor:pointer;transition:box-shadow .12s}
+.card.klick:hover{box-shadow:0 4px 16px rgba(0,0,0,.07)}
+.card.inaktiv::before{background:var(--border-strong)}
+.card.inaktiv{opacity:.72}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px}
+.card-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+.card-title svg{width:15px;height:15px;color:var(--text-muted);flex-shrink:0}
+.src-badge{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-radius:4px;padding:2px 7px;white-space:nowrap}
+.src-kilanka{background:var(--accent-light);color:var(--accent)}
+.src-fuhrpark{background:#eceff1;color:var(--auto)}
+
+.kennzeichen{display:inline-block;font-family:'Kodchasan',monospace;font-weight:700;font-size:15px;border:1.5px solid var(--text);border-radius:5px;padding:1px 10px;background:#fff;letter-spacing:1px}
+.kennzeichen::before{content:'';display:inline-block;width:8px;height:16px;background:#003399;border-radius:2px 0 0 2px;margin:0 8px 0 -10px;vertical-align:-3px}
+
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:12px;padding:2px 10px;white-space:nowrap}
+.chip-ok{background:var(--ok-bg);color:var(--ok)}
+.chip-warn{background:var(--warn-bg);color:var(--warn)}
+.chip-err{background:var(--error-bg);color:var(--error)}
+.chip-mut{background:var(--bg);color:var(--text-hint);border:1px solid var(--border)}
+
+.fz-meta{font-size:12px;color:var(--text-muted);margin:6px 0 12px}
+.bar{height:8px;border-radius:4px;background:var(--bg);border:1px solid var(--border);overflow:hidden;display:flex;position:relative}
+.bar-fill{height:100%;transition:width .4s ease}
+.bar .tolmark{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--accent-mid)}
+.bar-legend{display:flex;justify-content:space-between;gap:12px;font-size:10.5px;color:var(--text-muted);margin:4px 0 7px;flex-wrap:wrap}
+.sub-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:12px;margin-top:10px}
+.sub-item .sl{color:var(--text-hint);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px}
+.sub-item .sv{font-weight:600}
+
+/* ── Tabellen ── */
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;font-size:12.5px}
+th{background:var(--bg);color:var(--text-muted);text-align:left;padding:8px 12px;font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-top:1px solid var(--border);vertical-align:middle}
+tr.klick{cursor:pointer} tr.klick:hover td{background:var(--accent-light)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.tbar{min-width:130px}
+.tbar .bar{height:10px}
+
+/* ── Dialog ── */
+.overlay{position:fixed;inset:0;background:rgba(26,25,22,.45);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:200}
+.overlay.open{display:flex}
+.dialog{background:var(--surface);border-radius:var(--radius-lg);max-width:780px;width:100%;padding:22px 24px;border:1px solid var(--border)}
+.dialog h2{font-size:16px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dialog .dsub{font-size:12px;color:var(--text-muted);margin-bottom:14px}
+.felder{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px}
+.fgruppe{grid-column:1/-1;font-size:10.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-top:8px;border-bottom:1px solid var(--border);padding-bottom:3px}
+.fgruppe:first-child{margin-top:0}
+.feld label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-hint);margin-bottom:3px;font-weight:600}
+.feld input,.feld select{width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);outline:none}
+.feld input:focus,.feld select:focus{border-color:var(--accent-mid)}
+.feld input.auto{background:var(--accent-light)}
+.feld-check{display:flex;align-items:flex-end;padding-bottom:4px}
+.feld-check label{display:flex;align-items:center;gap:8px;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--text);font-weight:500;cursor:pointer;margin:0}
+.feld-check input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.feld .berechnet{font-size:9px;color:var(--accent-mid);font-weight:600;text-transform:none;letter-spacing:0;margin-left:5px}
+.dialog-warn{display:none;background:var(--warn-bg);border:1px solid #f3dcb8;color:var(--warn);border-radius:var(--radius);padding:8px 12px;font-size:12px;margin-top:12px}
+.dialog-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+
+/* ── Verwaltung ── */
+.setup-list{max-width:640px;margin:0 auto;width:100%;padding:20px;display:grid;gap:12px}
+.setup-step{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;align-items:center;gap:14px}
+.setup-step .nr{width:30px;height:30px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;color:var(--text-muted)}
+.setup-step.ok .nr{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.setup-step .txt{flex:1;font-size:13px}
+.setup-step .txt small{display:block;color:var(--text-hint);font-size:11px;line-height:1.5}
+
+.footer-note{max-width:1240px;margin:0 auto;padding:0 20px 40px;font-size:11px;color:var(--text-hint);line-height:1.7}
+.footer-note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:60px 20px;font-size:13px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.view{display:none}.view.active{display:block}
+@media (prefers-reduced-motion:reduce){.bar-fill{transition:none}.spinner{animation-duration:1.6s}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand" onclick="location.href='apps.html'">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <span>Fuhrpark</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge">
+      <div class="user-dot"></div>
+      <span id="userName"></span>
+    </div>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <div class="login-title">Fuhrpark <span class="beta-badge">BETA</span></div>
+    <div class="login-desc">Fahrzeug-Stammdaten, Vollkosten und km-Prognosen. Datenhaltung in der SharePoint-Liste <b>PNW-Fahrzeuge</b>, Dokumente je Fahrzeug in Kilanka.</div>
+    <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
+      <svg width="16" height="16" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <button class="btn-text" onclick="startDemo()">Demo-Modus ohne Anmeldung starten</button>
+    <div class="alert alert-error" id="loginError" style="display:none"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="demo-bar" id="demoBar">
+    <strong>Demo-Modus</strong><span>— Daten aus dem Excel-Import vom 15.07.2026 (km-Stände: 01.03.2026). Änderungen werden nicht gespeichert.</span>
+  </div>
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2 id="pageTitle">Flotte</h2>
+      <p id="pageSub">Stand: —</p>
+    </div>
+    <div class="page-header-actions">
+      <button class="btn btn-outline btn-sm" onclick="neuesFahrzeug()">+ Fahrzeug</button>
+      <button class="btn btn-outline btn-sm" onclick="reload()" id="refreshBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        Aktualisieren
+      </button>
+    </div>
+  </div>
+
+  <div class="viewbar">
+    <label>Ansicht</label>
+    <div class="pill-group">
+      <button class="pill active" data-view="flotte" onclick="zeige('flotte')">Flotte</button>
+      <button class="pill" data-view="kosten" onclick="zeige('kosten')">Kosten</button>
+      <button class="pill" data-view="prognose" onclick="zeige('prognose')">km-Prognose</button>
+      <button class="pill" data-view="verwaltung" onclick="zeige('verwaltung')">Verwaltung</button>
+    </div>
+  </div>
+
+  <div class="view active" id="view-flotte">
+    <div class="kpi-row" id="flotteKpis"></div>
+    <div class="tablewrap" id="flotteGrid"><div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div></div>
+  </div>
+
+  <div class="view" id="view-kosten">
+    <div class="kpi-row" id="kostenKpis"></div>
+    <div class="tablewrap" id="kostenTabelle"></div>
+    <div class="tablewrap" id="kaufTabelle" style="padding-top:0"></div>
+  </div>
+
+  <div class="view" id="view-prognose">
+    <div class="kpi-row" id="prognoseKpis"></div>
+    <div class="tablewrap" id="prognoseTabelle"></div>
+  </div>
+
+  <div class="view" id="view-verwaltung">
+    <div class="setup-list">
+      <div class="setup-step" id="stLogin">
+        <div class="nr">1</div>
+        <div class="txt">Microsoft-Anmeldung<small>Gleiche App-Registrierung wie App-Central. Redirect-URI <code>fuhrpark-beta.html</code> muss in Entra eingetragen sein.</small></div>
+      </div>
+      <div class="setup-step" id="stListe">
+        <div class="nr">2</div>
+        <div class="txt">SharePoint-Liste <b>PNW-Fahrzeuge</b><small>Wird per Graph API mit allen Spalten angelegt (Sites.Manage.All nur hierfür nötig).</small></div>
+        <button class="btn btn-outline btn-sm" id="btnListe" onclick="listePruefen()" disabled>Prüfen / Anlegen</button>
+      </div>
+      <div class="setup-step" id="stImport">
+        <div class="nr">3</div>
+        <div class="txt">Excel-Bestand importieren<small>19 Fahrzeuge aus KFZ_Übersicht_PNW.xlsx, bereinigt (ohne DKV-PIN und Geburtsdaten).</small></div>
+        <button class="btn btn-outline btn-sm" id="btnImport" onclick="seedImportieren()" disabled>Importieren</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <strong>Datenquellen:</strong> Stammdaten, Verträge, Versicherung und km-Stände aus der SharePoint-Liste <code>PNW-Fahrzeuge</code> (Graph API, <code>Sites.ReadWrite.All</code>) · Fahrzeug-Dokumente (Schein, Policen, Leasingverträge, DGUV-70-Nachweise) in Kilanka, verknüpft über das Feld <code>KilankaLink</code> · Kostenkennzahlen und km-Prognosen werden live berechnet und nicht gespeichert. Alle Beträge sind Endbeträge inkl. USt (kein Vorsteuerabzug); <code>PNW p. M.</code> = monatliche Kosten nach Abzug vereinbarter Eigenanteile. Kilanka hat aktuell keinen Fahrzeug-Graphen; die FIN dient als stabiler Schlüssel für eine spätere Synchronisierung.
+  </div>
+</div>
+
+<!-- DIALOG -->
+<div class="overlay" id="overlay">
+  <div class="dialog">
+    <h2 id="dialogTitel">Fahrzeug</h2>
+    <div class="dsub" id="dialogSub"></div>
+    <div class="felder" id="dialogFelder"></div>
+    <div class="dialog-warn" id="dialogWarn"></div>
+    <div class="dialog-actions">
+      <button class="btn btn-solid btn-sm" onclick="dialogSpeichern()">Speichern</button>
+      <button class="btn btn-outline btn-sm" onclick="kmErfassen()">km-Stand erfassen</button>
+      <button class="btn btn-outline btn-sm" id="btnKilanka" onclick="kilankaOeffnen()" style="display:none">Dokumente in Kilanka</button>
+      <button class="btn btn-ghost" onclick="schliesseDialog()" style="min-height:30px">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zu Mitarbeiter-Cockpit / Organisation
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/fuhrpark-beta.html',
+  spHost: 'praxisneuewegesonjapeltz978.sharepoint.com',
+  listName: 'PNW-Fahrzeuge'
+};
+const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All', 'Sites.Manage.All'];
+const APP_VERSION = 'BETA-lokal'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+
+/* ═══════════════════════════════════════════════════════════
+ * FELD-SCHEMA — SharePoint-Spalten (Title = Kennzeichen)
+ * ═══════════════════════════════════════════════════════════ */
+const SCHEMA = [
+  {sp:'Title',              key:'kennzeichen',        typ:'text',  label:'Kennzeichen'},
+  {sp:'FIN',                key:'fin',                typ:'text',  label:'FIN'},
+  {sp:'Hersteller',         key:'hersteller',         typ:'text',  label:'Hersteller'},
+  {sp:'Modell',             key:'modell',             typ:'text',  label:'Modell'},
+  {sp:'HSN',                key:'hsn',                typ:'text',  label:'HSN'},
+  {sp:'TSN',                key:'tsn',                typ:'text',  label:'TSN'},
+  {sp:'FzStatus',           key:'status',             typ:'wahl',  label:'Status', optionen:['aktiv','bestellt','Zurückgegeben','stillgelegt']},
+  {sp:'Erstzulassung',      key:'erstzulassung',      typ:'datum', label:'Erstzulassung'},
+  {sp:'Rueckgabe',          key:'rueckgabe',          typ:'datum', label:'Rückgabe / Vertragsende'},
+  {sp:'Finanzierung',       key:'finanzierung',       typ:'wahl',  label:'Finanzierung', optionen:['Leasing','Finanziert','Kauf']},
+  {sp:'Vertragsnummer',     key:'vertragsnummer',     typ:'text',  label:'Vertragsnummer'},
+  {sp:'InklGanzjahresreifen',key:'inklGanzjahresreifen',typ:'bool',label:'Ganzjahresreifen inkl.'},
+  {sp:'InklWartung',        key:'inklWartung',        typ:'bool',  label:'Wartung & Verschleiß inkl.'},
+  {sp:'InklVersicherung',   key:'inklVersicherung',   typ:'bool',  label:'Versicherung inkl.'},
+  {sp:'KmVertragGesamt',    key:'kmVertragGesamt',    typ:'zahl',  label:'km-Kontingent gesamt'},
+  {sp:'KmProJahr',          key:'kmProJahr',          typ:'zahl',  label:'km pro Jahr'},
+  {sp:'KmToleranz',         key:'kmToleranz',         typ:'zahl',  label:'km-Toleranz'},
+  {sp:'SatzMehrKm',         key:'satzMehrKm',         typ:'zahl',  label:'€ / Mehr-km'},
+  {sp:'SatzMinderKm',       key:'satzMinderKm',       typ:'zahl',  label:'€ / Minder-km'},
+  {sp:'LaufzeitMonate',     key:'laufzeitMonate',     typ:'zahl',  label:'Laufzeit (Monate)'},
+  {sp:'Bruttolistenpreis',  key:'bruttolistenpreis',  typ:'zahl',  label:'Bruttolistenpreis €'},
+  {sp:'Ueberfuehrung',      key:'ueberfuehrung',      typ:'zahl',  label:'Überführung €'},
+  {sp:'RateMonatlich',      key:'rateMonatlich',      typ:'zahl',  label:'Rate € / Monat'},
+  {sp:'SteuerJaehrlich',    key:'steuerJaehrlich',    typ:'zahl',  label:'Kfz-Steuer € / Jahr'},
+  {sp:'Versicherer',        key:'versicherer',        typ:'text',  label:'Versicherer'},
+  {sp:'Versicherungsnummer',key:'versicherungsnummer',typ:'text',  label:'Versicherungsnr.'},
+  {sp:'VersPraemie',        key:'versPraemie',        typ:'zahl',  label:'Vers.-Prämie € je Zahlung'},
+  {sp:'VersZahlweise',      key:'versZahlweise',      typ:'wahl',  label:'Zahlweise', optionen:['jährlich','quartalsweise','monatlich']},
+  {sp:'VersFahrleistung',   key:'versFahrleistung',   typ:'zahl',  label:'Vers. Fahrleistung km / Jahr'},
+  {sp:'SFHaftpflicht',      key:'sfHaftpflicht',      typ:'text',  label:'SF Haftpflicht'},
+  {sp:'SFKasko',            key:'sfKasko',            typ:'text',  label:'SF Kasko'},
+  {sp:'SBVollkasko',        key:'sbVollkasko',        typ:'zahl',  label:'SB Vollkasko €'},
+  {sp:'SBTeilkasko',        key:'sbTeilkasko',        typ:'zahl',  label:'SB Teilkasko €'},
+  {sp:'SensorAktiviert',    key:'sensorAktiviert',    typ:'text',  label:'Sensor'},
+  {sp:'Fahrer',             key:'fahrer',             typ:'fahrer',label:'Fahrer:in'},
+  {sp:'Privatnutzung',      key:'privatnutzung',      typ:'wahl',  label:'Privatnutzung', optionen:['ohne','mit']},
+  {sp:'EigenanteilMonat',   key:'eigenanteilMonat',   typ:'zahl',  label:'Eigenanteil € / Monat'},
+  {sp:'DGUVPruefung',       key:'dguvPruefung',       typ:'datum', label:'DGUV-70-Prüfung'},
+  {sp:'KmStand',            key:'kmStand',            typ:'zahl',  label:'km-Stand'},
+  {sp:'KmStandDatum',       key:'kmStandDatum',       typ:'datum', label:'km-Stand vom'},
+  {sp:'KilankaLink',        key:'kilankaLink',        typ:'text',  label:'Kilanka-Dokumente (Link/ID)'}
+];
+
+/* ═══════════════════════════════════════════════════════════
+ * SEED — bereinigter Excel-Bestand (15.07.2026), ohne DKV-PIN
+ * ═══════════════════════════════════════════════════════════ */
+const SEED = [
+{fin:"VSSZZZK11RP023832",kennzeichen:"FS-NW 101E",hersteller:"Cupra",modell:"Cupra Born",hsn:"7593",tsn:"ASO",status:"aktiv",erstzulassung:"2024-08-21",rueckgabe:"2027-08-21",finanzierung:"Finanziert",vertragsnummer:"Q026083",kmVertragGesamt:45000,kmProJahr:15000,laufzeitMonate:36,bruttolistenpreis:38058,ueberfuehrung:1000,rateMonatlich:300,steuerJaehrlich:68,versicherer:"HUK",versicherungsnummer:"622/431747-L",versPraemie:776.04,versZahlweise:"jährlich",versFahrleistung:20000,sfHaftpflicht:"29",sfKasko:"20",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"ja",fahrer:"Peltz",dguvPruefung:"2025-12-09"},
+{fin:"ZFACF1BJ6RJK07143",kennzeichen:"FS-NW 103",hersteller:"Fiat",modell:"Fiat 500",hsn:"2424",tsn:"ABD",status:"aktiv",erstzulassung:"2024-07-24",finanzierung:"Kauf",kmProJahr:15000,bruttolistenpreis:17990,steuerJaehrlich:50,versicherer:"HUK",versicherungsnummer:"622/420884-G",versPraemie:686.12,versZahlweise:"jährlich",inklGanzjahresreifen:true,versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"ja",fahrer:"Kastner",dguvPruefung:"2025-12-09",kmStand:34908,kmStandDatum:"2026-03-01"},
+{fin:"ZFACF1BJ0RJK07056",kennzeichen:"FS-NW 105",hersteller:"Fiat",modell:"Fiat 500",hsn:"2424",tsn:"ABD",status:"aktiv",erstzulassung:"2024-07-24",finanzierung:"Kauf",kmProJahr:15000,bruttolistenpreis:17990,steuerJaehrlich:50,versicherer:"HUK",versicherungsnummer:"622/420885-H",versPraemie:796.24,versZahlweise:"jährlich",inklGanzjahresreifen:true,versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"ja, wird nicht angezeigt",dguvPruefung:"2025-12-09",kmStand:46005,kmStandDatum:"2026-03-01"},
+{fin:"UU1DJF00873708487",kennzeichen:"FS-NW 106",hersteller:"Dacia",modell:"Dacia Sandero",hsn:"8212",tsn:"AFH",status:"aktiv",erstzulassung:"2024-12-02",rueckgabe:"2027-12-02",finanzierung:"Finanziert",vertragsnummer:"517588297/1",kmVertragGesamt:80000,kmProJahr:26667,laufzeitMonate:36,bruttolistenpreis:14650,ueberfuehrung:0,rateMonatlich:274.77,steuerJaehrlich:40,versicherer:"HUK",versicherungsnummer:"622/449074-X",versPraemie:1125.16,versZahlweise:"jährlich",inklGanzjahresreifen:true,inklWartung:true,versFahrleistung:29000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"ja",fahrer:"Grund",dguvPruefung:"2025-12-09",kmStand:42893,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ2SR538736",kennzeichen:"FS-NW 107",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2025-02-04",rueckgabe:"2028-02-04",finanzierung:"Finanziert",vertragsnummer:"Q370277",kmVertragGesamt:60000,kmProJahr:20000,laufzeitMonate:36,bruttolistenpreis:27170,ueberfuehrung:999,rateMonatlich:274.78,steuerJaehrlich:90,versicherer:"HUK",versicherungsnummer:"622/459104-V",versPraemie:910.96,versZahlweise:"jährlich",inklGanzjahresreifen:true,inklWartung:true,inklVersicherung:true,versFahrleistung:25000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,fahrer:"Edler",dguvPruefung:"2025-12-09",kmStand:36077,kmStandDatum:"2026-03-01"},
+{fin:"UU1DJF00773552507",kennzeichen:"FS-NW 108",hersteller:"Dacia",modell:"Dacia Sandero",hsn:"8212",tsn:"AFH",status:"aktiv",erstzulassung:"2024-11-01",rueckgabe:"2028-11-01",finanzierung:"Finanziert",vertragsnummer:"517603244/1",kmVertragGesamt:100000,kmProJahr:25000,laufzeitMonate:48,bruttolistenpreis:14650,ueberfuehrung:0,rateMonatlich:280.36,steuerJaehrlich:40,versicherer:"HUK",versicherungsnummer:"622/452429-K",versPraemie:854.08,versZahlweise:"jährlich",inklGanzjahresreifen:true,inklWartung:true,versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"im Versand",fahrer:"Riedl",dguvPruefung:"2025-12-09",kmStand:23472,kmStandDatum:"2026-03-01"},
+{fin:"UU1DJF00X73552498",kennzeichen:"FS-NW 910",hersteller:"Dacia",modell:"Dacia Sandero",hsn:"8212",tsn:"AFH",status:"aktiv",erstzulassung:"2024-10-02",rueckgabe:"2027-10-02",finanzierung:"Leasing",vertragsnummer:"609194661/1",kmVertragGesamt:45000,kmProJahr:15000,satzMehrKm:0.0595,satzMinderKm:0.0238,laufzeitMonate:36,bruttolistenpreis:14650,ueberfuehrung:0,rateMonatlich:236.02,steuerJaehrlich:40,versicherer:"HUK",versicherungsnummer:"622/429131-H",versPraemie:1056.48,versZahlweise:"jährlich",inklGanzjahresreifen:true,inklWartung:true,versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"ja",fahrer:"Schneider",dguvPruefung:"2025-12-09",kmStand:26100,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKL6SR001708",kennzeichen:"FS-NW 911",hersteller:"Seat",modell:"Seat Leon",hsn:"7593",tsn:"ASK",status:"Zurückgegeben",erstzulassung:"2024-06-26",rueckgabe:"2026-06-26",finanzierung:"Leasing",vertragsnummer:"P409450",kmVertragGesamt:30000,kmProJahr:15000,kmToleranz:2500,satzMehrKm:0.1535,satzMinderKm:0.0524,laufzeitMonate:24,bruttolistenpreis:34060,ueberfuehrung:1000,rateMonatlich:265.35,steuerJaehrlich:107,versicherer:"VWFS",versicherungsnummer:"VM1042251823",versPraemie:384.12,versZahlweise:"jährlich",inklGanzjahresreifen:true,inklWartung:true,versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:500,sbTeilkasko:150,kmStand:31743,kmStandDatum:"2026-03-01"},
+{fin:"UU1DJF00573552506",kennzeichen:"FS-NW 912",hersteller:"Dacia",modell:"Dacia Sandero",hsn:"8212",tsn:"AFH",status:"aktiv",erstzulassung:"2024-11-01",rueckgabe:"2027-11-01",finanzierung:"Leasing",vertragsnummer:"609295481/1",kmVertragGesamt:45000,kmProJahr:15000,laufzeitMonate:36,bruttolistenpreis:14650,ueberfuehrung:0,rateMonatlich:236.02,steuerJaehrlich:40,versicherer:"HUK",versicherungsnummer:"622/452432-E",versPraemie:1016.72,versZahlweise:"jährlich",inklGanzjahresreifen:true,inklWartung:true,versFahrleistung:17000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"angefordert",fahrer:"Koch",dguvPruefung:"2025-12-09",kmStand:35141,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ4SR501767",kennzeichen:"FS-NW 913",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2024-11-05",rueckgabe:"2027-11-05",finanzierung:"Leasing",vertragsnummer:"P949705",kmVertragGesamt:45000,kmProJahr:15000,kmToleranz:2500,satzMehrKm:0.064,satzMinderKm:0.023,laufzeitMonate:36,bruttolistenpreis:26239,ueberfuehrung:1535,rateMonatlich:151.13,steuerJaehrlich:90,versicherer:"HUK",versicherungsnummer:"622/437906-B",versPraemie:810.80,versZahlweise:"jährlich",inklGanzjahresreifen:true,versFahrleistung:16000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"nein",fahrer:"Gain",dguvPruefung:"2025-12-09",kmStand:33441,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ5SR501776",kennzeichen:"FS-NW 914",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2024-11-05",rueckgabe:"2027-11-05",finanzierung:"Leasing",vertragsnummer:"P949807",kmVertragGesamt:45000,kmProJahr:15000,kmToleranz:2500,satzMehrKm:0.064,satzMinderKm:0.023,laufzeitMonate:36,bruttolistenpreis:26239,ueberfuehrung:1535,rateMonatlich:151.13,steuerJaehrlich:90,versicherer:"HUK",versicherungsnummer:"622/439090-J",versPraemie:1011.36,versZahlweise:"jährlich",inklGanzjahresreifen:true,versFahrleistung:21000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,sensorAktiviert:"nein",fahrer:"Požgaj",dguvPruefung:"2025-12-09",kmStand:36897,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ6RR093878",kennzeichen:"FS-NW 915",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ARJ",status:"aktiv",erstzulassung:"2024-11-07",rueckgabe:"2027-11-07",finanzierung:"Leasing",vertragsnummer:"Q369373",kmVertragGesamt:60000,kmProJahr:20000,kmToleranz:2500,satzMehrKm:0.064,satzMinderKm:0.023,laufzeitMonate:36,bruttolistenpreis:30835,rateMonatlich:387.93,steuerJaehrlich:90,versicherer:"VWFS",versicherungsnummer:"VM1043877341",versPraemie:494.04,versZahlweise:"jährlich",inklGanzjahresreifen:true,inklWartung:true,inklVersicherung:true,versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:500,sbTeilkasko:150,fahrer:"Hermann",dguvPruefung:"2025-12-09",kmStand:26990,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ2TR535255",kennzeichen:"FS-NW 916",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2025-10-30",rueckgabe:"2028-10-30",finanzierung:"Leasing",vertragsnummer:"559139",kmVertragGesamt:75000,kmProJahr:25000,satzMehrKm:0.1214,satzMinderKm:0.0476,laufzeitMonate:36,bruttolistenpreis:32459.99,rateMonatlich:364.95,steuerJaehrlich:90,versicherer:"VWFS",versicherungsnummer:"VW-1973471042",versPraemie:906.24,versZahlweise:"jährlich",versFahrleistung:20000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:500,sbTeilkasko:150,fahrer:"Freundl",kmStand:6584,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ2SR538830",kennzeichen:"FS-NW 917",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2025-02-04",rueckgabe:"2028-02-04",finanzierung:"Leasing",kmVertragGesamt:60000,kmProJahr:20000,laufzeitMonate:36,bruttolistenpreis:27170,ueberfuehrung:999,rateMonatlich:243.99,steuerJaehrlich:90,versicherer:"VWFS",versicherungsnummer:"VM-1043879569",versPraemie:451.08,versZahlweise:"jährlich",versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,fahrer:"Dietrich",dguvPruefung:"2025-12-09",kmStand:33995,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJXTR534354",kennzeichen:"FS-NW 918",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2025-10-30",rueckgabe:"2028-10-30",finanzierung:"Leasing",vertragsnummer:"559259",kmVertragGesamt:75000,kmProJahr:25000,satzMehrKm:0.1214,satzMinderKm:0.0476,laufzeitMonate:36,bruttolistenpreis:32459.99,rateMonatlich:364.95,steuerJaehrlich:97,versicherer:"VWFS",versicherungsnummer:"VW-1973472113",versPraemie:906.24,versZahlweise:"jährlich",versFahrleistung:20000,sfHaftpflicht:"29",sfKasko:"20",sbVollkasko:500,sbTeilkasko:150,fahrer:"Blumoser",privatnutzung:"mit",eigenanteilMonat:150,kmStand:8432,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ1TR535912",kennzeichen:"FS-NW 919",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2025-10-30",rueckgabe:"2027-10-30",finanzierung:"Leasing",vertragsnummer:"558476",kmVertragGesamt:80000,kmProJahr:40000,satzMehrKm:0.1214,satzMinderKm:0.0476,laufzeitMonate:24,bruttolistenpreis:32459.99,rateMonatlich:431.14,steuerJaehrlich:90,versicherer:"VWFS",versicherungsnummer:"VW-1973504290",versPraemie:942.60,versZahlweise:"jährlich",versFahrleistung:25000,sfHaftpflicht:"4",sbVollkasko:600,sbTeilkasko:300,fahrer:"Meier",kmStand:10577,kmStandDatum:"2026-03-01"},
+{fin:"VSSZZZKJ6TR534089",kennzeichen:"FS-NW 922",hersteller:"Seat",modell:"Seat Arona",hsn:"7593",tsn:"ANP",status:"aktiv",erstzulassung:"2025-10-30",rueckgabe:"2027-10-30",finanzierung:"Leasing",vertragsnummer:"558861",kmVertragGesamt:80000,kmProJahr:40000,satzMehrKm:0.1214,satzMinderKm:0.0476,laufzeitMonate:24,bruttolistenpreis:32459.99,rateMonatlich:431.14,steuerJaehrlich:90,versicherer:"VWFS",versicherungsnummer:"VW-1973470768",versPraemie:980.28,versZahlweise:"jährlich",versFahrleistung:15000,sfHaftpflicht:"5",sfKasko:"5",sbVollkasko:1000,sbTeilkasko:500,fahrer:"Graf",kmStand:10161,kmStandDatum:"2026-03-01"},
+{fin:"UU1DJF00877128777",kennzeichen:"FS-NW 911",hersteller:"Dacia",modell:"Dacia Sandero",hsn:"8212",tsn:"AGA",status:"aktiv",erstzulassung:"2026-07-13",rueckgabe:"2030-07-12",finanzierung:"Leasing",kmVertragGesamt:80000,kmProJahr:20000,laufzeitMonate:48,rateMonatlich:264.30,versicherer:"HUK",fahrer:"Kerschenlohr"},
+{fin:"VSSZZZK10VP001119",kennzeichen:"FS-NW 102E",hersteller:"Cupra",modell:"Cupra Born",hsn:"7593",tsn:"ATE",status:"aktiv",erstzulassung:"2026-07-13",rueckgabe:"2029-07-12",finanzierung:"Leasing",vertragsnummer:"1FHNFGM",rateMonatlich:384.19,fahrer:"Peltz, Sonja"}
+];
+
+/* ═══════════════════════════════════════════════════════════
+ * ZUSTAND & MSAL
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance, currentAccount;
+let demoMode = false, online = false;
+let fahrzeuge = [];
+let fahrerListe = [];
+let listenBasis = `/sites/${CFG.spHost}/lists/${CFG.listName}`;
+
+function fahrerAusBestand(){
+  fahrerListe = [...new Set(fahrzeuge.map(f=>f.fahrer).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
+}
+async function ladeFahrerListe(){
+  try{
+    const res = await graph('/users?$select=displayName,mail,accountEnabled&$top=999');
+    const namen = (res&&res.value?res.value:[])
+      .filter(u=>u.accountEnabled!==false && u.mail && u.mail.toLowerCase().endsWith('@praxisneuewege.de'))
+      .map(u=>u.displayName).filter(Boolean);
+    fahrerListe = [...new Set(namen)].sort((a,b)=>a.localeCompare(b,'de'));
+    if(!fahrerListe.length) fahrerAusBestand();
+  }catch(e){ fahrerAusBestand(); }
+}
+
+function initMsal(){
+  msalInstance = msalInstance || new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'sessionStorage' }
+  });
+}
+async function login(){
+  try{
+    initMsal();
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account;
+    msalInstance.setActiveAccount(currentAccount);
+    demoMode = false;
+    zeigeApp();
+    document.getElementById('userName').textContent = currentAccount.name || currentAccount.username;
+    document.getElementById('userBadge').style.display = 'flex';
+    document.getElementById('logoutBtn').style.display = '';
+    setStep('stLogin', true, 'Angemeldet als '+(currentAccount.username||''));
+    document.getElementById('btnListe').disabled = false;
+    await ladeFahrerListe();
+    await ladeOderSetup();
+  }catch(e){
+    const err = document.getElementById('loginError');
+    err.textContent = 'Anmeldung fehlgeschlagen: '+e.message;
+    err.style.display = 'block';
+  }
+}
+function logout(){ if(msalInstance) msalInstance.logoutPopup({account:currentAccount}).catch(()=>{}); location.reload(); }
+function startDemo(){
+  demoMode = true; online = false;
+  fahrzeuge = SEED.map(f=>({...f,_spId:null}));
+  fahrerAusBestand();
+  zeigeApp();
+  document.getElementById('demoBar').style.display = 'flex';
+  renderAll();
+}
+function zeigeApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'flex';
+  document.getElementById('pageSub').textContent = 'Stand: '+new Date().toLocaleDateString('de-DE');
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * GRAPH API
+ * ═══════════════════════════════════════════════════════════ */
+async function token(){
+  const req = {scopes:SCOPES, account:currentAccount};
+  try{ return (await msalInstance.acquireTokenSilent(req)).accessToken; }
+  catch(e){ return (await msalInstance.acquireTokenPopup(req)).accessToken; }
+}
+async function graph(pfad, opt={}){
+  const t = await token();
+  const r = await fetch('https://graph.microsoft.com/v1.0'+pfad, {
+    ...opt, headers:{Authorization:'Bearer '+t,'Content-Type':'application/json',...(opt.headers||{})}
+  });
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error('Graph '+r.status+': '+await r.text());
+  return r.status===204 ? true : r.json();
+}
+function zuFeldern(f){
+  const felder={};
+  for(const s of SCHEMA){
+    const v=f[s.key];
+    if(v===undefined||v===null||v==='') continue;
+    felder[s.sp]=(s.typ==='datum')?(v+'T00:00:00Z'):v;
+  }
+  return felder;
+}
+function ausFeldern(item){
+  const f={_spId:item.id};
+  for(const s of SCHEMA){
+    let v=item.fields[s.sp];
+    if(v===undefined||v===null) continue;
+    if(s.typ==='datum'&&typeof v==='string') v=v.slice(0,10);
+    f[s.key]=v;
+  }
+  return f;
+}
+async function ladeOderSetup(){
+  const liste = await graph(listenBasis).catch(()=>null);
+  if(liste){
+    setStep('stListe', true, `Liste "${CFG.listName}" vorhanden.`);
+    document.getElementById('btnImport').disabled = false;
+    await ladeFahrzeuge();
+  }else{
+    zeige('verwaltung');
+    document.getElementById('flotteGrid').innerHTML =
+      '<div class="loading-state">Liste noch nicht vorhanden — bitte unter Verwaltung anlegen.</div>';
+  }
+}
+async function ladeFahrzeuge(){
+  const res = await graph(listenBasis+'/items?expand=fields&$top=200');
+  fahrzeuge = (res&&res.value)?res.value.map(ausFeldern):[];
+  online = true;
+  document.getElementById('demoBar').style.display = 'none';
+  if(fahrzeuge.length) setStep('stImport', true, fahrzeuge.length+' Fahrzeuge in der Liste.');
+  renderAll();
+}
+async function reload(){
+  if(online){ await ladeFahrzeuge(); } else { renderAll(); }
+}
+async function listePruefen(){
+  const btn=document.getElementById('btnListe'); btn.disabled=true;
+  try{
+    let liste = await graph(listenBasis);
+    if(!liste){
+      if(!confirm(`Liste "${CFG.listName}" existiert nicht. Jetzt mit allen Spalten anlegen?`)){ btn.disabled=false; return; }
+      const spalten = SCHEMA.filter(s=>s.sp!=='Title').map(s=>{
+        if(s.typ==='zahl')  return {name:s.sp, number:{decimalPlaces:'automatic'}};
+        if(s.typ==='datum') return {name:s.sp, dateTime:{format:'dateOnly'}};
+        if(s.typ==='bool')  return {name:s.sp, boolean:{}};
+        return {name:s.sp, text:{}};
+      });
+      await graph(`/sites/${CFG.spHost}/lists`, {method:'POST', body:JSON.stringify({
+        displayName:CFG.listName, columns:spalten, list:{template:'genericList'}
+      })});
+    }
+    setStep('stListe', true, `Liste "${CFG.listName}" bereit.`);
+    document.getElementById('btnImport').disabled = false;
+    await ladeFahrzeuge();
+  }catch(e){ alert('Fehler: '+e.message); }
+  btn.disabled=false;
+}
+async function seedImportieren(){
+  if(fahrzeuge.length && online){ alert('Die Liste enthält bereits Fahrzeuge — Import übersprungen, um Dubletten zu vermeiden.'); return; }
+  const btn=document.getElementById('btnImport'); btn.disabled=true; btn.textContent='Import läuft …';
+  try{
+    for(const f of SEED){
+      await graph(listenBasis+'/items', {method:'POST', body:JSON.stringify({fields:zuFeldern(f)})});
+    }
+    await ladeFahrzeuge();
+    alert('Import abgeschlossen: '+SEED.length+' Fahrzeuge.');
+  }catch(e){ alert('Fehler beim Import: '+e.message); }
+  btn.textContent='Importieren';
+}
+async function speichern(f){
+  if(!online){ renderAll(); return; }
+  if(f._spId){
+    await graph(listenBasis+'/items/'+f._spId+'/fields', {method:'PATCH', body:JSON.stringify(zuFeldern(f))});
+  }else{
+    const res = await graph(listenBasis+'/items', {method:'POST', body:JSON.stringify({fields:zuFeldern(f)})});
+    f._spId = res.id;
+  }
+  renderAll();
+}
+function setStep(id, ok, text){
+  const el=document.getElementById(id);
+  if(ok) el.classList.add('ok');
+  if(text) el.querySelector('small').textContent=text;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * KENNZAHLEN — live berechnet, nichts wird gespeichert
+ * ═══════════════════════════════════════════════════════════ */
+const HEUTE=new Date(); const T=86400000;
+const tg=(a,b)=>Math.max(0,Math.round((b-a)/T));
+const d=s=>s?new Date(s+'T00:00:00'):null;
+
+function kennzahlen(f){
+  const ez=d(f.erstzulassung), rg=d(f.rueckgabe);
+  const kauf=f.finanzierung==='Kauf';
+  const lzTage=(ez&&rg&&rg>ez)?tg(ez,rg):(f.laufzeitMonate?Math.round(f.laufzeitMonate*30.4375):null);
+  const verstrichen=ez?Math.min(tg(ez,HEUTE),lzTage||Infinity):null;
+  const zeitAnteil=(lzTage&&verstrichen!=null)?Math.min(1,verstrichen/lzTage):null;
+  let kmProTag=null,prognoseEnde=null,kmAnteil=null,sollHeute=null,abwHeute=null;
+  if(f.kmStand&&ez&&f.kmStandDatum){
+    const st=tg(ez,d(f.kmStandDatum));
+    if(st>0) kmProTag=f.kmStand/st;
+  }
+  if(kmProTag&&lzTage) prognoseEnde=Math.round(kmProTag*lzTage);
+  if(f.kmVertragGesamt&&f.kmStand) kmAnteil=f.kmStand/f.kmVertragGesamt;
+  if(f.kmVertragGesamt&&zeitAnteil!=null){
+    sollHeute=f.kmVertragGesamt*zeitAnteil;
+    if(kmProTag&&verstrichen!=null) abwHeute=kmProTag*verstrichen-sollHeute;
+  }
+  const toleranz=f.kmToleranz||0;
+  let mehrKm=null,mehrKosten=null,minderKm=null,minderErstattung=null;
+  if(prognoseEnde&&f.kmVertragGesamt){
+    const ueber=prognoseEnde-f.kmVertragGesamt-toleranz;
+    if(ueber>0){ mehrKm=ueber; if(f.satzMehrKm) mehrKosten=ueber*f.satzMehrKm; }
+    const unter=f.kmVertragGesamt-toleranz-prognoseEnde;
+    if(unter>0){ minderKm=unter; if(f.satzMinderKm) minderErstattung=unter*f.satzMinderKm; }
+  }
+  const lzMon=f.laufzeitMonate||(lzTage?lzTage/30.4375:null);
+  const eigenanteil=f.eigenanteilMonat||0;
+  const praemieFaktor={'jährlich':1,'quartalsweise':4,'monatlich':12}[f.versZahlweise||'jährlich']||1;
+  const versJahr=f.versPraemie!=null?f.versPraemie*praemieFaktor:null;
+  // km/Jahr: eingetragener Wert, sonst aus Kontingent und Laufzeit abgeleitet
+  const kmProJahrEff=f.kmProJahr||((f.kmVertragGesamt&&lzTage)?f.kmVertragGesamt/(lzTage/365.25):null);
+  // Konflikt: Versicherung deckt weniger km als Vertrag vorsieht oder als tatsächlich gefahren wird
+  const istProJahr=kmProTag?kmProTag*365.25:null;
+  const versKonflikt=!!(f.versFahrleistung&&f.status==='aktiv'&&(
+    (kmProJahrEff&&kmProJahrEff>f.versFahrleistung*1.02)||
+    (istProJahr&&istProJahr>f.versFahrleistung*1.02)));
+  let kostenMonat=null,kostenLaufzeit=null,kostenMonatNetto=null;
+  if(!kauf&&f.rateMonatlich!=null&&lzMon){
+    kostenLaufzeit=f.rateMonatlich*lzMon+(f.ueberfuehrung||0)+(f.steuerJaehrlich||0)*(lzMon/12)+(versJahr||0)*(lzMon/12);
+    kostenMonat=kostenLaufzeit/lzMon;
+    kostenMonatNetto=kostenMonat-eigenanteil;
+  }
+  let laufendJahr=null,laufendJahrNetto=null;
+  if(kauf){ laufendJahr=(f.steuerJaehrlich||0)+(versJahr||0); laufendJahrNetto=laufendJahr-eigenanteil*12; }
+  let ampel='mut';
+  if(f.status!=='aktiv') ampel='mut';
+  else if(abwHeute!=null&&sollHeute){
+    const rel=abwHeute/sollHeute;
+    ampel=rel>0.10?'err':(rel>0?'warn':'ok');
+  } else if(kauf&&f.kmStand){ ampel='ok'; }
+  return {kauf,lzTage,verstrichen,zeitAnteil,kmProTag,prognoseEnde,kmAnteil,sollHeute,abwHeute,
+          mehrKm,mehrKosten,minderKm,minderErstattung,kostenMonat,kostenMonatNetto,kostenLaufzeit,
+          laufendJahr,laufendJahrNetto,eigenanteil,versJahr,kmProJahrEff,istProJahr,versKonflikt,ampel,toleranz};
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * FORMAT
+ * ═══════════════════════════════════════════════════════════ */
+const fEUR=v=>v==null?'–':v.toLocaleString('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+const fEUR2=v=>v==null?'–':v.toLocaleString('de-DE',{style:'currency',currency:'EUR'});
+const fKM=v=>v==null?'–':Math.round(v).toLocaleString('de-DE')+' km';
+const fDat=s=>s?d(s).toLocaleDateString('de-DE'):'–';
+const fPz=v=>v==null?'–':Math.round(v*100)+' %';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ═══════════════════════════════════════════════════════════
+ * ANSICHTEN
+ * ═══════════════════════════════════════════════════════════ */
+const TITEL={flotte:'Flotte',kosten:'Kostenanalyse',prognose:'km-Prognose',verwaltung:'Verwaltung'};
+function zeige(view){
+  document.querySelectorAll('.pill[data-view]').forEach(p=>p.classList.toggle('active',p.dataset.view===view));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
+  document.getElementById('pageTitle').textContent=TITEL[view];
+}
+function aktive(){ return fahrzeuge.filter(f=>f.status==='aktiv'); }
+function ampelChip(k,f){
+  if(f.status!=='aktiv') return `<span class="chip chip-mut">${esc(f.status)}</span>`;
+  if(k.ampel==='err') return '<span class="chip chip-err">km über Plan</span>';
+  if(k.ampel==='warn') return '<span class="chip chip-warn">leicht über Plan</span>';
+  if(k.ampel==='ok') return '<span class="chip chip-ok">im Plan</span>';
+  return '<span class="chip chip-mut">kein km-Stand</span>';
+}
+const barFarbe={ok:'var(--ok)',warn:'var(--warn)',err:'var(--error)',mut:'var(--border-strong)'};
+
+function renderFlotte(){
+  const akt=aktive();
+  const kk=akt.map(f=>({f,k:kennzahlen(f)}));
+  const kritisch=kk.filter(x=>x.k.ampel==='err').length;
+  const flotteMonat=kk.reduce((s,x)=>s+(x.k.kostenMonatNetto||0)+((x.k.laufendJahrNetto||0)/12),0);
+  document.getElementById('flotteKpis').innerHTML=`
+    <div class="kpi"><div class="big">${akt.length}</div><div class="sl">Aktive Fahrzeuge</div></div>
+    <div class="kpi"><div class="big">${fEUR(flotteMonat)}</div><div class="sl">Flottenkosten PNW / Monat</div></div>
+    <div class="kpi"><div class="big" style="color:${kritisch?'var(--error)':'var(--ok)'}">${kritisch}</div><div class="sl">km-Verträge kritisch</div></div>
+    <div class="kpi"><div class="big">${fahrzeuge.length-akt.length}</div><div class="sl">Inaktiv / zurückgegeben</div></div>`;
+
+  const rang={err:0,warn:1,ok:2,mut:3};
+  const reihen=fahrzeuge.map(f=>({f,k:kennzahlen(f)}))
+    .sort((a,b)=>(a.f.status==='aktiv'?0:1)-(b.f.status==='aktiv'?0:1)
+      || rang[a.k.ampel]-rang[b.k.ampel]
+      || String(a.f.kennzeichen).localeCompare(b.f.kennzeichen));
+
+  document.getElementById('flotteGrid').innerHTML=`<table>
+    <thead><tr><th>Kennzeichen</th><th>Modell</th><th>Fahrer:in</th><th>Finanzierung</th><th>bis</th><th class="num">km-Stand</th><th class="tbar">km-Kontingent</th><th class="num">€ / Monat</th><th>Status</th></tr></thead>
+    <tbody>${reihen.map(({f,k})=>{
+      const kmB=(f.kmVertragGesamt&&f.kmStand)?Math.min(100,100*f.kmStand/(f.kmVertragGesamt+k.toleranz)):0;
+      const tolPos=(k.toleranz&&f.kmVertragGesamt)?Math.min(100,100*f.kmVertragGesamt/(f.kmVertragGesamt+k.toleranz)):null;
+      const inaktiv=f.status!=='aktiv';
+      const balken=k.kauf
+        ? '<span style="color:var(--text-hint);font-size:11px">Kauf — kein Kontingent</span>'
+        : (f.kmVertragGesamt
+          ? `<div class="bar" title="${fKM(f.kmStand)} von ${fKM(f.kmVertragGesamt)}${k.toleranz?' (+'+fKM(k.toleranz)+' Toleranz)':''}">${tolPos?`<span class="tolmark" style="left:${tolPos}%"></span>`:''}<div class="bar-fill" style="width:${kmB}%;background:${barFarbe[k.ampel]}"></div></div>`
+          : '<span style="color:var(--text-hint);font-size:11px">—</span>');
+      return `<tr class="klick" data-fin="${esc(f.fin)}" ${inaktiv?'style="opacity:.55"':''}>
+        <td><span class="kennzeichen" style="font-size:13px">${esc(f.kennzeichen)}</span></td>
+        <td>${esc(f.modell||'')}</td>
+        <td>${esc(f.fahrer||'–')}${f.privatnutzung==='mit'?' <span class="chip chip-mut" style="font-size:9px;padding:1px 7px" title="mit Privatnutzung'+(k.eigenanteil?', Eigenanteil '+fEUR2(k.eigenanteil)+'/Monat':'')+'">privat</span>':''}</td>
+        <td>${esc(f.finanzierung||'–')}</td>
+        <td>${k.kauf?'—':fDat(f.rueckgabe)}</td>
+        <td class="num">${fKM(f.kmStand)}</td>
+        <td class="tbar">${balken}</td>
+        <td class="num" title="${k.eigenanteil?'abzgl. '+fEUR2(k.eigenanteil)+' Eigenanteil':''}">${k.kauf?fEUR2((k.laufendJahrNetto||0)/12):fEUR2(k.kostenMonatNetto)}</td>
+        <td>${ampelChip(k,f)}${k.versKonflikt?' <span class="chip chip-warn" style="font-size:9px;padding:1px 7px" title="Versicherte Fahrleistung ('+fKM(f.versFahrleistung)+'/Jahr) liegt unter Vertrags-km ('+fKM(k.kmProJahrEff)+'/Jahr)'+(k.istProJahr?' bzw. Ist-Hochrechnung ('+fKM(k.istProJahr)+'/Jahr)':'')+' — Prämie anpassen, sonst droht Deckungsproblem.">Vers.-km!</span>':''}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  document.querySelectorAll('#flotteGrid tr.klick').forEach(el=>el.addEventListener('click',()=>oeffneDialog(el.dataset.fin)));
+}
+
+function renderKosten(){
+  const kk=aktive().map(f=>({f,k:kennzahlen(f)}));
+  const vertraege=kk.filter(x=>!x.k.kauf&&x.k.kostenMonat!=null).sort((a,b)=>b.k.kostenMonatNetto-a.k.kostenMonatNetto);
+  const kaeufe=kk.filter(x=>x.k.kauf);
+  const summeNetto=vertraege.reduce((s,x)=>s+x.k.kostenMonatNetto,0)+kaeufe.reduce((s,x)=>s+(x.k.laufendJahrNetto||0)/12,0);
+  const eigenSum=kk.reduce((s,x)=>s+x.k.eigenanteil,0);
+  const summeLZ=vertraege.reduce((s,x)=>s+x.k.kostenLaufzeit,0);
+  const max=vertraege.length?Math.max(...vertraege.map(x=>x.k.kostenMonatNetto)):1;
+  document.getElementById('kostenKpis').innerHTML=`
+    <div class="kpi"><div class="big">${fEUR(summeNetto)}</div><div class="sl">Flottenkosten PNW / Monat</div></div>
+    <div class="kpi"><div class="big">${fEUR(summeNetto*12)}</div><div class="sl">Hochgerechnet p. a.</div></div>
+    <div class="kpi"><div class="big" style="color:${eigenSum?'var(--ok)':'var(--text)'}">${fEUR2(eigenSum)}</div><div class="sl">Eigenanteile / Monat</div></div>
+    <div class="kpi"><div class="big">${fEUR(summeLZ)}</div><div class="sl">Vertragsvolumen (Laufzeiten)</div></div>`;
+  document.getElementById('kostenTabelle').innerHTML=vertraege.length?`<table>
+    <thead><tr><th>Kennzeichen</th><th>Fahrer:in</th><th class="num">Rate</th><th class="num">Vers. p. M.</th><th class="num">Gesamt p. M.</th><th class="num">Eigenanteil</th><th class="num">PNW p. M.</th><th class="tbar"></th><th class="num">Über Laufzeit</th></tr></thead>
+    <tbody>${vertraege.map(({f,k})=>`<tr class="klick" data-fin="${esc(f.fin)}">
+      <td><b>${esc(f.kennzeichen)}</b></td><td>${esc(f.fahrer||'–')}${f.privatnutzung==='mit'?' <span class="chip chip-mut" style="font-size:9px;padding:1px 7px">privat</span>':''}</td>
+      <td class="num">${fEUR2(f.rateMonatlich)}</td>
+      <td class="num">${k.versJahr?fEUR2(k.versJahr/12):'–'}</td>
+      <td class="num">${fEUR2(k.kostenMonat)}</td>
+      <td class="num">${k.eigenanteil?'<span style="color:var(--ok)">−'+fEUR2(k.eigenanteil)+'</span>':'–'}</td>
+      <td class="num"><b>${fEUR2(k.kostenMonatNetto)}</b></td>
+      <td class="tbar"><div class="bar"><div class="bar-fill" style="width:${Math.round(100*k.kostenMonatNetto/max)}%;background:var(--accent-mid)"></div></div></td>
+      <td class="num">${fEUR(k.kostenLaufzeit)}</td></tr>`).join('')}</tbody></table>`
+    :'<div class="loading-state">Keine Vertragsfahrzeuge mit Kostendaten.</div>';
+  document.getElementById('kaufTabelle').innerHTML=kaeufe.length?`<table>
+    <thead><tr><th>Gekauft</th><th>Modell</th><th class="num">Anschaffung</th><th class="num">Steuer p. a.</th><th class="num">Versicherung p. a.</th><th class="num">Laufend p. a.</th></tr></thead>
+    <tbody>${kaeufe.map(({f,k})=>`<tr class="klick" data-fin="${esc(f.fin)}">
+      <td><b>${esc(f.kennzeichen)}</b></td><td>${esc(f.modell||'')}</td>
+      <td class="num">${fEUR(f.bruttolistenpreis)}</td>
+      <td class="num">${fEUR2(f.steuerJaehrlich)}</td>
+      <td class="num">${fEUR2(k.versJahr)}</td>
+      <td class="num" title="${k.eigenanteil?'abzgl. '+fEUR2(k.eigenanteil*12)+' Eigenanteil p. a.':''}"><b>${fEUR2(k.laufendJahrNetto)}</b></td></tr>`).join('')}</tbody></table>`:'';
+  document.querySelectorAll('#view-kosten tr.klick').forEach(el=>el.addEventListener('click',()=>oeffneDialog(el.dataset.fin)));
+}
+
+function renderPrognose(){
+  const kk=aktive().map(f=>({f,k:kennzahlen(f)})).filter(x=>!x.k.kauf&&x.f.kmVertragGesamt);
+  const mit=kk.filter(x=>x.k.prognoseEnde!=null).sort((a,b)=>(b.k.prognoseEnde/b.f.kmVertragGesamt)-(a.k.prognoseEnde/a.f.kmVertragGesamt));
+  const ohne=kk.filter(x=>x.k.prognoseEnde==null);
+  const mehrSum=mit.reduce((s,x)=>s+(x.k.mehrKosten||0),0);
+  const kritisch=mit.filter(x=>x.k.ampel==='err').length;
+  document.getElementById('prognoseKpis').innerHTML=`
+    <div class="kpi"><div class="big" style="color:${mehrSum?'var(--error)':'var(--ok)'}">${fEUR(mehrSum)}</div><div class="sl">Prognostizierte Mehr-km-Kosten</div></div>
+    <div class="kpi"><div class="big">${kritisch}</div><div class="sl">Fahrzeuge &gt; 10 % über Plan</div></div>
+    <div class="kpi"><div class="big">${ohne.length}</div><div class="sl">Ohne aktuellen km-Stand</div></div>`;
+  document.getElementById('prognoseTabelle').innerHTML=`<table>
+    <thead><tr><th>Kennzeichen</th><th>Fahrer:in</th><th class="num">km-Stand</th><th class="num">Soll heute</th><th class="num">Abweichung</th><th class="num">Prognose Ende</th><th class="num">Kontingent (+Tol.)</th><th class="num">Mehr-km-Kosten</th></tr></thead>
+    <tbody>
+    ${mit.map(({f,k})=>{
+      const farbe=k.ampel==='err'?'var(--error)':k.ampel==='warn'?'var(--warn)':'var(--ok)';
+      return `<tr class="klick" data-fin="${esc(f.fin)}">
+        <td><b>${esc(f.kennzeichen)}</b></td><td>${esc(f.fahrer||'–')}</td>
+        <td class="num">${fKM(f.kmStand)}</td>
+        <td class="num">${fKM(k.sollHeute)}</td>
+        <td class="num" style="color:${farbe};font-weight:600">${k.abwHeute>0?'+':''}${fKM(k.abwHeute)}</td>
+        <td class="num">${fKM(k.prognoseEnde)}</td>
+        <td class="num">${fKM(f.kmVertragGesamt)}${k.toleranz?' (+'+fKM(k.toleranz)+')':''}</td>
+        <td class="num">${k.mehrKosten?'<b style="color:var(--error)">'+fEUR2(k.mehrKosten)+'</b>':(k.minderErstattung?'<span style="color:var(--ok)">−'+fEUR2(k.minderErstattung)+'</span>':'–')}</td>
+      </tr>`;
+    }).join('')}
+    ${ohne.map(({f})=>`<tr class="klick" data-fin="${esc(f.fin)}"><td><b>${esc(f.kennzeichen)}</b></td><td>${esc(f.fahrer||'–')}</td><td class="num" colspan="6" style="color:var(--text-hint)">km-Stand erfassen, um Prognose zu berechnen</td></tr>`).join('')}
+    </tbody></table>`;
+  document.querySelectorAll('#view-prognose tr.klick').forEach(el=>el.addEventListener('click',()=>oeffneDialog(el.dataset.fin)));
+}
+
+function renderAll(){ renderFlotte(); renderKosten(); renderPrognose(); }
+
+/* ═══════════════════════════════════════════════════════════
+ * DIALOG — Anzeigen / Bearbeiten / Neuanlage / km erfassen
+ * ═══════════════════════════════════════════════════════════ */
+let dialogFahrzeug=null;
+function oeffneDialog(fin){
+  dialogFahrzeug=fahrzeuge.find(x=>x.fin===fin);
+  if(!dialogFahrzeug) return;
+  fuelleDialog(dialogFahrzeug.kennzeichen+' · '+(dialogFahrzeug.modell||''),
+               online?'Änderungen werden in der SharePoint-Liste gespeichert.':'Demo-Modus — Änderungen nur lokal.');
+}
+function neuesFahrzeug(){
+  dialogFahrzeug={status:'bestellt',finanzierung:'Leasing',_spId:null};
+  fahrzeuge.push(dialogFahrzeug);
+  fuelleDialog('Neues Fahrzeug','FIN und Kennzeichen sind Pflicht — die FIN ist der stabile Schlüssel.');
+}
+const GRUPPEN={
+  'Fahrzeug':['kennzeichen','fin','hersteller','modell','hsn','tsn','status'],
+  'Vertrag & Laufleistung':['finanzierung','vertragsnummer','erstzulassung','rueckgabe','laufzeitMonate','kmVertragGesamt','kmProJahr','kmToleranz','satzMehrKm','satzMinderKm','inklGanzjahresreifen','inklWartung','inklVersicherung'],
+  'Kosten':['bruttolistenpreis','ueberfuehrung','rateMonatlich','steuerJaehrlich'],
+  'Versicherung':['versicherer','versicherungsnummer','versPraemie','versZahlweise','versFahrleistung','sfHaftpflicht','sfKasko','sbVollkasko','sbTeilkasko'],
+  'Betrieb':['fahrer','privatnutzung','eigenanteilMonat','kmStand','kmStandDatum','dguvPruefung','sensorAktiviert','kilankaLink']
+};
+function fuelleDialog(titel,sub){
+  document.getElementById('dialogTitel').innerHTML=esc(titel);
+  document.getElementById('dialogSub').textContent=sub;
+  let html=`<datalist id="fahrerDatalist">${fahrerListe.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+  for(const [gruppe,keys] of Object.entries(GRUPPEN)){
+    html+=`<div class="fgruppe">${gruppe}</div>`;
+    for(const key of keys){
+      const s=SCHEMA.find(x=>x.key===key);
+      const v=dialogFahrzeug[s.key]??'';
+      if(s.typ==='wahl'){ html+=`<div class="feld"><label>${s.label}</label><select data-key="${s.key}">${s.optionen.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></div>`; continue; }
+      if(s.typ==='bool'){ html+=`<div class="feld feld-check"><label for="chk-${s.key}"><input type="checkbox" id="chk-${s.key}" data-key="${s.key}" ${dialogFahrzeug[s.key]?'checked':''}> ${s.label}</label></div>`; continue; }
+      if(s.typ==='fahrer'){ html+=`<div class="feld"><label>${s.label}</label><input type="text" list="fahrerDatalist" data-key="${s.key}" value="${esc(v)}" placeholder="auswählen oder eingeben"></div>`; continue; }
+      const typ=s.typ==='zahl'?'number':s.typ==='datum'?'date':'text';
+      html+=`<div class="feld"><label>${s.label}</label><input type="${typ}" ${s.typ==='zahl'?'step="any"':''} data-key="${s.key}" value="${esc(v)}"></div>`;
+    }
+  }
+  document.getElementById('dialogFelder').innerHTML=html;
+  const kl=dialogFahrzeug.kilankaLink;
+  document.getElementById('btnKilanka').style.display=(kl&&/^https?:\/\//.test(kl))?'':'none';
+  document.getElementById('dialogFelder').addEventListener('input',dialogAutoBerechnen);
+  dialogAutoBerechnen();
+  document.getElementById('overlay').classList.add('open');
+}
+
+/* Abgeleitete Werte live berechnen — automatisch gefüllte Felder bleiben überschreibbar */
+function feldEl(key){ return document.querySelector(`#dialogFelder [data-key="${key}"]`); }
+function setzeAuto(key,wert){
+  const el=feldEl(key); if(!el) return;
+  if(el.value===''||el.classList.contains('auto')){
+    el.value=wert; el.classList.add('auto');
+    const label=el.closest('.feld').querySelector('label');
+    if(label&&!label.querySelector('.berechnet')) label.insertAdjacentHTML('beforeend','<span class="berechnet">berechnet</span>');
+  }
+}
+function dialogAutoBerechnen(e){
+  if(e&&e.target&&e.target.classList) e.target.classList.remove('auto'); // manuelle Eingabe schlägt Berechnung
+  const w=key=>{const el=feldEl(key);return el?el.value:'';};
+  const n=key=>{const v=parseFloat(w(key));return isNaN(v)?null:v;};
+  const ez=w('erstzulassung')?new Date(w('erstzulassung')+'T00:00:00'):null;
+  const rg=w('rueckgabe')?new Date(w('rueckgabe')+'T00:00:00'):null;
+  // Laufzeit aus EZ + Rückgabe
+  if(ez&&rg&&rg>ez) setzeAuto('laufzeitMonate',Math.round((rg-ez)/(86400000*30.4375)));
+  // Rückgabe aus EZ + Laufzeit
+  else if(ez&&n('laufzeitMonate')){
+    const d2=new Date(ez); d2.setMonth(d2.getMonth()+n('laufzeitMonate'));
+    setzeAuto('rueckgabe',d2.toISOString().slice(0,10));
+  }
+  // km/Jahr aus Kontingent + Laufzeit
+  const lz=n('laufzeitMonate'), kont=n('kmVertragGesamt');
+  if(kont&&lz) setzeAuto('kmProJahr',Math.round(kont/(lz/12)));
+  // km-Kontingent aus km/Jahr + Laufzeit (umgekehrter Fall)
+  else if(n('kmProJahr')&&lz) setzeAuto('kmVertragGesamt',Math.round(n('kmProJahr')*(lz/12)));
+  // Versicherungs-Fahrleistung gegen Vertrags-km prüfen
+  const warn=document.getElementById('dialogWarn');
+  const vfl=n('versFahrleistung'), kmj=n('kmProJahr');
+  if(vfl&&kmj&&kmj>vfl*1.02){
+    warn.style.display='block';
+    warn.innerHTML='<strong>Versicherung prüfen:</strong> Die versicherte Fahrleistung ('+Math.round(vfl).toLocaleString('de-DE')+' km/Jahr) liegt unter den Vertrags-km ('+Math.round(kmj).toLocaleString('de-DE')+' km/Jahr). Fahrleistung beim Versicherer anpassen, sonst drohen Nachprämie oder Deckungsprobleme im Schadensfall.';
+  }else{ warn.style.display='none'; }
+}
+function schliesseDialog(){
+  if(dialogFahrzeug&&!dialogFahrzeug.fin&&!dialogFahrzeug._spId){
+    fahrzeuge=fahrzeuge.filter(x=>x!==dialogFahrzeug); // verworfene Neuanlage entfernen
+  }
+  document.getElementById('overlay').classList.remove('open');
+  dialogFahrzeug=null;
+}
+async function dialogSpeichern(){
+  if(!dialogFahrzeug) return;
+  document.querySelectorAll('#dialogFelder [data-key]').forEach(el=>{
+    const s=SCHEMA.find(x=>x.key===el.dataset.key);
+    if(el.type==='checkbox'){ dialogFahrzeug[s.key]=el.checked; return; }
+    const v=el.value;
+    dialogFahrzeug[s.key]=v===''?null:(s.typ==='zahl'?parseFloat(v):v);
+  });
+  if(!dialogFahrzeug.fin||!dialogFahrzeug.kennzeichen){ alert('FIN und Kennzeichen sind Pflichtfelder.'); return; }
+  try{ await speichern(dialogFahrzeug); }catch(e){ alert('Speichern fehlgeschlagen: '+e.message); return; }
+  dialogFahrzeug=null;
+  document.getElementById('overlay').classList.remove('open');
+}
+function kmErfassen(){
+  if(!dialogFahrzeug) return;
+  const eingabe=prompt('Aktueller km-Stand'+(dialogFahrzeug.kennzeichen?' für '+dialogFahrzeug.kennzeichen:'')+':',dialogFahrzeug.kmStand||'');
+  if(eingabe===null) return;
+  const wert=parseFloat(String(eingabe).replace(/\./g,'').replace(',','.'));
+  if(isNaN(wert)){ alert('Bitte eine Zahl eingeben.'); return; }
+  dialogFahrzeug.kmStand=wert;
+  dialogFahrzeug.kmStandDatum=new Date().toISOString().slice(0,10);
+  const felder=document.querySelectorAll('#dialogFelder [data-key]');
+  felder.forEach(el=>{
+    if(el.dataset.key==='kmStand') el.value=wert;
+    if(el.dataset.key==='kmStandDatum') el.value=dialogFahrzeug.kmStandDatum;
+  });
+}
+function kilankaOeffnen(){
+  if(dialogFahrzeug&&dialogFahrzeug.kilankaLink) window.open(dialogFahrzeug.kilankaLink,'_blank','noopener');
+}
+document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')schliesseDialog();});
+</script>
+</body>
+</html>
