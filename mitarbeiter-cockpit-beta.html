@@ -581,7 +581,7 @@ function renderCards(d, own) {
       <span><span class="dot" style="background:var(--ok)"></span>Genommen: ${fmtNum(u.genommenTage,1)}</span>
       <span><span class="dot" style="background:#9ccc9c"></span>Geplant: ${fmtNum(u.geplantTage,1)}</span>
       <span title="${esc(u.anspruchQuelle || 'Kein Anspruchs-Text in Kilanka — Standard 30 Tage')}"><span class="dot" style="background:var(--bg);border:1px solid var(--border)"></span>Anspruch: ${u.anspruchTage ?? '— (Feld folgt)'}</span>
-      ${u.uebertragTage != null && u.uebertragTage > 0 ? `<span title="${esc(u.uebertragBasis || '')}"><span class="dot" style="background:#c9b8e8"></span>Übertrag ${u.jahr - 1}: +${fmtNum(u.uebertragTage,1)}</span>` : ''}
+      ${u.uebertragTage != null && u.uebertragTage !== 0 ? `<span title="${esc(u.uebertragBasis || '')}"><span class="dot" style="background:#c9b8e8"></span>Übertrag: ${u.uebertragTage > 0 ? '+' : ''}${fmtNum(u.uebertragTage,1)}</span>` : ''}
     </div>
     ${u.uebertragTage == null ? `<div class="note">Übertrag aus ${u.jahr - 1} nicht berechenbar (${esc(u.uebertragBasis || 'keine Vorjahresdaten')}) — Resttage ohne Übertrag.</div>` : ''}
     ${u.restTage != null && u.restTage < 0 ? `<div class="note" style="color:var(--warn)">⚠ Mehr Urlaub gebucht als Anspruch (inkl. berechnetem Übertrag: ${esc(u.uebertragBasis || '—')}) — bitte Kilanka-Feld „Urlaubsanspruch" prüfen (hinterlegt: ${esc(u.anspruchQuelle || 'kein Text, Standard 30')}).</div>` : ''}
