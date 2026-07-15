@@ -751,27 +751,55 @@ async function fetchClientStatusMap(env) {
 // Maßnahme) — Grundlage der Amt-basierten Zielerreichung im Manager-Cockpit,
 // unabhängig davon, wessen Team in der Tabellen-Sicht steht.
 async function alleHbFaelle(env, now) {
+  // Karenz für Anschluss-Maßnahmen: Endet eine Maßnahme und folgt die nächste
+  // mit einer Lücke von maximal 7 Tagen, gilt der Fall als durchlaufend aktiv —
+  // auch wenn der Stichtag genau in die Lücke fällt (typisch: Quartalswechsel,
+  // Maßnahme bis 30.06., Anschluss ab 01.07.). Verhindert Schein-Zu-/Abgänge.
+  const KARENZ_MS = 7 * 24 * 3600 * 1000;
   const clients = await fetchKilankaClients(env);
   const map = new Map();
+
+  const hbAktuell = (action, t) => (action.attendants || []).some(
+    (a) => a.user && !isArchived(a.user.recName) &&
+           isCurrent(a.validFrom, a.validUntil, t) &&
+           a.attendantKind?.name === "Hauptbetreuer"
+  );
+  // Für Brücken-Maßnahmen (liegen zeitlich neben dem Stichtag) genügt ein
+  // nicht archivierter HB, unabhängig vom Betreuungszeitfenster.
+  const hbVorhanden = (action) => (action.attendants || []).some(
+    (a) => a.user && !isArchived(a.user.recName) && a.attendantKind?.name === "Hauptbetreuer"
+  );
+
   for (const client of clients || []) {
     if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
-    for (const action of client.actions || []) {
-      if (kDate(action.deletedAt) || !isCurrent(action.validFrom, action.validUntil, now)) continue;
-      const hatHB = (action.attendants || []).some(
-        (a) => a.user && !isArchived(a.user.recName) &&
-               isCurrent(a.validFrom, a.validUntil, now) &&
-               a.attendantKind?.name === "Hauptbetreuer"
-      );
-      if (!hatHB) continue;
-      if (!map.has(String(client.id))) {
-        map.set(String(client.id), {
-          id: String(client.id),
-          name: client.recName || String(client.id),
-          amt: action.department?.name || "",
-          hilfeart: action.legalBasis?.name || "",
-          massnahme: action.recName || "",
-        });
+    const acts = (client.actions || []).filter((a) => !kDate(a.deletedAt));
+
+    // 1) Regulär: Maßnahme mit aktivem HB läuft zum Stichtag
+    let treffer = acts.find((a) => isCurrent(a.validFrom, a.validUntil, now) && hbAktuell(a, now));
+
+    // 2) Karenz: Stichtag liegt in einer Übergangs-Lücke ≤ 7 Tage
+    if (!treffer) {
+      let vorher = null, nachher = null;
+      for (const a of acts) {
+        if (!hbVorhanden(a)) continue;
+        const von = kDate(a.validFrom), bis = kDate(a.validUntil);
+        if (bis && bis < now && (!vorher || bis > kDate(vorher.validUntil))) vorher = a;
+        if (von && von > now && (!nachher || von < kDate(nachher.validFrom))) nachher = a;
       }
+      if (vorher && nachher) {
+        const luecke = kDate(nachher.validFrom) - kDate(vorher.validUntil);
+        if (luecke >= 0 && luecke <= KARENZ_MS) treffer = nachher; // Amt/Hilfeart der Anschluss-Maßnahme
+      }
+    }
+
+    if (treffer && !map.has(String(client.id))) {
+      map.set(String(client.id), {
+        id: String(client.id),
+        name: client.recName || String(client.id),
+        amt: treffer.department?.name || "",
+        hilfeart: treffer.legalBasis?.name || "",
+        massnahme: treffer.recName || "",
+      });
     }
   }
   return [...map.values()];
