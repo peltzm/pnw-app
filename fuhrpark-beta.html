@@ -584,16 +584,22 @@ function ampelChip(k,f){
   if(k.ampel==='ok') return '<span class="chip chip-ok">im Plan</span>';
   return '<span class="chip chip-mut">kein km-Stand</span>';
 }
+function privatProzentZelle(f){
+  const p=f.fbPrivatProzent;
+  if(p==null) return '<span style="color:var(--text-hint)">–</span>';
+  const farbe=p<=41?'var(--ok)':p<=51?'var(--warn)':'var(--error)';
+  const tip=f.fbVon?('Fahrtenbuch '+fDat(f.fbVon)+' – '+fDat(f.fbBis)+(f.fbFahrer?' · '+f.fbFahrer:'')):'';
+  return '<b style="color:'+farbe+'" title="'+esc(tip)+'">'+String(Math.round(p*10)/10).replace('.',',')+' %</b>';
+}
 function privatChip(f,k){
   const fb=f.fbPrivatProzent!=null?Math.round(f.fbPrivatProzent):null;
   if(f.privatnutzung==='mit'){
     let tip='mit Privatnutzung';
     if(k.eigenanteil) tip+=', Eigenanteil '+fEUR2(k.eigenanteil)+'/Monat';
-    if(fb!=null) tip+=', Fahrtenbuch: '+fb+' % privat';
-    return ' <span class="chip chip-mut" style="font-size:9px;padding:1px 7px" title="'+esc(tip)+'">privat'+(fb!=null?' '+fb+' %':'')+'</span>';
+    return ' <span class="chip chip-mut" style="font-size:9px;padding:1px 7px" title="'+esc(tip)+'">privat</span>';
   }
   if(fb!=null&&fb>5){
-    return ' <span class="chip chip-warn" style="font-size:9px;padding:1px 7px" title="'+esc('Fahrtenbuch weist '+fb+' % Privatanteil aus, Fahrzeug ist als ohne Privatnutzung geführt')+'">privat '+fb+' %?</span>';
+    return ' <span class="chip chip-warn" style="font-size:9px;padding:1px 7px" title="'+esc('Fahrtenbuch weist '+fb+' % Privatanteil aus, Fahrzeug ist als ohne Privatnutzung geführt')+'">privat?</span>';
   }
   return '';
 }
@@ -617,7 +623,7 @@ function renderFlotte(){
       || String(a.f.kennzeichen).localeCompare(b.f.kennzeichen));
 
   document.getElementById('flotteGrid').innerHTML=`<table>
-    <thead><tr><th>Kennzeichen</th><th>Modell</th><th>Fahrer:in</th><th>Finanzierung</th><th>bis</th><th class="num">km-Stand</th><th class="tbar">km-Kontingent</th><th class="num">€ / Monat</th><th>Status</th></tr></thead>
+    <thead><tr><th>Kennzeichen</th><th>Modell</th><th>Fahrer:in</th><th class="num">Privat</th><th>Finanzierung</th><th>bis</th><th class="num">km-Stand</th><th class="tbar">km-Kontingent</th><th class="num">€ / Monat</th><th>Status</th></tr></thead>
     <tbody>${reihen.map(({f,k})=>{
       const kmB=(f.kmVertragGesamt&&f.kmStand)?Math.min(100,100*f.kmStand/(f.kmVertragGesamt+k.toleranz)):0;
       const tolPos=(k.toleranz&&f.kmVertragGesamt)?Math.min(100,100*f.kmVertragGesamt/(f.kmVertragGesamt+k.toleranz)):null;
@@ -631,6 +637,7 @@ function renderFlotte(){
         <td><span class="kennzeichen" style="font-size:13px">${esc(f.kennzeichen)}</span></td>
         <td>${esc(f.modell||'')}</td>
         <td>${esc(f.fahrer||'–')}${privatChip(f,k)}</td>
+        <td class="num">${privatProzentZelle(f)}</td>
         <td>${esc(f.finanzierung||'–')}</td>
         <td>${k.kauf?'—':fDat(f.rueckgabe)}</td>
         <td class="num">${fKM(f.kmStand)}</td>
