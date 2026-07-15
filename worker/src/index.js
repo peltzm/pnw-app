@@ -233,6 +233,55 @@ async function validateEntraToken(authHeader) {
 // Kilanka-Abruf mit Retry (502) und Isolate-Cache
 // ═══════════════════════════════════════════════════════════════
 let clientCache = { data: null, fetchedAt: 0 };
+let rosterCache = { data: null, fetchedAt: 0 };
+
+// Dienstpläne (rosters): Plan-Metadaten + eingeplante User — freigeschaltet
+// laut Probe 15.07.2026. Keine Schichten/Stunden in der API, nur Planungs-Status.
+const ROSTER_GRAPH = {
+  id: 1, name: 1, deletedAt: 1,
+  plans: {
+    id: 1, name: 1, validFrom: 1, validUntil: 1, published: 1, deletedAt: 1,
+    users: { id: 1, $limit: 200 },
+    $limit: 500,
+  },
+  $limit: 100,
+};
+
+async function fetchKilankaRosters(env) {
+  if (rosterCache.data && Date.now() - rosterCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
+    return rosterCache.data;
+  }
+  const data = await kilankaPost(env, "rosters", ROSTER_GRAPH);
+  rosterCache = { data: Array.isArray(data) ? data : [], fetchedAt: Date.now() };
+  return rosterCache.data;
+}
+
+// Kilanka-User-ID → aktuell gültiger, veröffentlichter Dienstplan zum Stichtag.
+// Bei mehreren Treffern gewinnt der Plan mit dem spätesten Ende.
+async function dienstplanMap(env, now) {
+  const rosters = await fetchKilankaRosters(env);
+  const map = new Map();
+  for (const r of rosters || []) {
+    if (kDate(r.deletedAt)) continue;
+    for (const p of r.plans || []) {
+      if (kDate(p.deletedAt) || p.published !== true) continue;
+      if (!isCurrent(p.validFrom, p.validUntil, now)) continue;
+      const info = {
+        plan: [r.name, p.name].filter(Boolean).join(" · "),
+        bis: isoDate(kDate(p.validUntil)),
+      };
+      for (const u of p.users || []) {
+        const id = String(u.id);
+        const alt = map.get(id);
+        if (!alt || (kDate(p.validUntil) || 0) > (kDate(alt._bis) || 0)) {
+          map.set(id, { ...info, _bis: p.validUntil });
+        }
+      }
+    }
+  }
+  for (const v of map.values()) delete v._bis;
+  return map;
+}
 let qualiCache = { map: null, fetchedAt: 0 };
 
 async function kilankaPost(env, model, graph) {
@@ -1340,11 +1389,14 @@ export default {
           const st = new Date(stichtagParam + "T12:00:00Z");
           if (!isNaN(st) && st.getUTCFullYear() >= 2024 && st <= new Date()) now = st;
         }
+        let dpMap = null;
+        try { dpMap = await dienstplanMap(env, now); } catch (e) { /* Dienstplan optional */ }
         const rows = [];
         for (const m of liste) {
           const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
           rows.push({
             upn: m.upn,
+            dienstplan: (dpMap && d.person.kilankaId && dpMap.get(d.person.kilankaId)) || null,
             leitung: mgrMap.get(m.upn) || null,
             name: d.person.name || m.name || m.upn,
             team: d.person.team,
