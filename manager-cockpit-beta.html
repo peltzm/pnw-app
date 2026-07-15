@@ -144,6 +144,7 @@ tr{cursor:pointer}
       <select id="teamFilter" onchange="render()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)">
         <option value="">Alle</option>
       </select>
+      <button class="btn btn-outline" id="urlaubCheckBtn" style="padding:5px 12px;font-size:12px;display:none" onclick="toggleUrlaubCheck()">Urlaubs-Abgleich</button>
       <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="reload()">Aktualisieren</button>
     </div>
   </div>
@@ -161,6 +162,19 @@ tr{cursor:pointer}
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+    </div>
+
+    <!-- Urlaubs-Abgleich (GF): berechnete Kette vs. Kilanka-Stundenkonto -->
+    <div id="urlaubCheck" style="display:none;margin-top:24px">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:4px">Urlaubs-Abgleich (berechnete Jahreskette)</h3>
+      <p style="font-size:11px;color:var(--text-hint);margin-bottom:10px">
+        Zum Gegenprüfen mit dem Kilanka-Stundenkonto (Mitarbeiter → Zeiterfassung).
+        Tooltip auf dem Übertrag zeigt den Rechenweg je Jahr. Abweichungen bitte mit dem
+        Kilanka-Wert melden — der Rechenweg verrät dann das Problem-Jahr.
+      </p>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="urlaubCheckTbl"></table>
+      </div>
     </div>
 
     <!-- Zielerreichung Teamleitungen (Leistungs- und Vergütungsvereinbarung §5) -->
@@ -345,6 +359,8 @@ function render() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('tbl').style.display = '';
   const rolleTxt = daten.vorschauAls ? 'Vorschau als Teamleitung — ' + esc(daten.vorschauAls) : (daten.rolle === 'gf' ? 'Geschäftsführung (alle Mitarbeitenden)' : 'Teamleitung (eigenes Team)');
+  document.getElementById('urlaubCheckBtn').style.display = daten.rolle === 'gf' ? '' : 'none';
+  if (document.getElementById('urlaubCheck').style.display !== 'none') renderUrlaubCheck();
   const stichtagTxt = daten.stichtag ? ` · Stichtag: ${new Date(daten.stichtag).toLocaleDateString('de-DE')} (Nachweise: aktueller Stand)` : '';
   document.getElementById('pageSub').textContent =
     `Stand: ${new Date(daten.stand).toLocaleString('de-DE')} · Sicht: ${rolleTxt}${stichtagTxt}`;
@@ -497,6 +513,35 @@ const unzugeordneteAemter = dataset => {
   return [...alle].sort((a, b) => a.localeCompare(b, 'de'));
 };
 function toggleFallDiff(id) { document.getElementById(id)?.classList.toggle('open'); }
+
+/* ── Urlaubs-Abgleich (GF): alle Mitarbeitenden mit berechneter Urlaubskette ── */
+function toggleUrlaubCheck() {
+  const el = document.getElementById('urlaubCheck');
+  const offen = el.style.display !== 'none';
+  el.style.display = offen ? 'none' : '';
+  if (!offen) renderUrlaubCheck();
+}
+function renderUrlaubCheck() {
+  if (!daten?.rows) return;
+  const zeilen = daten.rows
+    .map(r => ({ name: r.name || r.upn, u: r.urlaub }))
+    .sort((a, b) => (a.u?.restTage ?? 99) - (b.u?.restTage ?? 99));
+  document.getElementById('urlaubCheckTbl').innerHTML = `
+    <thead><tr><th>Mitarbeiter:in</th><th style="text-align:right">Anspruch</th>
+      <th style="text-align:right">Übertrag</th><th style="text-align:right">Genommen</th>
+      <th style="text-align:right">Geplant</th><th style="text-align:right">Rest</th><th>Hinweis</th></tr></thead>
+    <tbody>${zeilen.map(({ name, u }) => !u
+      ? `<tr><td>${esc(name)}</td><td colspan="6" style="color:var(--text-hint)">keine Abwesenheitsdaten</td></tr>`
+      : `<tr>
+          <td>${esc(name)}</td>
+          <td style="text-align:right">${fmtNum(u.anspruchTage, 1)}</td>
+          <td style="text-align:right" title="${esc(u.uebertragBasis || '')}">${u.uebertragTage == null ? '—' : (u.uebertragTage > 0 ? '+' : '') + fmtNum(u.uebertragTage, 1)}</td>
+          <td style="text-align:right">${fmtNum(u.genommenTage, 1)}</td>
+          <td style="text-align:right">${fmtNum(u.geplantTage, 1)}</td>
+          <td style="text-align:right;font-weight:700;color:${u.restTage < 0 ? 'var(--error)' : 'var(--text)'}">${fmtNum(u.restTage, 1)}</td>
+          <td style="font-size:11px;color:var(--text-hint)">${u.uebertragTage == null ? esc(u.uebertragBasis || '') : ''}</td>
+        </tr>`).join('')}</tbody>`;
+}
 
 // Mischgehalt (brutto/Monat) je Teamleitung — quartalsunabhängig, lokal im Browser
 const gehaltLesen = upn => {
