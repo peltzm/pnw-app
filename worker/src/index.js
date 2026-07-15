@@ -759,20 +759,28 @@ async function alleHbFaelle(env, now) {
   const clients = await fetchKilankaClients(env);
   const map = new Map();
 
-  const hbAktuell = (action, t) => (action.attendants || []).some(
-    (a) => a.user && !isArchived(a.user.recName) &&
-           isCurrent(a.validFrom, a.validUntil, t) &&
-           a.attendantKind?.name === "Hauptbetreuer"
-  );
-  // Für Brücken-Maßnahmen (liegen zeitlich neben dem Stichtag) genügt ein
-  // nicht archivierter HB, unabhängig vom Betreuungszeitfenster.
+  // Archivierte Klienten und Betreuer bleiben in der HISTORISCHEN Auswertung —
+  // maßgeblich ist, ob Maßnahme/Betreuung zum Stichtag lief. Das Archiv-Flag hat
+  // keinen Zeitstempel; ohne diese Regel fehlen beendete Fälle in alten
+  // Beständen und Abgänge werden unsichtbar. Schutz gegen Datenlücken: bei
+  // archivierten Einträgen zählen nur Zeiträume MIT Enddatum (sonst würde ein
+  // vergessenes validUntil den Fall für immer als aktiv werten).
+  const hbAktuell = (action, t) => (action.attendants || []).some((a) => {
+    if (!a.user || a.attendantKind?.name !== "Hauptbetreuer") return false;
+    if (isArchived(a.user.recName) && !kDate(a.validUntil)) return false;
+    return isCurrent(a.validFrom, a.validUntil, t);
+  });
+  // Für Brücken-Maßnahmen (liegen zeitlich neben dem Stichtag) genügt ein HB.
   const hbVorhanden = (action) => (action.attendants || []).some(
-    (a) => a.user && !isArchived(a.user.recName) && a.attendantKind?.name === "Hauptbetreuer"
+    (a) => a.user && a.attendantKind?.name === "Hauptbetreuer"
   );
 
   for (const client of clients || []) {
-    if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
-    const acts = (client.actions || []).filter((a) => !kDate(a.deletedAt));
+    if (kDate(client.deletedAt)) continue;
+    const archiviert = isArchived(client.recName);
+    const acts = (client.actions || []).filter(
+      (a) => !kDate(a.deletedAt) && (!archiviert || kDate(a.validUntil))
+    );
 
     // 1) Regulär: Maßnahme mit aktivem HB läuft zum Stichtag
     let treffer = acts.find((a) => isCurrent(a.validFrom, a.validUntil, now) && hbAktuell(a, now));
