@@ -1226,30 +1226,39 @@ async function buildCockpit(env, upn, now) {
     if (anspruch == null || anspruch < 20 || anspruch > 60) anspruch = 30; // Plausibilitätsrahmen
     anspruch = anteiligerAnspruch(anspruch, person.eintritt, jahr);
 
-    // Übertrag aus dem Vorjahr berechnen: Vorjahres-Anspruch (anteilig ab
-    // Eintritt) minus im Vorjahr genommener Urlaub. Nur wenn das Vorjahr
-    // belastbar ist (erfasste Urlaube ODER Eintritt im Vorjahr/später);
-    // entfällt, wenn der Anspruch den Übertrag bereits explizit enthält ("30+4").
+    // Übertrag als JAHRESKETTE ab Eintritt (wie Kilankas Stundenkonto):
+    // Rest(J) = Rest(J−1) + anteiliger Anspruch(J) − genommen(J).
+    // Nur der Saldo des Eintrittsjahrs darf ohne erfasste Urlaube starten;
+    // ein volles Beschäftigungsjahr ganz ohne Urlaubsbuchungen gilt als
+    // Datenlücke → Übertrag nicht berechenbar (statt falscher Riesenwerte).
+    // Entfällt, wenn der Anspruch den Übertrag explizit enthält ("30+4").
     let uebertragTage = null, uebertragBasis = null;
-    const vorjahr = jahr - 1;
     const eintrittJahr = person.eintritt ? parseInt(person.eintritt.slice(0, 4), 10) : null;
-    if (!anspruchInklUebertrag) {
-      const vorjahrBelastbar = uProJahr.has(vorjahr) || (eintrittJahr != null && eintrittJahr >= vorjahr);
-      if (eintrittJahr != null && eintrittJahr > vorjahr) {
-        uebertragTage = 0;
-        uebertragBasis = `Eintritt ${person.eintritt} — kein Vorjahresanspruch`;
-      } else if (vorjahrBelastbar) {
-        const basisAnspruch = anspruchProJahr.get(vorjahr)?.wert ?? 30;
-        const anspruchVJ = anteiligerAnspruch(basisAnspruch, person.eintritt, vorjahr);
-        const genommenVJ = uProJahr.get(vorjahr) || 0;
-        uebertragTage = Math.max(0, Math.round((anspruchVJ - genommenVJ) * 2) / 2);
-        uebertragBasis = `${vorjahr}: Anspruch ${anspruchVJ} − genommen ${Math.round(genommenVJ * 2) / 2}`;
-      } else {
-        uebertragBasis = `${vorjahr} ohne erfasste Urlaube — Übertrag nicht berechenbar`;
-      }
-    } else {
+    if (anspruchInklUebertrag) {
       uebertragTage = 0;
       uebertragBasis = "im Anspruch bereits enthalten (" + anspruchQuelle + ")";
+    } else if (eintrittJahr != null && eintrittJahr >= jahr) {
+      uebertragTage = 0;
+      uebertragBasis = `Eintritt ${person.eintritt} — kein Vorjahresanspruch`;
+    } else {
+      const startJahr = eintrittJahr ?? Math.min(jahr, ...[...uProJahr.keys()].filter((y) => y < jahr));
+      if (!Number.isFinite(startJahr) || startJahr >= jahr) {
+        uebertragBasis = "keine Vorjahresdaten in Kilanka — Übertrag nicht berechenbar";
+      } else {
+        let rest = 0, belastbar = true;
+        const schritte = [];
+        for (let y = startJahr; y < jahr; y++) {
+          const gY = uProJahr.get(y);
+          if (gY == null && y !== eintrittJahr) { belastbar = false; uebertragBasis = `${y} ohne erfasste Urlaube — Übertrag nicht berechenbar`; break; }
+          const aY = anteiligerAnspruch(anspruchProJahr.get(y)?.wert ?? 30, person.eintritt, y);
+          rest = rest + aY - (gY || 0);
+          schritte.push(`${y}: +${aY} −${Math.round((gY || 0) * 2) / 2}`);
+        }
+        if (belastbar) {
+          uebertragTage = Math.round(rest * 2) / 2;
+          uebertragBasis = schritte.join(" · ") + ` → ${uebertragTage} Tage`;
+        }
+      }
     }
 
     urlaub = {
