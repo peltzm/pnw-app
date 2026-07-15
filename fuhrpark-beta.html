@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#ffffff">
 <title>Fuhrpark (Beta) — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
@@ -194,6 +195,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     </div>
     <div class="page-header-actions">
       <button class="btn btn-outline btn-sm" onclick="neuesFahrzeug()">+ Fahrzeug</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('fbDatei').click()" title="Fahrtenbuch (Excel) hochladen — Zuordnung per Kennzeichen, Auswertung des Privatanteils">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+        Fahrtenbuch
+      </button>
+      <input type="file" id="fbDatei" accept=".xlsx,.xls" style="display:none" onchange="fbDateiGewaehlt(event)">
       <button class="btn btn-outline btn-sm" onclick="csvExport()" title="Flotte: alle Stammdaten als CSV · Kosten/Prognose: sichtbare Tabelle">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
         CSV
@@ -232,6 +238,26 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 
   <div class="footer-note">
     <strong>Datenquellen:</strong> Stammdaten, Verträge, Versicherung und km-Stände aus der SharePoint-Liste <code>PNW-Fahrzeuge</code> (Graph API, <code>Sites.ReadWrite.All</code>) · Fahrzeug-Dokumente (Schein, Policen, Leasingverträge, DGUV-70-Nachweise) in Kilanka, verknüpft über das Feld <code>KilankaLink</code> · Kostenkennzahlen und km-Prognosen werden live berechnet und nicht gespeichert. Alle Beträge sind Endbeträge inkl. USt (kein Vorsteuerabzug); <code>PNW p. M.</code> = monatliche Kosten nach Abzug vereinbarter Eigenanteile. Kilanka hat aktuell keinen Fahrzeug-Graphen; die FIN dient als stabiler Schlüssel für eine spätere Synchronisierung.
+  </div>
+</div>
+
+<!-- FAHRTENBUCH-AUSWERTUNG -->
+<div class="overlay" id="fbOverlay">
+  <div class="dialog">
+    <h2 id="fbTitel">Fahrtenbuch-Auswertung</h2>
+    <div class="dsub" id="fbSub"></div>
+    <div id="fbErgebnis" style="overflow-x:auto"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-top:12px;cursor:pointer">
+      <input type="checkbox" id="fbKmUebernehmen" checked style="width:15px;height:15px;accent-color:var(--accent)">
+      <span id="fbKmLabel">km-Stand aus Fahrtenbuch übernehmen</span>
+    </label>
+    <div style="font-size:10.5px;color:var(--text-hint);line-height:1.6;margin-top:10px">
+      Methode: Es sind nur Geschäftsfahrten erfasst — der Privatanteil ergibt sich rechnerisch aus den km-Lücken zwischen den Fahrten (Kilometerspanne des Fahrers minus Summe der Geschäfts-km). Enthält damit auch Werkstatt-/Tankfahrten. Kein steuerlich ordnungsgemäßes Fahrtenbuch. Es werden nur Summenwerte gespeichert, keine Fahrtdetails oder Klientendaten.
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-solid btn-sm" onclick="fbUebernehmen()">Auswertung speichern</button>
+      <button class="btn btn-ghost" onclick="fbSchliessen()" style="min-height:30px">Verwerfen</button>
+    </div>
   </div>
 </div>
 
@@ -310,6 +336,12 @@ const SCHEMA = [
   {sp:'DGUVPruefung',       key:'dguvPruefung',       typ:'datum', label:'DGUV-70-Prüfung'},
   {sp:'KmStand',            key:'kmStand',            typ:'zahl',  label:'km-Stand'},
   {sp:'KmStandDatum',       key:'kmStandDatum',       typ:'datum', label:'km-Stand vom'},
+  {sp:'FbVon',              key:'fbVon',              typ:'datum', label:'Fahrtenbuch von'},
+  {sp:'FbBis',              key:'fbBis',              typ:'datum', label:'Fahrtenbuch bis'},
+  {sp:'FbFahrer',           key:'fbFahrer',           typ:'text',  label:'Ausgewertete:r Fahrer:in'},
+  {sp:'FbKmZeitraum',       key:'fbKmZeitraum',       typ:'zahl',  label:'km im Zeitraum (Fahrer)'},
+  {sp:'FbKmGeschaeft',      key:'fbKmGeschaeft',      typ:'zahl',  label:'davon geschäftlich km'},
+  {sp:'FbPrivatProzent',    key:'fbPrivatProzent',    typ:'zahl',  label:'Privatanteil %'},
   {sp:'KilankaLink',        key:'kilankaLink',        typ:'text',  label:'Kilanka-Dokumente (Link/ID)'}
 ];
 
@@ -552,6 +584,19 @@ function ampelChip(k,f){
   if(k.ampel==='ok') return '<span class="chip chip-ok">im Plan</span>';
   return '<span class="chip chip-mut">kein km-Stand</span>';
 }
+function privatChip(f,k){
+  const fb=f.fbPrivatProzent!=null?Math.round(f.fbPrivatProzent):null;
+  if(f.privatnutzung==='mit'){
+    let tip='mit Privatnutzung';
+    if(k.eigenanteil) tip+=', Eigenanteil '+fEUR2(k.eigenanteil)+'/Monat';
+    if(fb!=null) tip+=', Fahrtenbuch: '+fb+' % privat';
+    return ' <span class="chip chip-mut" style="font-size:9px;padding:1px 7px" title="'+esc(tip)+'">privat'+(fb!=null?' '+fb+' %':'')+'</span>';
+  }
+  if(fb!=null&&fb>5){
+    return ' <span class="chip chip-warn" style="font-size:9px;padding:1px 7px" title="'+esc('Fahrtenbuch weist '+fb+' % Privatanteil aus, Fahrzeug ist als ohne Privatnutzung geführt')+'">privat '+fb+' %?</span>';
+  }
+  return '';
+}
 const barFarbe={ok:'var(--ok)',warn:'var(--warn)',err:'var(--error)',mut:'var(--border-strong)'};
 
 function renderFlotte(){
@@ -585,7 +630,7 @@ function renderFlotte(){
       return `<tr class="klick" data-fin="${esc(f.fin)}" ${inaktiv?'style="opacity:.55"':''}>
         <td><span class="kennzeichen" style="font-size:13px">${esc(f.kennzeichen)}</span></td>
         <td>${esc(f.modell||'')}</td>
-        <td>${esc(f.fahrer||'–')}${f.privatnutzung==='mit'?' <span class="chip chip-mut" style="font-size:9px;padding:1px 7px" title="mit Privatnutzung'+(k.eigenanteil?', Eigenanteil '+fEUR2(k.eigenanteil)+'/Monat':'')+'">privat</span>':''}</td>
+        <td>${esc(f.fahrer||'–')}${privatChip(f,k)}</td>
         <td>${esc(f.finanzierung||'–')}</td>
         <td>${k.kauf?'—':fDat(f.rueckgabe)}</td>
         <td class="num">${fKM(f.kmStand)}</td>
@@ -613,7 +658,7 @@ function renderKosten(){
   document.getElementById('kostenTabelle').innerHTML=vertraege.length?`<table>
     <thead><tr><th>Kennzeichen</th><th>Fahrer:in</th><th class="num">Rate</th><th class="num">Vers. p. M.</th><th class="num">Gesamt p. M.</th><th class="num">Eigenanteil</th><th class="num">PNW p. M.</th><th class="tbar"></th><th class="num">Über Laufzeit</th></tr></thead>
     <tbody>${vertraege.map(({f,k})=>`<tr class="klick" data-fin="${esc(f.fin)}">
-      <td><b>${esc(f.kennzeichen)}</b></td><td>${esc(f.fahrer||'–')}${f.privatnutzung==='mit'?' <span class="chip chip-mut" style="font-size:9px;padding:1px 7px">privat</span>':''}</td>
+      <td><b>${esc(f.kennzeichen)}</b></td><td>${esc(f.fahrer||'–')}${privatChip(f,k)}</td>
       <td class="num">${fEUR2(f.rateMonatlich)}</td>
       <td class="num">${k.versJahr?fEUR2(k.versJahr/12):'–'}</td>
       <td class="num">${fEUR2(k.kostenMonat)}</td>
@@ -752,6 +797,156 @@ function csvDownload(text,name){
 }
 
 /* ═══════════════════════════════════════════════════════════
+ * FAHRTENBUCH — Upload, Zuordnung per Kennzeichen, Auswertung
+ * Es sind nur Geschäftsfahrten erfasst: Privat-km = km-Spanne
+ * des Fahrers minus Summe der Geschäfts-km. Auswertung läuft
+ * komplett im Browser; gespeichert werden NUR Summenwerte —
+ * keine Fahrtdetails, keine Klientendaten.
+ * ═══════════════════════════════════════════════════════════ */
+let fbPending=null;
+const normKz=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const normName=s=>String(s||'').toLowerCase().replace(/[^a-zäöüß]/g,'');
+function fbDatum(v){
+  if(v==null||v==='') return null;
+  if(v instanceof Date) return v.toISOString().slice(0,10);
+  if(typeof v==='number') return new Date(Date.UTC(1899,11,30)+Math.round(v*86400000)).toISOString().slice(0,10);
+  const m=String(v).match(/(\d{4})-(\d{2})-(\d{2})|(\d{2})\.(\d{2})\.(\d{4})/);
+  if(!m) return null;
+  return m[1]?`${m[1]}-${m[2]}-${m[3]}`:`${m[6]}-${m[5]}-${m[4]}`;
+}
+async function fbDateiGewaehlt(ev){
+  const file=ev.target.files[0];
+  ev.target.value='';
+  if(!file) return;
+  try{ await fbVerarbeite(file); }
+  catch(e){ alert('Fahrtenbuch konnte nicht gelesen werden: '+e.message); }
+}
+async function fbVerarbeite(file){
+  const buf=await file.arrayBuffer();
+  const wbk=XLSX.read(buf,{type:'array'});
+  const rows=XLSX.utils.sheet_to_json(wbk.Sheets[wbk.SheetNames[0]],{header:1,raw:true,defval:null});
+  // Kopfbereich: Kennzeichen + Zeitraum
+  let kz=null,von=null,bis=null;
+  for(const r of rows.slice(0,10)){
+    const c0=String(r&&r[0]||'');
+    if(/^Fahrzeug/i.test(c0)) kz=r[1];
+    else if(/^Von/i.test(c0)) von=fbDatum(r[1]);
+    else if(/^Bis/i.test(c0)) bis=fbDatum(r[1]);
+  }
+  // Spaltenkopf finden (enthält Startkilometer + Strecke)
+  const hIdx=rows.findIndex(r=>r&&r.some(c=>/startkilometer/i.test(String(c||''))));
+  if(hIdx<0) throw new Error('Spaltenkopf (Startkilometerstand) nicht gefunden.');
+  const kopf=rows[hIdx].map(c=>String(c||'').toLowerCase());
+  const iFahrer=kopf.findIndex(c=>c.includes('fahrer'));
+  const iStart=kopf.findIndex(c=>c.includes('startkilometer'));
+  const iEnde=kopf.findIndex(c=>c.includes('endkilometer'));
+  const iStrecke=kopf.findIndex(c=>c.includes('strecke'));
+  const iBeginn=kopf.findIndex(c=>c.includes('beginn'));
+  if(iStart<0||iStrecke<0) throw new Error('Spalten Startkilometerstand/Strecke nicht gefunden.');
+  // Fahrten aggregieren (nur Summen, keine Details behalten)
+  const fahrer={}; let letzterTag=null;
+  for(const r of rows.slice(hIdx+1)){
+    if(!r) continue;
+    const start=parseFloat(r[iStart]), strecke=parseFloat(r[iStrecke]);
+    if(isNaN(start)||isNaN(strecke)) continue;
+    const ende=!isNaN(parseFloat(r[iEnde]))?parseFloat(r[iEnde]):start+strecke;
+    const name=iFahrer>=0?String(r[iFahrer]||'').trim()||'(ohne Name)':'(ohne Name)';
+    const a=fahrer[name]||(fahrer[name]={n:0,km:0,min:Infinity,maxEnde:-Infinity});
+    a.n++; a.km+=strecke; a.min=Math.min(a.min,start); a.maxEnde=Math.max(a.maxEnde,ende);
+    if(iBeginn>=0){ const d2=fbDatum(r[iBeginn]); if(d2&&(!letzterTag||d2>letzterTag)) letzterTag=d2; }
+  }
+  const namen=Object.keys(fahrer);
+  if(!namen.length) throw new Error('Keine Fahrten gefunden.');
+  // Fahrzeug zuordnen: Kennzeichen aus der Datei, sonst Dateiname
+  const nk=normKz(kz);
+  let kandidaten=nk?fahrzeuge.filter(f=>normKz(f.kennzeichen)===nk):[];
+  if(!kandidaten.length){
+    const nf=normKz(file.name);
+    kandidaten=fahrzeuge.filter(f=>f.kennzeichen&&nf.includes(normKz(f.kennzeichen)))
+      .sort((a,b)=>normKz(b.kennzeichen).length-normKz(a.kennzeichen).length);
+  }
+  if(kandidaten.length>1){
+    const aktiv=kandidaten.filter(f=>f.status==='aktiv');
+    if(aktiv.length===1) kandidaten=aktiv;
+  }
+  if(!kandidaten.length){ alert('Kein Fahrzeug zum Kennzeichen "'+(kz||file.name)+'" gefunden.'); return; }
+  const fz=kandidaten[0];
+  const gesamtMaxEnde=Math.max(...namen.map(n=>fahrer[n].maxEnde));
+  fbPending={fz,fahrer,von,bis,letzterTag,gesamtMaxEnde};
+  fbZeigeErgebnis();
+}
+function fbAuswertungFuer(name){
+  const a=fbPending.fahrer[name];
+  const spanne=a.maxEnde-a.min, privat=Math.max(0,spanne-a.km);
+  return {name,n:a.n,km:a.km,min:a.min,maxEnde:a.maxEnde,spanne,privat,anteil:spanne>0?privat/spanne*100:0};
+}
+function fbAktuellerFahrerName(){
+  const soll=normName(fbPending.fz.fahrer);
+  if(soll){
+    const treffer=Object.keys(fbPending.fahrer).find(n=>{const nn=normName(n);return nn.includes(soll)||soll.includes(nn);});
+    if(treffer) return treffer;
+  }
+  // sonst: Fahrer mit dem jüngsten km-Segment
+  return Object.keys(fbPending.fahrer).sort((a,b)=>fbPending.fahrer[b].maxEnde-fbPending.fahrer[a].maxEnde)[0];
+}
+function fbZeigeErgebnis(){
+  const p=fbPending, aktName=fbAktuellerFahrerName();
+  document.getElementById('fbTitel').innerHTML='Fahrtenbuch — <span class="kennzeichen" style="font-size:13px">'+esc(p.fz.kennzeichen)+'</span>';
+  document.getElementById('fbSub').textContent='Zeitraum '+(p.von?fDat(p.von):'?')+' bis '+(p.bis?fDat(p.bis):'?')+' · aktuelle:r Fahrer:in laut Liste: '+(p.fz.fahrer||'—');
+  document.getElementById('fbErgebnis').innerHTML='<table><thead><tr><th>Fahrer:in</th><th class="num">Fahrten</th><th class="num">km-Spanne</th><th class="num">Geschäftlich</th><th class="num">Privat</th><th class="num">Privatanteil</th></tr></thead><tbody>'+
+    Object.keys(p.fahrer).sort((a,b)=>p.fahrer[a].min-p.fahrer[b].min).map(n=>{
+      const a=fbAuswertungFuer(n), akt=n===aktName;
+      const farbe=a.anteil>30?'var(--error)':a.anteil>10?'var(--warn)':'var(--ok)';
+      return '<tr'+(akt?' style="background:var(--accent-light)"':'')+'><td>'+(akt?'<b>':'')+esc(n)+(akt?'</b> <span class="chip chip-mut" style="font-size:9px;padding:1px 7px">aktuell</span>':'')+'</td>'+
+        '<td class="num">'+a.n+'</td><td class="num">'+fKM(a.spanne)+'</td><td class="num">'+fKM(a.km)+'</td><td class="num">'+fKM(a.privat)+'</td>'+
+        '<td class="num"><b style="color:'+farbe+'">'+a.anteil.toFixed(1).replace('.',',')+' %</b></td></tr>';
+    }).join('')+'</tbody></table>';
+  document.getElementById('fbKmLabel').textContent='km-Stand übernehmen: '+Math.round(p.gesamtMaxEnde).toLocaleString('de-DE')+' km'+(p.letzterTag?' (letzte Fahrt '+fDat(p.letzterTag)+')':'');
+  const veraltet=p.fz.kmStand&&p.gesamtMaxEnde<p.fz.kmStand;
+  document.getElementById('fbKmUebernehmen').checked=!veraltet;
+  document.getElementById('fbOverlay').classList.add('open');
+  machSortierbar();
+}
+function fbSchliessen(){ document.getElementById('fbOverlay').classList.remove('open'); fbPending=null; }
+async function fbUebernehmen(){
+  const p=fbPending; if(!p) return;
+  const a=fbAuswertungFuer(fbAktuellerFahrerName());
+  const f=p.fz;
+  f.fbVon=p.von; f.fbBis=p.bis; f.fbFahrer=a.name;
+  f.fbKmZeitraum=Math.round(a.spanne); f.fbKmGeschaeft=Math.round(a.km);
+  f.fbPrivatProzent=Math.round(a.anteil*10)/10;
+  if(document.getElementById('fbKmUebernehmen').checked){
+    f.kmStand=Math.round(p.gesamtMaxEnde);
+    f.kmStandDatum=p.letzterTag||p.bis||new Date().toISOString().slice(0,10);
+  }
+  try{
+    if(online) await ensureFbSpalten();
+    await speichern(f);
+    fbSchliessen();
+  }catch(e){ alert('Speichern fehlgeschlagen: '+e.message); }
+}
+/* Neue Auswertungs-Spalten bei Bedarf in der bestehenden Liste anlegen
+   (Sites.Manage.All wurde beim Setup konsentiert — nur der Scope wird angefragt, kein neuer Consent) */
+let fbSpaltenOk=false;
+async function ensureFbSpalten(){
+  if(fbSpaltenOk) return;
+  const res=await graph(listenBasis+'/columns?$select=name&$top=200');
+  const vorhanden=new Set((res&&res.value||[]).map(c=>c.name));
+  const noetig=SCHEMA.filter(s=>s.sp.startsWith('Fb')&&!vorhanden.has(s.sp));
+  if(noetig.length){
+    const req={scopes:['Sites.Manage.All'],account:currentAccount};
+    let t; try{ t=(await msalInstance.acquireTokenSilent(req)).accessToken; }
+    catch(e){ t=(await msalInstance.acquireTokenPopup(req)).accessToken; }
+    for(const s of noetig){
+      const def=s.typ==='zahl'?{name:s.sp,number:{decimalPlaces:'automatic'}}:s.typ==='datum'?{name:s.sp,dateTime:{format:'dateOnly'}}:{name:s.sp,text:{}};
+      const r=await fetch('https://graph.microsoft.com/v1.0'+listenBasis+'/columns',{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(def)});
+      if(!r.ok) throw new Error('Spalte '+s.sp+' konnte nicht angelegt werden ('+r.status+')');
+    }
+  }
+  fbSpaltenOk=true;
+}
+
+/* ═══════════════════════════════════════════════════════════
  * DIALOG — Anzeigen / Bearbeiten / Neuanlage / km erfassen
  * ═══════════════════════════════════════════════════════════ */
 let dialogFahrzeug=null;
@@ -771,7 +966,8 @@ const GRUPPEN={
   'Vertrag & Laufleistung':['finanzierung','vertragsnummer','erstzulassung','rueckgabe','laufzeitMonate','kmVertragGesamt','kmProJahr','kmToleranz','satzMehrKm','satzMinderKm','inklGanzjahresreifen','inklWartung','inklVersicherung'],
   'Kosten':['bruttolistenpreis','ueberfuehrung','rateMonatlich','steuerJaehrlich'],
   'Versicherung':['versicherer','versicherungsnummer','versPraemie','versZahlweise','versFahrleistung','sfHaftpflicht','sfKasko','sbVollkasko','sbTeilkasko'],
-  'Betrieb':['fahrer','privatnutzung','eigenanteilMonat','kmStand','kmStandDatum','dguvPruefung','sensorAktiviert','kilankaLink']
+  'Betrieb':['fahrer','privatnutzung','eigenanteilMonat','kmStand','kmStandDatum','dguvPruefung','sensorAktiviert','kilankaLink'],
+  'Fahrtenbuch (Auswertung)':['fbVon','fbBis','fbFahrer','fbKmZeitraum','fbKmGeschaeft','fbPrivatProzent']
 };
 function fuelleDialog(titel,sub){
   document.getElementById('dialogTitel').innerHTML=esc(titel);
