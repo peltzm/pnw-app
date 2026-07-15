@@ -339,7 +339,7 @@ function render() {
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('tbl').style.display = '';
-  const rolleTxt = daten.rolle === 'gf' ? 'Geschäftsführung (alle Mitarbeitenden)' : 'Teamleitung (eigenes Team)';
+  const rolleTxt = daten.vorschauAls ? 'Vorschau als Teamleitung — ' + esc(daten.vorschauAls) : (daten.rolle === 'gf' ? 'Geschäftsführung (alle Mitarbeitenden)' : 'Teamleitung (eigenes Team)');
   const stichtagTxt = daten.stichtag ? ` · Stichtag: ${new Date(daten.stichtag).toLocaleDateString('de-DE')} (Nachweise: aktueller Stand)` : '';
   document.getElementById('pageSub').textContent =
     `Stand: ${new Date(daten.stand).toLocaleString('de-DE')} · Sicht: ${rolleTxt}${stichtagTxt}`;
@@ -359,6 +359,9 @@ const ZIEL = {
   maSoll: 4.0          // Befragung, Skala 1–5
 };
 const stichtagCache = new Map(); // iso → Antwort des Workers
+// GF-Vorschau: ?als=<upn> in der Cockpit-URL wird an den Worker durchgereicht
+const ALS = (new URLSearchParams(location.search).get('als') || '').trim();
+const alsQuery = pre => ALS ? pre + 'als=' + encodeURIComponent(ALS) : '';
 
 // Abgeschlossene Quartale (Ende ≤ heute); Anfang = Vorquartals-Ende
 function abgeschlosseneQuartale() {
@@ -385,7 +388,7 @@ function fuelleQuartale() {
 async function holeStichtag(iso) {
   if (stichtagCache.has(iso)) return stichtagCache.get(iso);
   const t = await tokens();
-  const r = await fetch(CFG.workerUrl + '/api/manager-cockpit?stichtag=' + iso, {
+  const r = await fetch(CFG.workerUrl + '/api/manager-cockpit?stichtag=' + iso + alsQuery('&'), {
     headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
   });
   if (!r.ok) throw new Error('Stichtag ' + iso + ': HTTP ' + r.status);
@@ -518,7 +521,7 @@ async function ladeZiele() {
 
     // Sichtbarkeit: GF (Sonja/Markus) sehen alle Teamleitungen,
     // Teamleitungen ausschließlich die eigene Karte, alle anderen nichts.
-    const meinUpn = (currentAccount?.username || '').toLowerCase();
+    const meinUpn = (dEnde.vorschauAls || currentAccount?.username || '').toLowerCase();
     let eintraege = [...leitungen.entries()];
     if (dEnde.rolle !== 'gf') eintraege = eintraege.filter(([upn]) => upn === meinUpn);
     if (!eintraege.length) { sec.style.display = 'none'; return; }
@@ -649,7 +652,7 @@ async function laden() {
   try {
     const t = await tokens();
     const stichtag = document.getElementById('stichtagFilter').value;
-    const r = await fetch(CFG.workerUrl + '/api/manager-cockpit' + (stichtag ? '?stichtag=' + stichtag : ''), {
+    const r = await fetch(CFG.workerUrl + '/api/manager-cockpit' + (stichtag ? '?stichtag=' + stichtag + alsQuery('&') : alsQuery('?')), {
       headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
     });
     if (!r.ok) {
