@@ -1140,19 +1140,33 @@ export default {
       }
       try {
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        // GF-Vorschau: ?als=<upn> zeigt der GF exakt die Sicht einer Teamleitung
+        // (Rolle, Zeilen, Zielerreichung) — für alle anderen wirkungslos.
+        const alsParam = (url.searchParams.get("als") || "").trim().toLowerCase();
+        const vorschau = istGf && alsParam && alsParam !== caller && alsParam.endsWith(`@${MAIL_DOMAIN}`);
         const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
-        const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
+        const rolle = istGf ? (vorschau ? "tl" : "gf") : reports.length ? "tl" : "fk";
         if (rolle === "fk") {
           return json({ error: "Manager-Cockpit ist Teamleitungen und GF vorbehalten" }, 403, origin);
         }
+        const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
         let liste;
-        if (istGf) liste = await alleAktivenMitarbeiter(env);
-        else {
+        if (vorschau) {
+          // Team der simulierten Leitung über die Manager-Map aufbauen
+          const alle = await alleAktivenMitarbeiter(env);
+          const kopf = alle.find((m) => (m.upn || "").toLowerCase() === alsParam) || { upn: alsParam, name: alsParam };
+          liste = [kopf];
+          for (const m of alle) {
+            const mu = (m.upn || "").toLowerCase();
+            if (mu !== alsParam && ((mgrMap.get(m.upn)?.upn) || "").toLowerCase() === alsParam) liste.push(m);
+          }
+        } else if (istGf) {
+          liste = await alleAktivenMitarbeiter(env);
+        } else {
           const seen = new Set([caller]);
           liste = [{ upn: caller, name: auth.name || caller }];
           for (const r of reports) if (!seen.has(r.upn)) { seen.add(r.upn); liste.push(r); }
         }
-        const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
         // Stichtag (?stichtag=YYYY-MM-DD): kompletter Rechenkern arbeitet
         // datumsbezogen → historische Quartals-Momentaufnahme. 12:00 UTC
         // vermeidet Zeitzonen-Kanten. Nachweise (UDFs) sind immer aktueller Stand.
@@ -1181,7 +1195,7 @@ export default {
         }
         let amtFaelle = [];
         try { amtFaelle = await alleHbFaelle(env, now); } catch (e) { /* Ziel-Basis optional */ }
-        return json({ rolle, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows, amtFaelle }, 200, origin);
+        return json({ rolle, vorschauAls: vorschau ? alsParam : null, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows, amtFaelle }, 200, origin);
       } catch (e) {
         return json({ error: `Manager-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
       }
