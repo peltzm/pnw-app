@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fahrtenbuch-Check · Praxis NeueWege</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f7f6f2; --surface:#ffffff; --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --border:#e2dfd8; --border-strong:#c8c4bc;
+  --accent:#7b3f1e; --accent-mid:#c47848; --accent-light:#f5ede7;
+  --ok:#2f6b3a; --ok-bg:#eef5ef; --warn:#9a6b12; --warn-bg:#fbf4e4; --error:#9b1c1c; --error-bg:#fef2f2;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 22px;display:flex;align-items:center;gap:14px}
+header .logo{width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;letter-spacing:.5px}
+header h1{font-size:18px;font-weight:600}
+header .sub{font-size:12px;color:var(--text-muted);margin-top:1px}
+header .spacer{flex:1}
+.badge{font-size:11px;color:var(--text-hint);border:1px solid var(--border);border-radius:20px;padding:3px 10px;background:var(--bg)}
+main{flex:1;width:100%;max-width:820px;margin:0 auto;padding:28px 18px 60px}
+
+.privacy{display:flex;gap:10px;align-items:flex-start;background:var(--accent-light);border:1px solid var(--border);border-radius:12px;padding:12px 16px;font-size:13px;color:var(--text-muted);margin-bottom:22px;line-height:1.5}
+.privacy .lock{font-size:16px;line-height:1.4}
+.privacy strong{color:var(--text)}
+
+.dropzone{border:2px dashed var(--border-strong);border-radius:16px;background:var(--surface);padding:46px 24px;text-align:center;cursor:pointer;transition:border-color .15s, background .15s}
+.dropzone:hover,.dropzone.dragover{border-color:var(--accent-mid);background:var(--accent-light)}
+.dropzone .icon{font-size:34px;margin-bottom:10px}
+.dropzone h2{font-size:17px;font-weight:600;margin-bottom:6px}
+.dropzone p{font-size:13px;color:var(--text-muted)}
+.dropzone p b{color:var(--accent)}
+#fileInput{display:none}
+
+.error-box{margin-top:18px;background:var(--error-bg);border:1px solid #f0c9c9;color:var(--error);border-radius:12px;padding:14px 16px;font-size:14px;display:none}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px;margin-bottom:18px}
+.card h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-hint);margin-bottom:14px}
+
+#driverPick{display:none;margin-top:26px}
+#driverPick p{font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5}
+.driver-chips{display:flex;flex-wrap:wrap;gap:10px}
+.driver-chip{border:1px solid var(--border-strong);background:var(--bg);border-radius:24px;padding:10px 20px;font-family:inherit;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:all .12s}
+.driver-chip:hover{border-color:var(--accent-mid);background:var(--accent-light)}
+.driver-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+#result{display:none;margin-top:8px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13px;color:var(--text-muted);margin-bottom:6px}
+.meta b{color:var(--text);font-weight:600}
+
+.verdict{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:6px 0 4px}
+.verdict .pct{font-size:56px;font-weight:700;line-height:1;letter-spacing:-1px}
+.verdict .label{font-size:15px;font-weight:600}
+.verdict .sublabel{width:100%;font-size:13px;color:var(--text-muted);line-height:1.5}
+.v-ok .pct,.v-ok .label{color:var(--ok)}
+.v-warn .pct,.v-warn .label{color:var(--warn)}
+.v-error .pct,.v-error .label{color:var(--error)}
+
+.bar-wrap{margin:20px 0 6px}
+.bar{position:relative;height:30px;border-radius:8px;overflow:hidden;background:var(--accent-light);border:1px solid var(--border)}
+.bar .dienst{position:absolute;left:0;top:0;bottom:0;background:var(--accent-mid);opacity:.85}
+.bar .privat{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,#8a8a8a 0 6px,#a5a5a5 6px 12px)}
+.bar .grenze{position:absolute;left:50%;top:-5px;bottom:-5px;width:2px;background:var(--text)}
+.bar-legend{display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:8px;flex-wrap:wrap;gap:6px}
+.bar-legend .g{font-weight:600;color:var(--text)}
+.chip{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+.chip.c-dienst{background:var(--accent-mid)}
+.chip.c-privat{background:repeating-linear-gradient(45deg,#8a8a8a 0 4px,#a5a5a5 4px 8px)}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
+.kpi{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.kpi .v{font-size:20px;font-weight:700}
+.kpi .k{font-size:12px;color:var(--text-muted);margin-top:2px}
+
+.hint-list{list-style:none;font-size:13px;line-height:1.55}
+.hint-list li{padding:9px 12px;border-radius:10px;margin-bottom:8px;border:1px solid var(--border)}
+.hint-list li.h-warn{background:var(--warn-bg);border-color:#ecd9a8;color:#6d4c0d}
+.hint-list li.h-ok{background:var(--ok-bg);border-color:#cfe3d2;color:var(--ok)}
+.hint-list li b{font-weight:600}
+
+.note{font-size:12px;color:var(--text-hint);line-height:1.5;margin-top:4px}
+.reset{margin-top:4px;background:none;border:1px solid var(--border-strong);border-radius:10px;padding:9px 18px;font-family:inherit;font-size:13px;font-weight:600;color:var(--text);cursor:pointer}
+.reset:hover{background:var(--accent-light);border-color:var(--accent-mid)}
+footer{text-align:center;font-size:11px;color:var(--text-hint);padding:16px}
+@media (max-width:560px){.verdict .pct{font-size:44px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">NW</div>
+  <div>
+    <h1>Fahrtenbuch-Check</h1>
+    <div class="sub">Praxis NeueWege · Fuhrpark</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="badge" id="versionBadge">dev</span>
+</header>
+
+<main>
+  <div class="privacy">
+    <span class="lock">🔒</span>
+    <span><strong>Keine Datenspeicherung.</strong> Die Datei wird ausschließlich lokal in deinem Browser ausgewertet. Es wird nichts hochgeladen, nichts gespeichert und nichts an Praxis NeueWege oder Dritte übermittelt. Seite schließen = alles weg.</span>
+  </div>
+
+  <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Fahrtenbuch-Datei auswählen">
+    <div class="icon">🚗</div>
+    <h2>Fahrtenbuch hier ablegen</h2>
+    <p>oder <b>klicken zum Auswählen</b> · Excel-Export (.xlsx) aus der Fahrzeugverwaltung</p>
+  </div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls">
+  <div class="error-box" id="errorBox"></div>
+
+  <div id="driverPick" class="card">
+    <h3>Wer bist du?</h3>
+    <p>Im Fahrtenbuch sind mehrere Fahrer:innen eingetragen. Wähle deinen Namen — angezeigt wird nur deine eigene Nutzung.</p>
+    <div class="driver-chips" id="driverChips"></div>
+  </div>
+
+  <div id="result">
+    <div class="card">
+      <h3>Deine Nutzung</h3>
+      <div class="meta" id="meta"></div>
+      <div class="verdict" id="verdict">
+        <span class="pct" id="pct">–</span>
+        <span class="label" id="verdictLabel"></span>
+        <span class="sublabel" id="verdictSub"></span>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar">
+          <div class="dienst" id="barDienst"></div>
+          <div class="privat" id="barPrivat"></div>
+          <div class="grenze" title="Kalkulationsgrenze 50 %"></div>
+        </div>
+        <div class="bar-legend">
+          <span><span class="chip c-dienst"></span>Dienstlich erfasst&nbsp;&nbsp;<span class="chip c-privat"></span>Privat (nicht erfasst)</span>
+          <span class="g">| Kalkulationsgrenze: 50&nbsp;%</span>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="v" id="kpiGesamt">–</div><div class="k">km gesamt (dir zugeordnet)</div></div>
+        <div class="kpi"><div class="v" id="kpiDienst">–</div><div class="k">km dienstlich erfasst</div></div>
+        <div class="kpi"><div class="v" id="kpiPrivat">–</div><div class="k">km privat</div></div>
+        <div class="kpi"><div class="v" id="kpiFahrten">–</div><div class="k">deine erfassten Fahrten</div></div>
+      </div>
+      <p class="note" style="margin-top:14px">Zuordnung: Nicht erfasste Kilometer werden der Person zugerechnet, die das Fahrzeug laut Fahrtenbuch zuletzt gefahren hat. Fährt jemand anderes ohne Eintrag, verfälscht das dein Ergebnis — auch deshalb: bitte jede Dienstfahrt sofort eintragen.</p>
+    </div>
+
+    <div class="card">
+      <h3>Hinweise zu deiner Erfassung</h3>
+      <ul class="hint-list" id="hints"></ul>
+      <p class="note">Erfassungsfehler (z.&nbsp;B. Zahlendreher beim Kilometerstand) erhöhen deinen ausgewiesenen Privatanteil. Bitte im Zweifel korrigieren und erneut prüfen.</p>
+    </div>
+
+    <button class="reset" id="resetBtn">Weitere Datei prüfen</button>
+  </div>
+</main>
+
+<footer>Praxis NeueWege · Fahrtenbuch-Check · rein lokale Auswertung, keine Datenübertragung</footer>
+
+<script>
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
+document.querySelectorAll('#versionBadge').forEach(el => { el.textContent = APP_VERSION; });
+
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('fileInput');
+const errorBox = document.getElementById('errorBox');
+let parsed = null; // { trips, fahrzeug, drivers }
+
+dz.addEventListener('click', () => fi.click());
+dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fi.click(); } });
+['dragover','dragenter'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('dragover'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+dz.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+fi.addEventListener('change', () => { if (fi.files[0]) handleFile(fi.files[0]); fi.value = ''; });
+document.getElementById('resetBtn').addEventListener('click', () => {
+  parsed = null;
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('driverPick').style.display = 'none';
+  errorBox.style.display = 'none';
+  dz.scrollIntoView({behavior:'smooth'});
+});
+
+function fail(msg){
+  errorBox.textContent = msg;
+  errorBox.style.display = 'block';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('driverPick').style.display = 'none';
+}
+
+function fmt(n){ return Math.round(n).toLocaleString('de-DE'); }
+function excelDate(v){
+  if (v instanceof Date) return v;
+  if (typeof v === 'number') return new Date(Math.round((v - 25569) * 86400 * 1000));
+  return null;
+}
+function fmtDate(d){ return d ? d.toLocaleDateString('de-DE') : '–'; }
+
+function handleFile(file){
+  errorBox.style.display = 'none';
+  if (!/\.(xlsx|xls)$/i.test(file.name)) { fail('Bitte den Excel-Export (.xlsx) aus der Fahrzeugverwaltung verwenden.'); return; }
+  const reader = new FileReader();
+  reader.onerror = () => fail('Die Datei konnte nicht gelesen werden. Bitte erneut versuchen.');
+  reader.onload = e => {
+    try { parseWorkbook(new Uint8Array(e.target.result)); }
+    catch (err) { console.error(err); fail('Die Datei konnte nicht ausgewertet werden. Ist es der unveränderte Fahrtenbuch-Export?'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseWorkbook(bytes){
+  const wb = XLSX.read(bytes, { type: 'array', cellDates: false });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+  let hdrIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 30); i++) {
+    if ((rows[i] || []).some(c => typeof c === 'string' && c.includes('Startkilometerstand'))) { hdrIdx = i; break; }
+  }
+  if (hdrIdx < 0) { fail('Keine Fahrtenbuch-Tabelle gefunden (Spalte „Startkilometerstand" fehlt). Bitte den Original-Export verwenden.'); return; }
+
+  const hdr = rows[hdrIdx].map(c => (c || '').toString().trim());
+  const col = name => hdr.findIndex(h => h === name);
+  const cBeg = col('Beginn'), cEnd = col('Ende'), cStart = col('Startkilometerstand'),
+        cEndKm = col('Endkilometerstand'), cStrecke = col('Strecke in km'), cFahrer = col('Fahrer');
+
+  let fahrzeug = '';
+  for (let i = 0; i < hdrIdx; i++) {
+    const r = rows[i] || [];
+    const j = r.findIndex(c => typeof c === 'string' && c.startsWith('Fahrzeug'));
+    if (j >= 0 && r[j + 1]) { fahrzeug = String(r[j + 1]).trim(); break; }
+  }
+
+  const trips = [];
+  for (let i = hdrIdx + 1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    const s = r[cStart], e = r[cEndKm];
+    if (typeof s !== 'number' || typeof e !== 'number') continue;
+    trips.push({
+      beg: cBeg >= 0 ? excelDate(r[cBeg]) : null,
+      end: cEnd >= 0 ? excelDate(r[cEnd]) : null,
+      startKm: s, endKm: e,
+      strecke: (cStrecke >= 0 && typeof r[cStrecke] === 'number') ? r[cStrecke] : (e - s),
+      fahrer: cFahrer >= 0 ? String(r[cFahrer] || '').trim() : ''
+    });
+  }
+  if (trips.length < 2) { fail('Zu wenige Fahrten gefunden. Bitte den unveränderten Fahrtenbuch-Export prüfen.'); return; }
+
+  trips.sort((a, b) => a.startKm - b.startKm || (a.beg && b.beg ? a.beg - b.beg : 0));
+
+  const drivers = [...new Set(trips.map(t => t.fahrer).filter(Boolean))].sort();
+  parsed = { trips, fahrzeug, drivers };
+
+  document.getElementById('result').style.display = 'none';
+  if (drivers.length <= 1) {
+    renderFor(drivers[0] || '');
+  } else {
+    const chips = document.getElementById('driverChips');
+    chips.innerHTML = '';
+    drivers.forEach(d => {
+      const b = document.createElement('button');
+      b.className = 'driver-chip';
+      b.textContent = d;
+      b.addEventListener('click', () => {
+        chips.querySelectorAll('.driver-chip').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        renderFor(d);
+      });
+      chips.appendChild(b);
+    });
+    const pick = document.getElementById('driverPick');
+    pick.style.display = 'block';
+    pick.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+function renderFor(driver){
+  const { trips, fahrzeug } = parsed;
+
+  // Eigene Fahrten
+  const own = trips.filter(t => !driver || t.fahrer === driver);
+  const dienst = own.reduce((a, t) => a + Math.max(0, t.strecke), 0);
+
+  // Nicht erfasste km: Lücke zwischen Fahrten, zugerechnet dem/der letzten Fahrer:in davor
+  let privat = 0;
+  let ownGaps = 0;
+  for (let i = 0; i < trips.length - 1; i++) {
+    const gap = trips[i + 1].startKm - trips[i].endKm;
+    if (gap > 0 && (!driver || trips[i].fahrer === driver)) { privat += gap; ownGaps++; }
+  }
+  const gesamt = dienst + privat;
+  const anteil = gesamt > 0 ? privat / gesamt : 0;
+
+  // Plausibilitätsprüfungen — nur eigene Fahrten / eigene Lücken
+  const hints = [];
+  let streckeMismatch = 0, timeBack = 0;
+  for (const t of own) {
+    if (Math.abs((t.endKm - t.startKm) - t.strecke) > 1) streckeMismatch++;
+    if (t.beg && t.end && t.end < t.beg) timeBack++;
+  }
+  let negGap = 0, bigSameDay = 0;
+  for (let i = 0; i < trips.length - 1; i++) {
+    if (driver && trips[i].fahrer !== driver) continue;
+    const gap = trips[i + 1].startKm - trips[i].endKm;
+    if (gap < 0) negGap++;
+    if (gap > 400 && trips[i].end && trips[i + 1].beg) {
+      const h = (trips[i + 1].beg - trips[i].end) / 36e5;
+      if (h >= 0 && h <= 12) bigSameDay++;
+    }
+  }
+  if (timeBack) hints.push({ t: 'warn', m: `<b>${timeBack}× rückläufige Zeitangabe:</b> Ende liegt vor Beginn der Fahrt — vermutlich Tippfehler bei Datum oder Uhrzeit.` });
+  if (negGap) hints.push({ t: 'warn', m: `<b>${negGap}× überlappende Kilometerstände:</b> Die Folgefahrt startet mit niedrigerem km-Stand, als deine Fahrt endete — Zahlendreher prüfen.` });
+  if (bigSameDay) hints.push({ t: 'warn', m: `<b>${bigSameDay}× Tacho-Sprung über 400 km binnen weniger Stunden nach deiner Fahrt:</b> Wahrscheinlich falsch eingetragener Kilometerstand. Das erhöht deinen ausgewiesenen Privatanteil!` });
+  if (streckeMismatch) hints.push({ t: 'warn', m: `<b>${streckeMismatch}× Strecke passt nicht zu den Kilometerständen:</b> „Strecke in km" weicht von Endkilometer − Startkilometer ab.` });
+  if (!hints.length) hints.push({ t: 'ok', m: '<b>Keine Auffälligkeiten:</b> Deine Einträge sind in sich schlüssig. Danke für die saubere Erfassung!' });
+
+  // Ausgabe
+  const dates = own.map(t => t.beg).filter(Boolean);
+  const von = dates.length ? new Date(Math.min(...dates)) : null;
+  const bis = dates.length ? new Date(Math.max(...dates)) : null;
+
+  document.getElementById('meta').innerHTML =
+    (driver ? `Fahrer:in: <b>${driver}</b>` : '') +
+    (fahrzeug ? `<span>Fahrzeug: <b>${fahrzeug}</b></span>` : '') +
+    (von ? `<span>Zeitraum: <b>${fmtDate(von)} – ${fmtDate(bis)}</b></span>` : '');
+
+  document.getElementById('pct').textContent =
+    (anteil * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' %';
+
+  const verdict = document.getElementById('verdict');
+  verdict.classList.remove('v-ok', 'v-warn', 'v-error');
+  let label, sub;
+  if (anteil <= 0.5) {
+    verdict.classList.add('v-ok');
+    label = 'Privatanteil im Rahmen';
+    sub = 'Deine private Nutzung liegt innerhalb der kalkulierten 50 % — alles gut, weiter so.';
+  } else if (anteil <= 0.55) {
+    verdict.classList.add('v-warn');
+    label = 'Privatanteil leicht über der Kalkulation';
+    sub = 'Knapp über der 50-%-Grenze. Bitte behalte die private Nutzung in den kommenden Wochen im Blick.';
+  } else {
+    verdict.classList.add('v-error');
+    label = 'Privatanteil deutlich über der Kalkulation';
+    sub = 'Deine private Nutzung liegt deutlich über den kalkulierten 50 %. Bitte reduziere sie oder sprich die Situation offen mit der Verwaltung an.';
+  }
+  document.getElementById('verdictLabel').textContent = label;
+  document.getElementById('verdictSub').textContent = sub;
+
+  const p = Math.min(100, anteil * 100);
+  document.getElementById('barDienst').style.width = (100 - p) + '%';
+  document.getElementById('barPrivat').style.left = (100 - p) + '%';
+  document.getElementById('barPrivat').style.width = p + '%';
+
+  document.getElementById('kpiGesamt').textContent = fmt(gesamt);
+  document.getElementById('kpiDienst').textContent = fmt(dienst);
+  document.getElementById('kpiPrivat').textContent = fmt(privat);
+  document.getElementById('kpiFahrten').textContent = own.length;
+
+  document.getElementById('hints').innerHTML =
+    hints.map(h => `<li class="h-${h.t}">${h.m}</li>`).join('');
+
+  const res = document.getElementById('result');
+  res.style.display = 'block';
+  res.scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
