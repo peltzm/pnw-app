@@ -160,7 +160,7 @@ tr{cursor:pointer}
       Nachweise: FZ = Führungszeugnis (5 J.) · DS = Datenschutz (einmalig) · EH = Ersthelfer/BEH (jährl., 3 Mon. Vorwarnung, nur Nordstern) —
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
-      Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+      Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
     </div>
 
     <!-- Zielerreichung Teamleitungen (Leistungs- und Vergütungsvereinbarung §5) -->
@@ -195,7 +195,7 @@ const CFG = {
   workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
 const SCOPES = ['User.Read', 'User.ReadBasic.All'];
-const APP_VERSION = 'BETA-e6baa89'; // auto-updated on deploy
+const APP_VERSION = 'BETA-b38eebe'; // auto-updated on deploy
 
 let msalInstance, currentAccount, daten = null;
 
@@ -318,8 +318,13 @@ function render() {
   // Zeilen
   document.getElementById('tbody').innerHTML = rows.map(r => {
     const kz = kennzahlen(r);
-    const auslChip = kz.auslastung == null ? '—'
-      : `<span class="chip ${kz.auslastung>=95?'chip-ok':kz.auslastung>=80?'chip-warn':'chip-err'}">${kz.auslastung} %</span>`;
+    const dpDatum = iso => iso ? iso.split('-').reverse().join('.') : '';
+    const auslChip = kz.nordstern
+      ? (r.dienstplan
+          ? `<span class="chip chip-ok" title="${esc(r.dienstplan.plan || '')}">DP bis ${dpDatum(r.dienstplan.bis)}</span>`
+          : '<span class="chip chip-warn">kein Dienstplan</span>')
+      : (kz.auslastung == null ? '—'
+          : `<span class="chip ${kz.auslastung>=95?'chip-ok':kz.auslastung>=80?'chip-warn':'chip-err'}">${kz.auslastung} %</span>`);
     return `<tr onclick="location.href='mitarbeiter-cockpit-beta.html'">
       <td><span class="name">${esc(r.name)}</span><br><span class="team">${esc(r.team || '')}</span></td>
       <td>${r.klienten?.aktiv ?? '—'} <span class="team">(${r.klienten?.hb ?? 0}/${r.klienten?.mb ?? 0}/${r.klienten?.v ?? 0})</span></td>
