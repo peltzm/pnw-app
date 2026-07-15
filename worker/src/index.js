@@ -701,7 +701,13 @@ async function fetchCockpitAbsences(env) {
     if (cockpitAbsencesCache.verfuegbar === false && alter < 45 * 1000) return cockpitAbsencesCache;
   }
   try {
-    const data = await kilankaPost(env, "users/absences", COCKPIT_ABSENCES_GRAPH);
+    const data = [];
+    const limit = COCKPIT_ABSENCES_GRAPH.$limit || 1000;
+    for (let offset = 0; ; offset += limit) {
+      const page = await kilankaPost(env, "users/absences", { ...COCKPIT_ABSENCES_GRAPH, $offset: offset });
+      if (Array.isArray(page)) data.push(...page);
+      if (!Array.isArray(page) || page.length < limit) break;
+    }
     cockpitAbsencesCache = { data, fetchedAt: Date.now(), verfuegbar: true };
   } catch (e) {
     const strukturell = /Kilanka 4(00|03)/.test(e.message || ""); // Graph nicht freigegeben
@@ -764,6 +770,26 @@ function decimalToNumber(w) {
   if (w == null) return 0;
   if (typeof w === "number") return w;
   return parseFloat(w.$decimal ?? w) || 0;
+}
+
+// Urlaubsanspruch aus vacationEntitlement.description parsen:
+// "30 + 4" (Anspruch + Übertrag) → Summe (explizit inkl. Übertrag),
+// sonst größte plausible Zahl 20–60 (Jahreszahlen wie "2026" zählen nicht).
+function parseAnspruch(beschr) {
+  if (!beschr) return null;
+  const plus = /(\d{1,2})\s*\+\s*(\d{1,2})/.exec(beschr);
+  if (plus) return { wert: parseInt(plus[1], 10) + parseInt(plus[2], 10), explizitInklUebertrag: true };
+  const kandidaten = (beschr.match(/\d+/g) || []).map(Number).filter((n) => n >= 20 && n <= 60);
+  return kandidaten.length ? { wert: Math.max(...kandidaten), explizitInklUebertrag: false } : null;
+}
+
+// Anteiliger Jahresanspruch bei Eintritt im Jahr (Zwölftelung, volle Monate)
+function anteiligerAnspruch(anspruch, eintrittIso, jahr) {
+  const e = eintrittIso ? new Date(eintrittIso + "T12:00:00Z") : null;
+  if (!e || e.getUTCFullYear() !== jahr) return anspruch;
+  let monate = 12 - e.getUTCMonth();
+  if (e.getUTCDate() > 1) monate -= 1; // angebrochener Eintrittsmonat zählt nicht
+  return Math.round(anspruch * Math.max(0, monate) / 12 * 2) / 2;
 }
 
 function classifyAbsence(a) {
@@ -1160,34 +1186,32 @@ async function buildCockpit(env, upn, now) {
   if (abs.verfuegbar && person && person.kilankaId) {
     let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
     let regenH1 = null, regenH2 = null, anspruch = null, anspruchQuelle = null;
+    let anspruchInklUebertrag = false;
+    const uProJahr = new Map();       // Jahr → genommene Urlaubstage (für Übertrag)
+    const anspruchProJahr = new Map(); // Jahr → geparster Anspruch
     const geplanteTermine = []; // kommende genehmigte Urlaube inkl. Datum
     for (const a of abs.data || []) {
       if (String(a.user?.id) !== person.kilankaId) continue;
       if ((a.status || "").toLowerCase() !== "approved") continue;
       const begin = kDate(a.begin);
-      if (!begin || begin.getFullYear() !== jahr) continue;
+      if (!begin) continue;
+      const beginJahr = begin.getFullYear();
       const tage = decimalToNumber(a.totalDays);
       const art = classifyAbsence(a);
+      // Urlaube ALLER Jahre sammeln — Basis der Übertragsberechnung
+      if (art === "urlaub") {
+        uProJahr.set(beginJahr, (uProJahr.get(beginJahr) || 0) + tage);
+        const p = parseAnspruch(a.vacationEntitlement?.description || "");
+        if (p && (!anspruchProJahr.has(beginJahr) || p.wert > anspruchProJahr.get(beginJahr).wert)) {
+          anspruchProJahr.set(beginJahr, { ...p, quelle: a.vacationEntitlement.description });
+        }
+      }
+      if (beginJahr !== jahr) continue;
       if (art === "urlaub") {
         if (begin > now) {
           uGeplant += tage;
           geplanteTermine.push({ von: isoDate(begin), bis: isoDate(kDate(a.end) || begin), tage });
         } else uGenommen += tage;
-        // Urlaubsanspruch aus vacationEntitlement.description (Standard 30).
-        // Formate wie "30 + 4" (Anspruch + Übertrag) werden summiert; sonst
-        // größte plausible Zahl (20–60), Jahreszahlen wie "2026" zählen nicht.
-        const beschr = a.vacationEntitlement?.description || "";
-        if (beschr) {
-          anspruchQuelle = beschr;
-          const plus = /(\d{1,2})\s*\+\s*(\d{1,2})/.exec(beschr);
-          let wert = null;
-          if (plus) wert = parseInt(plus[1], 10) + parseInt(plus[2], 10);
-          else {
-            const kandidaten = (beschr.match(/\d+/g) || []).map(Number).filter((n) => n >= 20 && n <= 60);
-            if (kandidaten.length) wert = Math.max(...kandidaten);
-          }
-          if (wert != null) anspruch = Math.max(anspruch || 0, wert);
-        }
       }
       else if (art === "krank") { kTage += tage; if (!letzte || begin > letzte) letzte = begin; }
       else if (art === "kindkrank") { kindKrank += tage; }
@@ -1197,14 +1221,46 @@ async function buildCockpit(env, upn, now) {
         else { if (!regenH2 || begin < regenH2) regenH2 = begin; }
       }
     }
-    if (anspruch == null || anspruch < 20 || anspruch > 45) anspruch = 30; // Plausibilitätsrahmen
+    const pAktuell = anspruchProJahr.get(jahr);
+    if (pAktuell) { anspruch = pAktuell.wert; anspruchQuelle = pAktuell.quelle; anspruchInklUebertrag = pAktuell.explizitInklUebertrag; }
+    if (anspruch == null || anspruch < 20 || anspruch > 60) anspruch = 30; // Plausibilitätsrahmen
+    anspruch = anteiligerAnspruch(anspruch, person.eintritt, jahr);
+
+    // Übertrag aus dem Vorjahr berechnen: Vorjahres-Anspruch (anteilig ab
+    // Eintritt) minus im Vorjahr genommener Urlaub. Nur wenn das Vorjahr
+    // belastbar ist (erfasste Urlaube ODER Eintritt im Vorjahr/später);
+    // entfällt, wenn der Anspruch den Übertrag bereits explizit enthält ("30+4").
+    let uebertragTage = null, uebertragBasis = null;
+    const vorjahr = jahr - 1;
+    const eintrittJahr = person.eintritt ? parseInt(person.eintritt.slice(0, 4), 10) : null;
+    if (!anspruchInklUebertrag) {
+      const vorjahrBelastbar = uProJahr.has(vorjahr) || (eintrittJahr != null && eintrittJahr >= vorjahr);
+      if (eintrittJahr != null && eintrittJahr > vorjahr) {
+        uebertragTage = 0;
+        uebertragBasis = `Eintritt ${person.eintritt} — kein Vorjahresanspruch`;
+      } else if (vorjahrBelastbar) {
+        const basisAnspruch = anspruchProJahr.get(vorjahr)?.wert ?? 30;
+        const anspruchVJ = anteiligerAnspruch(basisAnspruch, person.eintritt, vorjahr);
+        const genommenVJ = uProJahr.get(vorjahr) || 0;
+        uebertragTage = Math.max(0, Math.round((anspruchVJ - genommenVJ) * 2) / 2);
+        uebertragBasis = `${vorjahr}: Anspruch ${anspruchVJ} − genommen ${Math.round(genommenVJ * 2) / 2}`;
+      } else {
+        uebertragBasis = `${vorjahr} ohne erfasste Urlaube — Übertrag nicht berechenbar`;
+      }
+    } else {
+      uebertragTage = 0;
+      uebertragBasis = "im Anspruch bereits enthalten (" + anspruchQuelle + ")";
+    }
+
     urlaub = {
       jahr,
       anspruchTage: anspruch,
       anspruchQuelle,
+      uebertragTage,
+      uebertragBasis,
       genommenTage: Math.round(uGenommen * 2) / 2,
       geplantTage: Math.round(uGeplant * 2) / 2,
-      restTage: Math.round((anspruch - uGenommen - uGeplant) * 2) / 2,
+      restTage: Math.round((anspruch + (uebertragTage || 0) - uGenommen - uGeplant) * 2) / 2,
       regeneration: { h1: isoDate(regenH1), h2: isoDate(regenH2) },
       geplanteTermine: geplanteTermine.sort((x, y) => x.von.localeCompare(y.von)),
     };
