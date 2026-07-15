@@ -140,14 +140,6 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .dialog-warn{display:none;background:var(--warn-bg);border:1px solid #f3dcb8;color:var(--warn);border-radius:var(--radius);padding:8px 12px;font-size:12px;margin-top:12px}
 .dialog-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
 
-/* ── Verwaltung ── */
-.setup-list{max-width:640px;margin:0 auto;width:100%;padding:20px;display:grid;gap:12px}
-.setup-step{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;align-items:center;gap:14px}
-.setup-step .nr{width:30px;height:30px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;color:var(--text-muted)}
-.setup-step.ok .nr{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
-.setup-step .txt{flex:1;font-size:13px}
-.setup-step .txt small{display:block;color:var(--text-hint);font-size:11px;line-height:1.5}
-
 .footer-note{max-width:1240px;margin:0 auto;padding:0 20px 40px;font-size:11px;color:var(--text-hint);line-height:1.7}
 .footer-note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
 .loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:60px 20px;font-size:13px}
@@ -202,7 +194,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     </div>
     <div class="page-header-actions">
       <button class="btn btn-outline btn-sm" onclick="neuesFahrzeug()">+ Fahrzeug</button>
-      <button class="btn btn-outline btn-sm" onclick="csvExport()" title="Exportiert die aktuelle Ansicht als CSV — unter Verwaltung: alle Stammdaten">
+      <button class="btn btn-outline btn-sm" onclick="csvExport()" title="Flotte: alle Stammdaten als CSV · Kosten/Prognose: sichtbare Tabelle">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
         CSV
       </button>
@@ -219,7 +211,6 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
       <button class="pill active" data-view="flotte" onclick="zeige('flotte')">Flotte</button>
       <button class="pill" data-view="kosten" onclick="zeige('kosten')">Kosten</button>
       <button class="pill" data-view="prognose" onclick="zeige('prognose')">km-Prognose</button>
-      <button class="pill" data-view="verwaltung" onclick="zeige('verwaltung')">Verwaltung</button>
     </div>
   </div>
 
@@ -237,25 +228,6 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   <div class="view" id="view-prognose">
     <div class="kpi-row" id="prognoseKpis"></div>
     <div class="tablewrap" id="prognoseTabelle"></div>
-  </div>
-
-  <div class="view" id="view-verwaltung">
-    <div class="setup-list">
-      <div class="setup-step" id="stLogin">
-        <div class="nr">1</div>
-        <div class="txt">Microsoft-Anmeldung<small>Gleiche App-Registrierung wie App-Central. Redirect-URI <code>fuhrpark-beta.html</code> muss in Entra eingetragen sein.</small></div>
-      </div>
-      <div class="setup-step" id="stListe">
-        <div class="nr">2</div>
-        <div class="txt">SharePoint-Liste <b>PNW-Fahrzeuge</b><small>Wird per Graph API mit allen Spalten angelegt (Sites.Manage.All nur hierfür nötig).</small></div>
-        <button class="btn btn-outline btn-sm" id="btnListe" onclick="listePruefen()" disabled>Prüfen / Anlegen</button>
-      </div>
-      <div class="setup-step" id="stImport">
-        <div class="nr">3</div>
-        <div class="txt">Excel-Bestand importieren<small>19 Fahrzeuge aus KFZ_Übersicht_PNW.xlsx, bereinigt (ohne DKV-PIN und Geburtsdaten).</small></div>
-        <button class="btn btn-outline btn-sm" id="btnImport" onclick="seedImportieren()" disabled>Importieren</button>
-      </div>
-    </div>
   </div>
 
   <div class="footer-note">
@@ -406,10 +378,13 @@ async function login(){
     document.getElementById('userName').textContent = currentAccount.name || currentAccount.username;
     document.getElementById('userBadge').style.display = 'flex';
     document.getElementById('logoutBtn').style.display = '';
-    setStep('stLogin', true, 'Angemeldet als '+(currentAccount.username||''));
-    document.getElementById('btnListe').disabled = false;
     await ladeFahrerListe();
-    await ladeOderSetup();
+    try{
+      await ladeFahrzeuge();
+    }catch(e){
+      document.getElementById('flotteGrid').innerHTML =
+        '<div class="loading-state">Liste "'+CFG.listName+'" konnte nicht geladen werden ('+esc(e.message)+'). Bitte Berechtigungen auf der SharePoint-Liste prüfen.</div>';
+    }
   }catch(e){
     const err = document.getElementById('loginError');
     err.textContent = 'Anmeldung fehlgeschlagen: '+e.message;
@@ -467,62 +442,15 @@ function ausFeldern(item){
   }
   return f;
 }
-async function ladeOderSetup(){
-  const liste = await graph(listenBasis).catch(()=>null);
-  if(liste){
-    setStep('stListe', true, `Liste "${CFG.listName}" vorhanden.`);
-    document.getElementById('btnImport').disabled = false;
-    await ladeFahrzeuge();
-  }else{
-    zeige('verwaltung');
-    document.getElementById('flotteGrid').innerHTML =
-      '<div class="loading-state">Liste noch nicht vorhanden — bitte unter Verwaltung anlegen.</div>';
-  }
-}
 async function ladeFahrzeuge(){
   const res = await graph(listenBasis+'/items?expand=fields&$top=200');
   fahrzeuge = (res&&res.value)?res.value.map(ausFeldern):[];
   online = true;
   document.getElementById('demoBar').style.display = 'none';
-  if(fahrzeuge.length) setStep('stImport', true, fahrzeuge.length+' Fahrzeuge in der Liste.');
   renderAll();
 }
 async function reload(){
   if(online){ await ladeFahrzeuge(); } else { renderAll(); }
-}
-async function listePruefen(){
-  const btn=document.getElementById('btnListe'); btn.disabled=true;
-  try{
-    let liste = await graph(listenBasis);
-    if(!liste){
-      if(!confirm(`Liste "${CFG.listName}" existiert nicht. Jetzt mit allen Spalten anlegen?`)){ btn.disabled=false; return; }
-      const spalten = SCHEMA.filter(s=>s.sp!=='Title').map(s=>{
-        if(s.typ==='zahl')  return {name:s.sp, number:{decimalPlaces:'automatic'}};
-        if(s.typ==='datum') return {name:s.sp, dateTime:{format:'dateOnly'}};
-        if(s.typ==='bool')  return {name:s.sp, boolean:{}};
-        return {name:s.sp, text:{}};
-      });
-      await graph(`/sites/${CFG.spHost}/lists`, {method:'POST', body:JSON.stringify({
-        displayName:CFG.listName, columns:spalten, list:{template:'genericList'}
-      })});
-    }
-    setStep('stListe', true, `Liste "${CFG.listName}" bereit.`);
-    document.getElementById('btnImport').disabled = false;
-    await ladeFahrzeuge();
-  }catch(e){ alert('Fehler: '+e.message); }
-  btn.disabled=false;
-}
-async function seedImportieren(){
-  if(fahrzeuge.length && online){ alert('Die Liste enthält bereits Fahrzeuge — Import übersprungen, um Dubletten zu vermeiden.'); return; }
-  const btn=document.getElementById('btnImport'); btn.disabled=true; btn.textContent='Import läuft …';
-  try{
-    for(const f of SEED){
-      await graph(listenBasis+'/items', {method:'POST', body:JSON.stringify({fields:zuFeldern(f)})});
-    }
-    await ladeFahrzeuge();
-    alert('Import abgeschlossen: '+SEED.length+' Fahrzeuge.');
-  }catch(e){ alert('Fehler beim Import: '+e.message); }
-  btn.textContent='Importieren';
 }
 async function speichern(f){
   if(!online){ renderAll(); return; }
@@ -533,11 +461,6 @@ async function speichern(f){
     f._spId = res.id;
   }
   renderAll();
-}
-function setStep(id, ok, text){
-  const el=document.getElementById(id);
-  if(ok) el.classList.add('ok');
-  if(text) el.querySelector('small').textContent=text;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -615,7 +538,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 /* ═══════════════════════════════════════════════════════════
  * ANSICHTEN
  * ═══════════════════════════════════════════════════════════ */
-const TITEL={flotte:'Flotte',kosten:'Kostenanalyse',prognose:'km-Prognose',verwaltung:'Verwaltung'};
+const TITEL={flotte:'Flotte',kosten:'Kostenanalyse',prognose:'km-Prognose'};
 function zeige(view){
   document.querySelectorAll('.pill[data-view]').forEach(p=>p.classList.toggle('active',p.dataset.view===view));
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
@@ -784,13 +707,13 @@ function sortiereTabelle(table,idx,th){
 }
 
 /* ═══════════════════════════════════════════════════════════
- * CSV-EXPORT — aktuelle Ansicht; Verwaltung = alle Stammdaten
+ * CSV-EXPORT — Flotte = alle Stammdaten; Kosten/Prognose = sichtbare Tabelle
  * (Semikolon-getrennt, UTF-8 mit BOM für Excel)
  * ═══════════════════════════════════════════════════════════ */
 function csvExport(){
   const view=document.querySelector('.view.active');
   const datum=new Date().toISOString().slice(0,10);
-  if(!view||view.id==='view-verwaltung'){ stammdatenCsv(datum); return; }
+  if(!view||view.id==='view-flotte'){ stammdatenCsv(datum); return; }  // Flotte = kompletter Stammdatensatz
   const tables=[...view.querySelectorAll('table')];
   if(!tables.length){ stammdatenCsv(datum); return; }
   let csv='\uFEFF';
