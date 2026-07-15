@@ -53,6 +53,7 @@ body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:va
 .chartcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;min-width:0}
 .chartcard h3{font-size:13px;font-weight:600;margin-bottom:10px}
 .chartcard .cwrap{position:relative;height:250px}
+.chartcard .cwrap.hoch{height:300px}
 @media (max-width:900px){.charts{grid-template-columns:1fr}}
 /* Tabelle */
 .tablecard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto}
@@ -138,7 +139,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
   <div class="wrap">
     <div class="kpis" id="kpis"></div>
     <div class="charts">
-      <div class="chartcard"><h3>Fallbestand je Monat (laufende Hilfen zum Monatsende)</h3><div class="cwrap"><canvas id="chBestand"></canvas></div></div>
+      <div class="chartcard"><h3>Fallbestand je Monat und Jugendamt (laufende Hilfen zum Monatsende)</h3><div class="cwrap hoch"><canvas id="chBestand"></canvas></div></div>
       <div class="chartcard"><h3>Zugänge und Abgänge je Monat</h3><div class="cwrap"><canvas id="chBewegung"></canvas></div></div>
       <div class="chartcard"><h3>Hilfen je Jugendamt</h3><div class="cwrap"><canvas id="chJa"></canvas></div></div>
       <div class="chartcard"><h3>Ambulant / Stationär</h3><div class="cwrap"><canvas id="chBereich"></canvas></div></div>
@@ -232,6 +233,9 @@ function renderKpis(rows) {
 /* ── BI-Grafiken (Chart.js) ── */
 const CH = {}; // Chart-Instanzen
 const CI = { braun:'#7b3f1e', terra:'#c47848', hell:'#f5ede7', gruen:'#2e7d32', grau:'#a09e99', warn:'#b45309' };
+// Palette für die Jugendamt-Flächen: erdige CI-Töne + klar unterscheidbare Akzente
+const JA_FARBEN = ['#7b3f1e','#c47848','#2e7d32','#b45309','#3d6b8e','#8e5a9e',
+                   '#5f7a4a','#9b1c1c','#c2a13a','#4a8e86','#6b6860'];
 if (window.Chart) {
   Chart.defaults.font.family = "'Kodchasan','Segoe UI',sans-serif";
   Chart.defaults.font.size = 11;
@@ -262,26 +266,40 @@ function renderCharts(rows) {
   const monate = monatsListe();
   const labels = monate.map(mLabel);
 
-  // 1) Fallbestand zum Monatsende, gesplittet ambulant/stationär (gestapelte Fläche)
-  const bestand = { 'ambulant': [], 'stationär': [] };
-  for (const m of monate) {
-    const mEnde = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 0, 23, 59, 59));
-    let amb = 0, sta = 0;
-    for (const r of rows) {
-      if (!r.beginn) continue;
-      const b = new Date(r.beginn);
-      const e = r.ende ? new Date(r.ende) : null;
-      if (b <= mEnde && (!e || e >= mEnde)) { r.bereich === 'stationär' ? sta++ : amb++; }
-    }
-    bestand['ambulant'].push(amb); bestand['stationär'].push(sta);
+  // 1) Fallbestand zum Monatsende: gestapelte Fläche, eine Farbe je Jugendamt
+  //    (Top 10 nach Bestandssumme, Rest als "Sonstige")
+  const monatsEnden = monate.map(m => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 0, 23, 59, 59)));
+  const aktivAm = (r, t) => {
+    if (!r.beginn) return false;
+    const b = new Date(r.beginn), e = r.ende ? new Date(r.ende) : null;
+    return b <= t && (!e || e >= t);
+  };
+  const jaBestand = new Map();
+  for (const r of rows) {
+    if (!jaBestand.has(r.jugendamt)) jaBestand.set(r.jugendamt, monatsEnden.map(() => 0));
+    const serie = jaBestand.get(r.jugendamt);
+    monatsEnden.forEach((t, i) => { if (aktivAm(r, t)) serie[i]++; });
+  }
+  const jaRank = [...jaBestand.entries()].sort((a, b) =>
+    b[1].reduce((x, y) => x + y, 0) - a[1].reduce((x, y) => x + y, 0));
+  const topJa = jaRank.slice(0, 10);
+  const rest = jaRank.slice(10);
+  if (rest.length) {
+    const sonst = monatsEnden.map((_, i) => rest.reduce((s, [, serie]) => s + serie[i], 0));
+    topJa.push(['Sonstige (' + rest.length + ')', sonst]);
   }
   chart('chBestand', {
     type: 'line',
-    data: { labels, datasets: [
-      { label: 'Ambulant', data: bestand['ambulant'], borderColor: CI.terra, backgroundColor: CI.terra + '55', fill: true, tension: .3, pointRadius: 2, stack: 's' },
-      { label: 'Stationär', data: bestand['stationär'], borderColor: CI.braun, backgroundColor: CI.braun + '55', fill: true, tension: .3, pointRadius: 2, stack: 's' },
-    ]},
+    data: { labels, datasets: topJa.map(([name, serie], i) => ({
+      label: name, data: serie,
+      borderColor: JA_FARBEN[i % JA_FARBEN.length],
+      backgroundColor: JA_FARBEN[i % JA_FARBEN.length] + 'aa',
+      fill: true, tension: .3, pointRadius: 0, borderWidth: 1.5, stack: 's',
+    }))},
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8 } },
+        tooltip: { itemSort: (a, b) => b.parsed.y - a.parsed.y, callbacks: {
+          footer: items => 'Gesamt: ' + items.reduce((s, x) => s + x.parsed.y, 0) } } },
       scales: { y: { stacked: true, beginAtZero: true, grid: { color: '#eeece6' } }, x: { grid: { display: false } } } }
   });
 
