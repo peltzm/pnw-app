@@ -363,15 +363,19 @@ const stichtagCache = new Map(); // iso → Antwort des Workers
 const ALS = (new URLSearchParams(location.search).get('als') || '').trim();
 const alsQuery = pre => ALS ? pre + 'als=' + encodeURIComponent(ALS) : '';
 
-// Abgeschlossene Quartale (Ende ≤ heute); Anfang = Vorquartals-Ende
-function abgeschlosseneQuartale() {
-  const heute = new Date(), res = [];
+// Quartale: abgeschlossene (Ende ≤ heute) plus das laufende Quartal —
+// beim laufenden dient der heutige Tag als vorläufiges Quartalsende.
+function alleQuartale() {
+  const heute = new Date(), heuteIso = heute.toISOString().slice(0, 10), res = [];
   for (let j = heute.getFullYear() - 1; j <= heute.getFullYear(); j++) {
     const enden = [`${j}-03-31`, `${j}-06-30`, `${j}-09-30`, `${j}-12-31`];
     enden.forEach((ende, i) => {
-      if (new Date(ende) > heute) return;
       const start = i === 0 ? `${j - 1}-12-31` : enden[i - 1];
-      res.push({ start, ende, label: `Q${i + 1}/${j}` });
+      if (new Date(ende) <= heute) {
+        res.push({ start, ende, label: `Q${i + 1}/${j}` });
+      } else if (new Date(start) < heute && !res.some(q => q.laufend)) {
+        res.push({ start, ende: heuteIso, label: `Q${i + 1}/${j} (laufend)`, laufend: true });
+      }
     });
   }
   return res;
@@ -380,9 +384,12 @@ function abgeschlosseneQuartale() {
 function fuelleQuartale() {
   const sel = document.getElementById('quartalFilter');
   if (sel.options.length) return;
-  const qs = abgeschlosseneQuartale().reverse(); // jüngstes zuerst
+  const qs = alleQuartale().reverse(); // jüngstes zuerst
+  // Vorauswahl: letztes abgeschlossenes Quartal (maßgeblich für die Zulage);
+  // das laufende steht als Zwischenstand zur Auswahl.
+  const vorauswahl = qs.findIndex(q => !q.laufend);
   sel.innerHTML = qs.map((q, i) =>
-    `<option value="${q.start}|${q.ende}" ${i === 0 ? 'selected' : ''}>${q.label}</option>`).join('');
+    `<option value="${q.start}|${q.ende}" ${i === vorauswahl ? 'selected' : ''}>${q.label}</option>`).join('');
 }
 
 async function holeStichtag(iso) {
