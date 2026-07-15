@@ -109,6 +109,8 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
       <p id="standInfo">Zeitraum ab 01.04.2024 · inkl. Archiv</p>
     </div>
     <div class="filters">
+      <label>Zeitraum ab</label>
+      <select id="vonFilter" onchange="render()"></select>
       <label>Jugendamt</label>
       <select id="jaFilter" onchange="render()"></select>
       <label>Hilfeart</label>
@@ -152,7 +154,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
       </table>
     </div>
     <div class="legend">
-      Datenbasis: alle Hilfen (Maßnahmen) mit Laufzeit-Überschneidung ab 01.04.2024, inklusive archivierter Klienten.
+      Datenbasis: alle Hilfen (Maßnahmen) mit Laufzeit-Überschneidung ab dem gewählten Zeitraum (frühestens 01.04.2024 — ältere Daten sind in Kilanka nicht belastbar erfasst), inklusive archivierter Klienten.
       Dauer = Beginn bis Ende der Hilfe; bei laufenden Hilfen bis heute. Bei archivierten Hilfen ohne Enddatum gilt das Archivierungsdatum als Ende;
       Archivierung vor Maßnahmen-Ende wird als Fehlanlage nicht gewertet. Hauptbetreuer:in = zum (effektiven) Ende gültige HB-Zuordnung.
       Sachbearbeitung = Ansprechpartner:in des Amts aus Kilanka (departmentResponsible). Jugendamt = Kurzname aus Kilanka (voller Name im Tooltip).
@@ -186,13 +188,33 @@ function bereichVon(r) {
   return /§\s*34\b|heimerziehung|wohngruppe|nordstern|station/.test(s) ? 'stationär' : 'ambulant';
 }
 
+function vonAuswahl() {
+  return document.getElementById('vonFilter').value || (daten?.zeitraumVon ?? '2024-04-01');
+}
+
+function fuelleVonFilter() {
+  const sel = document.getElementById('vonFilter');
+  const start = new Date(daten.zeitraumVon + 'T00:00:00Z');
+  const jetzt = new Date();
+  const opts = [];
+  for (let d = new Date(start); d <= jetzt; d.setUTCMonth(d.getUTCMonth() + 1)) {
+    const iso = d.toISOString().slice(0, 8) + '01';
+    const label = String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + d.getUTCFullYear();
+    opts.push(`<option value="${iso}">${label}</option>`);
+  }
+  sel.innerHTML = opts.join('');
+  sel.value = daten.zeitraumVon; // Standard: frühestmöglich (04/2024)
+}
+
 function gefiltert() {
   if (!daten) return [];
+  const von = vonAuswahl();
   const ja = document.getElementById('jaFilter').value;
   const art = document.getElementById('artFilter').value;
   const bereich = document.getElementById('bereichFilter').value;
   const status = document.getElementById('statusFilter').value;
   return daten.rows.filter(r =>
+    (!r.ende || r.ende >= von) &&
     (!ja || r.jugendamt === ja) &&
     (!art || (r.rechtsgrundlage || '— ohne Angabe —') === art) &&
     (!bereich || r.bereich === bereich) &&
@@ -222,9 +244,9 @@ function renderKpis(rows) {
   const dl = mittel(laufend.map(r => r.dauerMonate));
   const db = mittel(beendet.map(r => r.dauerMonate));
   document.getElementById('kpis').innerHTML = `
-    <div class="kpi"><div class="v">${fmtNum(rows.length)}</div><div class="l">Hilfen ab 04/24</div><div class="s">${fmtNum(kl.size)} Klient:innen</div></div>
+    <div class="kpi"><div class="v">${fmtNum(rows.length)}</div><div class="l">Hilfen ab ${vonAuswahl().slice(5,7)}/${vonAuswahl().slice(2,4)}</div><div class="s">${fmtNum(kl.size)} Klient:innen</div></div>
     <div class="kpi"><div class="v">${fmtNum(laufend.length)}</div><div class="l">Laufend</div><div class="s">heute aktiv</div></div>
-    <div class="kpi"><div class="v">${fmtNum(beendet.length)}</div><div class="l">Beendet</div><div class="s">seit 01.04.2024</div></div>
+    <div class="kpi"><div class="v">${fmtNum(beendet.length)}</div><div class="l">Beendet</div><div class="s">seit ${fmtDate(vonAuswahl())}</div></div>
     <div class="kpi"><div class="v">${fmtNum(dl,1)}</div><div class="l">Ø Dauer laufend</div><div class="s">Monate (bisher)</div></div>
     <div class="kpi"><div class="v">${fmtNum(db,1)}</div><div class="l">Ø Dauer beendet</div><div class="s">Monate (gesamt)</div></div>
     <div class="kpi"><div class="v">${fmtNum(jas.size)}</div><div class="l">Jugendämter</div><div class="s">in der Auswahl</div></div>`;
@@ -244,7 +266,8 @@ if (window.Chart) {
 }
 
 function monatsListe() {
-  const von = new Date(Date.UTC(2024, 3, 1)); // April 2024
+  const v = vonAuswahl();
+  const von = new Date(v + 'T00:00:00Z');
   const jetzt = new Date();
   const liste = [];
   for (let d = new Date(von); d <= jetzt; d.setUTCMonth(d.getUTCMonth() + 1)) {
@@ -513,6 +536,7 @@ async function laden() {
       'Zeitraum ab ' + fmtDate(daten.zeitraumVon) + ' · inkl. Archiv · Datenstand ' +
       new Date(daten.stand).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) + ' Uhr';
     fuelleFilter();
+    fuelleVonFilter();
     render();
   } catch(e) {
     document.getElementById('loading').innerHTML =
