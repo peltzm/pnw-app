@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Jugendamt-Cockpit (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --text:#1a1916;
+  --text-muted:#6b6860; --text-hint:#a09e99; --accent:#7b3f1e;
+  --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2; --radius:8px; --radius-lg:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-brand img{height:28px}
+.header-brand span{font-size:13px;font-weight:600}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.header-right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:inherit}
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - 56px);padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:400px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:60px;margin-bottom:1rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.4rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem;display:none}
+#appScreen{display:none}
+.page-header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h2{font-size:17px;font-weight:600}
+.page-header p{font-size:12px;color:var(--text-muted)}
+.filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.filters select{height:32px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:12.5px;padding:0 8px;color:var(--text);max-width:230px}
+.filters label{font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.3px}
+.wrap{max-width:1400px;margin:0 auto;padding:18px 20px 60px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px}
+.kpi .v{font-size:26px;font-weight:700;line-height:1.15}
+.kpi .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.kpi .s{font-size:11px;color:var(--text-hint);margin-top:2px}
+/* Hilfeart-Verteilung */
+.artcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:18px}
+.artcard h3{font-size:13px;font-weight:600;margin-bottom:10px}
+.artrow{display:grid;grid-template-columns:220px 1fr 90px;align-items:center;gap:10px;padding:3px 0;font-size:12px}
+.artrow .an{color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.artbar{height:14px;background:var(--accent-light);border-radius:7px;overflow:hidden}
+.artbar i{display:block;height:100%;background:var(--accent-mid);border-radius:7px}
+.artrow .av{text-align:right;font-weight:600}
+.artrow .av span{font-weight:400;color:var(--text-hint)}
+/* Tabelle */
+.tablecard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:1100px;font-size:12.5px}
+th{position:sticky;top:0;background:var(--surface);text-align:left;padding:10px 10px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none;z-index:5}
+th:first-child,td:first-child{padding-left:16px}
+th.num,td.num{text-align:right}
+th.sorted{color:var(--accent)}
+td{padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+tr.datarow:hover td{background:var(--accent-light)}
+tr.grouphead td{background:var(--accent-light);font-weight:600;font-size:12px;border-bottom:1px solid var(--border)}
+tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
+.name{font-weight:600}
+.sub{font-size:11px;color:var(--text-hint)}
+.chip{display:inline-block;font-size:11px;font-weight:600;border-radius:12px;padding:1px 9px}
+.chip-ok{background:var(--ok-bg);color:var(--ok)}
+.chip-warn{background:var(--warn-bg);color:var(--warn)}
+.chip-muted{background:var(--bg);color:var(--text-hint);border:1px solid var(--border)}
+.legend{font-size:11px;color:var(--text-hint);margin-top:10px;line-height:1.7}
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:70px 20px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:640px){.wrap{padding:14px 10px 50px}.artrow{grid-template-columns:130px 1fr 80px}}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-brand">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="PNW">
+    <span>Jugendamt-Cockpit</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <span id="userName"></span>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="PNW">
+    <div class="login-title">Jugendamt-Cockpit</div>
+    <div class="login-desc">Fallzahlen, Laufzeiten und Hilfearten je Jugendamt — ab April 2024, inklusive archivierter Hilfen. Zugang für Teamleitungen und Geschäftsführung.</div>
+    <button class="btn btn-outline" id="loginBtn" onclick="login()">Mit Microsoft anmelden</button>
+    <div class="alert-error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="page-header">
+    <div>
+      <h2>Hilfen je Jugendamt</h2>
+      <p id="standInfo">Zeitraum ab 01.04.2024 · inkl. Archiv</p>
+    </div>
+    <div class="filters">
+      <label>Jugendamt</label>
+      <select id="jaFilter" onchange="render()"></select>
+      <label>Hilfeart</label>
+      <select id="artFilter" onchange="render()"></select>
+      <label>Status</label>
+      <select id="statusFilter" onchange="render()">
+        <option value="">Alle</option>
+        <option value="laufend">Laufend</option>
+        <option value="beendet">Beendet</option>
+      </select>
+      <label>Gruppierung</label>
+      <select id="gruppeFilter" onchange="render()">
+        <option value="">Keine</option>
+        <option value="ja">JA-Sachbearbeitung</option>
+        <option value="pnw">PNW-Betreuer:in</option>
+      </select>
+      <button class="btn-ghost" onclick="reload()">Neu laden</button>
+      <button class="btn-ghost" onclick="csvExport()">CSV exportieren</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="kpis" id="kpis"></div>
+    <div class="artcard" id="artcard">
+      <h3>Verteilung nach Hilfeart</h3>
+      <div id="artrows"></div>
+    </div>
+    <div class="tablecard">
+      <div class="loading-state" id="loading"><div class="spinner"></div><span>Kilanka-Daten werden geladen …</span></div>
+      <table id="tbl" style="display:none">
+        <thead><tr id="theadRow"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="legend">
+      Datenbasis: alle Hilfen (Maßnahmen) mit Laufzeit-Überschneidung ab 01.04.2024, inklusive archivierter Klienten.
+      Dauer = Beginn bis Ende der Hilfe; bei laufenden Hilfen bis heute. Bei archivierten Hilfen ohne Enddatum gilt das Archivierungsdatum als Ende;
+      Archivierung vor Maßnahmen-Ende wird als Fehlanlage nicht gewertet. Hauptbetreuer:in = zum (effektiven) Ende gültige HB-Zuordnung.
+      Sachbearbeitung = Ansprechpartner:in des Amts aus Kilanka (departmentResponsible).
+    </div>
+  </div>
+</div>
+
+<script>
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/jugendamt-cockpit-beta.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read', 'User.ReadBasic.All'];
+const APP_VERSION = 'BETA'; // auto-updated on deploy
+
+let msalInstance, currentAccount, daten = null;
+let sortKey = 'klient', sortDir = 1;
+
+const fmtNum = (n, d=0) => n == null ? '—' : n.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('de-DE') : '—';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ── Auswahl / Filterung ── */
+function gefiltert() {
+  if (!daten) return [];
+  const ja = document.getElementById('jaFilter').value;
+  const art = document.getElementById('artFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  return daten.rows.filter(r =>
+    (!ja || r.jugendamt === ja) &&
+    (!art || (r.rechtsgrundlage || '— ohne Angabe —') === art) &&
+    (!status || (status === 'laufend' ? r.laufend : !r.laufend))
+  );
+}
+
+function fuelleFilter() {
+  const jas = [...new Set(daten.rows.map(r => r.jugendamt))].sort((a,b)=>a.localeCompare(b,'de'));
+  const arten = [...new Set(daten.rows.map(r => r.rechtsgrundlage || '— ohne Angabe —'))].sort((a,b)=>a.localeCompare(b,'de'));
+  document.getElementById('jaFilter').innerHTML =
+    '<option value="">Alle Jugendämter (' + jas.length + ')</option>' +
+    jas.map(j => `<option value="${esc(j)}">${esc(j)}</option>`).join('');
+  document.getElementById('artFilter').innerHTML =
+    '<option value="">Alle Hilfearten</option>' +
+    arten.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+}
+
+/* ── KPIs ── */
+function mittel(arr) { const v = arr.filter(x => x != null); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : null; }
+
+function renderKpis(rows) {
+  const laufend = rows.filter(r => r.laufend);
+  const beendet = rows.filter(r => !r.laufend);
+  const kl = new Set(rows.map(r => r.klientId));
+  const jas = new Set(rows.map(r => r.jugendamt));
+  const dl = mittel(laufend.map(r => r.dauerMonate));
+  const db = mittel(beendet.map(r => r.dauerMonate));
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="v">${fmtNum(rows.length)}</div><div class="l">Hilfen ab 04/24</div><div class="s">${fmtNum(kl.size)} Klient:innen</div></div>
+    <div class="kpi"><div class="v">${fmtNum(laufend.length)}</div><div class="l">Laufend</div><div class="s">heute aktiv</div></div>
+    <div class="kpi"><div class="v">${fmtNum(beendet.length)}</div><div class="l">Beendet</div><div class="s">seit 01.04.2024</div></div>
+    <div class="kpi"><div class="v">${fmtNum(dl,1)}</div><div class="l">Ø Dauer laufend</div><div class="s">Monate (bisher)</div></div>
+    <div class="kpi"><div class="v">${fmtNum(db,1)}</div><div class="l">Ø Dauer beendet</div><div class="s">Monate (gesamt)</div></div>
+    <div class="kpi"><div class="v">${fmtNum(jas.size)}</div><div class="l">Jugendämter</div><div class="s">in der Auswahl</div></div>`;
+}
+
+/* ── Hilfeart-Verteilung ── */
+function renderArten(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = r.rechtsgrundlage || '— ohne Angabe —';
+    if (!m.has(k)) m.set(k, { n: 0, laufend: 0, dauern: [] });
+    const e = m.get(k); e.n++; if (r.laufend) e.laufend++;
+    if (r.dauerMonate != null) e.dauern.push(r.dauerMonate);
+  }
+  const max = Math.max(1, ...[...m.values()].map(e => e.n));
+  const html = [...m.entries()].sort((a,b) => b[1].n - a[1].n).map(([k,e]) => `
+    <div class="artrow">
+      <div class="an" title="${esc(k)}">${esc(k)}</div>
+      <div class="artbar"><i style="width:${Math.round(e.n/max*100)}%"></i></div>
+      <div class="av">${e.n} <span>· Ø ${fmtNum(mittel(e.dauern),1)} Mon.</span></div>
+    </div>`).join('');
+  document.getElementById('artrows').innerHTML = html || '<div class="sub">Keine Hilfen in der Auswahl.</div>';
+}
+
+/* ── Tabelle ── */
+const SPALTEN = [
+  { k:'klient',          t:'Klient:in' },
+  { k:'jugendamt',       t:'Jugendamt' },
+  { k:'sachbearbeitung', t:'Sachbearbeitung (JA)' },
+  { k:'rechtsgrundlage', t:'Hilfeart' },
+  { k:'hb',              t:'Betreuung (PNW)' },
+  { k:'beginn',          t:'Beginn', num:true },
+  { k:'ende',            t:'Ende', num:true },
+  { k:'dauerMonate',     t:'Dauer (Mon.)', num:true },
+  { k:'laufend',         t:'Status' },
+];
+
+function sortWert(r, key) {
+  switch (key) {
+    case 'klient': return (r.klient || '').toLowerCase();
+    case 'jugendamt': return (r.jugendamt || '').toLowerCase();
+    case 'sachbearbeitung': return (r.sachbearbeitung || 'zzz').toLowerCase();
+    case 'rechtsgrundlage': return (r.rechtsgrundlage || 'zzz').toLowerCase();
+    case 'hb': return (r.hb || 'zzz').toLowerCase();
+    case 'beginn': return r.beginn || '';
+    case 'ende': return r.ende || '9999';
+    case 'dauerMonate': return r.dauerMonate ?? -1;
+    case 'laufend': return r.laufend ? 1 : 0;
+    default: return 0;
+  }
+}
+
+function setSort(k) {
+  if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; }
+  render();
+}
+
+function zeileHtml(r) {
+  const status = r.laufend
+    ? '<span class="chip chip-ok">laufend</span>'
+    : (r.archiviert ? '<span class="chip chip-muted">beendet · Archiv</span>' : '<span class="chip chip-warn">beendet</span>');
+  const weitere = r.betreuer.filter(b => b.name !== r.hb);
+  const betrTitle = r.betreuer.map(b => `${b.name} (${b.rolle}${b.aktuell ? '' : ', beendet'})`).join('\n');
+  return `<tr class="datarow">
+    <td><span class="name">${esc(r.klient)}</span>${r.hilfe ? `<div class="sub" title="${esc(r.hilfe)}">${esc(r.hilfe)}</div>` : ''}</td>
+    <td>${esc(r.jugendamt)}${r.aktenzeichen ? `<div class="sub">Az. ${esc(r.aktenzeichen)}</div>` : ''}</td>
+    <td>${esc(r.sachbearbeitung || '—')}</td>
+    <td>${esc(r.rechtsgrundlage || '—')}</td>
+    <td title="${esc(betrTitle)}">${esc(r.hb || '—')}${weitere.length ? `<span class="sub"> +${weitere.length}</span>` : ''}</td>
+    <td class="num">${fmtDate(r.beginn)}</td>
+    <td class="num">${r.laufend ? '—' : fmtDate(r.ende)}</td>
+    <td class="num">${fmtNum(r.dauerMonate,1)}</td>
+    <td>${status}</td>
+  </tr>`;
+}
+
+function render() {
+  if (!daten) return;
+  const rows = gefiltert();
+  renderKpis(rows);
+  renderArten(rows);
+
+  document.getElementById('theadRow').innerHTML = SPALTEN.map(s =>
+    `<th class="${s.num ? 'num' : ''}${sortKey === s.k ? ' sorted' : ''}" onclick="setSort('${s.k}')">${s.t}${sortKey === s.k ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}</th>`
+  ).join('');
+
+  const sortiert = [...rows].sort((a,b) => {
+    const va = sortWert(a, sortKey), vb = sortWert(b, sortKey);
+    return (typeof va === 'string' ? va.localeCompare(vb, 'de') : va - vb) * sortDir;
+  });
+
+  const gruppe = document.getElementById('gruppeFilter').value;
+  let html = '';
+  if (!gruppe) {
+    html = sortiert.map(zeileHtml).join('');
+  } else {
+    const alleJa = !document.getElementById('jaFilter').value;
+    const keyFn = gruppe === 'pnw'
+      ? r => r.hb || '— ohne PNW-Zuordnung —'
+      : r => (r.sachbearbeitung || '— ohne Sachbearbeitung —') + (alleJa ? ` · ${r.jugendamt}` : '');
+    const gruppen = new Map();
+    for (const r of sortiert) {
+      const k = keyFn(r);
+      if (!gruppen.has(k)) gruppen.set(k, []);
+      gruppen.get(k).push(r);
+    }
+    for (const [k, g] of [...gruppen.entries()].sort((a,b) => b[1].length - a[1].length || a[0].localeCompare(b[0],'de'))) {
+      const laufend = g.filter(r => r.laufend).length;
+      const d = mittel(g.map(r => r.dauerMonate));
+      html += `<tr class="grouphead"><td colspan="9">${esc(k)} <span>— ${g.length} Hilfen · ${laufend} laufend · Ø ${fmtNum(d,1)} Mon.</span></td></tr>`;
+      html += g.map(zeileHtml).join('');
+    }
+  }
+  document.getElementById('tbody').innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--text-hint);padding:30px">Keine Hilfen in der Auswahl.</td></tr>';
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('tbl').style.display = '';
+}
+
+/* ── CSV-Export der aktuellen Auswahl ── */
+function csvExport() {
+  if (!daten) return;
+  const rows = gefiltert();
+  const head = ['Klient','Jugendamt','Aktenzeichen','Sachbearbeitung','Hilfeart','Massnahme','Betreuung PNW','Weitere Betreuung','Beginn','Ende','Dauer Monate','Status','Archiv'];
+  const csvVal = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
+  const lines = [head.map(csvVal).join(';')];
+  for (const r of rows) {
+    lines.push([
+      r.klient, r.jugendamt, r.aktenzeichen || '', r.sachbearbeitung || '', r.rechtsgrundlage || '',
+      r.hilfe || '', r.hb || '',
+      r.betreuer.filter(b => b.name !== r.hb).map(b => `${b.name} (${b.rolle})`).join(', '),
+      r.beginn || '', r.ende || '', r.dauerMonate != null ? String(r.dauerMonate).replace('.',',') : '',
+      r.laufend ? 'laufend' : 'beendet', r.archiviert ? 'ja' : 'nein'
+    ].map(csvVal).join(';'));
+  }
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jugendamt-cockpit_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ── MSAL + Laden ── */
+function tokenAblauf(jwt) { try { return (JSON.parse(atob(jwt.split('.')[1])).exp || 0) * 1000; } catch(_) { return 0; } }
+async function tokens() {
+  try {
+    let r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    if (tokenAblauf(r.idToken) < Date.now() + 60000) {
+      r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount, forceRefresh: true });
+    }
+    return { id: r.idToken, graph: r.accessToken };
+  } catch (e) {
+    const code = e.errorCode || '';
+    if (code === 'monitor_window_timeout' || code === 'interaction_required' ||
+        code === 'consent_required' || code === 'login_required' ||
+        e instanceof msal.InteractionRequiredAuthError) {
+      await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account: currentAccount });
+    }
+    throw e;
+  }
+}
+
+async function laden() {
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('tbl').style.display = 'none';
+  try {
+    const t = await tokens();
+    const r = await fetch(CFG.workerUrl + '/api/jugendamt-cockpit', {
+      headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
+    });
+    if (!r.ok) {
+      let detail = ''; try { detail = (await r.json()).error || ''; } catch(_) {}
+      throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
+    }
+    daten = await r.json();
+    document.getElementById('standInfo').textContent =
+      'Zeitraum ab ' + fmtDate(daten.zeitraumVon) + ' · inkl. Archiv · Datenstand ' +
+      new Date(daten.stand).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) + ' Uhr';
+    fuelleFilter();
+    render();
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      '<div style="text-align:center;color:var(--error)">Abruf fehlgeschlagen: ' + esc(e.message) +
+      '<br><span style="color:var(--text-muted);font-size:12px">403 = Sicht ist Teamleitungen und GF vorbehalten.</span></div>';
+  }
+}
+function reload() { laden(); }
+
+async function initApp() {
+  document.getElementById('versionBadge').textContent = APP_VERSION;
+  msalInstance = new msal.PublicClientApplication({
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  });
+  await msalInstance.initialize();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; showApp(); }
+}
+async function login() {
+  const errEl = document.getElementById('loginError');
+  document.getElementById('loginBtn').disabled = true; errEl.style.display = 'none';
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) { document.getElementById('loginBtn').disabled = false; errEl.style.display = 'block'; errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message); }
+}
+async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userName').textContent = currentAccount?.name || '';
+  document.getElementById('logoutBtn').style.display = '';
+  laden();
+}
+initApp();
+</script>
+</body>
+</html>

@@ -265,7 +265,15 @@ async function fetchKilankaClients(env) {
   if (clientCache.data && Date.now() - clientCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
     return clientCache.data;
   }
-  const data = await kilankaPost(env, "clients", CLIENT_GRAPH);
+  // Paginiert laden: mit dem Archiv (Jugendamt-Cockpit wertet Fälle ab 04/2024
+  // aus, inkl. archivierter) kann der Bestand die alte 1000er-Seite sprengen.
+  const data = [];
+  const limit = CLIENT_GRAPH.$limit || 1000;
+  for (let offset = 0; ; offset += limit) {
+    const page = await kilankaPost(env, "clients", { ...CLIENT_GRAPH, $offset: offset });
+    if (Array.isArray(page)) data.push(...page);
+    if (!Array.isArray(page) || page.length < limit) break;
+  }
   clientCache = { data, fetchedAt: Date.now() };
   return data;
 }
@@ -823,6 +831,86 @@ async function alleHbFaelle(env, now) {
   return [...map.values()];
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Jugendamt-Cockpit: alle Hilfen (Maßnahmen) ab 01.04.2024, inkl. Archiv.
+// Eine Zeile je (Klient, Maßnahme) mit Amt, Sachbearbeitung, Hilfeart,
+// Laufzeit und PNW-Betreuung — Aggregation macht das Frontend.
+// ═══════════════════════════════════════════════════════════════
+const JA_ZEITRAUM_VON = "2024-04-01";
+
+function jugendamtFaelle(clients, now) {
+  const von0 = new Date(JA_ZEITRAUM_VON + "T00:00:00Z");
+  const rows = [];
+  for (const client of clients || []) {
+    const archiviertAm = kDate(client.deletedAt);
+    const archiviert = !!archiviertAm || isArchived(client.recName);
+    const klientName = (client.recName || String(client.id))
+      .replace(/^\[archiviert\]\s*/i, "");
+
+    for (const a of client.actions || []) {
+      if (kDate(a.deletedAt)) continue; // gelöschte Maßnahme = Fehlanlage
+      const von = kDate(a.validFrom);
+      let bis = kDate(a.validUntil);
+
+      // Archiv-Schutzregeln (identisch zu alleHbFaelle, s. Doku §7):
+      // - Archiv ohne Maßnahmen-Ende: vergessenes validUntil → Archivdatum
+      //   als Ende werten (ohne Archivdatum: nicht werten)
+      // - Archivierung VOR Maßnahmen-Ende: Fehlanlage/Löschung → nicht werten
+      if (archiviert && !bis) {
+        if (!archiviertAm) continue;
+        bis = archiviertAm;
+      } else if (archiviert && archiviertAm && archiviertAm < bis) {
+        continue;
+      }
+
+      // Zeitraumfilter: Hilfe überlappt [01.04.2024, heute]
+      if (bis && bis < von0) continue;       // vor dem Fenster beendet
+      if (von && von > now) continue;        // noch nicht begonnen
+
+      const laufend = !bis || bis >= now;
+      const endeEff = laufend ? now : bis;
+      const dauerMonate = von
+        ? Math.round(((endeEff - von) / (30.44 * 864e5)) * 10) / 10
+        : null;
+
+      // PNW-Betreuung: alle Zuordnungen mit Rolle; Hauptbetreuer bevorzugt
+      // die zum (effektiven) Ende gültige Zuordnung, sonst die jüngste.
+      const betreuer = (a.attendants || [])
+        .filter((t) => t.user?.recName)
+        .map((t) => ({
+          name: t.user.recName.replace(/^\[archiviert\]\s*/i, ""),
+          rolle: t.attendantKind?.name || "",
+          aktuell: isCurrent(t.validFrom, t.validUntil, endeEff),
+          _von: kDate(t.validFrom)?.getTime() || 0,
+        }));
+      const hbs = betreuer.filter((b) => b.rolle === "Hauptbetreuer");
+      const hb =
+        hbs.find((b) => b.aktuell)?.name ||
+        hbs.sort((x, y) => y._von - x._von)[0]?.name ||
+        betreuer.find((b) => b.aktuell)?.name || null;
+      for (const b of betreuer) delete b._von;
+
+      rows.push({
+        klientId: String(client.id),
+        klient: klientName,
+        archiviert,
+        jugendamt: a.department?.name || "— ohne Amt —",
+        sachbearbeitung: a.departmentResponsible?.recName || null,
+        rechtsgrundlage: a.legalBasis?.name || null,
+        hilfe: a.recName || null,
+        aktenzeichen: a.fileReference || null,
+        beginn: isoDate(von),
+        ende: laufend ? null : isoDate(bis),
+        laufend,
+        dauerMonate,
+        hb,
+        betreuer: betreuer.map(({ name, rolle, aktuell }) => ({ name, rolle, aktuell })),
+      });
+    }
+  }
+  return rows;
+}
+
 async function buildCockpit(env, upn, now) {
   const jahr = now.getFullYear();
 
@@ -1244,6 +1332,32 @@ export default {
         return json({ rolle, vorschauAls: vorschau ? alsParam : null, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows, amtFaelle }, 200, origin);
       } catch (e) {
         return json({ error: `Manager-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    if (url.pathname === "/api/jugendamt-cockpit" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
+        return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      }
+      try {
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
+        if (rolle === "fk") {
+          return json({ error: "Jugendamt-Cockpit ist Teamleitungen und GF vorbehalten" }, 403, origin);
+        }
+        const now = new Date();
+        const clients = await fetchKilankaClients(env);
+        const rows = jugendamtFaelle(clients, now);
+        return json(
+          { rolle, zeitraumVon: JA_ZEITRAUM_VON, stand: new Date(clientCache.fetchedAt).toISOString(), anzahl: rows.length, rows },
+          200, origin
+        );
+      } catch (e) {
+        return json({ error: `Jugendamt-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
       }
     }
 
