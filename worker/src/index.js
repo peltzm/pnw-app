@@ -60,7 +60,7 @@ const CLIENT_GRAPH = {
     recName: 1, mainAction: 1, deletedAt: 1,
     validFrom: 1, validUntil: 1,
     legalBasis: { name: 1 },
-    department: { name: 1 },
+    department: { id: 1, name: 1, shortName: 1 }, // shortName = Kurzname (Probe; Fallback: contacts-Map)
     departmentResponsible: { recName: 1 },
     fileReference: 1, reportDueDate: 1, nextMeeting: 1,
     attendants: {
@@ -836,9 +836,35 @@ async function alleHbFaelle(env, now) {
 // Eine Zeile je (Klient, Maßnahme) mit Amt, Sachbearbeitung, Hilfeart,
 // Laufzeit und PNW-Betreuung — Aggregation macht das Frontend.
 // ═══════════════════════════════════════════════════════════════
+let amtKurznameCache = { map: null, fetchedAt: 0 };
+async function fetchAmtKurznamen(env) {
+  if (amtKurznameCache.map && Date.now() - amtKurznameCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
+    return amtKurznameCache.map;
+  }
+  const map = new Map();
+  try {
+    for (let offset = 0; ; offset += 1000) {
+      const page = await kilankaPost(env, "contacts", {
+        id: 1, shortName: 1, deletedAt: 1, $limit: 1000, $offset: offset,
+      });
+      if (!Array.isArray(page)) break;
+      for (const k of page) {
+        if (k?.shortName) map.set(String(k.id), k.shortName);
+      }
+      if (page.length < 1000) break;
+    }
+    amtKurznameCache = { map, fetchedAt: Date.now() };
+  } catch (e) {
+    // Kurznamen sind nice-to-have: bei Fehler (z. B. contacts nicht im
+    // Token-Scope) mit vollen Amtsnamen weiterarbeiten
+    console.warn("Kurzname-Abruf (contacts) fehlgeschlagen:", e.message);
+  }
+  return map;
+}
+
 const JA_ZEITRAUM_VON = "2024-04-01";
 
-function jugendamtFaelle(clients, now) {
+function jugendamtFaelle(clients, now, amtKurz) {
   const von0 = new Date(JA_ZEITRAUM_VON + "T00:00:00Z");
   const rows = [];
   for (const client of clients || []) {
@@ -894,7 +920,11 @@ function jugendamtFaelle(clients, now) {
         klientId: String(client.id),
         klient: klientName,
         archiviert,
-        jugendamt: a.department?.name || "— ohne Amt —",
+        jugendamt:
+          a.department?.shortName ||
+          (amtKurz && amtKurz.get(String(a.department?.id))) ||
+          a.department?.name || "— ohne Amt —",
+        jugendamtLang: a.department?.name || null,
         sachbearbeitung: a.departmentResponsible?.recName || null,
         rechtsgrundlage: a.legalBasis?.name || null,
         hilfe: a.recName || null,
@@ -1350,8 +1380,11 @@ export default {
           return json({ error: "Jugendamt-Cockpit ist Teamleitungen und GF vorbehalten" }, 403, origin);
         }
         const now = new Date();
-        const clients = await fetchKilankaClients(env);
-        const rows = jugendamtFaelle(clients, now);
+        const [clients, amtKurz] = await Promise.all([
+          fetchKilankaClients(env),
+          fetchAmtKurznamen(env),
+        ]);
+        const rows = jugendamtFaelle(clients, now, amtKurz);
         return json(
           { rolle, zeitraumVon: JA_ZEITRAUM_VON, stand: new Date(clientCache.fetchedAt).toISOString(), anzahl: rows.length, rows },
           200, origin

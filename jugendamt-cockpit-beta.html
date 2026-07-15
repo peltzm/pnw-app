@@ -8,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Jugendamt-Cockpit (Beta) — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --text:#1a1916;
@@ -47,6 +48,12 @@ body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:va
 .kpi .v{font-size:26px;font-weight:700;line-height:1.15}
 .kpi .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
 .kpi .s{font-size:11px;color:var(--text-hint);margin-top:2px}
+/* BI-Grafiken */
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.chartcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;min-width:0}
+.chartcard h3{font-size:13px;font-weight:600;margin-bottom:10px}
+.chartcard .cwrap{position:relative;height:250px}
+@media (max-width:900px){.charts{grid-template-columns:1fr}}
 /* Hilfeart-Verteilung */
 .artcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:18px}
 .artcard h3{font-size:13px;font-weight:600;margin-bottom:10px}
@@ -114,6 +121,12 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
       <select id="jaFilter" onchange="render()"></select>
       <label>Hilfeart</label>
       <select id="artFilter" onchange="render()"></select>
+      <label>Bereich</label>
+      <select id="bereichFilter" onchange="render()">
+        <option value="">Alle</option>
+        <option value="ambulant">Ambulant</option>
+        <option value="stationär">Stationär</option>
+      </select>
       <label>Status</label>
       <select id="statusFilter" onchange="render()">
         <option value="">Alle</option>
@@ -133,6 +146,12 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
 
   <div class="wrap">
     <div class="kpis" id="kpis"></div>
+    <div class="charts">
+      <div class="chartcard"><h3>Fallbestand je Monat (laufende Hilfen zum Monatsende)</h3><div class="cwrap"><canvas id="chBestand"></canvas></div></div>
+      <div class="chartcard"><h3>Zugänge und Abgänge je Monat</h3><div class="cwrap"><canvas id="chBewegung"></canvas></div></div>
+      <div class="chartcard"><h3>Hilfen je Jugendamt</h3><div class="cwrap"><canvas id="chJa"></canvas></div></div>
+      <div class="chartcard"><h3>Ambulant / Stationär</h3><div class="cwrap"><canvas id="chBereich"></canvas></div></div>
+    </div>
     <div class="artcard" id="artcard">
       <h3>Verteilung nach Hilfeart</h3>
       <div id="artrows"></div>
@@ -148,7 +167,8 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
       Datenbasis: alle Hilfen (Maßnahmen) mit Laufzeit-Überschneidung ab 01.04.2024, inklusive archivierter Klienten.
       Dauer = Beginn bis Ende der Hilfe; bei laufenden Hilfen bis heute. Bei archivierten Hilfen ohne Enddatum gilt das Archivierungsdatum als Ende;
       Archivierung vor Maßnahmen-Ende wird als Fehlanlage nicht gewertet. Hauptbetreuer:in = zum (effektiven) Ende gültige HB-Zuordnung.
-      Sachbearbeitung = Ansprechpartner:in des Amts aus Kilanka (departmentResponsible).
+      Sachbearbeitung = Ansprechpartner:in des Amts aus Kilanka (departmentResponsible). Jugendamt = Kurzname aus Kilanka (voller Name im Tooltip).
+      Bereich: stationär = § 34 / Heimerziehung / Wohngruppe (Nordstern), sonst ambulant — Zuordnung heuristisch über Rechtsgrundlage und Maßnahmenname.
     </div>
   </div>
 </div>
@@ -171,14 +191,23 @@ const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('de-DE') : '—';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ── Auswahl / Filterung ── */
+// Bereichs-Heuristik: § 34 / Heimerziehung / Wohngruppe (Nordstern) = stationär,
+// alles andere (SPFH § 31, EB § 30, ISE § 35a ambulant, …) = ambulant
+function bereichVon(r) {
+  const s = ((r.rechtsgrundlage || '') + ' ' + (r.hilfe || '')).toLowerCase();
+  return /§\s*34\b|heimerziehung|wohngruppe|nordstern|station/.test(s) ? 'stationär' : 'ambulant';
+}
+
 function gefiltert() {
   if (!daten) return [];
   const ja = document.getElementById('jaFilter').value;
   const art = document.getElementById('artFilter').value;
+  const bereich = document.getElementById('bereichFilter').value;
   const status = document.getElementById('statusFilter').value;
   return daten.rows.filter(r =>
     (!ja || r.jugendamt === ja) &&
     (!art || (r.rechtsgrundlage || '— ohne Angabe —') === art) &&
+    (!bereich || r.bereich === bereich) &&
     (!status || (status === 'laufend' ? r.laufend : !r.laufend))
   );
 }
@@ -232,6 +261,116 @@ function renderArten(rows) {
   document.getElementById('artrows').innerHTML = html || '<div class="sub">Keine Hilfen in der Auswahl.</div>';
 }
 
+/* ── BI-Grafiken (Chart.js) ── */
+const CH = {}; // Chart-Instanzen
+const CI = { braun:'#7b3f1e', terra:'#c47848', hell:'#f5ede7', gruen:'#2e7d32', grau:'#a09e99', warn:'#b45309' };
+if (window.Chart) {
+  Chart.defaults.font.family = "'Kodchasan','Segoe UI',sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = '#6b6860';
+  Chart.defaults.plugins.legend.labels.boxWidth = 12;
+}
+
+function monatsListe() {
+  const von = new Date(Date.UTC(2024, 3, 1)); // April 2024
+  const jetzt = new Date();
+  const liste = [];
+  for (let d = new Date(von); d <= jetzt; d.setUTCMonth(d.getUTCMonth() + 1)) {
+    liste.push(new Date(d));
+  }
+  return liste;
+}
+const mLabel = d => String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + String(d.getUTCFullYear()).slice(2);
+const mKey = d => d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+
+function chart(id, cfg) {
+  if (!window.Chart) return;
+  if (CH[id]) CH[id].destroy();
+  CH[id] = new Chart(document.getElementById(id), cfg);
+}
+
+function renderCharts(rows) {
+  if (!window.Chart) return;
+  const monate = monatsListe();
+  const labels = monate.map(mLabel);
+
+  // 1) Fallbestand zum Monatsende, gesplittet ambulant/stationär (gestapelte Fläche)
+  const bestand = { 'ambulant': [], 'stationär': [] };
+  for (const m of monate) {
+    const mEnde = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 0, 23, 59, 59));
+    let amb = 0, sta = 0;
+    for (const r of rows) {
+      if (!r.beginn) continue;
+      const b = new Date(r.beginn);
+      const e = r.ende ? new Date(r.ende) : null;
+      if (b <= mEnde && (!e || e >= mEnde)) { r.bereich === 'stationär' ? sta++ : amb++; }
+    }
+    bestand['ambulant'].push(amb); bestand['stationär'].push(sta);
+  }
+  chart('chBestand', {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Ambulant', data: bestand['ambulant'], borderColor: CI.terra, backgroundColor: CI.terra + '55', fill: true, tension: .3, pointRadius: 2, stack: 's' },
+      { label: 'Stationär', data: bestand['stationär'], borderColor: CI.braun, backgroundColor: CI.braun + '55', fill: true, tension: .3, pointRadius: 2, stack: 's' },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { y: { stacked: true, beginAtZero: true, grid: { color: '#eeece6' } }, x: { grid: { display: false } } } }
+  });
+
+  // 2) Zugänge / Abgänge je Monat + Netto-Linie
+  const zu = new Map(), ab = new Map();
+  for (const r of rows) {
+    if (r.beginn) { const k = r.beginn.slice(0, 7); zu.set(k, (zu.get(k) || 0) + 1); }
+    if (r.ende)   { const k = r.ende.slice(0, 7);   ab.set(k, (ab.get(k) || 0) + 1); }
+  }
+  const zugaenge = monate.map(m => zu.get(mKey(m)) || 0);
+  const abgaenge = monate.map(m => ab.get(mKey(m)) || 0);
+  chart('chBewegung', {
+    data: { labels, datasets: [
+      { type: 'bar', label: 'Zugänge', data: zugaenge, backgroundColor: CI.gruen + 'cc', borderRadius: 3 },
+      { type: 'bar', label: 'Abgänge', data: abgaenge.map(v => -v), backgroundColor: CI.warn + 'cc', borderRadius: 3 },
+      { type: 'line', label: 'Netto', data: zugaenge.map((v, i) => v - abgaenge[i]), borderColor: CI.braun, pointRadius: 2, tension: .3 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { tooltip: { callbacks: { label: x => x.dataset.label + ': ' + Math.abs(x.parsed.y) } } },
+      scales: { y: { grid: { color: '#eeece6' }, ticks: { callback: v => Math.abs(v) } }, x: { stacked: true, grid: { display: false } } } }
+  });
+
+  // 3) Hilfen je Jugendamt (laufend/beendet gestapelt, absteigend, Top 14)
+  const jaMap = new Map();
+  for (const r of rows) {
+    if (!jaMap.has(r.jugendamt)) jaMap.set(r.jugendamt, { l: 0, b: 0 });
+    r.laufend ? jaMap.get(r.jugendamt).l++ : jaMap.get(r.jugendamt).b++;
+  }
+  const jaSort = [...jaMap.entries()].sort((a, b) => (b[1].l + b[1].b) - (a[1].l + a[1].b)).slice(0, 14);
+  chart('chJa', {
+    type: 'bar',
+    data: { labels: jaSort.map(e => e[0]), datasets: [
+      { label: 'Laufend', data: jaSort.map(e => e[1].l), backgroundColor: CI.braun + 'dd', borderRadius: 3 },
+      { label: 'Beendet', data: jaSort.map(e => e[1].b), backgroundColor: CI.terra + '99', borderRadius: 3 },
+    ]},
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      scales: { x: { stacked: true, beginAtZero: true, grid: { color: '#eeece6' } }, y: { stacked: true, grid: { display: false } } } }
+  });
+
+  // 4) Ambulant/Stationär (Donut) mit Ø Dauer im Tooltip
+  const be = { 'ambulant': { n: 0, d: [] }, 'stationär': { n: 0, d: [] } };
+  for (const r of rows) { const e = be[r.bereich]; e.n++; if (r.dauerMonate != null) e.d.push(r.dauerMonate); }
+  chart('chBereich', {
+    type: 'doughnut',
+    data: { labels: ['Ambulant', 'Stationär'], datasets: [{
+      data: [be['ambulant'].n, be['stationär'].n],
+      backgroundColor: [CI.terra, CI.braun], borderColor: '#fff', borderWidth: 2,
+    }]},
+    options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: { tooltip: { callbacks: { label: x => {
+        const e = be[x.label.toLowerCase()];
+        const avg = e.d.length ? (e.d.reduce((a, b) => a + b, 0) / e.d.length) : null;
+        return ' ' + x.label + ': ' + e.n + ' Hilfen · Ø ' + (avg == null ? '—' : avg.toLocaleString('de-DE', { maximumFractionDigits: 1 })) + ' Mon.';
+      } } } } }
+  });
+}
+
 /* ── Tabelle ── */
 const SPALTEN = [
   { k:'klient',          t:'Klient:in' },
@@ -273,9 +412,9 @@ function zeileHtml(r) {
   const betrTitle = r.betreuer.map(b => `${b.name} (${b.rolle}${b.aktuell ? '' : ', beendet'})`).join('\n');
   return `<tr class="datarow">
     <td><span class="name">${esc(r.klient)}</span>${r.hilfe ? `<div class="sub" title="${esc(r.hilfe)}">${esc(r.hilfe)}</div>` : ''}</td>
-    <td>${esc(r.jugendamt)}${r.aktenzeichen ? `<div class="sub">Az. ${esc(r.aktenzeichen)}</div>` : ''}</td>
+    <td title="${esc(r.jugendamtLang || r.jugendamt)}">${esc(r.jugendamt)}${r.aktenzeichen ? `<div class="sub">Az. ${esc(r.aktenzeichen)}</div>` : ''}</td>
     <td>${esc(r.sachbearbeitung || '—')}</td>
-    <td>${esc(r.rechtsgrundlage || '—')}</td>
+    <td>${esc(r.rechtsgrundlage || '—')}<div class="sub">${esc(r.bereich)}</div></td>
     <td title="${esc(betrTitle)}">${esc(r.hb || '—')}${weitere.length ? `<span class="sub"> +${weitere.length}</span>` : ''}</td>
     <td class="num">${fmtDate(r.beginn)}</td>
     <td class="num">${r.laufend ? '—' : fmtDate(r.ende)}</td>
@@ -288,6 +427,7 @@ function render() {
   if (!daten) return;
   const rows = gefiltert();
   renderKpis(rows);
+  renderCharts(rows);
   renderArten(rows);
 
   document.getElementById('theadRow').innerHTML = SPALTEN.map(s =>
@@ -330,13 +470,13 @@ function render() {
 function csvExport() {
   if (!daten) return;
   const rows = gefiltert();
-  const head = ['Klient','Jugendamt','Aktenzeichen','Sachbearbeitung','Hilfeart','Massnahme','Betreuung PNW','Weitere Betreuung','Beginn','Ende','Dauer Monate','Status','Archiv'];
+  const head = ['Klient','Jugendamt','Jugendamt (voll)','Aktenzeichen','Sachbearbeitung','Hilfeart','Bereich','Massnahme','Betreuung PNW','Weitere Betreuung','Beginn','Ende','Dauer Monate','Status','Archiv'];
   const csvVal = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
   const lines = [head.map(csvVal).join(';')];
   for (const r of rows) {
     lines.push([
-      r.klient, r.jugendamt, r.aktenzeichen || '', r.sachbearbeitung || '', r.rechtsgrundlage || '',
-      r.hilfe || '', r.hb || '',
+      r.klient, r.jugendamt, r.jugendamtLang || '', r.aktenzeichen || '', r.sachbearbeitung || '', r.rechtsgrundlage || '',
+      r.bereich, r.hilfe || '', r.hb || '',
       r.betreuer.filter(b => b.name !== r.hb).map(b => `${b.name} (${b.rolle})`).join(', '),
       r.beginn || '', r.ende || '', r.dauerMonate != null ? String(r.dauerMonate).replace('.',',') : '',
       r.laufend ? 'laufend' : 'beendet', r.archiviert ? 'ja' : 'nein'
@@ -383,6 +523,7 @@ async function laden() {
       throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
     }
     daten = await r.json();
+    for (const r2 of daten.rows) r2.bereich = bereichVon(r2);
     document.getElementById('standInfo').textContent =
       'Zeitraum ab ' + fmtDate(daten.zeitraumVon) + ' · inkl. Archiv · Datenstand ' +
       new Date(daten.stand).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) + ' Uhr';
