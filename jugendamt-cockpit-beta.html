@@ -284,6 +284,30 @@ function monatsListe() {
 const mLabel = d => String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + String(d.getUTCFullYear()).slice(2);
 const mKey = d => d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
 
+// Inline-Plugin: Gesamtbestand als Zahl an Quartalsenden (03/06/09/12) + letztem Monat
+const quartalsWerte = {
+  id: 'quartalsWerte',
+  afterDatasetsDraw(ch, args, opts) {
+    if (!opts || !opts.monate) return;
+    const x = ch.scales.x, y = ch.scales.y;
+    const ctx = ch.ctx;
+    ctx.save();
+    ctx.font = "600 10px 'Kodchasan','Segoe UI',sans-serif";
+    ctx.fillStyle = '#3D2B1F';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    opts.monate.forEach((m, i) => {
+      const q = [3, 6, 9, 12].includes(m.getUTCMonth() + 1);
+      if (!q && i !== opts.monate.length - 1) return;
+      let total = 0;
+      for (const ds of ch.data.datasets) total += ds.data[i] || 0;
+      if (!total) return;
+      ctx.fillText(String(total), x.getPixelForValue(i), y.getPixelForValue(total) - 4);
+    });
+    ctx.restore();
+  },
+};
+
 function chart(id, cfg) {
   if (!window.Chart) return;
   if (CH[id]) CH[id].destroy();
@@ -325,11 +349,13 @@ function renderCharts(rows) {
       backgroundColor: JA_FARBEN[i % JA_FARBEN.length] + 'aa',
       fill: true, tension: .3, pointRadius: 0, borderWidth: 1.5, stack: 's',
     }))},
+    plugins: [quartalsWerte],
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, padding: 8 } },
+        quartalsWerte: { monate },
         tooltip: { itemSort: (a, b) => b.parsed.y - a.parsed.y, callbacks: {
           footer: items => 'Gesamt: ' + items.reduce((s, x) => s + x.parsed.y, 0) } } },
-      scales: { y: { stacked: true, beginAtZero: true, grid: { color: '#eeece6' } }, x: { grid: { display: false } } } }
+      scales: { y: { stacked: true, beginAtZero: true, grace: '10%', grid: { color: '#eeece6' } }, x: { grid: { display: false } } } }
   });
 
   // 2) Zugänge / Abgänge je Monat + Netto-Linie
@@ -650,6 +676,7 @@ async function pdfSummary() {
           layout: tabLayout, margin: [0, 1, 0, 2] },
 
         {
+          pageBreak: 'before',
           columns: [
             { width: '*', stack: [
               abschnitt('Hilfen nach PNW-Mitarbeiter:in'),
