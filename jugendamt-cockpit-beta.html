@@ -543,6 +543,9 @@ async function pdfSummary() {
     pdfMake.vfs = assets.vfs; pdfMake.fonts = assets.fonts;
 
     const C = { wood:'#3D2B1F', terra:'#B56B4A', creme:'#F5F0EA', meta:'#8a8378', ink:'#2b241d', line:'#e2dfd8', gruen:'#2e7d32' };
+    // Fallbestands-Grafik als Bild übernehmen (zeigt durch den JA-Filter genau dieses Amt)
+    let chartImg = null;
+    try { if (CH.chBestand) chartImg = CH.chBestand.toBase64Image('image/png', 1); } catch (e) { console.warn('Chart-Export:', e.message); }
     const rows = gefiltert();
     const laufend = rows.filter(r => r.laufend);
     const beendet = rows.filter(r => !r.laufend);
@@ -561,10 +564,10 @@ async function pdfSummary() {
       const e = artMap.get(k); e.g++; if (r.laufend) e.l++;
     }
     const artZeilen = [...artMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
-      { text: k, fontSize: 8.5 },
-      { text: String(e.g), alignment: 'right', fontSize: 8.5 },
-      { text: String(e.l), alignment: 'right', fontSize: 8.5 },
-      { text: String(e.g - e.l), alignment: 'right', fontSize: 8.5 },
+      { text: k, fontSize: 8 },
+      { text: String(e.g), alignment: 'right', fontSize: 8 },
+      { text: String(e.l), alignment: 'right', fontSize: 8 },
+      { text: String(e.g - e.l), alignment: 'right', fontSize: 8 },
     ]);
 
     // Sachbearbeitungs-Aggregat
@@ -575,9 +578,9 @@ async function pdfSummary() {
       const e = sbMap.get(k); e.g++; if (r.laufend) e.l++;
     }
     const sbZeilen = [...sbMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
-      { text: k, fontSize: 8.5 },
-      { text: String(e.g), alignment: 'right', fontSize: 8.5 },
-      { text: String(e.l), alignment: 'right', fontSize: 8.5 },
+      { text: k, fontSize: 8 },
+      { text: String(e.g), alignment: 'right', fontSize: 8 },
+      { text: String(e.l), alignment: 'right', fontSize: 8 },
     ]);
 
     // Hilfen nach PNW-Mitarbeiter (Hauptbetreuung)
@@ -588,25 +591,26 @@ async function pdfSummary() {
       const e = pnwMap.get(k); e.g++; if (r.laufend) e.l++;
     }
     const pnwZeilen = [...pnwMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
-      { text: k, fontSize: 8.5 },
-      { text: String(e.g), alignment: 'right', fontSize: 8.5 },
-      { text: String(e.l), alignment: 'right', fontSize: 8.5 },
-      { text: String(e.g - e.l), alignment: 'right', fontSize: 8.5 },
+      { text: k, fontSize: 8 },
+      { text: String(e.g), alignment: 'right', fontSize: 8 },
+      { text: String(e.l), alignment: 'right', fontSize: 8 },
+      { text: String(e.g - e.l), alignment: 'right', fontSize: 8 },
     ]);
 
-    const kopfZelle = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .5, color: C.meta, fillColor: C.creme, margin: [0,3,0,3] });
+    const kopfZelle = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 7, characterSpacing: .4, color: C.meta, fillColor: C.creme, margin: [0,2,0,2] });
+    const tabLayout = { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 1.6, paddingBottom: () => 1.6 };
     const kpi = (wert, label) => ({
       stack: [
-        { text: String(wert), font: 'KodchasanSemi', fontSize: 16, color: C.wood },
-        { text: label.toUpperCase(), font: 'KodchasanSemi', fontSize: 6.5, characterSpacing: .5, color: C.meta, margin: [0,1,0,0] },
+        { text: String(wert), font: 'KodchasanSemi', fontSize: 13, color: C.wood },
+        { text: label.toUpperCase(), font: 'KodchasanSemi', fontSize: 6, characterSpacing: .4, color: C.meta, margin: [0,1,0,0] },
       ],
-      fillColor: C.creme, margin: [8, 7, 8, 7],
+      fillColor: C.creme, margin: [7, 5, 7, 5],
     });
-    const abschnitt = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 9, characterSpacing: .8, color: C.terra, margin: [0, 10, 0, 4] });
+    const abschnitt = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 8.5, characterSpacing: .7, color: C.terra, margin: [0, 7, 0, 3] });
 
     const dd = {
-      pageSize: 'A4', pageMargins: [40, 54, 40, 46],
-      defaultStyle: { font: 'Kodchasan', fontSize: 9, color: C.ink, lineHeight: 1.25 },
+      pageSize: 'A4', pageMargins: [36, 38, 36, 40],
+      defaultStyle: { font: 'Kodchasan', fontSize: 9, color: C.ink, lineHeight: 1.2 },
       footer: (cur, tot) => ({
         columns: [
           { text: 'Praxis NeueWege · praxisneuewege.de · Erstellt am ' + heute, fontSize: 7, color: C.meta },
@@ -618,37 +622,50 @@ async function pdfSummary() {
           columns: [
             { stack: [
               { text: 'PRAXIS NEUEWEGE · ZUSAMMENARBEIT', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: 1.2, color: C.meta },
-              { text: jaSel, font: 'KodchasanSemi', fontSize: 19, color: C.wood, margin: [0, 3, 0, 0] },
+              { text: jaSel, font: 'KodchasanSemi', fontSize: 16, color: C.wood, margin: [0, 2, 0, 0] },
               ...(jaLang !== jaSel ? [{ text: jaLang.replace(/\n/g, ' — '), fontSize: 8.5, color: C.meta, margin: [0, 1, 0, 0] }] : []),
               { text: 'Zeitraum ab ' + fmtDate(von) + ' · Stand ' + heute, fontSize: 8.5, color: C.meta, margin: [0, 3, 0, 0] },
             ]},
-            ...(assets.logo ? [{ image: assets.logo, width: 84, alignment: 'right' }] : []),
+            ...(assets.logo ? [{ image: assets.logo, width: 66, alignment: 'right' }] : []),
           ],
-          margin: [0, 0, 0, 12],
+          margin: [0, 0, 0, 8],
         },
         { text: ('Zeitraum ' + fmtDate(von) + ' – ' + heute).toUpperCase(), font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: C.meta, margin: [0, 0, 0, 3] },
         { table: { widths: ['*','*','*'], body: [[
             kpi(rows.length, 'Hilfen gesamt'), kpi(neuBegonnen, 'Neu begonnen'), kpi(beendet.length, 'Beendet'),
-          ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 8] },
+          ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 6] },
         { text: 'STAND HEUTE', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: C.meta, margin: [0, 0, 0, 3] },
         { table: { widths: ['*','*','*'], body: [[
             kpi(laufend.length, 'Laufende Hilfen'), kpi(klientenLaufend, 'Klient:innen'), kpi(pnwLaufend, 'PNW-Fachkräfte im Einsatz'),
-          ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 4] },
+          ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 2] },
+
+        ...(chartImg ? [
+          abschnitt('Fallbestand je Monat (laufende Hilfen zum Monatsende)'),
+          { image: chartImg, width: 505, margin: [0, 0, 0, 2] },
+        ] : []),
 
         abschnitt('Verteilung nach Hilfeart'),
-        { table: { headerRows: 1, widths: ['*', 44, 44, 44],
+        { table: { headerRows: 1, widths: ['*', 40, 44, 44],
             body: [ ['Hilfeart','Gesamt','Laufend','Beendet'].map(kopfZelle), ...artZeilen ] },
-          layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
+          layout: tabLayout, margin: [0, 1, 0, 2] },
 
-        abschnitt('Hilfen je Sachbearbeitung'),
-        { table: { headerRows: 1, widths: ['*', 44, 44],
-            body: [ ['Sachbearbeitung','Gesamt','Laufend'].map(kopfZelle), ...sbZeilen ] },
-          layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
-
-        abschnitt('Hilfen nach PNW-Mitarbeiter:in (Hauptbetreuung)'),
-        { table: { headerRows: 1, widths: ['*', 44, 44, 44],
-            body: [ ['Betreuer:in','Gesamt','Laufend','Beendet'].map(kopfZelle), ...pnwZeilen ] },
-          layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
+        {
+          columns: [
+            { width: '*', stack: [
+              abschnitt('Hilfen nach PNW-Mitarbeiter:in'),
+              { table: { headerRows: 1, widths: ['*', 32, 36, 36],
+                  body: [ ['Betreuer:in (HB)','Ges.','Lfd.','Beend.'].map(kopfZelle), ...pnwZeilen ] },
+                layout: tabLayout, margin: [0, 1, 0, 0] },
+            ]},
+            { width: 14, text: '' },
+            { width: '*', stack: [
+              abschnitt('Hilfen je Sachbearbeitung'),
+              { table: { headerRows: 1, widths: ['*', 32, 36],
+                  body: [ ['Sachbearbeitung','Ges.','Lfd.'].map(kopfZelle), ...sbZeilen ] },
+                layout: tabLayout, margin: [0, 1, 0, 0] },
+            ]},
+          ],
+        },
       ],
     };
     const dateiname = 'PNW_Summary_' + jaSel.replace(/[^\wäöüÄÖÜß-]+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
