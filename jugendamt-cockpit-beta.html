@@ -592,8 +592,8 @@ async function pdfSummary() {
     const artZeilen = [...artMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
       { text: k, fontSize: 8 },
       { text: String(e.g), alignment: 'right', fontSize: 8 },
-      { text: String(e.l), alignment: 'right', fontSize: 8 },
       { text: String(e.g - e.l), alignment: 'right', fontSize: 8 },
+      { text: String(e.l), alignment: 'right', fontSize: 8 },
     ]);
 
     // Sachbearbeitungs-Aggregat
@@ -619,8 +619,8 @@ async function pdfSummary() {
     const pnwZeilen = [...pnwMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
       { text: k, fontSize: 8 },
       { text: String(e.g), alignment: 'right', fontSize: 8 },
-      { text: String(e.l), alignment: 'right', fontSize: 8 },
       { text: String(e.g - e.l), alignment: 'right', fontSize: 8 },
+      { text: String(e.l), alignment: 'right', fontSize: 8 },
     ]);
 
     const kopfZelle = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 7, characterSpacing: .4, color: C.meta, fillColor: C.creme, margin: [0,2,0,2] });
@@ -672,7 +672,7 @@ async function pdfSummary() {
 
         abschnitt('Verteilung nach Hilfeart'),
         { table: { headerRows: 1, widths: ['*', 40, 44, 44],
-            body: [ ['Hilfeart','Gesamt','Laufend','Beendet'].map(kopfZelle), ...artZeilen ] },
+            body: [ ['Hilfeart','Gesamt','Beendet','Laufend'].map(kopfZelle), ...artZeilen ] },
           layout: tabLayout, margin: [0, 1, 0, 2] },
 
         {
@@ -681,7 +681,7 @@ async function pdfSummary() {
             { width: '*', stack: [
               abschnitt('Hilfen nach PNW-Mitarbeiter:in'),
               { table: { headerRows: 1, widths: ['*', 32, 36, 36],
-                  body: [ ['Betreuer:in (HB)','Ges.','Lfd.','Beend.'].map(kopfZelle), ...pnwZeilen ] },
+                  body: [ ['Betreuer:in (HB)','Ges.','Beend.','Lfd.'].map(kopfZelle), ...pnwZeilen ] },
                 layout: tabLayout, margin: [0, 1, 0, 0] },
             ]},
             { width: 14, text: '' },
