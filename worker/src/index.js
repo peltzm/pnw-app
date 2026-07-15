@@ -1005,6 +1005,7 @@ async function buildCockpit(env, upn, now) {
   const hbClientIds = new Set();
   const hbFallNamen = new Map(); // id → recName (für Zu-/Abgangs-Listen im Manager-Cockpit)
   const alleClientIds = new Set(); // HB+MB+V — für Status-Aggregation
+  const clientNamen = new Map();   // id → recName (für Fehlt-Listen der Status-Chips)
   for (const client of clients || []) {
     if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
     let besteRolle = 0;
@@ -1020,6 +1021,7 @@ async function buildCockpit(env, upn, now) {
       const rang = ROLE_RANK[att.attendantKind.name];
       if (rang > besteRolle) besteRolle = rang;
       alleClientIds.add(String(client.id));
+      clientNamen.set(String(client.id), client.recName || String(client.id));
       if (rang !== 3) continue; // Soll/Ist nur über Hauptbetreuung (keine Doppelzählung)
       hbClientIds.add(String(client.id));
       hbFallNamen.set(String(client.id), { name: client.recName || String(client.id), amt: action.department?.name || "", hilfeart: action.legalBasis?.name || "", massnahme: action.recName || "" });
@@ -1075,14 +1077,17 @@ async function buildCockpit(env, upn, now) {
     const statusMap = await fetchClientStatusMap(env);
     if (statusMap.size) {
       const zaehle = (f) => {
-        let x = 0, y = 0;
+        let ok = 0, gesamt = 0;
+        const fehlt = [];
         for (const id of alleClientIds) {
           const s = statusMap.get(id);
           if (!s) continue;
-          y++;
-          if (f(s)) x++;
+          gesamt++;
+          if (f(s)) ok++;
+          else fehlt.push(clientNamen.get(id) || "Fall-ID " + id);
         }
-        return [x, y];
+        fehlt.sort((a, b) => a.localeCompare(b, "de"));
+        return { ok, gesamt, fehlt };
       };
       klientenStatus = { ds: zaehle((s) => s.ds), spe: zaehle((s) => s.spe), bew: zaehle((s) => s.bew) };
     }
@@ -1154,7 +1159,7 @@ async function buildCockpit(env, upn, now) {
   const abs = await fetchCockpitAbsences(env);
   if (abs.verfuegbar && person && person.kilankaId) {
     let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
-    let regenH1 = null, regenH2 = null, anspruch = null;
+    let regenH1 = null, regenH2 = null, anspruch = null, anspruchQuelle = null;
     const geplanteTermine = []; // kommende genehmigte Urlaube inkl. Datum
     for (const a of abs.data || []) {
       if (String(a.user?.id) !== person.kilankaId) continue;
@@ -1168,9 +1173,21 @@ async function buildCockpit(env, upn, now) {
           uGeplant += tage;
           geplanteTermine.push({ von: isoDate(begin), bis: isoDate(kDate(a.end) || begin), tage });
         } else uGenommen += tage;
-        // Urlaubsanspruch aus vacationEntitlement.description (Standard 30)
-        const m2 = /(\d{1,2})/.exec(a.vacationEntitlement?.description || "");
-        if (m2) anspruch = Math.max(anspruch || 0, parseInt(m2[1], 10));
+        // Urlaubsanspruch aus vacationEntitlement.description (Standard 30).
+        // Formate wie "30 + 4" (Anspruch + Übertrag) werden summiert; sonst
+        // größte plausible Zahl (20–60), Jahreszahlen wie "2026" zählen nicht.
+        const beschr = a.vacationEntitlement?.description || "";
+        if (beschr) {
+          anspruchQuelle = beschr;
+          const plus = /(\d{1,2})\s*\+\s*(\d{1,2})/.exec(beschr);
+          let wert = null;
+          if (plus) wert = parseInt(plus[1], 10) + parseInt(plus[2], 10);
+          else {
+            const kandidaten = (beschr.match(/\d+/g) || []).map(Number).filter((n) => n >= 20 && n <= 60);
+            if (kandidaten.length) wert = Math.max(...kandidaten);
+          }
+          if (wert != null) anspruch = Math.max(anspruch || 0, wert);
+        }
       }
       else if (art === "krank") { kTage += tage; if (!letzte || begin > letzte) letzte = begin; }
       else if (art === "kindkrank") { kindKrank += tage; }
@@ -1184,6 +1201,7 @@ async function buildCockpit(env, upn, now) {
     urlaub = {
       jahr,
       anspruchTage: anspruch,
+      anspruchQuelle,
       genommenTage: Math.round(uGenommen * 2) / 2,
       geplantTage: Math.round(uGeplant * 2) / 2,
       restTage: Math.round((anspruch - uGenommen - uGeplant) * 2) / 2,
