@@ -776,11 +776,21 @@ async function alleHbFaelle(env, now) {
   );
 
   for (const client of clients || []) {
-    if (kDate(client.deletedAt)) continue;
-    const archiviert = isArchived(client.recName);
-    const acts = (client.actions || []).filter(
-      (a) => !kDate(a.deletedAt) && (!archiviert || kDate(a.validUntil))
-    );
+    // Kilanka-Archiv nutzt ZWEI Marker (s. docs/kilanka-api-erkenntnisse.md §7):
+    // deletedAt gesetzt ODER recName-Präfix "[archiviert]". Beides bedeutet
+    // "Fall beendet und archiviert", NICHT "Datensatz ungültig" — für
+    // historische Stichtage müssen diese Fälle mitzählen.
+    const archiviertAm = kDate(client.deletedAt);
+    const archiviert = !!archiviertAm || isArchived(client.recName);
+    const acts = (client.actions || []).filter((a) => {
+      if (kDate(a.deletedAt)) return false;
+      if (!archiviert) return true;
+      const bis = kDate(a.validUntil);
+      if (!bis) return false; // Archiv ohne Maßnahmen-Enddatum: nicht werten
+      // deletedAt VOR Maßnahmen-Ende → Fehlanlage/Löschung, kein Archiv
+      if (archiviertAm && archiviertAm < bis) return false;
+      return true;
+    });
 
     // 1) Regulär: Maßnahme mit aktivem HB läuft zum Stichtag
     let treffer = acts.find((a) => isCurrent(a.validFrom, a.validUntil, now) && hbAktuell(a, now));
