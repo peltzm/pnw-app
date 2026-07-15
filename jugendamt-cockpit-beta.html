@@ -9,6 +9,7 @@
 <title>Jugendamt-Cockpit (Beta) — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --text:#1a1916;
@@ -39,7 +40,7 @@ body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:va
 .page-header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
 .page-header h2{font-size:17px;font-weight:600}
 .page-header p{font-size:12px;color:var(--text-muted)}
-.filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1 1 100%;justify-content:center}
 .filters select{height:32px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:inherit;font-size:12.5px;padding:0 8px;color:var(--text);max-width:230px}
 .filters label{font-size:11px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.3px}
 .wrap{max-width:1400px;margin:0 auto;padding:18px 20px 60px}
@@ -57,12 +58,14 @@ body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:va
 @media (max-width:900px){.charts{grid-template-columns:1fr}}
 /* Tabelle */
 .tablecard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto}
-table{border-collapse:collapse;width:100%;min-width:1100px;font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
 th{position:sticky;top:0;background:var(--surface);text-align:left;padding:10px 10px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none;z-index:5}
 th:first-child,td:first-child{padding-left:16px}
 th.num,td.num{text-align:right}
 th.sorted{color:var(--accent)}
-td{padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--border);white-space:normal;vertical-align:top}
+td.nw{white-space:nowrap}
+td .sub{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr.datarow:hover td{background:var(--accent-light)}
 tr.grouphead td{background:var(--accent-light);font-weight:600;font-size:12px;border-bottom:1px solid var(--border)}
 tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
@@ -135,6 +138,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
       </select>
       <button class="btn-ghost" onclick="reload()">Neu laden</button>
       <button class="btn-ghost" onclick="csvExport()">CSV exportieren</button>
+      <button class="btn-ghost" onclick="pdfSummary()" id="btnPdf">PDF-Summary</button>
     </div>
   </div>
 
@@ -178,6 +182,8 @@ let sortKey = 'klient', sortDir = 1;
 
 const fmtNum = (n, d=0) => n == null ? '—' : n.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
 const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('de-DE') : '—';
+// "§ 31 SGB VIII - Sozialpädagogische Familienhilfe" → "Sozialpädagogische Familienhilfe"
+const artKurz = s => { if (!s) return s; const i = s.indexOf(' - '); return s.startsWith('§') && i > -1 ? s.slice(i + 3).trim() : s; };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ── Auswahl / Filterung ── */
@@ -230,7 +236,7 @@ function fuelleFilter() {
     jas.map(j => `<option value="${esc(j)}">${esc(j)}</option>`).join('');
   document.getElementById('artFilter').innerHTML =
     '<option value="">Alle Hilfearten</option>' +
-    arten.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+    arten.map(a => `<option value="${esc(a)}">${esc(artKurz(a))}</option>`).join('');
 }
 
 /* ── KPIs ── */
@@ -423,12 +429,12 @@ function zeileHtml(r) {
     <td><span class="name">${esc(r.klient)}</span>${r.hilfe ? `<div class="sub" title="${esc(r.hilfe)}">${esc(r.hilfe)}</div>` : ''}</td>
     <td title="${esc(r.jugendamtLang || r.jugendamt)}">${esc(r.jugendamt)}${r.aktenzeichen ? `<div class="sub">Az. ${esc(r.aktenzeichen)}</div>` : ''}</td>
     <td>${esc(r.sachbearbeitung || '—')}</td>
-    <td>${esc(r.rechtsgrundlage || '—')}<div class="sub">${esc(r.bereich)}</div></td>
-    <td title="${esc(betrTitle)}">${esc(r.hb || '—')}${weitere.length ? `<span class="sub"> +${weitere.length}</span>` : ''}</td>
-    <td class="num">${fmtDate(r.beginn)}</td>
-    <td class="num">${r.laufend ? '—' : fmtDate(r.ende)}</td>
-    <td class="num">${fmtNum(r.dauerMonate,1)}</td>
-    <td>${status}</td>
+    <td title="${esc(r.rechtsgrundlage || '')}">${esc(artKurz(r.rechtsgrundlage) || '—')}<div class="sub">${esc(r.bereich)}</div></td>
+    <td class="nw" title="${esc(betrTitle)}">${esc(r.hb || '—')}${weitere.length ? `<span class="sub"> +${weitere.length}</span>` : ''}</td>
+    <td class="num nw">${fmtDate(r.beginn)}</td>
+    <td class="num nw">${r.laufend ? '—' : fmtDate(r.ende)}</td>
+    <td class="num nw">${fmtNum(r.dauerMonate,1)}</td>
+    <td class="nw">${status}</td>
   </tr>`;
 }
 
@@ -496,6 +502,164 @@ function csvExport() {
   a.download = 'jugendamt-cockpit_' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+/* ── PDF-Summary je Jugendamt (pdfmake, Kodchasan, PNW-CI) ── */
+let _pdfAssets = null;
+async function _ladePdfAssets() {
+  if (_pdfAssets) return _pdfAssets;
+  const basis = window.location.pathname.replace(/[^/]*$/, '');
+  async function b64(pfad) {
+    const r = await fetch(basis + pfad);
+    if (!r.ok) throw new Error(pfad + ' nicht gefunden (' + r.status + ')');
+    const buf = await r.arrayBuffer();
+    let bin = ''; const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  const namen = ['Kodchasan-Regular.ttf','Kodchasan-Medium.ttf','Kodchasan-SemiBold.ttf','Kodchasan-Bold.ttf','Kodchasan-Italic.ttf'];
+  const geladen = await Promise.all(namen.map(n => b64('assets/fonts/' + n)));
+  const vfs = {}; namen.forEach((n, i) => vfs[n] = geladen[i]);
+  const fonts = {
+    Kodchasan:       { normal: 'Kodchasan-Regular.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+    KodchasanMedium: { normal: 'Kodchasan-Medium.ttf', bold: 'Kodchasan-SemiBold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-SemiBold.ttf' },
+    KodchasanSemi:   { normal: 'Kodchasan-SemiBold.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+  };
+  let logo = null;
+  try { logo = 'data:image/png;base64,' + await b64('assets/logo-pnw-neu.png'); } catch (e) { console.warn('Logo fehlt:', e.message); }
+  _pdfAssets = { vfs, fonts, logo };
+  return _pdfAssets;
+}
+
+async function pdfSummary() {
+  const jaSel = document.getElementById('jaFilter').value;
+  if (!jaSel) { alert('Bitte zuerst ein Jugendamt auswählen — das Summary ist als Mitnahme-Dokument je Amt gedacht.'); return; }
+  const btn = document.getElementById('btnPdf');
+  const orig = btn.textContent;
+  try {
+    btn.disabled = true; btn.textContent = 'PDF wird erstellt…';
+    if (typeof pdfMake === 'undefined') throw new Error('pdfmake nicht geladen (CDN blockiert?)');
+    const assets = await _ladePdfAssets();
+    pdfMake.vfs = assets.vfs; pdfMake.fonts = assets.fonts;
+
+    const C = { wood:'#3D2B1F', terra:'#B56B4A', creme:'#F5F0EA', meta:'#8a8378', ink:'#2b241d', line:'#e2dfd8', gruen:'#2e7d32' };
+    const rows = gefiltert();
+    const laufend = rows.filter(r => r.laufend);
+    const beendet = rows.filter(r => !r.laufend);
+    const jaLang = rows.find(r => r.jugendamtLang)?.jugendamtLang || jaSel;
+    const von = vonAuswahl();
+    const heute = new Date().toLocaleDateString('de-DE');
+    const dM = arr => { const v = arr.map(r => r.dauerMonate).filter(x => x != null); return v.length ? (v.reduce((a,b)=>a+b,0)/v.length).toLocaleString('de-DE',{maximumFractionDigits:1}) : '—'; };
+
+    // Hilfeart-Aggregat
+    const artMap = new Map();
+    for (const r of rows) {
+      const k = r.rechtsgrundlage || '— ohne Angabe —';
+      if (!artMap.has(k)) artMap.set(k, { g:0, l:0, d:[] });
+      const e = artMap.get(k); e.g++; if (r.laufend) e.l++;
+      if (r.dauerMonate != null) e.d.push(r.dauerMonate);
+    }
+    const artZeilen = [...artMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
+      { text: k, fontSize: 8.5 },
+      { text: String(e.g), alignment: 'right', fontSize: 8.5 },
+      { text: String(e.l), alignment: 'right', fontSize: 8.5 },
+      { text: String(e.g - e.l), alignment: 'right', fontSize: 8.5 },
+      { text: (e.d.length ? (e.d.reduce((a,b)=>a+b,0)/e.d.length).toLocaleString('de-DE',{maximumFractionDigits:1}) : '—') + ' Mon.', alignment: 'right', fontSize: 8.5 },
+    ]);
+
+    // Sachbearbeitungs-Aggregat
+    const sbMap = new Map();
+    for (const r of rows) {
+      const k = r.sachbearbeitung || '— ohne Angabe —';
+      if (!sbMap.has(k)) sbMap.set(k, { g:0, l:0 });
+      const e = sbMap.get(k); e.g++; if (r.laufend) e.l++;
+    }
+    const sbZeilen = [...sbMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
+      { text: k, fontSize: 8.5 },
+      { text: String(e.g), alignment: 'right', fontSize: 8.5 },
+      { text: String(e.l), alignment: 'right', fontSize: 8.5 },
+    ]);
+
+    const kopfZelle = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .5, color: C.meta, fillColor: C.creme, margin: [0,3,0,3] });
+    const fallZeile = r => [
+      { text: r.klient, fontSize: 8.5 },
+      { text: artKurz(r.rechtsgrundlage) || '—', fontSize: 8.5 },
+      { text: r.sachbearbeitung || '—', fontSize: 8.5 },
+      { text: r.hb || '—', fontSize: 8.5 },
+      { text: fmtDate(r.beginn), alignment: 'right', fontSize: 8.5 },
+      { text: (r.laufend ? 'läuft' : fmtDate(r.ende)), alignment: 'right', fontSize: 8.5, color: r.laufend ? C.gruen : C.ink },
+      { text: fmtNum(r.dauerMonate, 1) + ' Mon.', alignment: 'right', fontSize: 8.5 },
+    ];
+    const fallTabelle = liste => ({
+      table: {
+        headerRows: 1, widths: ['*', 90, 80, 80, 42, 42, 40],
+        body: [
+          ['Klient:in','Hilfeart','Sachbearbeitung','Betreuung PNW','Beginn','Ende','Dauer'].map(kopfZelle),
+          ...liste.map(fallZeile),
+        ],
+      },
+      layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 },
+      margin: [0, 2, 0, 12],
+    });
+    const kpi = (wert, label) => ({
+      stack: [
+        { text: String(wert), font: 'KodchasanSemi', fontSize: 16, color: C.wood },
+        { text: label.toUpperCase(), font: 'KodchasanSemi', fontSize: 6.5, characterSpacing: .5, color: C.meta, margin: [0,1,0,0] },
+      ],
+      fillColor: C.creme, margin: [8, 7, 8, 7],
+    });
+    const abschnitt = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 9, characterSpacing: .8, color: C.terra, margin: [0, 10, 0, 4] });
+
+    const sortiert = l => [...l].sort((a,b) => (a.klient||'').localeCompare(b.klient||'','de'));
+    const dd = {
+      pageSize: 'A4', pageMargins: [40, 54, 40, 46],
+      defaultStyle: { font: 'Kodchasan', fontSize: 9, color: C.ink, lineHeight: 1.25 },
+      footer: (cur, tot) => ({
+        columns: [
+          { text: 'Praxis NeueWege · praxisneuewege.de · Erstellt am ' + heute, fontSize: 7, color: C.meta },
+          { text: cur + ' / ' + tot, alignment: 'right', fontSize: 7, color: C.meta },
+        ], margin: [40, 14, 40, 0],
+      }),
+      content: [
+        {
+          columns: [
+            { stack: [
+              { text: 'PRAXIS NEUEWEGE · ZUSAMMENARBEIT', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: 1.2, color: C.meta },
+              { text: jaSel, font: 'KodchasanSemi', fontSize: 19, color: C.wood, margin: [0, 3, 0, 0] },
+              ...(jaLang !== jaSel ? [{ text: jaLang.replace(/\n/g, ' — '), fontSize: 8.5, color: C.meta, margin: [0, 1, 0, 0] }] : []),
+              { text: 'Zeitraum ab ' + fmtDate(von) + ' · Stand ' + heute, fontSize: 8.5, color: C.meta, margin: [0, 3, 0, 0] },
+            ]},
+            ...(assets.logo ? [{ image: assets.logo, width: 84, alignment: 'right' }] : []),
+          ],
+          margin: [0, 0, 0, 12],
+        },
+        { table: { widths: ['*','*','*','*','*'], body: [[
+            kpi(rows.length, 'Hilfen gesamt'), kpi(laufend.length, 'Laufend'),
+            kpi(beendet.length, 'Beendet'), kpi(dM(laufend) + ' Mon.', 'Ø Dauer laufend'), kpi(dM(beendet) + ' Mon.', 'Ø Dauer beendet'),
+          ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 4] },
+
+        abschnitt('Verteilung nach Hilfeart'),
+        { table: { headerRows: 1, widths: ['*', 40, 44, 44, 50],
+            body: [ ['Hilfeart','Gesamt','Laufend','Beendet','Ø Dauer'].map(kopfZelle), ...artZeilen ] },
+          layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
+
+        abschnitt('Hilfen je Sachbearbeitung'),
+        { table: { headerRows: 1, widths: ['*', 44, 44],
+            body: [ ['Sachbearbeitung','Gesamt','Laufend'].map(kopfZelle), ...sbZeilen ] },
+          layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
+
+        ...(laufend.length ? [abschnitt('Laufende Hilfen (' + laufend.length + ')'), fallTabelle(sortiert(laufend))] : []),
+        ...(beendet.length ? [abschnitt('Beendete Hilfen seit ' + fmtDate(von) + ' (' + beendet.length + ')'), fallTabelle(sortiert(beendet))] : []),
+      ],
+    };
+    const dateiname = 'PNW_Summary_' + jaSel.replace(/[^\wäöüÄÖÜß-]+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
+    try { pdfMake.createPdf(dd).open(); } catch (e) { pdfMake.createPdf(dd).download(dateiname); }
+  } catch (e) {
+    alert('PDF-Erzeugung fehlgeschlagen: ' + e.message);
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
 }
 
 /* ── MSAL + Laden ── */
