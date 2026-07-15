@@ -549,22 +549,22 @@ async function pdfSummary() {
     const jaLang = rows.find(r => r.jugendamtLang)?.jugendamtLang || jaSel;
     const von = vonAuswahl();
     const heute = new Date().toLocaleDateString('de-DE');
-    const dM = arr => { const v = arr.map(r => r.dauerMonate).filter(x => x != null); return v.length ? (v.reduce((a,b)=>a+b,0)/v.length).toLocaleString('de-DE',{maximumFractionDigits:1}) : '—'; };
+    const neuBegonnen = rows.filter(r => r.beginn && r.beginn >= von).length;
+    const klientenLaufend = new Set(laufend.map(r => r.klientId)).size;
+    const pnwLaufend = new Set(laufend.map(r => r.hb).filter(Boolean)).size;
 
     // Hilfeart-Aggregat
     const artMap = new Map();
     for (const r of rows) {
       const k = r.rechtsgrundlage || '— ohne Angabe —';
-      if (!artMap.has(k)) artMap.set(k, { g:0, l:0, d:[] });
+      if (!artMap.has(k)) artMap.set(k, { g:0, l:0 });
       const e = artMap.get(k); e.g++; if (r.laufend) e.l++;
-      if (r.dauerMonate != null) e.d.push(r.dauerMonate);
     }
     const artZeilen = [...artMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
       { text: k, fontSize: 8.5 },
       { text: String(e.g), alignment: 'right', fontSize: 8.5 },
       { text: String(e.l), alignment: 'right', fontSize: 8.5 },
       { text: String(e.g - e.l), alignment: 'right', fontSize: 8.5 },
-      { text: (e.d.length ? (e.d.reduce((a,b)=>a+b,0)/e.d.length).toLocaleString('de-DE',{maximumFractionDigits:1}) : '—') + ' Mon.', alignment: 'right', fontSize: 8.5 },
     ]);
 
     // Sachbearbeitungs-Aggregat
@@ -580,27 +580,21 @@ async function pdfSummary() {
       { text: String(e.l), alignment: 'right', fontSize: 8.5 },
     ]);
 
+    // Hilfen nach PNW-Mitarbeiter (Hauptbetreuung)
+    const pnwMap = new Map();
+    for (const r of rows) {
+      const k = r.hb || '— ohne Zuordnung —';
+      if (!pnwMap.has(k)) pnwMap.set(k, { g:0, l:0 });
+      const e = pnwMap.get(k); e.g++; if (r.laufend) e.l++;
+    }
+    const pnwZeilen = [...pnwMap.entries()].sort((a,b) => b[1].g - a[1].g).map(([k,e]) => [
+      { text: k, fontSize: 8.5 },
+      { text: String(e.g), alignment: 'right', fontSize: 8.5 },
+      { text: String(e.l), alignment: 'right', fontSize: 8.5 },
+      { text: String(e.g - e.l), alignment: 'right', fontSize: 8.5 },
+    ]);
+
     const kopfZelle = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .5, color: C.meta, fillColor: C.creme, margin: [0,3,0,3] });
-    const fallZeile = r => [
-      { text: r.klient, fontSize: 8.5 },
-      { text: artKurz(r.rechtsgrundlage) || '—', fontSize: 8.5 },
-      { text: r.sachbearbeitung || '—', fontSize: 8.5 },
-      { text: r.hb || '—', fontSize: 8.5 },
-      { text: fmtDate(r.beginn), alignment: 'right', fontSize: 8.5 },
-      { text: (r.laufend ? 'läuft' : fmtDate(r.ende)), alignment: 'right', fontSize: 8.5, color: r.laufend ? C.gruen : C.ink },
-      { text: fmtNum(r.dauerMonate, 1) + ' Mon.', alignment: 'right', fontSize: 8.5 },
-    ];
-    const fallTabelle = liste => ({
-      table: {
-        headerRows: 1, widths: ['*', 90, 80, 80, 42, 42, 40],
-        body: [
-          ['Klient:in','Hilfeart','Sachbearbeitung','Betreuung PNW','Beginn','Ende','Dauer'].map(kopfZelle),
-          ...liste.map(fallZeile),
-        ],
-      },
-      layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 },
-      margin: [0, 2, 0, 12],
-    });
     const kpi = (wert, label) => ({
       stack: [
         { text: String(wert), font: 'KodchasanSemi', fontSize: 16, color: C.wood },
@@ -610,7 +604,6 @@ async function pdfSummary() {
     });
     const abschnitt = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 9, characterSpacing: .8, color: C.terra, margin: [0, 10, 0, 4] });
 
-    const sortiert = l => [...l].sort((a,b) => (a.klient||'').localeCompare(b.klient||'','de'));
     const dd = {
       pageSize: 'A4', pageMargins: [40, 54, 40, 46],
       defaultStyle: { font: 'Kodchasan', fontSize: 9, color: C.ink, lineHeight: 1.25 },
@@ -633,14 +626,18 @@ async function pdfSummary() {
           ],
           margin: [0, 0, 0, 12],
         },
-        { table: { widths: ['*','*','*','*','*'], body: [[
-            kpi(rows.length, 'Hilfen gesamt'), kpi(laufend.length, 'Laufend'),
-            kpi(beendet.length, 'Beendet'), kpi(dM(laufend) + ' Mon.', 'Ø Dauer laufend'), kpi(dM(beendet) + ' Mon.', 'Ø Dauer beendet'),
+        { text: ('Zeitraum ' + fmtDate(von) + ' – ' + heute).toUpperCase(), font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: C.meta, margin: [0, 0, 0, 3] },
+        { table: { widths: ['*','*','*'], body: [[
+            kpi(rows.length, 'Hilfen gesamt'), kpi(neuBegonnen, 'Neu begonnen'), kpi(beendet.length, 'Beendet'),
+          ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 8] },
+        { text: 'STAND HEUTE', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: C.meta, margin: [0, 0, 0, 3] },
+        { table: { widths: ['*','*','*'], body: [[
+            kpi(laufend.length, 'Laufende Hilfen'), kpi(klientenLaufend, 'Klient:innen'), kpi(pnwLaufend, 'PNW-Fachkräfte im Einsatz'),
           ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 4] },
 
         abschnitt('Verteilung nach Hilfeart'),
-        { table: { headerRows: 1, widths: ['*', 40, 44, 44, 50],
-            body: [ ['Hilfeart','Gesamt','Laufend','Beendet','Ø Dauer'].map(kopfZelle), ...artZeilen ] },
+        { table: { headerRows: 1, widths: ['*', 44, 44, 44],
+            body: [ ['Hilfeart','Gesamt','Laufend','Beendet'].map(kopfZelle), ...artZeilen ] },
           layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
 
         abschnitt('Hilfen je Sachbearbeitung'),
@@ -648,8 +645,10 @@ async function pdfSummary() {
             body: [ ['Sachbearbeitung','Gesamt','Laufend'].map(kopfZelle), ...sbZeilen ] },
           layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
 
-        ...(laufend.length ? [abschnitt('Laufende Hilfen (' + laufend.length + ')'), fallTabelle(sortiert(laufend))] : []),
-        ...(beendet.length ? [abschnitt('Beendete Hilfen seit ' + fmtDate(von) + ' (' + beendet.length + ')'), fallTabelle(sortiert(beendet))] : []),
+        abschnitt('Hilfen nach PNW-Mitarbeiter:in (Hauptbetreuung)'),
+        { table: { headerRows: 1, widths: ['*', 44, 44, 44],
+            body: [ ['Betreuer:in','Gesamt','Laufend','Beendet'].map(kopfZelle), ...pnwZeilen ] },
+          layout: { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 2.5, paddingBottom: () => 2.5 }, margin: [0, 2, 0, 4] },
       ],
     };
     const dateiname = 'PNW_Summary_' + jaSel.replace(/[^\wäöüÄÖÜß-]+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
