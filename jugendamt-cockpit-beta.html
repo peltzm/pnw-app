@@ -22,7 +22,7 @@
 body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55}
 .header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
 .header-brand{display:flex;align-items:center;gap:10px}
-.header-brand img{height:28px}
+.header-brand img{height:32px}
 .header-brand span{font-size:13px;font-weight:600}
 .beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
 .header-right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted)}
@@ -32,7 +32,7 @@ body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:va
 .btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:inherit}
 .login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - 56px);padding:24px}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:400px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
-.login-card img{height:60px;margin-bottom:1rem}
+.login-card img{height:56px;max-width:100%;object-fit:contain;margin-bottom:1rem}
 .login-title{font-size:18px;font-weight:600;margin-bottom:6px}
 .login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.4rem}
 .alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem;display:none}
@@ -85,7 +85,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
 <body>
 <header class="header">
   <div class="header-brand">
-    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="PNW">
+    <img src="assets/Logo-PraxisNeueWege-transparent.png" alt="PNW">
     <span>Jugendamt-Cockpit</span>
     <span class="beta-badge" id="versionBadge">BETA</span>
   </div>
@@ -97,7 +97,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
 
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
-    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="PNW">
+    <img src="assets/Logo-PraxisNeueWege-transparent.png" alt="PNW">
     <div class="login-title">Jugendamt-Cockpit</div>
     <div class="login-desc">Fallzahlen, Laufzeiten und Hilfearten je Jugendamt — ab April 2024, inklusive archivierter Hilfen. Zugang für Teamleitungen und Geschäftsführung.</div>
     <button class="btn btn-outline" id="loginBtn" onclick="login()">Mit Microsoft anmelden</button>
@@ -346,8 +346,9 @@ function renderCharts(rows) {
     data: { labels, datasets: topJa.map(([name, serie], i) => ({
       label: name, data: serie,
       borderColor: JA_FARBEN[i % JA_FARBEN.length],
-      backgroundColor: JA_FARBEN[i % JA_FARBEN.length] + 'aa',
-      fill: true, tension: .3, pointRadius: 0, borderWidth: 1.5, stack: 's',
+      backgroundColor: JA_FARBEN[i % JA_FARBEN.length] + '24', // zarte Tönung statt Vollfläche
+      fill: true, tension: .38, pointRadius: 0, pointHitRadius: 8,
+      borderWidth: 2, borderCapStyle: 'round', borderJoinStyle: 'round', stack: 's',
     }))},
     plugins: [quartalsWerte],
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -552,7 +553,7 @@ async function _ladePdfAssets() {
     KodchasanSemi:   { normal: 'Kodchasan-SemiBold.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
   };
   let logo = null;
-  try { logo = 'data:image/png;base64,' + await b64('assets/logo-pnw-neu.png'); } catch (e) { console.warn('Logo fehlt:', e.message); }
+  try { logo = 'data:image/png;base64,' + await b64('assets/Logo-PraxisNeueWege-transparent.png'); } catch (e) { console.warn('Logo fehlt:', e.message); }
   _pdfAssets = { vfs, fonts, logo };
   return _pdfAssets;
 }
@@ -579,7 +580,6 @@ async function pdfSummary() {
     const von = vonAuswahl();
     const heute = new Date().toLocaleDateString('de-DE');
     const neuBegonnen = rows.filter(r => r.beginn && r.beginn >= von).length;
-    const klientenLaufend = new Set(laufend.map(r => r.klientId)).size;
     const pnwLaufend = new Set(laufend.map(r => r.hb).filter(Boolean)).size;
 
     // Hilfeart-Aggregat
@@ -652,7 +652,7 @@ async function pdfSummary() {
               ...(jaLang !== jaSel ? [{ text: jaLang.replace(/\n/g, ' — '), fontSize: 8.5, color: C.meta, margin: [0, 1, 0, 0] }] : []),
               { text: 'Zeitraum ab ' + fmtDate(von) + ' · Stand ' + heute, fontSize: 8.5, color: C.meta, margin: [0, 3, 0, 0] },
             ]},
-            ...(assets.logo ? [{ image: assets.logo, width: 66, alignment: 'right' }] : []),
+            ...(assets.logo ? [{ image: assets.logo, width: 150, alignment: 'right', margin: [0, 4, 0, 0] }] : []),
           ],
           margin: [0, 0, 0, 8],
         },
@@ -661,8 +661,8 @@ async function pdfSummary() {
             kpi(rows.length, 'Hilfen gesamt'), kpi(neuBegonnen, 'Neu begonnen'), kpi(beendet.length, 'Beendet'),
           ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 6] },
         { text: 'STAND HEUTE', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: C.meta, margin: [0, 0, 0, 3] },
-        { table: { widths: ['*','*','*'], body: [[
-            kpi(laufend.length, 'Laufende Hilfen'), kpi(klientenLaufend, 'Klient:innen'), kpi(pnwLaufend, 'PNW-Fachkräfte im Einsatz'),
+        { table: { widths: ['*','*'], body: [[
+            kpi(laufend.length, 'Laufende Hilfen'), kpi(pnwLaufend, 'PNW-Fachkräfte im Einsatz'),
           ]]}, layout: { hLineWidth: () => 0, vLineWidth: () => 0, paddingLeft: () => 3, paddingRight: () => 3 }, margin: [0, 0, 0, 2] },
 
         ...(chartImg ? [
