@@ -587,9 +587,9 @@ function ampelChip(k,f){
 function privatProzentZelle(f){
   const p=f.fbPrivatProzent;
   if(p==null) return '<span style="color:var(--text-hint)">–</span>';
-  const farbe=p<=41?'var(--ok)':p<=51?'var(--warn)':'var(--error)';
+  const cls=p<=41?'chip-ok':p<=51?'chip-warn':'chip-err';
   const tip=f.fbVon?('Fahrtenbuch '+fDat(f.fbVon)+' – '+fDat(f.fbBis)+(f.fbFahrer?' · '+f.fbFahrer:'')):'';
-  return '<b style="color:'+farbe+'" title="'+esc(tip)+'">'+String(Math.round(p*10)/10).replace('.',',')+' %</b>';
+  return '<span class="chip '+cls+'" title="'+esc(tip)+'">'+String(Math.round(p*10)/10).replace('.',',')+' %</span>';
 }
 function privatChip(f,k){
   const fb=f.fbPrivatProzent!=null?Math.round(f.fbPrivatProzent):null;
