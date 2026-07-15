@@ -157,7 +157,7 @@ tr{cursor:pointer}
       </table>
     </div>
     <div class="legend">
-      Nachweise: FZ = Führungszeugnis (3 J.) · DS = Datenschutz (jährl.) · EH = Ersthelfer/BEH (jährl., nur Nordstern) —
+      Nachweise: FZ = Führungszeugnis (5 J.) · DS = Datenschutz (einmalig) · EH = Ersthelfer/BEH (jährl., 3 Mon. Vorwarnung, nur Nordstern) —
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Zeile anklicken öffnet das Mitarbeiter-Cockpit.
@@ -259,7 +259,7 @@ function sortWert(r, key) {
     case 'auslastung': return kz.auslastung ?? -1;
     case 'urlaub': return r.urlaub?.genommenTage ?? -1;
     case 'krank': return r.krankheit?.tage ?? -1;
-    case 'nachweise': return Math.max(monate(r.nachweise?.fuehrungszeugnis), monate(r.nachweise?.datenschutz));
+    case 'nachweise': return Math.max(monate(r.nachweise?.fuehrungszeugnis), r.nachweise?.datenschutz ? 0 : Infinity);
     case 'klstatus': { // nach Anzahl fehlender Einwilligungen/Bewilligungen sortieren
       const s = r.klienten?.status;
       if (!s) return -1;
@@ -303,7 +303,7 @@ function render() {
   const avgAusl = mitAusl.length ? Math.round(mitAusl.reduce((s,k)=>s+k.auslastung,0)/mitAusl.length) : null;
   const sumKli = rows.reduce((s,r)=>s+(r.klienten?.aktiv||0),0);
   const sumKrank = rows.reduce((s,r)=>s+(r.krankheit?.tage||0),0);
-  const kritisch = rows.filter(r => monate(r.nachweise?.fuehrungszeugnis) >= 36 || monate(r.nachweise?.datenschutz) >= 12).length;
+  const kritisch = rows.filter(r => monate(r.nachweise?.fuehrungszeugnis) >= 60 || !r.nachweise?.datenschutz || (/nordstern/i.test(r.team || '') && monate(r.nachweise?.behAusbildung) >= 12)).length;
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">= ${fmtNum(rows.reduce((s,r)=>s+(r.wochenstunden||0),0)/39, 1)} VZÄ (39 h/Wo)${rows.some(r=>r.wochenstunden==null) ? ' · ' + rows.filter(r=>r.wochenstunden==null).length + ' ohne Vertragsstunden' : ''}</div></div>
     <div class="kpi"><div class="v">${sumKli}</div><div class="l">Aktive Klienten</div><div class="s">HB + MB + Vertretung</div></div>
@@ -328,7 +328,7 @@ function render() {
       <td>${auslChip}</td>
       <td>${r.urlaub ? fmtNum(r.urlaub.genommenTage,1) + (r.urlaub.geplantTage ? ' <span class="team">+' + fmtNum(r.urlaub.geplantTage,1) + ' gepl.</span>' : '') : '—'}</td>
       <td>${r.krankheit ? fmtNum(r.krankheit.tage,1) : '—'}</td>
-      <td style="text-align:center">${ampel(r.nachweise?.fuehrungszeugnis, 30, 36)}${ampel(r.nachweise?.datenschutz, 11, 12)}${ampel(r.nachweise?.behAusbildung, 11, 12, kz.nordstern)}</td>
+      <td style="text-align:center">${ampel(r.nachweise?.fuehrungszeugnis, 54, 60)}${ampel(r.nachweise?.datenschutz, Infinity, Infinity)}${ampel(r.nachweise?.behAusbildung, 9, 12, kz.nordstern)}</td>
       <td style="text-align:center">${r.klienten?.status
         ? [r.klienten.status.bew, r.klienten.status.ds, r.klienten.status.spe].map(s =>
             `<span class="chip ${s[1] > 0 && s[0] === s[1] ? 'chip-ok' : 'chip-err'}" style="padding:1px 6px;margin:0 1px">${s[0]}/${s[1]}</span>`).join('')
