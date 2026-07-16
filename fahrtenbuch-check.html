@@ -117,7 +117,7 @@ footer{text-align:center;font-size:11px;color:var(--text-hint);padding:16px}
 
   <div id="driverPick" class="card">
     <h3>Wer bist du?</h3>
-    <p>Im Fahrtenbuch sind mehrere Fahrer:innen eingetragen. Wähle deinen Namen — angezeigt wird nur deine eigene Nutzung.</p>
+    <p>Anhand der neuesten Einträge automatisch gewählt — tippe deinen Namen an, falls das nicht stimmt. Angezeigt wird nur deine eigene Nutzung.</p>
     <div class="driver-chips" id="driverChips"></div>
   </div>
 
@@ -163,7 +163,7 @@ footer{text-align:center;font-size:11px;color:var(--text-hint);padding:16px}
 <footer>Praxis NeueWege · Fahrtenbuch-Check · rein lokale Auswertung, keine Datenübertragung</footer>
 
 <script>
-const APP_VERSION = 'v5fa15eb'; // auto-updated on deploy
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
 document.querySelectorAll('#versionBadge').forEach(el => { el.textContent = APP_VERSION; });
 
 const dz = document.getElementById('dropzone');
@@ -259,11 +259,21 @@ function parseWorkbook(bytes){
   if (drivers.length <= 1) {
     renderFor(drivers[0] || '');
   } else {
+    // Fahrer:in mit dem juengsten Eintrag vorwaehlen (Fallback: hoechster Endkilometerstand)
+    const latest = {}, maxKm = {};
+    for (const t of trips) {
+      if (!t.fahrer) continue;
+      if (t.beg && (!latest[t.fahrer] || t.beg > latest[t.fahrer])) latest[t.fahrer] = t.beg;
+      if (!maxKm[t.fahrer] || t.endKm > maxKm[t.fahrer]) maxKm[t.fahrer] = t.endKm;
+    }
+    const auto = drivers.slice().sort((a, b) =>
+      (latest[a] && latest[b]) ? (latest[b] - latest[a]) : ((maxKm[b] || 0) - (maxKm[a] || 0))
+    )[0];
     const chips = document.getElementById('driverChips');
     chips.innerHTML = '';
     drivers.forEach(d => {
       const b = document.createElement('button');
-      b.className = 'driver-chip';
+      b.className = 'driver-chip' + (d === auto ? ' active' : '');
       b.textContent = d;
       b.addEventListener('click', () => {
         chips.querySelectorAll('.driver-chip').forEach(x => x.classList.remove('active'));
@@ -272,9 +282,8 @@ function parseWorkbook(bytes){
       });
       chips.appendChild(b);
     });
-    const pick = document.getElementById('driverPick');
-    pick.style.display = 'block';
-    pick.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('driverPick').style.display = 'block';
+    renderFor(auto);
   }
 }
 
