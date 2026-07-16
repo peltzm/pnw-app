@@ -42,12 +42,6 @@ main{flex:1;width:100%;max-width:820px;margin:0 auto;padding:28px 18px 60px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px 24px;margin-bottom:18px}
 .card h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-hint);margin-bottom:14px}
 
-#driverPick{display:none;margin-top:26px}
-#driverPick p{font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.5}
-.driver-chips{display:flex;flex-wrap:wrap;gap:10px}
-.driver-chip{border:1px solid var(--border-strong);background:var(--bg);border-radius:24px;padding:10px 20px;font-family:inherit;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;transition:all .12s}
-.driver-chip:hover{border-color:var(--accent-mid);background:var(--accent-light)}
-.driver-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
 #result{display:none;margin-top:8px}
 .meta{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13px;color:var(--text-muted);margin-bottom:6px}
@@ -115,12 +109,6 @@ footer{text-align:center;font-size:11px;color:var(--text-hint);padding:16px}
   <input type="file" id="fileInput" accept=".xlsx,.xls">
   <div class="error-box" id="errorBox"></div>
 
-  <div id="driverPick" class="card">
-    <h3>Wer bist du?</h3>
-    <p>Anhand der neuesten Einträge automatisch gewählt — tippe deinen Namen an, falls das nicht stimmt. Angezeigt wird nur deine eigene Nutzung.</p>
-    <div class="driver-chips" id="driverChips"></div>
-  </div>
-
   <div id="result">
     <div class="card">
       <h3>Deine Nutzung</h3>
@@ -147,7 +135,7 @@ footer{text-align:center;font-size:11px;color:var(--text-hint);padding:16px}
         <div class="kpi"><div class="v" id="kpiPrivat">–</div><div class="k">km privat</div></div>
         <div class="kpi"><div class="v" id="kpiFahrten">–</div><div class="k">deine erfassten Fahrten</div></div>
       </div>
-      <p class="note" style="margin-top:14px">Zuordnung: Nicht erfasste Kilometer werden der Person zugerechnet, die das Fahrzeug laut Fahrtenbuch zuletzt gefahren hat. Fährt jemand anderes ohne Eintrag, verfälscht das dein Ergebnis — auch deshalb: bitte jede Dienstfahrt sofort eintragen.</p>
+      <p class="note" style="margin-top:14px">Ausgewertet wird automatisch die Person mit den neuesten Fahrtenbuch-Einträgen; andere Namen werden aus Datenschutzgründen nicht angezeigt. Falls oben nicht dein Name steht, melde dich bitte bei der Verwaltung. Zuordnung: Nicht erfasste Kilometer werden der Person zugerechnet, die das Fahrzeug laut Fahrtenbuch zuletzt gefahren hat. Fährt jemand anderes ohne Eintrag, verfälscht das dein Ergebnis — auch deshalb: bitte jede Dienstfahrt sofort eintragen.</p>
     </div>
 
     <div class="card">
@@ -163,7 +151,7 @@ footer{text-align:center;font-size:11px;color:var(--text-hint);padding:16px}
 <footer>Praxis NeueWege · Fahrtenbuch-Check · rein lokale Auswertung, keine Datenübertragung</footer>
 
 <script>
-const APP_VERSION = 'v335a2c6'; // auto-updated on deploy
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
 document.querySelectorAll('#versionBadge').forEach(el => { el.textContent = APP_VERSION; });
 
 const dz = document.getElementById('dropzone');
@@ -180,7 +168,6 @@ fi.addEventListener('change', () => { if (fi.files[0]) handleFile(fi.files[0]); 
 document.getElementById('resetBtn').addEventListener('click', () => {
   parsed = null;
   document.getElementById('result').style.display = 'none';
-  document.getElementById('driverPick').style.display = 'none';
   errorBox.style.display = 'none';
   dz.scrollIntoView({behavior:'smooth'});
 });
@@ -189,7 +176,6 @@ function fail(msg){
   errorBox.textContent = msg;
   errorBox.style.display = 'block';
   document.getElementById('result').style.display = 'none';
-  document.getElementById('driverPick').style.display = 'none';
 }
 
 function fmt(n){ return Math.round(n).toLocaleString('de-DE'); }
@@ -259,7 +245,8 @@ function parseWorkbook(bytes){
   if (drivers.length <= 1) {
     renderFor(drivers[0] || '');
   } else {
-    // Fahrer:in mit dem juengsten Eintrag vorwaehlen (Fallback: hoechster Endkilometerstand)
+    // Stille Auto-Auswahl: Fahrer:in mit dem juengsten Eintrag (Fallback: hoechster Endkilometerstand).
+    // Aus Datenschutzgruenden werden keine anderen Namen angezeigt.
     const latest = {}, maxKm = {};
     for (const t of trips) {
       if (!t.fahrer) continue;
@@ -269,20 +256,6 @@ function parseWorkbook(bytes){
     const auto = drivers.slice().sort((a, b) =>
       (latest[a] && latest[b]) ? (latest[b] - latest[a]) : ((maxKm[b] || 0) - (maxKm[a] || 0))
     )[0];
-    const chips = document.getElementById('driverChips');
-    chips.innerHTML = '';
-    drivers.forEach(d => {
-      const b = document.createElement('button');
-      b.className = 'driver-chip' + (d === auto ? ' active' : '');
-      b.textContent = d;
-      b.addEventListener('click', () => {
-        chips.querySelectorAll('.driver-chip').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        renderFor(d);
-      });
-      chips.appendChild(b);
-    });
-    document.getElementById('driverPick').style.display = 'block';
     renderFor(auto);
   }
 }
