@@ -840,7 +840,54 @@ function addZiel() {
   enableSpellcheck();
 }
 
-function removeZiel(n) { document.getElementById('ziel_' + n)?.remove(); }
+function removeZiel(n) {
+  document.getElementById('ziel_' + n)?.remove();
+  renumberZiele();
+}
+
+// Nach jedem Löschen alle verbleibenden Ziel-Karten lückenlos neu nummerieren.
+// Verhindert ID-Lücken, durch die Ziele beim Speichern/Generieren stillschweigend
+// verloren gingen (Fix aus Fall Kerschenlohr 13.07., ergänzt um Graf 17.07.).
+function renumberZiele() {
+  const zc = document.getElementById('zieleContainer');
+  if (!zc) return;
+  const cards = Array.from(zc.children);
+  cards.forEach((card, idx) => {
+    const n = idx + 1;
+    card.id = 'ziel_' + n;
+    const label = card.querySelector('.ziel-label');
+    if (label) label.textContent = 'Ziel ' + n;
+    const btn = card.querySelector('.btn-remove');
+    if (btn) btn.setAttribute('onclick', 'removeZiel(' + n + ')');
+    ['Beschreibung','Methoden','Ergebnis'].forEach(suffix => {
+      const el = card.querySelector('textarea[id$="_' + suffix + '"]');
+      if (el) el.id = 'Ziel_' + n + '_' + suffix;
+    });
+  });
+  zielCount = cards.length;
+}
+
+// Ziele robust direkt aus dem DOM einsammeln — unabhängig von zielCount.
+// Rückgabe null = Ziele-Container nicht im DOM (kein verlässlicher Stand).
+// Aktualisiert nebenbei _zieleSnapshot (letzter bekannter Stand mit Karten),
+// der als Schutz gegen versehentliches Leeren beim Speichern dient.
+let _zieleSnapshot = null;
+function collectZiele() {
+  const zc = document.getElementById('zieleContainer');
+  if (!zc) return null;
+  const ziele = [];
+  Array.from(zc.children).forEach(card => {
+    const b = card.querySelector('textarea[id$="_Beschreibung"]');
+    if (!b) return;
+    ziele.push({
+      beschreibung: b.value,
+      methoden: card.querySelector('textarea[id$="_Methoden"]')?.value || '',
+      ergebnis: card.querySelector('textarea[id$="_Ergebnis"]')?.value || ''
+    });
+  });
+  if (ziele.length > 0) _zieleSnapshot = ziele;
+  return ziele;
+}
 
 function checkHpgVorlaufzeit() {
   const val = document.getElementById('Naechstes_HPG')?.value;
@@ -951,10 +998,17 @@ function collectData() {
   const bzVon = document.getElementById('BZ_Von')?.value || '';
   const bzBis = document.getElementById('BZ_Bis')?.value || '';
   data['Berichtszeitraum'] = bzVon && bzBis ? _de(bzVon) + ' – ' + _de(bzBis) : (bzVon ? _de(bzVon) : (bzBis ? _de(bzBis) : ''));
+  // Ziele in DOM-Reihenfolge auf die Template-Tokens 1..20 mappen.
+  // Fallback auf den letzten bekannten Stand, falls der Ziele-Bereich gerade
+  // nicht im DOM steht (Schutz gegen leere Ziel-Abschnitte im Dokument).
+  let _zListe = collectZiele();
+  if ((!_zListe || _zListe.length === 0) && _zieleSnapshot) _zListe = _zieleSnapshot;
+  _zListe = _zListe || [];
   for (let i = 1; i <= 20; i++) {
-    data['Ziel_' + i + '_Beschreibung'] = document.getElementById('Ziel_' + i + '_Beschreibung')?.value || '';
-    data['Ziel_' + i + '_Methoden'] = document.getElementById('Ziel_' + i + '_Methoden')?.value || '';
-    data['Ziel_' + i + '_Ergebnis'] = document.getElementById('Ziel_' + i + '_Ergebnis')?.value || '';
+    const _z = _zListe[i - 1] || {};
+    data['Ziel_' + i + '_Beschreibung'] = _z.beschreibung || '';
+    data['Ziel_' + i + '_Methoden'] = _z.methoden || '';
+    data['Ziel_' + i + '_Ergebnis'] = _z.ergebnis || '';
   }
   return data;
 }
@@ -1021,7 +1075,9 @@ async function fillTemplate(templateBytes, data) {
   // damit keine {{...}}-Platzhalter im fertigen Dokument sichtbar bleiben.
   // Bewusst eng gefasst auf token-artige Namen (Wortzeichen/Punkt/Bindestrich),
   // um echten Fließtext mit geschweiften Klammern nicht zu beschädigen.
-  xml = xml.replace(/\{\{\s*[\w.\-]+\s*\}\}/g, '');
+  // Auch verwaiste Blockmarker ({{#Name}}/{{/Name}} ohne Gegenstück) mitentfernen —
+  // sonst bleibt z.B. ein einzelnes {{#Fachkraft2}} im Dokument sichtbar.
+  xml = xml.replace(/\{\{\s*[#\/]?[\w.\-]+\s*\}\}/g, '');
   zip.file('word/document.xml', xml);
   return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
 }
@@ -1218,8 +1274,12 @@ function startNew() {
     stationaer: '/Templates/Verlaufsbericht-Stationaer_Template.docx'
   }[currentBerichtstyp];
   showMainLayout();
-  buildDynamicSections(true);
+  // Reihenfolge wichtig (wie in loadDraft): resetForm löscht Werte und setzt
+  // dataset.builtFor='' — buildDynamicSections baut danach frisch auf und setzt
+  // den Marker korrekt. Umgekehrt erzwang jede spätere Navigation einen Rebuild,
+  // der eingegebene Ziele zerstören konnte.
   resetForm();
+  buildDynamicSections(true);
   // Re-apply pre-selections after reset (Hilfeart bei Clearing fest vorbelegt + gesperrt)
   applyHilfeartPreset(currentBerichtstyp);
   // Re-apply Fachkraft and TL pre-selections
@@ -1522,6 +1582,7 @@ async function copyStammdaten(id) {
     });
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
+      _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
       document.getElementById('zieleContainer') && (document.getElementById('zieleContainer').innerHTML = '');
       zielCount = 0;
       data._ziele.forEach(z => {
@@ -1658,6 +1719,7 @@ async function loadDraft(id) {
     });
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
+      _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
       const zc = document.getElementById('zieleContainer');
       if (zc) { zc.innerHTML = ''; zielCount = 0; }
       else zielCount = 0;
@@ -1818,6 +1880,7 @@ function resetForm() {
   // Reset ziele
   document.getElementById('zieleContainer') && (document.getElementById('zieleContainer').innerHTML = '');
   zielCount = 0;
+  _zieleSnapshot = null;
   // Betreuungszeitraum-Automatik wieder aktivieren
   const bzReset = document.getElementById('Betreuungszeitraum');
   if (bzReset) delete bzReset.dataset.manuallySet;
@@ -1870,6 +1933,7 @@ function loadFromJson(input) {
       });
       // Restore ziele
       if (data._ziele && Array.isArray(data._ziele)) {
+        _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
         document.getElementById('zieleContainer').innerHTML = '';
         zielCount = 0;
         data._ziele.forEach(z => {
@@ -1932,16 +1996,8 @@ async function importFromDocx(input) {
 // Save as JSON for "Weiterbearbeiten"
 function saveAsJson() {
   const data = collectData();
-  // Add ziele
-  data._ziele = [];
-  for (let i = 1; i <= zielCount; i++) {
-    const b = document.getElementById('Ziel_'+i+'_Beschreibung');
-    if (b) data._ziele.push({
-      beschreibung: b.value,
-      methoden: document.getElementById('Ziel_'+i+'_Methoden')?.value || '',
-      ergebnis: document.getElementById('Ziel_'+i+'_Ergebnis')?.value || ''
-    });
-  }
+  // Ziele robust aus dem DOM einsammeln (mit Snapshot-Fallback)
+  data._ziele = collectZiele() || _zieleSnapshot || [];
   const name = `VB_${data.Kind_Familienname||'Entwurf'}_Entwurf.json`;
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
@@ -2000,17 +2056,21 @@ async function saveToList(data, existingId = null) {
       }
     } catch(e) { /* Guard best-effort — im Zweifel bisheriges Verhalten */ }
   }
-  // Collect ziele
-  const ziele = [];
-  for (let i = 1; i <= zielCount; i++) {
-    const b = document.getElementById('Ziel_'+i+'_Beschreibung');
-    if (b) ziele.push({
-      beschreibung: b?.value || '',
-      methoden: document.getElementById('Ziel_'+i+'_Methoden')?.value || '',
-      ergebnis: document.getElementById('Ziel_'+i+'_Ergebnis')?.value || ''
-    });
+  // Ziele robust aus dem DOM einsammeln — mit Schutz gegen versehentliches Leeren:
+  // Ist der Ziele-Container nicht (mehr) im DOM oder ohne Karten, obwohl zuvor
+  // Ziele erfasst wurden, bleibt der letzte bekannte Stand erhalten. Verhindert,
+  // dass ein DOM-Rebuild per Autosave alle Ziele in der Liste überschreibt.
+  const ziele = collectZiele();
+  if (ziele === null || ziele.length === 0) {
+    if (_zieleSnapshot && _zieleSnapshot.length) {
+      console.warn('Ziele-Schutz: Ziele-Bereich leer/fehlt — letzter bekannter Stand wird beibehalten.');
+      data._ziele = _zieleSnapshot;
+    } else {
+      data._ziele = [];
+    }
+  } else {
+    data._ziele = ziele;
   }
-  data._ziele = ziele;
   data._berichtstyp = currentBerichtstyp || 'verlauf';
 
   const fields = {
@@ -3841,10 +3901,6 @@ function buildDynamicSections(force = false) {
   if (s4.hasZiele) {
     s4html += `<div id="zieleContainer"></div>
       <button class="btn-add" onclick="addZiel()">+ Ziel hinzufügen</button>`;
-    // Re-init ziele
-    setTimeout(() => {
-      if (document.getElementById('zieleContainer') && zielCount === 0) addZiel();
-    }, 50);
   } else if (s4.fields) {
     s4.fields.forEach(f => {
       s4html += `<div class="card"><div class="card-title">${f.label}</div>
@@ -3853,10 +3909,25 @@ function buildDynamicSections(force = false) {
         </div></div></div>`;
     });
   }
+  // Bestehende Ziel-Eingaben VOR dem innerHTML-Ersatz sichern — der Ersatz
+  // zerstört die Karten, während zielCount sonst stehen bliebe (Ursache des
+  // Datenverlusts im Fall Graf: Autosave schrieb danach ein leeres _ziele).
+  const _prevZiele = collectZiele();
   if(s4c) s4c.innerHTML = s4html;
-  // Add first ziel if hasZiele and none exist yet
-  if (s4.hasZiele && document.getElementById('zieleContainer') && zielCount === 0) {
-    addZiel();
+  // Container wurde ersetzt — Zähler zwingend neu aufsetzen
+  zielCount = 0;
+  if (s4.hasZiele && document.getElementById('zieleContainer')) {
+    if (_prevZiele && _prevZiele.length) {
+      _prevZiele.forEach(z => {
+        addZiel();
+        const n = zielCount;
+        const b = document.getElementById('Ziel_'+n+'_Beschreibung'); if (b) b.value = z.beschreibung || '';
+        const m = document.getElementById('Ziel_'+n+'_Methoden'); if (m) m.value = z.methoden || '';
+        const e = document.getElementById('Ziel_'+n+'_Ergebnis'); if (e) e.value = z.ergebnis || '';
+      });
+    } else {
+      addZiel();
+    }
   }
   
   // Build S5
