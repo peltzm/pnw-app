@@ -2257,6 +2257,11 @@ function renderFreigabe() {
 /* ──────────────────────────────────────
    PDF GENERIERUNG
 ────────────────────────────────────── */
+// Nutzereingaben sicher ins HTML übernehmen: Sonderzeichen escapen und
+// Zeilenumbrüche aus Textareas als <br> erhalten (sonst kollabieren sie im HTML)
+function escHtml(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function nl2br(s) { return escHtml(s).replace(/\r\n|\r|\n/g, '<br>'); }
+
 async function generateProtokollPDF(data, freigeberName) {
   // Baue temporäres HTML-Element mit exakt dem Vorschau-Layout
   const cfg      = data.type ? TYPES[data.type] : null;
@@ -2290,12 +2295,12 @@ async function generateProtokollPDF(data, freigeberName) {
   const topsHtml = tops.length ? tops.map((t,i) => `
     <div style="margin-bottom:8px;border:1px solid #e8e0d8;border-radius:6px;overflow:hidden;">
       <div style="background:white;padding:8px 12px;font-size:13px;font-weight:600;color:#321900;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e8e0d8;">
-        <span>${i+1}. ${t.title||''}</span>
+        <span>${i+1}. ${escHtml(t.title||'')}</span>
         ${t.type==='beschluss'?'<span style="font-size:10px;font-weight:700;color:#92400e;background:#fffbeb;padding:2px 7px;border-radius:3px;">BESCHLUSS</span>':''}
         ${t.type==='aufgabe'?'<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:2px 7px;border-radius:3px;">AUFGABE</span>':''}
       </div>
       <div style="background:white;padding:8px 12px;font-size:12px;color:${t.text?'#555':'#bbb'};font-style:${t.text?'normal':'italic'};">
-        ${t.text||'Kein Text eingetragen'}
+        ${t.text ? nl2br(t.text) : 'Kein Text eingetragen'}
       </div>
       ${t.frist?`<div style="background:#fafafa;padding:3px 12px;font-size:11px;color:#96500a;font-style:italic;border-top:1px solid #e8e0d8;">Frist: ${t.frist.split('-').reverse().join('.')}</div>`:''}
     </div>`).join('')
@@ -2337,7 +2342,7 @@ async function generateProtokollPDF(data, freigeberName) {
     </table>
     ${sh('Protokoll')}
     ${topsHtml}
-    ${nextDatum?`${sh('N&auml;chster Termin')}<table style="width:100%;border-collapse:collapse;margin-bottom:10px;">${tr('Datum / Uhrzeit', nextDatum+(nextZeit?' &middot; '+nextZeit+' Uhr':''))}${nextHinweis?tr('Hinweise',nextHinweis):''}</table>`:''}
+    ${nextDatum?`${sh('N&auml;chster Termin')}<table style="width:100%;border-collapse:collapse;margin-bottom:10px;">${tr('Datum / Uhrzeit', nextDatum+(nextZeit?' &middot; '+nextZeit+' Uhr':''))}${nextHinweis?tr('Hinweise',nl2br(nextHinweis)):''}</table>`:''}
     <div style="display:flex;gap:3rem;margin-top:2rem;padding-top:1rem;border-top:1px solid #ccc;">
       <div style="flex:1;"><div style="border-bottom:1px solid #aaa;height:30px;margin-bottom:4px;"></div><div style="font-size:10px;color:#888;">Protokollf&uuml;hrung: ${proto}</div></div>
       <div style="flex:1;"><div style="border-bottom:1px solid #aaa;height:30px;margin-bottom:4px;"></div><div style="font-size:10px;color:#888;">Freigabe TL: ${approverFull}</div></div>
@@ -2654,11 +2659,11 @@ function buildPreview() {
 
   const topsHtml = S.tops.length ? S.tops.map((t,i) => `
     <div class="top-row">
-      <h4>${i+1}. ${t.title}
+      <h4>${i+1}. ${escHtml(t.title||'')}
         ${t.type==='beschluss'?'<span style="font-size:10px;font-weight:700;color:#92400e;background:#fffbeb;padding:1px 6px;border-radius:3px;margin-left:6px;">BESCHLUSS</span>':''}
         ${t.type==='aufgabe'  ?'<span style="font-size:10px;font-weight:700;color:#2d6a4f;background:#eaf4ee;padding:1px 6px;border-radius:3px;margin-left:6px;">AUFGABE</span>':''}
       </h4>
-      <p>${t.text || '<em style="color:#bbb">Kein Text eingetragen</em>'}</p>
+      <p>${t.text ? nl2br(t.text) : '<em style="color:#bbb">Kein Text eingetragen</em>'}</p>
       ${t.type==='beschluss'?`<div class="beschluss-box">📌 Beschlossen</div>`:''}
     </div>`).join('') : '<p style="color:#bbb;font-size:12px;">Keine TOPs erfasst</p>';
 
