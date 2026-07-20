@@ -4867,18 +4867,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Kopf Seite 1
     const content = [];
-    content.push({
-      columns: [
-        opts.logoDataUrl
-          ? { image: opts.logoDataUrl, fit: [140, 36], width: 145 }
-          : { width: 50, text: '' },
-        { width: '*', text: '' },
-        { width: 'auto', text: `ERSTELLT AM ${erstelltAm}`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta, margin: [0, 4, 0, 0] },
-      ],
-      margin: [0, 0, 0, 10],
-    });
+    if (opts.logoDataUrl) {
+      content.push({
+        columns: [
+          { width: '*', text: '' },
+          { image: opts.logoDataUrl, fit: [140, 36], width: 140 },
+        ],
+        margin: [0, 0, 0, 10],
+      });
+    }
     content.push({ text: label, font: 'Baskerville', bold: true, fontSize: F.titel, color: C.dunkelbraun, margin: [0, 0, 0, 3] });
     if (untertitel) content.push({ text: untertitel, font: 'Baskerville', italics: true, fontSize: F.untertitel, color: C.terra, margin: [0, 0, 0, 4] });
+    content.push({ text: `ERSTELLT AM ${erstelltAm}`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta, margin: [0, 2, 0, 2] });
     content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.trenner, lineColor: C.rahmenStark }], margin: [0, 4, 0, 0] });
 
     // Stammdaten
