@@ -6,6 +6,7 @@
 <title>Formulare Beta — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -646,6 +647,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
 <!-- KLIENT-MODUS -->
 <div id="klientScreen" class="screen">
   <div class="klient-header">
+    <img src="assets/logo-praxisneuewege.png" alt="Praxis NeueWege" style="height:36px;width:auto;margin-right:14px;flex-shrink:0;">
     <div>
       <div class="klient-header-title">Praxis NeueWege — Formulare</div>
       <div class="klient-header-sub" id="klHeaderSub">Bitte lesen und unterzeichnen Sie die folgenden Formulare.</div>
@@ -668,7 +670,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
 <div id="doneScreen" class="screen">
   <div class="header">
     <div class="header-brand">
-      <img src="assets/logo-pnw-neu.png" style="height:30px;width:auto;" alt="PNW">
+      <img src="assets/logo-praxisneuewege.png" style="height:30px;width:auto;" alt="PNW">
       <span style="font-size:14px;font-weight:600;margin-left:4px;">Formulare Beta</span>
       <span id="versionBadge" style="font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace;"></span>
       <a href="changelog.html" target="_blank" style="font-size:10px;color:var(--accent-mid);text-decoration:none;margin-left:6px;opacity:0.8;" title="Changelog">Changelog ↗</a>
@@ -1907,12 +1909,26 @@ function generatePDF(formId){
   return doc;
 }
 
-function mockPDFPreview(){
+async function mockPDFPreview(){
   if(selForms.size===0){alert('Bitte zuerst mindestens ein Formular auswählen.');return;}
-  const fid=[...selForms][0];
   try{
-    const doc=generatePDF(fid);
-    window.open(URL.createObjectURL(doc.output('blob')),'_blank');
+    const fids=[...selForms];
+    if(fids.length===1 || typeof PDFLib==='undefined'){
+      // Ein Formular (oder pdf-lib nicht geladen): direkt oeffnen
+      const doc=generatePDF(fids[0]);
+      window.open(URL.createObjectURL(doc.output('blob')),'_blank');
+      return;
+    }
+    // Mehrere Formulare: alle erzeugen und zu einem PDF zusammenfuehren
+    const merged=await PDFLib.PDFDocument.create();
+    for(const fid of fids){
+      const buf=generatePDF(fid).output('arraybuffer');
+      const src=await PDFLib.PDFDocument.load(buf);
+      const pages=await merged.copyPages(src,src.getPageIndices());
+      pages.forEach(p=>merged.addPage(p));
+    }
+    const bytes=await merged.save();
+    window.open(URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})),'_blank');
   }catch(e){alert('PDF-Fehler: '+e.message);}
 }
 
