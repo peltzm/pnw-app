@@ -723,7 +723,11 @@ function _mapBeziehung(kindName) {
 
 function _setVal(id, val) {
   const el = document.getElementById(id);
-  if (el && val != null && val !== '') el.value = val;
+  if (!el || val == null || val === '') return;
+  // Einzeilige Inputs: Zeilenumbrueche (z.B. aus Kilanka-Stammdaten) in Leerzeichen
+  // wandeln — Browser entfernen sie sonst kommentarlos und kleben die Werte zusammen.
+  if (el.tagName === 'INPUT' && typeof val === 'string') val = val.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  el.value = val;
 }
 
 function _setSelect(id, val) {
@@ -1073,16 +1077,10 @@ function collectData() {
     data[`Sorg2_Name_${i+1}`] = s.name || '';
     data[`Sorg2_Beziehung_${i+1}`] = s.beziehung || '';
   });
-  // Alle Sorgeberechtigten (Sorg 1 + Extra) in die Template-Tokens zusammenführen.
-  // Die Templates haben nur einen Sorg-Slot — alle weiteren werden zeilenweise angehängt.
-  if (data._extraSorg.length > 0) {
-    const allSorg = [
-      { vorname: data['Sorg_Vorname'], name: data['Sorg_Familienname'] },
-      ...data._extraSorg
-    ];
-    data['Sorg_Vorname']      = allSorg.map(s => s.vorname || '').join('\n');
-    data['Sorg_Familienname'] = allSorg.map(s => s.name || '').join('\n');
-  }
+  // Hinweis: Die fruehere Zusammenfuehrung aller Sorgeberechtigten in Sorg_Vorname/
+  // Sorg_Familienname (DOCX-Template-Altlast) wurde entfernt. Sie zerstoerte beim
+  // Speichern/Neuladen die Einzelwerte (Inputs entfernen \n -> "FranciscaJuergen").
+  // Das PDF baut die Liste selbst aus Sorg_* + _extraSorg (alleSorg()).
   // TL-Kommentare mitpersistieren
   data._tlKommentare = _tlKommentare;
   // Dokumentversion mitpersistieren
@@ -4867,18 +4865,17 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Kopf Seite 1
     const content = [];
-    if (opts.logoDataUrl) {
-      content.push({
-        columns: [
-          { width: '*', text: '' },
-          { image: opts.logoDataUrl, fit: [140, 36], width: 140 },
-        ],
-        margin: [0, 0, 0, 10],
-      });
-    }
-    content.push({ text: label, font: 'Baskerville', bold: true, fontSize: F.titel, color: C.dunkelbraun, margin: [0, 0, 0, 3] });
-    if (untertitel) content.push({ text: untertitel, font: 'Baskerville', italics: true, fontSize: F.untertitel, color: C.terra, margin: [0, 0, 0, 4] });
-    content.push({ text: `ERSTELLT AM ${erstelltAm}`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta, margin: [0, 2, 0, 2] });
+    const kopfLinks = [];
+    kopfLinks.push({ text: label, font: 'Baskerville', bold: true, fontSize: F.titel, color: C.dunkelbraun, margin: [0, 0, 0, 3] });
+    if (untertitel) kopfLinks.push({ text: untertitel, font: 'Baskerville', italics: true, fontSize: F.untertitel, color: C.terra, margin: [0, 0, 0, 4] });
+    kopfLinks.push({ text: `ERSTELLT AM ${erstelltAm}`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta, margin: [0, 2, 0, 2] });
+    content.push({
+      columns: [
+        { width: '*', stack: kopfLinks },
+        ...(opts.logoDataUrl ? [{ image: opts.logoDataUrl, fit: [140, 36], width: 140, margin: [10, 2, 0, 0] }] : []),
+      ],
+      margin: [0, 0, 0, 4],
+    });
     content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.trenner, lineColor: C.rahmenStark }], margin: [0, 4, 0, 0] });
 
     // Stammdaten
