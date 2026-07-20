@@ -566,11 +566,11 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
               <div class="dl-card-sub">1 Seite · PDF</div>
             </div>
             <div class="dl-actions">
-              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Schweigepflichtsentbindung')">
+              <button class="btn btn-secondary btn-sm" onclick="blankPrint('schweig')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                 Drucken
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Schweigepflichtsentbindung')">
+              <button class="btn btn-secondary btn-sm" onclick="blankDownload('schweig')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 PDF
               </button>
@@ -582,11 +582,11 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
               <div class="dl-card-sub">2 Seiten · PDF · inkl. WA &amp; OneDrive</div>
             </div>
             <div class="dl-actions">
-              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Datenschutzerklärung')">
+              <button class="btn btn-secondary btn-sm" onclick="blankPrint('datenschutz')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                 Drucken
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Datenschutzerklärung')">
+              <button class="btn btn-secondary btn-sm" onclick="blankDownload('datenschutz')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 PDF
               </button>
@@ -598,11 +598,11 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
               <div class="dl-card-sub">1 Seite · PDF</div>
             </div>
             <div class="dl-actions">
-              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Vollmacht_Sorgerecht')">
+              <button class="btn btn-secondary btn-sm" onclick="blankPrint('vollm')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                 Drucken
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Vollmacht_Sorgerecht')">
+              <button class="btn btn-secondary btn-sm" onclick="blankDownload('vollm')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 PDF
               </button>
@@ -614,11 +614,11 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
               <div class="dl-card-sub">1 Seite · PDF · Erstaufnahme</div>
             </div>
             <div class="dl-actions">
-              <button class="btn btn-secondary btn-sm" onclick="mockPrint('Startkompass')">
+              <button class="btn btn-secondary btn-sm" onclick="blankPrint('kompass')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                 Drucken
               </button>
-              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Startkompass')">
+              <button class="btn btn-secondary btn-sm" onclick="blankDownload('kompass')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 PDF
               </button>
@@ -627,17 +627,17 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
           <div class="dl-card">
             <div class="dl-card-info">
               <div class="dl-card-title">📦 Alle Formulare</div>
-              <div class="dl-card-sub">Komplettpaket · 3 PDFs als ZIP</div>
+              <div class="dl-card-sub">Komplettpaket · alle 4 als ein PDF</div>
             </div>
             <div class="dl-actions">
-              <button class="btn btn-secondary btn-sm" onclick="mockDownload('Alle_Formulare_PNW')">
+              <button class="btn btn-secondary btn-sm" onclick="blankDownloadAll()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                ZIP
+                PDF
               </button>
             </div>
           </div>
         </div>
-        <div class="alert alert-info">Im Vollbetrieb werden die Leer-PDFs direkt aus SharePoint geladen und per Browser-Download bereitgestellt.</div>
+        <div class="alert alert-info">Die Leerformulare werden direkt in der App erzeugt — identisches Layout wie die ausgefüllten PDFs, Felder bleiben zum handschriftlichen Ausfüllen frei.</div>
       </div>
 
     </div><!-- /fk-content -->
@@ -1658,7 +1658,12 @@ async function mockSend(){
   }
 }
 // ── PDF GENERATION (Designer Style) ──
-function generatePDF(formId){
+function generatePDF(formId, blank){
+  // blank=true: Leerformular ohne Klientdaten, Formularfelder und Unterschriften
+  const kdX = blank ? {} : kd;
+  const sigsX = blank ? {} : sigs;
+  const $id = blank ? (()=>null) : document.getElementById.bind(document);
+  const $qsa = blank ? (()=>[]) : document.querySelectorAll.bind(document);
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   doc.addFileToVFS('Kodchasan-Regular.ttf',_KODCHASAN_REG);
@@ -1772,7 +1777,7 @@ function generatePDF(formId){
     y+=bh+4;
   }
   function cbRow(id,lbl){
-    pageCheck(7);const chk=((document.getElementById(id)||{}).checked)||false;
+    pageCheck(7);const chk=(($id(id)||{}).checked)||false;
     const cx=ML,cy=y-3.2;
     doc.setDrawColor(...(chk?ACC:MUTED));doc.setLineWidth(chk?0.5:0.3);doc.roundedRect(cx,cy,3.8,3.8,0.5,0.5);
     if(chk){doc.setFillColor(...ACC);doc.roundedRect(cx,cy,3.8,3.8,0.5,0.5,'F');doc.setDrawColor(...WHITE);doc.setLineWidth(0.7);doc.line(cx+0.6,cy+2,cx+1.6,cy+3);doc.line(cx+1.6,cy+3,cx+3.3,cy+0.8);}
@@ -1783,25 +1788,25 @@ function generatePDF(formId){
   drawPageHeader(formId);y=34;secN=0;
 
   if(formId==='schweig'){
-    const inst=(document.getElementById('s_inst')||{}).value||'—';
-    const vertr=(document.getElementById('s_vertr')||{}).value||kd.fk||'';
+    const inst=($id('s_inst')||{}).value||'—';
+    const vertr=($id('s_vertr')||{}).value||kdX.fk||'';
     eyebrow('EINWILLIGUNG & ENTBINDUNG');mainTitle('Schweigepflichtsentbindung');
-    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kd.nn||''}.`);
+    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kdX.nn||''}.`);
     hRule();highlightSection('BETROFFENE INSTITUTION',inst);
-    section('Inhalt der Entbindung',`Ich/Wir gebe/n ${vertr} gemäß ${kd.sgb||'§ SGB VIII'} als Mitarbeiter/in der Praxis NeueWege die Erlaubnis, alle zur gezielten Unterstützung erforderlichen Daten (Gutachten, Diagnosen, Therapiepläne etc.) von der oben genannten Institution einzuholen und zu übermitteln.`);
+    section('Inhalt der Entbindung',`Ich/Wir gebe/n ${vertr} gemäß ${kdX.sgb||'§ SGB VIII'} als Mitarbeiter/in der Praxis NeueWege die Erlaubnis, alle zur gezielten Unterstützung erforderlichen Daten (Gutachten, Diagnosen, Therapiepläne etc.) von der oben genannten Institution einzuholen und zu übermitteln.`);
     section('Hinweis Schweigepflicht','Ich/Wir wurde/n über die gesetzliche Schweigepflicht gem. § 203 StGB und § 65 SGB VIII umfassend unterrichtet. Die Daten dürfen anderen Stellen nur unter den Voraussetzungen der §§ 61–68 SGB VIII sowie §§ 67–85a SGB X übermittelt werden.');
     section('Widerruf','Diese Entbindungserklärung kann jederzeit schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO).');
     hRule();capsSection('ANGABEN & UNTERSCHRIFT');
-    fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kd.name||'','Wohnort',((kd.plz||'')+' '+(kd.ort||'')).trim());
-    sigArea2((kd.ort||'Nandlstadt')+', '+fmtDate(kd.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigs['schweig']);
+    fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',((kdX.plz||'')+' '+(kdX.ort||'')).trim());
+    sigArea2((kdX.ort||'Nandlstadt')+', '+fmtDate(kdX.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigsX['schweig']);
   }
 
   else if(formId==='datenschutz'){
     eyebrow('INFORMATION & EINWILLIGUNG');mainTitle('Datenschutzerklärung');
-    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kd.nn||''}.`);
+    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kdX.nn||''}.`);
     hRule();
     highlightSection('1 · VERANTWORTLICHE STELLE (ART. 13 DSGVO)','Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt\nTel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de');
-    section('Zweck und Rechtsgrundlage der Datenverarbeitung',`Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach ${kd.sgb||'SGB VIII'} durch das ${kd.ja||''}. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).`);
+    section('Zweck und Rechtsgrundlage der Datenverarbeitung',`Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach ${kdX.sgb||'SGB VIII'} durch das ${kdX.ja||''}. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).`);
     section('Erhobene Datenkategorien','Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne).');
     section('Speicherdauer','Ihre Daten werden bis zum Ablauf der gesetzlichen Aufbewahrungsfristen (§ 63 SGB VIII; i.d.R. 10 Jahre nach Hilfeende) gespeichert.');
     section('Weitergabe an Dritte','Daten werden nur weitergegeben, soweit dies zur Hilfeerfüllung erforderlich ist (§ 64 SGB VIII, §§ 69 ff. SGB X) oder Sie ausdrücklich eingewilligt haben.');
@@ -1811,25 +1816,25 @@ function generatePDF(formId){
     eyebrow('DATENSCHUTZ · EINWILLIGUNGEN');capsSection('EINWILLIGUNGEN');
     doc.setFont(F,'normal');doc.setFontSize(8.5);doc.setTextColor(60,55,50);
     doc.text('Bitte kreuzen Sie an und unterschreiben Sie. Die Pflichteinwilligung ist Voraussetzung für die Durchführung der Hilfe.',ML,y,{maxWidth:CW});y+=10;
-    const basis=((document.getElementById('ki_ds_basis')||{}).checked)||false;
-    const od=(document.getElementById('ki_ds_onedrive')||{}).checked;
-    const wa=(document.getElementById('ki_ds_wa')||{}).checked;
-    consentBox('PFLICHTEINWILLIGUNG — ERFORDERLICH',`Ich habe die Datenschutzerklärung gelesen und stimme der Erhebung und Verarbeitung meiner personenbezogenen Daten zur Erfüllung der Hilfe nach ${kd.sgb||'SGB VIII'} zu.`,basis);
+    const basis=(($id('ki_ds_basis')||{}).checked)||false;
+    const od=($id('ki_ds_onedrive')||{}).checked;
+    const wa=($id('ki_ds_wa')||{}).checked;
+    consentBox('PFLICHTEINWILLIGUNG — ERFORDERLICH',`Ich habe die Datenschutzerklärung gelesen und stimme der Erhebung und Verarbeitung meiner personenbezogenen Daten zur Erfüllung der Hilfe nach ${kdX.sgb||'SGB VIII'} zu.`,basis);
     y+=2;doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('OPTIONALE EINWILLIGUNGEN — FREIWILLIG',ML,y);y+=5;
     consentBox('ONEDRIVE / MICROSOFT 365','Ablage und Austausch von Dokumenten über OneDrive (Microsoft Ireland Operations Ltd.). Datenübertragung in die USA auf Basis des EU-US Data Privacy Framework.',od);
     consentBox('WHATSAPP-KOMMUNIKATION','Nutzung von WhatsApp (Meta Platforms Ireland Ltd.) für die Kommunikation mit der Fachkraft. Die Einwilligung ist freiwillig — bei Ablehnung wird auf andere Kommunikationswege ausgewichen.',wa);
     y+=2;noteBox('Mit Ihrer Unterschrift bestätigen Sie, dass Sie diese Datenschutzerklärung erhalten und die angekreuzten Einwilligungen erteilt haben.');
     y+=4;capsSection('ANGABEN & UNTERSCHRIFT');
-    fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kd.name||'','Wohnort',((kd.plz||'')+' '+(kd.ort||'')).trim());
-    y+=4;sigArea2((kd.ort||'Nandlstadt')+', '+fmtDate(kd.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigs['datenschutz']);
+    fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',((kdX.plz||'')+' '+(kdX.ort||'')).trim());
+    y+=4;sigArea2((kdX.ort||'Nandlstadt')+', '+fmtDate(kdX.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigsX['datenschutz']);
   }
 
   else if(formId==='vollm'){
-    const vGebers=getAllVollmachtgeber();
-    const vKind=(document.getElementById('v_kind')||{}).value||'—';
-    const vKindGeb=fmtDate((document.getElementById('v_kind_geb')||{}).value||'');
-    const vFk1=(document.getElementById('v_fk1')||{}).value||kd.fk||'';
-    const vFk2=(document.getElementById('v_fk2_sel')||{}).value||'';
+    const vGebers=(blank ? [{name:'',ort:''}] : getAllVollmachtgeber());
+    const vKind=($id('v_kind')||{}).value||'—';
+    const vKindGeb=fmtDate(($id('v_kind_geb')||{}).value||'');
+    const vFk1=($id('v_fk1')||{}).value||kdX.fk||'';
+    const vFk2=($id('v_fk2_sel')||{}).value||'';
     eyebrow('VOLLMACHT & BEVOLLMÄCHTIGUNG');mainTitle('Vollmacht Sorgerecht');
     subtitle('Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt.');
     hRule();capsSection('VOLLMACHTGEBER/IN');
@@ -1844,17 +1849,17 @@ function generatePDF(formId){
     y+=2;noteBox('Diese Vollmacht gilt bis auf Widerruf und kann jederzeit schriftlich widerrufen werden.');
     y+=2;capsSection('UNTERSCHRIFT');
     const hw=(CW-6)/2;
-    fieldRow('Ort, Datum',(kd.ort||'')+', '+fmtDate(kd.datum||''),hw,ML);y-=7;
+    fieldRow('Ort, Datum',(kdX.ort||'')+', '+fmtDate(kdX.datum||''),hw,ML);y-=7;
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('ORT, DATUM',ML+hw+6,y-3.5);doc.line(ML+hw+6,y+1.5,ML+hw+6+hw,y+1.5);y+=7;
     if(vGebers.length>1){
-      const p1=sigs['vollm_0'],p2=sigs['vollm_1'];
+      const p1=sigsX['vollm_0'],p2=sigsX['vollm_1'];
       if(p1&&p1.length>200)try{doc.addImage(p1,'PNG',ML,y-8,hw*0.7,14);}catch(e){}
       if(p2&&p2.length>200)try{doc.addImage(p2,'PNG',ML+hw+6,y-8,hw*0.7,14);}catch(e){}
       y+=10;doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y,ML+hw,y);doc.line(ML+hw+6,y,ML+hw+6+hw,y);y+=3;
       doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
       doc.text(vGebers[0]?.name||'',ML,y);doc.text(vGebers[1]?.name||'',ML+hw+6,y);
     } else {
-      sigArea2((kd.ort||'')+', '+fmtDate(kd.datum||''),'Unterschrift Vollmachtgeber/in',sigs['vollm']||sigs['vollm_0']);
+      sigArea2((kdX.ort||'')+', '+fmtDate(kdX.datum||''),'Unterschrift Vollmachtgeber/in',sigsX['vollm']||sigsX['vollm_0']);
     }
   }
 
@@ -1862,14 +1867,14 @@ function generatePDF(formId){
     eyebrow('STAMMDATEN · EINVERSTÄNDNIS · NOTFALL');mainTitle('Startkompass');
     subtitle('Erstaufnahme-Dokumentation für die Hilfe zur Erziehung nach SGB VIII.');
     hRule();
-    highlightSection('HILFEEMPFÄNGER',`${kd.name||'—'}  ·  geb. ${kd.geb||'—'}  ·  ${((kd.str||'')+', '+(kd.plz||'')+' '+(kd.ort||'')).replace(/^, /,'')||'—'}\nTel.: ${kd.tel||'—'}  ·  Krankenkasse: ${((document.getElementById('ki_k_kk')||{}).value)||'—'}`);
+    highlightSection('HILFEEMPFÄNGER',`${kdX.name||'—'}  ·  geb. ${kdX.geb||'—'}  ·  ${((kdX.str||'')+', '+(kdX.plz||'')+' '+(kdX.ort||'')).replace(/^, /,'')||'—'}\nTel.: ${kdX.tel||'—'}  ·  Krankenkasse: ${(($id('ki_k_kk')||{}).value)||'—'}`);
     capsSection('ELTERN');
-    fieldRow2('Mutter',((document.getElementById('ki_m_name')||{}).value)||'','Tel. Mutter',((document.getElementById('ki_m_tel')||{}).value)||'');
-    fieldRow('Adresse Mutter',((document.getElementById('ki_m_adr')||{}).value)||'',CW,ML);
-    fieldRow2('Vater',((document.getElementById('ki_v_name')||{}).value)||'','Tel. Vater',((document.getElementById('ki_v_tel')||{}).value)||'');
-    fieldRow('Sorgerecht',((document.getElementById('ki_sorgerecht')||{}).value)||'',CW,ML);
-    fieldRow('Sonstige Ansprechpartner',((document.getElementById('ki_ansprechpartner')||{}).value)||'',CW,ML);
-    const gsBlocks=document.querySelectorAll('#ki_geschwister_list .extra-block');
+    fieldRow2('Mutter',(($id('ki_m_name')||{}).value)||'','Tel. Mutter',(($id('ki_m_tel')||{}).value)||'');
+    fieldRow('Adresse Mutter',(($id('ki_m_adr')||{}).value)||'',CW,ML);
+    fieldRow2('Vater',(($id('ki_v_name')||{}).value)||'','Tel. Vater',(($id('ki_v_tel')||{}).value)||'');
+    fieldRow('Sorgerecht',(($id('ki_sorgerecht')||{}).value)||'',CW,ML);
+    fieldRow('Sonstige Ansprechpartner',(($id('ki_ansprechpartner')||{}).value)||'',CW,ML);
+    const gsBlocks=$qsa('#ki_geschwister_list .extra-block');
     if(gsBlocks.length>0){
       capsSection('GESCHWISTER');
       gsBlocks.forEach((b,i)=>{
@@ -1878,13 +1883,13 @@ function generatePDF(formId){
       });
     }
     capsSection('GESUNDHEIT & NOTFALL');
-    const kr=((document.getElementById('ki_krankheiten')||{}).value)||'';if(kr)fieldRow('Krankheiten',kr,CW,ML);
-    const al=((document.getElementById('ki_allergien')||{}).value)||'';if(al)fieldRow('Allergien',al,CW,ML);
-    document.querySelectorAll('#ki_notfmed_list .extra-block').forEach((b,i)=>{
+    const kr=(($id('ki_krankheiten')||{}).value)||'';if(kr)fieldRow('Krankheiten',kr,CW,ML);
+    const al=(($id('ki_allergien')||{}).value)||'';if(al)fieldRow('Allergien',al,CW,ML);
+    $qsa('#ki_notfmed_list .extra-block').forEach((b,i)=>{
       const n=b.querySelector('[id^="nfm_name"]'),d2=b.querySelector('[id^="nfm_dos"]'),a2=b.querySelector('[id^="nfm_art"]');
       if(n&&n.value)fieldRow(`Medikament ${i+1}`,`${n.value}  ·  ${d2?d2.value:''}  ·  ${a2?a2.value:''}`,CW,ML);
     });
-    document.querySelectorAll('#ki_notfkontakt_list .extra-block').forEach((b,i)=>{
+    $qsa('#ki_notfkontakt_list .extra-block').forEach((b,i)=>{
       const n=b.querySelector('[id^="nfk_name"]'),t2=b.querySelector('[id^="nfk_tel"]');
       if(n&&n.value)fieldRow2(`Notfallkontakt ${i+1}`,n.value,'Telefon',(t2&&t2.value)||'');
     });
@@ -1893,13 +1898,13 @@ function generatePDF(formId){
     [['ki_schwimm_frei','Schwimmen ohne Schwimmhilfe'],['ki_schwimm_hilfe','Schwimmen mit Schwimmhilfe'],['ki_schwimm_aufsicht','Schwimmen nur unter Bademeister-Aufsicht'],['ki_zecken_pnw','Zecken: Entfernung durch MA PNW'],['ki_zecken_eltern','Zecken: Eltern holen ab → Arzt'],['ki_einv_erlebn','Erlebnispädagogische Maßnahmen'],['ki_einv_auto','Mitnahme im Auto'],['ki_einv_foto','Fotoaufnahmen trägerintern'],['ki_foto_public','Fotoaufnahmen öffentlich']].forEach(([id,lbl])=>cbRow(id,lbl));
     y+=4;capsSection('UNTERSCHRIFTEN');
     const hw2=(CW-6)/2;
-    fieldRow('Ort, Datum',(kd.ort||'')+', '+fmtDate(kd.datum||''),hw2,ML);y-=7;
+    fieldRow('Ort, Datum',(kdX.ort||'')+', '+fmtDate(kdX.datum||''),hw2,ML);y-=7;
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('ORT, DATUM',ML+hw2+6,y-3.5);doc.line(ML+hw2+6,y+1.5,ML+hw2+6+hw2,y+1.5);y+=7;
-    if(sigs['kompass_eb']&&sigs['kompass_eb'].length>200)try{doc.addImage(sigs['kompass_eb'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
+    if(sigsX['kompass_eb']&&sigsX['kompass_eb'].length>200)try{doc.addImage(sigsX['kompass_eb'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
     y+=10;doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y,ML+hw2,y);y+=3;
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('Unterschrift Erziehungsberechtigte/r',ML,y);y+=8;
-    if(sigs['kompass_kl']&&sigs['kompass_kl'].length>200){
-      try{doc.addImage(sigs['kompass_kl'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
+    if(sigsX['kompass_kl']&&sigsX['kompass_kl'].length>200){
+      try{doc.addImage(sigsX['kompass_kl'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
       y+=10;doc.line(ML,y,ML+hw2,y);y+=3;doc.text('Unterschrift Klient (optional)',ML,y);
     }
   }
@@ -1941,6 +1946,36 @@ function mockDownload(name){
   a.click();
   // Show toast
   showToast('⬇️ '+name+'.pdf wird heruntergeladen …');
+}
+// ── LEERFORMULARE: echte Blanko-PDFs aus generatePDF ──
+function _blankName(fid){
+  const map={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass'};
+  return 'PNW_Leer_'+(map[fid]||fid)+'.pdf';
+}
+function blankPrint(fid){
+  try{ const doc=generatePDF(fid,true); window.open(URL.createObjectURL(doc.output('blob')),'_blank'); }
+  catch(e){ alert('PDF-Fehler: '+e.message); }
+}
+function blankDownload(fid){
+  try{ generatePDF(fid,true).save(_blankName(fid)); showToast('⬇️ '+_blankName(fid)); }
+  catch(e){ alert('PDF-Fehler: '+e.message); }
+}
+async function blankDownloadAll(){
+  const fids=['schweig','datenschutz','vollm','kompass'];
+  try{
+    if(typeof PDFLib==='undefined'){ fids.forEach(f=>blankDownload(f)); return; }
+    const merged=await PDFLib.PDFDocument.create();
+    for(const fid of fids){
+      const buf=generatePDF(fid,true).output('arraybuffer');
+      const src=await PDFLib.PDFDocument.load(buf);
+      (await merged.copyPages(src,src.getPageIndices())).forEach(p=>merged.addPage(p));
+    }
+    const bytes=await merged.save();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    a.download='PNW_Leerformulare_Komplett.pdf'; a.click();
+    showToast('⬇️ PNW_Leerformulare_Komplett.pdf');
+  }catch(e){ alert('PDF-Fehler: '+e.message); }
 }
 function mockPrint(name){
   showToast('🖨️ Druckdialog für '+name+' wird geöffnet …');
