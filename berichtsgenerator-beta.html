@@ -4917,14 +4917,6 @@ window.addEventListener('DOMContentLoaded', () => {
     // Stammdaten
     content.push(stammBox(stammRows(typ, data)));
 
-    // Besprochen-Hinweis (alle Typen, sobald das Feld ausgefuellt ist).
-    // Achtung: Select liefert 'Ja'/'Nein' (Grossschreibung) — frueherer Vergleich mit 'ja' schlug fehl.
-    if (has(data.Bericht_Besprochen)) {
-      const _b = data.Bericht_Besprochen === 'Ja'
-        ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
-        : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
-      content.push({ text: _b, fontSize: 8.5, italics: true, color: C.muted, margin: [0, 2, 0, 0] });
-    }
     if (has(data.HPG_Begruendung)) {
       content.push({ text: `Hinweis zur Vorlaufzeit: ${data.HPG_Begruendung}`, fontSize: 8.5, italics: true, color: C.muted, margin: [0, 2, 0, 0] });
     }
@@ -4941,6 +4933,17 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       if (s.ressRisiken) content.push(ressRisiken(data.Ressourcen, data.Risiken));
     });
+
+    // Besprochen-Hinweis (alle Typen, sobald das Feld ausgefuellt ist) — am Ende
+    // des Berichts, dort wo es auch im Formular abgefragt wird.
+    // Achtung: Select liefert 'Ja'/'Nein' (Grossschreibung).
+    if (has(data.Bericht_Besprochen)) {
+      const _b = data.Bericht_Besprochen === 'Ja'
+        ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
+        : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
+      content.push({ text: 'BERICHT BESPROCHEN', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 14, 0, 2] });
+      content.push({ text: _b, fontSize: 9.25, lineHeight: 1.4, color: C.ink });
+    }
 
     // Anlagen-Hinweis (falls ein PDF-Anhang beigefuegt ist)
     if (opts.anhang) {
