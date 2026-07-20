@@ -85,7 +85,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
 <body>
 <header class="header">
   <div class="header-brand">
-    <img src="assets/Logo-PraxisNeueWege-transparent.png" alt="PNW">
+    <img src="assets/logo-pnw-neu.png" alt="PNW">
     <span>Jugendamt-Cockpit</span>
     <span class="beta-badge" id="versionBadge">BETA</span>
   </div>
@@ -97,7 +97,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
 
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
-    <img src="assets/Logo-PraxisNeueWege-transparent.png" alt="PNW">
+    <img src="assets/logo-pnw-neu.png" alt="PNW">
     <div class="login-title">Jugendamt-Cockpit</div>
     <div class="login-desc">Fallzahlen, Laufzeiten und Hilfearten je Jugendamt — ab April 2024, inklusive archivierter Hilfen. Zugang für Teamleitungen und Geschäftsführung.</div>
     <button class="btn btn-outline" id="loginBtn" onclick="login()">Mit Microsoft anmelden</button>
@@ -553,7 +553,7 @@ async function _ladePdfAssets() {
     KodchasanSemi:   { normal: 'Kodchasan-SemiBold.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
   };
   let logo = null;
-  try { logo = 'data:image/png;base64,' + await b64('assets/Logo-PraxisNeueWege-transparent.png'); } catch (e) { console.warn('Logo fehlt:', e.message); }
+  try { logo = 'data:image/png;base64,' + await b64('assets/logo-praxisneuewege.png'); } catch (e) { console.warn('Logo fehlt:', e.message); }
   _pdfAssets = { vfs, fonts, logo };
   return _pdfAssets;
 }
