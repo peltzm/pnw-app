@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,200;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff">
+<title>Beta App-Center — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --radius:8px; --radius-lg:12px;
+  --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh;overflow-x:hidden}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.user-badge{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.btn-logout{margin-left:4px;font-size:11px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;color:var(--text-muted);font-family:inherit}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center}
+.login-card img{height:72px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:44px}
+.btn-primary{background:var(--surface);color:var(--accent);border:1px solid var(--accent);width:100%}
+.btn-primary:active{background:var(--accent-light)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;line-height:1.5;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* ── APP SCREEN ── */
+#appScreen{display:none}
+
+/* Hero */
+.hero{text-align:center;padding:28px 20px 20px}
+.hero img.hero-logo{height:52px;width:auto;margin-bottom:10px}
+.hero h1{font-size:17px;font-weight:600;color:var(--text);margin-bottom:14px}
+.profile-block{display:flex;flex-direction:column;align-items:center;gap:5px}
+.profile-avatar{width:54px;height:54px;border-radius:50%;object-fit:cover;border:2px solid var(--border);background:var(--accent-light);display:block}
+.profile-avatar-fallback{width:54px;height:54px;border-radius:50%;background:var(--accent-light);color:var(--accent);font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--border)}
+.profile-label{font-size:10px;color:var(--text-hint);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.profile-name{font-size:14px;font-weight:600;color:var(--text)}
+
+/* ── GRID ── */
+/* Desktop: 4 Spalten, 2 Zeilen */
+.app-grid{
+  display:grid;
+  /* Auto-fit: so viele Spalten wie reinpassen, mind. 150px pro Kachel */
+  grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+  gap:14px;
+  padding:16px 20px 20px;
+  max-width:800px;
+  margin:0 auto;
+  width:100%;
+}
+
+/* Mobil (<600px): 3 Spalten, kompaktere Kacheln */
+@media(max-width:600px){
+  .app-grid{
+    grid-template-columns:repeat(3,1fr);
+    gap:6px;
+    padding:8px 4px 12px;
+    max-width:100%;
+    width:100%;
+    align-items:stretch;
+    justify-items:stretch;
+  }
+  .app-card{
+    padding:10px 4px 8px;
+    gap:5px;
+    aspect-ratio:unset;
+    min-width:0;
+    height:90px;
+    width:100%;
+  }
+  .card-icon{font-size:22px}
+  .card-name{font-size:10px;font-weight:600}
+  .card-desc{display:none}
+  .page-footer{
+    text-align:center;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+  }
+}
+
+/* ── KACHEL ── */
+.app-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  text-decoration:none;color:inherit;
+  cursor:pointer;
+  transition:border-color .12s,box-shadow .12s;
+  aspect-ratio:1/1;
+  padding:14px 8px;
+  gap:8px;
+}
+.app-card:hover,.app-card:active{
+  border-color:var(--accent-mid);
+  box-shadow:0 2px 12px rgba(123,63,30,.12);
+  background:var(--accent-light);
+}
+
+.card-icon{
+  width:48px;height:48px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:30px;line-height:1;
+  flex-shrink:0;
+}
+.card-icon img{
+  width:48px;height:48px;
+  object-fit:contain;
+  border-radius:10px;
+}
+.card-name{
+  font-size:12px;font-weight:600;
+  color:var(--text);line-height:1.2;
+  text-align:center;
+  word-break:break-word;
+  hyphens:auto;
+  width:100%;
+}
+.card-desc{
+  font-size:10px;color:var(--text-muted);
+  line-height:1.35;
+}
+
+/* Mobile: Beschreibungen ausblenden */
+@media(max-width:500px){
+  .card-desc{display:none}
+  .card-name{font-size:11px}
+  .app-card{gap:6px;padding:10px 6px}
+  .card-icon{width:38px;height:38px;font-size:24px}
+  .card-icon img{width:38px;height:38px}
+}
+
+/* Soon */
+.app-card.soon{opacity:.42;pointer-events:none}
+
+/* Beta banner */
+.app-card.beta{position:relative;overflow:hidden;}
+.app-card.beta::after{
+  content:'BETA';
+  position:absolute;
+  top:16px;right:-18px;
+  width:72px;
+  text-align:center;
+  font-size:8px;font-weight:700;letter-spacing:.1em;
+  color:#fff;
+  background:var(--accent);
+  padding:4px 0;
+  transform:rotate(45deg);
+  box-shadow:0 1px 4px rgba(0,0,0,.22);
+  pointer-events:none;
+}
+
+/* NEU banner */
+.app-card.neu{position:relative;overflow:hidden;}
+.app-card.neu::after{
+  content:'NEU';
+  position:absolute;
+  top:16px;right:-18px;
+  width:72px;
+  text-align:center;
+  font-size:8px;font-weight:700;letter-spacing:.1em;
+  color:#fff;
+  background:#2d7a3a;
+  padding:4px 0;
+  transform:rotate(45deg);
+  box-shadow:0 1px 4px rgba(0,0,0,.22);
+  pointer-events:none;
+}
+.soon-pill{
+  font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--accent-mid);background:var(--accent-light);
+  border:1px solid #e8c4a8;border-radius:4px;
+  padding:1px 6px;display:inline-block;
+}
+@media(max-width:600px){.soon-pill{display:none}}
+
+/* Footer */
+.page-footer{text-align:center;padding:16px 16px 28px;font-size:11px;color:var(--text-hint);border-top:1px solid var(--border);margin-top:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.page-footer a{color:var(--accent-mid);text-decoration:none}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand">
+    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <span>Beta App-Center</span>
+    <span id="versionBadge" style="font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace;"></span>
+    <a href="changelog.html" target="_blank" style="font-size:10px;color:var(--accent-mid);text-decoration:none;margin-left:6px;opacity:0.8;" title="Changelog">Changelog ↗</a>
+  </div>
+  <div class="user-badge" id="userBadge" style="display:none">
+    <div class="user-dot"></div>
+    <span id="userName"></span>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <div class="login-title">Beta App-Center</div>
+    <div class="login-desc">Dieser Bereich ist ausschließlich für autorisierte Mitarbeiter zugänglich. Bitte authentifizieren Sie sich mit Ihrem Konto. Jeder Zugriff wird protokolliert&nbsp;— unbefugte Nutzung ist strafbar gemäß&nbsp;§202a&nbsp;StGB.</div>
+    <button class="btn btn-primary" id="loginBtn" onclick="login()">
+      <svg width="16" height="16" viewBox="0 0 23 23" fill="none">
+        <path d="M1 1h10v10H1z" fill="#f25022"/>
+        <path d="M12 1h10v10H12z" fill="#7fba00"/>
+        <path d="M1 12h10v10H1z" fill="#00a4ef"/>
+        <path d="M12 12h10v10H12z" fill="#ffb900"/>
+      </svg>
+      Mit Microsoft anmelden
+    </button>
+    <div id="loginError" class="alert alert-error" style="display:none">
+      Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.
+    </div>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<div id="appScreen">
+  <div class="hero">
+    <h1>Beta App-Center</h1>
+    <div class="profile-block">
+      <div id="profileAvatar" class="profile-avatar-fallback">?</div>
+      <div class="profile-label">Angemeldet als:</div>
+      <div class="profile-name" id="profileName"></div>
+    </div>
+  </div>
+
+  <div style="max-width:800px;margin:0 auto;padding:0 20px;">
+    <div style="background:var(--accent-light);border:1px solid #e8c4a8;border-radius:var(--radius-lg);padding:10px 14px;font-size:12px;color:var(--accent);line-height:1.5;">
+      🧪 Hier gesammelt: alle Apps in der Erprobung. Feedback bitte direkt an Markus — die stabilen Versionen findest du weiterhin im <a href="apps.html" style="color:var(--accent);font-weight:600;">App-Central</a>.
+    </div>
+  </div>
+
+  <div class="app-grid">
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/berichtsgenerator-beta.html">
+      <div class="card-icon">📄</div>
+      <div class="card-name">Berichts&shy;generator</div>
+      <div class="card-desc">Berichte mit Kilanka-Vorbefüllung und PDF-Ausgabe</div>
+    </a>
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/mitarbeiter-cockpit-beta.html">
+      <div class="card-icon">👤</div>
+      <div class="card-name">Mitarbeiter-Cockpit</div>
+      <div class="card-desc">FLS-Ist und persönliche Kennzahlen aus Kilanka</div>
+    </a>
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/manager-cockpit-beta.html">
+      <div class="card-icon">📊</div>
+      <div class="card-name">Manager-Cockpit</div>
+      <div class="card-desc">Kennzahlen und Auswertungen für die Leitung</div>
+    </a>
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/jugendamt-cockpit-beta.html">
+      <div class="card-icon">🏛️</div>
+      <div class="card-name">Jugendamt-Cockpit</div>
+      <div class="card-desc">Fälle und Auswertungen je Jugendamt</div>
+    </a>
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/fuhrpark-beta.html">
+      <div class="card-icon">🚙</div>
+      <div class="card-name">Fuhrpark</div>
+      <div class="card-desc">Fahrzeuge und Fuhrparkdaten im Blick</div>
+    </a>
+
+    <a class="app-card" href="https://apps.praxisneuewege.de/apps.html" style="border-style:dashed;">
+      <div class="card-icon">⌂</div>
+      <div class="card-name">App-Central</div>
+      <div class="card-desc">Zurück zu den stabilen Apps</div>
+    </a>
+
+  <footer class="page-footer" style="display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;flex-direction:column;text-align:center;">
+    <span>Praxis NeueWege · <a href="https://www.praxisneuewege.de">praxisneuewege.de</a></span>
+    <button id="footerLogoutBtn" class="btn-logout" onclick="logout()" style="display:none;">Abmelden</button>
+  </footer>
+</div>
+
+<script>
+// HTTPS erzwingen — MSAL funktioniert nicht über HTTP
+if (location.protocol === 'http:' && location.hostname !== 'localhost') {
+  location.replace('https://' + location.host + location.pathname + location.search + location.hash);
+}
+
+const CFG = {
+  clientId:    'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/beta-apps.html'
+};
+const msalConfig = {
+  auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+  system: { allowNativeBroker: false }
+};
+const APP_VERSION = 'BETA-CENTER'; // auto-updated on deploy
+
+function applyVersionBadge() {
+  document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
+}
+
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+applyVersionBadge();
+const SCOPES = ['User.Read'];
+
+// Popup auf Desktop (Firefox, Chrome, Edge auf Mac/Win); Redirect auf iOS Safari
+function _clearStuckInteraction() {
+  // MSAL kann nach einem geblockten Popup einen 'interaction.status' zurücklassen,
+  // an dem auch der Redirect-Login scheitert — vor dem Redirect aufräumen
+  try {
+    for (const st of [sessionStorage, localStorage]) {
+      const keys = [];
+      for (let i = 0; i < st.length; i++) {
+        const k = st.key(i);
+        if (k && k.includes('interaction.status')) keys.push(k);
+      }
+      keys.forEach(k => st.removeItem(k));
+    }
+  } catch(e) {}
+}
+
+function _popupLikelyWorks() {
+  const ua = navigator.userAgent;
+  // Mobile Geräte generell per Redirect anmelden: Popups werden auf Android-Chrome
+  // wie iOS häufig blockiert und hinterlassen einen hängenden interaction-Status
+  if (/Android|iPhone|iPad|iPod|Mobi/i.test(ua)) return false;
+  return !(/Safari/.test(ua) && !/Chrome|Firefox|Edge/.test(ua));
+}
+
+async function login() {
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginError');
+  btn.disabled = true;
+  errEl.style.display = 'none';
+  const req = { scopes: SCOPES };
+  if (_popupLikelyWorks()) {
+    try {
+      const resp = await msalInstance.loginPopup(req);
+      if (resp) { msalInstance.setActiveAccount(resp.account); await showApp(resp.account); return; }
+    } catch(e) {
+      if (e.errorCode === 'interaction_in_progress') {
+        errEl.style.display = 'block';
+        errEl.textContent = 'Eine Anmeldung läuft bereits. Bitte kurz warten und erneut versuchen.';
+        btn.disabled = false;
+        return;
+      }
+      // Popup fehlgeschlagen → Redirect-Fallback
+    }
+  }
+  try {
+    _clearStuckInteraction();
+    await msalInstance.loginRedirect(req);
+  } catch(e) {
+    console.error(e);
+    errEl.style.display = 'block';
+    btn.disabled = false;
+  }
+}
+
+function logout() {
+  msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri });
+}
+
+async function loadProfilePhoto(token) {
+  try {
+    const r = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!r.ok) return null;
+    return URL.createObjectURL(await r.blob());
+  } catch { return null; }
+}
+
+async function getToken() {
+  const account = msalInstance.getActiveAccount();
+  if (!account) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+    return r.accessToken;
+  } catch { return null; }
+}
+
+async function showApp(account) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userBadge').style.display = 'flex';
+  const flb = document.getElementById('footerLogoutBtn'); if(flb) flb.style.display = 'inline-flex';
+  const name = account.name || account.username;
+  document.getElementById('userName').textContent = name;
+  document.getElementById('profileName').textContent = name;
+  const initials = name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
+  const avatarEl = document.getElementById('profileAvatar');
+  avatarEl.textContent = initials;
+  const token = await getToken();
+  if (token) {
+    const url = await loadProfilePhoto(token);
+    if (url) {
+      const img = document.createElement('img');
+      img.src = url; img.className = 'profile-avatar'; img.alt = name;
+      avatarEl.replaceWith(img);
+    }
+  }
+}
+
+async function init() {
+  try {
+    await msalInstance.initialize();
+    const resp = await msalInstance.handleRedirectPromise();
+    if (resp?.account) { msalInstance.setActiveAccount(resp.account); await showApp(resp.account); return; }
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) { msalInstance.setActiveAccount(accounts[0]); await showApp(accounts[0]); }
+  } catch(e) { console.error('Init:', e); }
+}
+init();
+</script>
+</body>
+</html>
+
