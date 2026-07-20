@@ -1074,11 +1074,13 @@ function buildStep(fid,idx){
       <p>Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne).</p>
       <h3>4. Speicherdauer</h3>
       <p>Ihre Daten werden bis zum Ablauf der gesetzlichen Aufbewahrungsfristen (§ 63 SGB VIII; i.d.R. 10 Jahre nach Hilfeende) gespeichert. Daten, die keiner gesetzlichen Aufbewahrungspflicht unterliegen, werden nach Wegfall des Verarbeitungszwecks gelöscht.</p>
-      <h3>5. Weitergabe an Dritte</h3>
+      <h3>5. Speicherung Ihrer Daten</h3>
+      <p>Die Speicherung Ihrer personenbezogenen Daten erfolgt lokal auf den Arbeitsgeräten der zuständigen Mitarbeitenden sowie in unserem Fachsoftwaresystem <strong>Kilanka</strong>. Eine Ablage in öffentlichen Cloud-Diensten (z.B. OneDrive/Microsoft 365) erfolgt <strong>nur, wenn Sie die entsprechende optionale Einwilligung unten erteilen</strong>. Ohne diese Einwilligung findet keine Übertragung Ihrer Daten in Drittländer außerhalb der Europäischen Union statt.</p>
+      <h3>6. Weitergabe an Dritte</h3>
       <p>Daten werden nur weitergegeben, soweit dies zur Hilfeerfüllung erforderlich ist (§ 64 SGB VIII, §§ 69 ff. SGB X) oder Sie ausdrücklich eingewilligt haben. Empfänger können sein: das beauftragende Jugendamt, beteiligte Fachkräfte und Institutionen im Rahmen der Hilfeplanung.</p>
-      <h3>6. Ihre Rechte (Art. 15–21 DSGVO)</h3>
+      <h3>7. Ihre Rechte (Art. 15–21 DSGVO)</h3>
       <p>Sie haben das Recht auf <strong>Auskunft</strong> (Art. 15), <strong>Berichtigung</strong> (Art. 16), <strong>Löschung</strong> (Art. 17), <strong>Einschränkung</strong> (Art. 18) und <strong>Widerspruch</strong> (Art. 21). Beschwerden: Bayerisches Landesamt für Datenschutzaufsicht, Promenade 27, 91522 Ansbach, poststelle@lda.bayern.de</p>
-      <h3>7. Widerruf von Einwilligungen</h3>
+      <h3>8. Widerruf von Einwilligungen</h3>
       <p style="color:var(--text-muted);font-size:13px;">Erteilte Einwilligungen können jederzeit ohne Angabe von Gründen schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO). Der Widerruf berührt nicht die Rechtmäßigkeit der bis dahin erfolgten Verarbeitung.</p>
     </div>
     <div class="klient-inputs">
@@ -1098,14 +1100,14 @@ function buildStep(fid,idx){
           <div class="toggle-label-main">📁 OneDrive / Microsoft 365</div>
           <div class="toggle-label-sub">Ablage und Austausch von Dokumenten über OneDrive (Microsoft Ireland Operations Ltd.). Datenübertragung in die USA auf Basis des EU-USA Data Privacy Framework.</div>
         </div>
-        <label class="toggle"><input type="checkbox" id="ki_ds_onedrive" checked><span class="toggle-slider"></span></label>
+        <label class="toggle"><input type="checkbox" id="ki_ds_onedrive"><span class="toggle-slider"></span></label>
       </div>
       <div class="toggle-row">
         <div class="toggle-label">
           <div class="toggle-label-main">💬 WhatsApp-Kommunikation</div>
           <div class="toggle-label-sub">Nutzung von WhatsApp (Meta Platforms Ireland Ltd.) für die Kommunikation mit der Fachkraft. Die Einwilligung ist freiwillig — bei Ablehnung wird auf andere Kommunikationswege ausgewichen.</div>
         </div>
-        <label class="toggle"><input type="checkbox" id="ki_ds_wa" checked><span class="toggle-slider"></span></label>
+        <label class="toggle"><input type="checkbox" id="ki_ds_wa"><span class="toggle-slider"></span></label>
       </div>
     </div>`;
   }
@@ -1571,11 +1573,6 @@ function generatePDF(formId, blank){
     try{doc.addImage(PNW_LOGO_B64,'PNG',ML,6,lw,lh);}catch(e){}
     doc.setFont(F,'bold');doc.setFontSize(7);doc.setTextColor(...ACC);
     doc.text(CATS[fid]||'',PW-MR,11,{align:'right'});
-    doc.setDrawColor(...ACC);doc.setLineWidth(0.4);
-    const bW=22,bH=5.5,bX=PW-MR-bW,bY=13.5;
-    doc.rect(bX,bY,bW,bH);
-    doc.setFont(F,'bold');doc.setFontSize(6.5);doc.setTextColor(...ACC);
-    doc.text('FORMULAR',bX+bW/2,bY+3.8,{align:'center'});
     doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,22,PW-MR,22);
   }
   function drawPageFooter(fid,p,tot){
@@ -1697,6 +1694,14 @@ function generatePDF(formId, blank){
     section('Zweck und Rechtsgrundlage der Datenverarbeitung',`Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach ${kdX.sgb||'SGB VIII'} durch das ${kdX.ja||''}. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).`);
     section('Erhobene Datenkategorien','Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne).');
     section('Speicherdauer','Ihre Daten werden bis zum Ablauf der gesetzlichen Aufbewahrungsfristen (§ 63 SGB VIII; i.d.R. 10 Jahre nach Hilfeende) gespeichert.');
+    const _odKonsent = blank ? null : (($id('ki_ds_onedrive')||{}).checked||false);
+    section('Speicherung Ihrer Daten',
+      'Die Speicherung Ihrer personenbezogenen Daten erfolgt lokal auf den Arbeitsgeräten der zuständigen Mitarbeitenden sowie im Fachsoftwaresystem Kilanka. ' +
+      (_odKonsent === null
+        ? 'Eine Ablage in öffentlichen Cloud-Diensten (z.B. OneDrive/Microsoft 365) erfolgt nur bei erteilter optionaler Einwilligung; ohne diese findet keine Übertragung in Drittländer außerhalb der EU statt.'
+        : _odKonsent
+          ? 'Mit Ihrer unten erteilten Einwilligung erfolgt zusätzlich die Ablage in OneDrive/Microsoft 365 (Microsoft Ireland Operations Ltd.); Datenübertragung in die USA auf Basis des EU-US Data Privacy Framework.'
+          : 'Eine Ablage in öffentlichen Cloud-Diensten erfolgt nicht. Eine Übertragung Ihrer Daten in Drittländer außerhalb der Europäischen Union findet nicht statt.'));
     section('Weitergabe an Dritte','Daten werden nur weitergegeben, soweit dies zur Hilfeerfüllung erforderlich ist (§ 64 SGB VIII, §§ 69 ff. SGB X) oder Sie ausdrücklich eingewilligt haben.');
     section('Ihre Rechte (Art. 15–21 DSGVO)','Sie haben das Recht auf Auskunft (Art. 15), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung (Art. 18) und Widerspruch (Art. 21). Beschwerden: Bayer. Landesamt für Datenschutzaufsicht, Promenade 27, 91522 Ansbach.');
     section('Widerruf von Einwilligungen','Erteilte Einwilligungen können jederzeit ohne Angabe von Gründen schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO).');
