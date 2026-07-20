@@ -233,8 +233,8 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 
 /* Leerformular download section */
 .dl-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:1rem;}
-.dl-card{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.1rem;gap:12px;}
-.dl-card-info{flex:1;}
+.dl-card{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.1rem;gap:12px;min-width:0;flex-wrap:wrap;}
+.dl-card-info{flex:1;min-width:0;overflow-wrap:anywhere;}
 .dl-card-title{font-size:13px;font-weight:600;color:var(--text);}
 .dl-card-sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
 .dl-actions{display:flex;gap:8px;flex-shrink:0;}
