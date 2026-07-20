@@ -10,6 +10,7 @@
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <style>
   :root {
     --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
@@ -1087,6 +1088,7 @@ function collectData() {
   data._version = currentVersion || 0;
   // PDF-Anhang (Clearingbericht) mitpersistieren — nur Metadaten, kein Base64 (zu groß für SharePoint-Liste)
   data._anhangName = _anhangPDF ? _anhangPDF.name : null;
+  data._anhangTitel = _anhangPDF ? (_anhangPDF.titel || '') : null;
   // Unterschrift-Fachkräfte: Name + Qualifikationen als flache Tokens
   // (Quali2 = Freitext, falls "Andere…" gewählt)
   for (let i = 1; i <= 4; i++) {
@@ -1492,7 +1494,34 @@ async function saveEntwurf() {
 let currentBerichtstyp = 'verlauf';
 
 // PDF-Anhang für Clearingbericht (Anhang-Methodik)
-let _anhangPDF = null; // { name: string, base64: string, size: number } | null
+let _anhangPDF = null; // { name, base64, size, titel } | null
+
+// Bezeichnung des Anhangs setzen und beide Eingabefelder synchron halten
+function setAnhangTitel(v) {
+  if (_anhangPDF) _anhangPDF.titel = v;
+  ['anhangTitel', 'anhangTitelS5'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value !== v) el.value = v;
+  });
+}
+
+// Angehaengtes PDF (falls vorhanden) per pdf-lib an ein Basis-PDF anfuegen.
+// Gibt bei Fehlern das unveraenderte Basis-PDF zurueck.
+async function _mergeAnhangInPdf(baseBytes) {
+  if (!_anhangPDF) return baseBytes;
+  if (typeof PDFLib === 'undefined') { console.warn('pdf-lib nicht geladen — PDF ohne Anhang'); return baseBytes; }
+  try {
+    const doc = await PDFLib.PDFDocument.load(baseBytes);
+    const anhangBytes = Uint8Array.from(atob(_anhangPDF.base64), c => c.charCodeAt(0));
+    const anhangDoc = await PDFLib.PDFDocument.load(anhangBytes, { ignoreEncryption: true });
+    const pages = await doc.copyPages(anhangDoc, anhangDoc.getPageIndices());
+    pages.forEach(p => doc.addPage(p));
+    return await doc.save();
+  } catch(e) {
+    console.warn('Anhang-Merge fehlgeschlagen — PDF ohne Anhang:', e);
+    return baseBytes;
+  }
+}
 
 // Betreuungszeitraum automatisch aus Hilfebeginn – Befristet/Ende ableiten.
 // Manuelle Eingabe (dataset.manuallySet) hat Vorrang und wird nicht überschrieben.
@@ -2787,7 +2816,8 @@ async function approveReport() {
             { headers: { Authorization: 'Bearer ' + token } }
           );
           if (pdfResp.ok) {
-            const pdfBytes = await pdfResp.arrayBuffer();
+            let pdfBytes = await pdfResp.arrayBuffer();
+            pdfBytes = await _mergeAnhangInPdf(new Uint8Array(pdfBytes));
             const pdfUpload = await fetch(
               `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(pdfName)}:/content`,
               { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' }, body: pdfBytes }
@@ -3961,6 +3991,7 @@ function buildDynamicSections(force = false) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             <span id="anhangFileName" style="font-size:13px; font-weight:500; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
             <span id="anhangFileSize" style="font-size:12px; color:var(--text-muted); white-space:nowrap;"></span>
+            <input type="text" id="anhangTitel" placeholder="Bezeichnung des Anhangs (z.B. Genogramm)" oninput="setAnhangTitel(this.value)" style="flex-basis:100%; margin-top:6px; font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius); font-family:inherit;">
             <button onclick="previewAnhang()" title="Anhang ansehen" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:white; cursor:pointer; transition:all 0.12s;" onmouseover="this.style.borderColor=\'var(--accent-mid)\';this.style.background=\'var(--accent-light)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.background=\'white\'">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
@@ -4066,6 +4097,7 @@ function buildDynamicSections(force = false) {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         <span id="anhangFileNameS5" style="font-size:13px; font-weight:500; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
         <span id="anhangFileSizeS5" style="font-size:12px; color:var(--text-muted); white-space:nowrap;"></span>
+        <input type="text" id="anhangTitelS5" placeholder="Bezeichnung des Anhangs (z.B. Genogramm)" oninput="setAnhangTitel(this.value)" style="flex-basis:100%; margin-top:6px; font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius); font-family:inherit;">
         <button onclick="previewAnhang()" title="Anhang ansehen" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:white; cursor:pointer; transition:all 0.12s;" onmouseover="this.style.borderColor=\'var(--accent-mid)\';this.style.background=\'var(--accent-light)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.background=\'white\'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
@@ -4443,7 +4475,8 @@ function handleAnhangUpload(input) {
   const reader = new FileReader();
   reader.onload = function(e) {
     const base64 = e.target.result.split(',')[1];
-    _anhangPDF = { name: file.name, base64: base64, size: file.size };
+    _anhangPDF = { name: file.name, base64: base64, size: file.size,
+      titel: file.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() };
     updateAnhangUI();
   };
   reader.readAsDataURL(file);
@@ -4466,6 +4499,7 @@ function updateAnhangUI() {
       previewDiv.style.display = 'flex';
       if (nameSpan) nameSpan.textContent = _anhangPDF.name;
       if (sizeSpan) sizeSpan.textContent = (_anhangPDF.size / 1024).toFixed(0) + ' KB';
+      setAnhangTitel(_anhangPDF.titel || '');
     } else {
       noneDiv.style.display    = 'flex';
       previewDiv.style.display = 'none';
@@ -4800,7 +4834,7 @@ window.addEventListener('DOMContentLoaded', () => {
       rows.push([['Nächstes HPG', fmtDate(data.Naechstes_HPG)], ['Fallleitung', data.Fallleitung]]);
     }
     const fk1 = data.Fachkraft1_Name || data.Fachkraft_NeueWege;
-    const fk2 = typ === 'verlauf' ? (data.Fachkraft2_Name || data.Fachkraft_2) : '';
+    const fk2 = data.Fachkraft2_Name || data.Fachkraft_2; // fuer alle Berichtstypen
     rows.push([['Fachkraft NeueWege', fk1], has(fk2) ? ['Fachkraft 2', fk2] : ['', '']]);
     return rows;
   }
@@ -4883,9 +4917,13 @@ window.addEventListener('DOMContentLoaded', () => {
     // Stammdaten
     content.push(stammBox(stammRows(typ, data)));
 
-    // Besprochen-Hinweis (Abschlussbericht)
-    if (typ === 'abschluss' && data.Bericht_Besprochen === 'ja' && has(data.Bericht_Besprochen_Datum)) {
-      content.push({ text: `Bericht wurde besprochen am: ${fmtDate(data.Bericht_Besprochen_Datum)}`, fontSize: 8.5, italics: true, color: C.muted, margin: [0, 2, 0, 0] });
+    // Besprochen-Hinweis (alle Typen, sobald das Feld ausgefuellt ist).
+    // Achtung: Select liefert 'Ja'/'Nein' (Grossschreibung) — frueherer Vergleich mit 'ja' schlug fehl.
+    if (has(data.Bericht_Besprochen)) {
+      const _b = data.Bericht_Besprochen === 'Ja'
+        ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
+        : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
+      content.push({ text: _b, fontSize: 8.5, italics: true, color: C.muted, margin: [0, 2, 0, 0] });
     }
     if (has(data.HPG_Begruendung)) {
       content.push({ text: `Hinweis zur Vorlaufzeit: ${data.HPG_Begruendung}`, fontSize: 8.5, italics: true, color: C.muted, margin: [0, 2, 0, 0] });
@@ -4903,6 +4941,13 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       if (s.ressRisiken) content.push(ressRisiken(data.Ressourcen, data.Risiken));
     });
+
+    // Anlagen-Hinweis (falls ein PDF-Anhang beigefuegt ist)
+    if (opts.anhang) {
+      const _at = has(opts.anhang.titel) ? opts.anhang.titel : opts.anhang.name;
+      content.push({ text: 'ANLAGEN', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 14, 0, 2] });
+      content.push({ text: `Diesem Bericht ist folgende Anlage beigefügt: ${_at}${_at !== opts.anhang.name ? ` (${opts.anhang.name})` : ''}. Die Anlage folgt am Ende dieses Dokuments.`, fontSize: 9.25, lineHeight: 1.4, color: C.ink });
+    }
 
     // Unterschriften
     content.push(signatureBlock(data, freigegebenVon));
@@ -5014,14 +5059,27 @@ async function erzeugeBerichtPdf() {
     data._ziele = ziele;
 
     const typ = currentBerichtstyp || 'verlauf';
-    const dd = buildBerichtDocDefinition(typ, data, { logoDataUrl: assets.logo, freigegebenVon: '' });
+    const dd = buildBerichtDocDefinition(typ, data, {
+      logoDataUrl: assets.logo, freigegebenVon: '',
+      anhang: _anhangPDF ? { titel: _anhangPDF.titel || '', name: _anhangPDF.name } : null,
+    });
 
     const _pre = { verlauf: 'VB', abschluss: 'AB', clearing: 'CL', stationaer: 'VB-S' }[typ] || 'VB';
     const _d = data.Datum_Unterschrift || new Date().toISOString().slice(0, 10);
     const dateiname = `${_pre}_${data.Kind_Familienname || 'Bericht'}_${(data.Kind_Vorname || 'X').substring(0, 2)}_${_d.substring(2, 4)}${_d.substring(5, 7)}.pdf`;
 
-    try { pdfMake.createPdf(dd).open(); }
-    catch(e) { pdfMake.createPdf(dd).download(dateiname); }
+    if (_anhangPDF) {
+      // Bericht rendern, Anhang-Seiten anfuegen, dann als Blob oeffnen
+      const buf = await new Promise(res => pdfMake.createPdf(dd).getBuffer(res));
+      const merged = await _mergeAnhangInPdf(buf);
+      const blob = new Blob([merged], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url);
+      if (!w) { const a = document.createElement('a'); a.href = url; a.download = dateiname; a.click(); }
+    } else {
+      try { pdfMake.createPdf(dd).open(); }
+      catch(e) { pdfMake.createPdf(dd).download(dateiname); }
+    }
   } catch (e) {
     alert('PDF-Erzeugung fehlgeschlagen: ' + e.message);
     console.error(e);
