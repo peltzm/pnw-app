@@ -4668,7 +4668,7 @@ window.addEventListener('DOMContentLoaded', () => {
         { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 0, 0, 1.5] },
         { text: dash(value), font: 'KodchasanMedium', fontSize: F.wert, color: C.ink, lineHeight: 1.2 },
       ],
-      fillColor: C.creme, margin: [4, 4, 4, 4],
+      margin: [6, 5, 6, 5],
     };
   }
 
@@ -4679,9 +4679,11 @@ window.addEventListener('DOMContentLoaded', () => {
         body: rows.map(([l, r]) => [stammCell(l[0], l[1]), stammCell(r[0], r[1])]),
       },
       layout: {
-        hLineWidth: () => LINE.trenner, vLineWidth: (i, node) => (i === 0 || i === node.table.widths.length) ? LINE.trenner : 0,
-        hLineColor: () => C.rahmenMittel, vLineColor: () => C.rahmenMittel,
-        paddingLeft: () => 6, paddingRight: () => 6, paddingTop: () => 2, paddingBottom: () => 2,
+        hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 0.9 : LINE.trenner,
+        vLineWidth: (i, node) => (i === 0 || i === node.table.widths.length) ? 0.9 : 0,
+        hLineColor: (i, node) => (i === 0 || i === node.table.body.length) ? C.rahmenStark : C.rahmenMittel,
+        vLineColor: () => C.rahmenStark,
+        paddingLeft: () => 8, paddingRight: () => 8, paddingTop: () => 2, paddingBottom: () => 2,
       },
       margin: [0, 10, 0, 4],
     };
@@ -4872,7 +4874,7 @@ window.addEventListener('DOMContentLoaded', () => {
     content.push({
       columns: [
         { width: '*', stack: kopfLinks },
-        ...(opts.logoDataUrl ? [{ image: opts.logoDataUrl, fit: [140, 36], width: 140, margin: [10, 2, 0, 0] }] : []),
+        ...(opts.logoDataUrl ? [{ image: opts.logoDataUrl, fit: [210, 55], width: 210, margin: [12, 0, 0, 0] }] : []),
       ],
       margin: [0, 0, 0, 4],
     });
