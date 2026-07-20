@@ -4070,8 +4070,7 @@ function buildDynamicSections(force = false) {
     // Besprochen-Abfrage: beim Verlaufsbericht unter der Stellungnahme-Box,
     // beim Abschlussbericht unter "Fachliche Einschätzung und Empfehlung"
     if ((typ === 'verlauf' && f.id === 'Stellungnahme') ||
-        (typ === 'abschluss' && f.id === 'Fachliche_Einschaetzung') ||
-        (typ === 'stationaer' && f.id === 'Fachliche_Einschaetzung')) {
+        (typ !== 'verlauf' && f.id === 'Fachliche_Einschaetzung')) { // abschluss, clearing, stationaer
       s5html += `<div class="card"><div class="card-title">Bericht wurde mit Hilfeempfänger besprochen</div>
       <div class="field-grid">
         <div class="field"><label>Besprochen? (Auswahlliste)</label>
