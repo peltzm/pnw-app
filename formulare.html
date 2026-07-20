@@ -1072,6 +1072,7 @@ function buildStep(fid,idx){
       <p>Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach <strong>${d.sgb||'§§ 27 ff. SGB VIII'}</strong> durch das Jugendamt <strong>${d.ja||'___'}</strong>. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).</p>
       <h3>3. Erhobene Datenkategorien</h3>
       <p>Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne).</p>
+      <p style="color:var(--text-muted);font-size:13px;">Bitte informieren Sie alle weiteren Personen, deren Daten Sie uns zur Verarbeitung übermitteln, über diese Datenverarbeitung.</p>
       <h3>4. Speicherdauer</h3>
       <p>Ihre Daten werden bis zum Ablauf der gesetzlichen Aufbewahrungsfristen (§ 63 SGB VIII; i.d.R. 10 Jahre nach Hilfeende) gespeichert. Daten, die keiner gesetzlichen Aufbewahrungspflicht unterliegen, werden nach Wegfall des Verarbeitungszwecks gelöscht.</p>
       <h3>5. Speicherung Ihrer Daten</h3>
@@ -1079,7 +1080,7 @@ function buildStep(fid,idx){
       <h3>6. Weitergabe an Dritte</h3>
       <p>Daten werden nur weitergegeben, soweit dies zur Hilfeerfüllung erforderlich ist (§ 64 SGB VIII, §§ 69 ff. SGB X) oder Sie ausdrücklich eingewilligt haben. Empfänger können sein: das beauftragende Jugendamt, beteiligte Fachkräfte und Institutionen im Rahmen der Hilfeplanung.</p>
       <h3>7. Ihre Rechte (Art. 15–21 DSGVO)</h3>
-      <p>Sie haben das Recht auf <strong>Auskunft</strong> (Art. 15), <strong>Berichtigung</strong> (Art. 16), <strong>Löschung</strong> (Art. 17), <strong>Einschränkung</strong> (Art. 18) und <strong>Widerspruch</strong> (Art. 21). Beschwerden: Bayerisches Landesamt für Datenschutzaufsicht, Promenade 27, 91522 Ansbach, poststelle@lda.bayern.de</p>
+      <p>Sie haben das Recht auf <strong>Auskunft</strong> (Art. 15), <strong>Berichtigung</strong> (Art. 16), <strong>Löschung</strong> (Art. 17), <strong>Einschränkung</strong> (Art. 18) und <strong>Widerspruch</strong> (Art. 21). Beschwerden: Bayerisches Landesamt für Datenschutzaufsicht, Promenade 27, 91522 Ansbach · Tel.: 0981 531300 · Fax: 0981 53981300 · poststelle@lda.bayern.de · www.lda.bayern.de</p>
       <h3>8. Widerruf von Einwilligungen</h3>
       <p style="color:var(--text-muted);font-size:13px;">Erteilte Einwilligungen können jederzeit ohne Angabe von Gründen schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO). Der Widerruf berührt nicht die Rechtmäßigkeit der bis dahin erfolgten Verarbeitung.</p>
     </div>
@@ -1107,7 +1108,13 @@ function buildStep(fid,idx){
           <div class="toggle-label-main">💬 WhatsApp-Kommunikation</div>
           <div class="toggle-label-sub">Nutzung von WhatsApp (Meta Platforms Ireland Ltd.) für die Kommunikation mit der Fachkraft. Die Einwilligung ist freiwillig — bei Ablehnung wird auf andere Kommunikationswege ausgewichen.</div>
         </div>
-        <label class="toggle"><input type="checkbox" id="ki_ds_wa"><span class="toggle-slider"></span></label>
+        <label class="toggle"><input type="checkbox" id="ki_ds_wa" onchange="toggleWaPersonen()"><span class="toggle-slider"></span></label>
+      </div>
+      <div id="waPersonenWrap" style="display:none;margin-top:10px;padding:12px;border:1px dashed var(--border-strong);border-radius:var(--radius);">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px;">Praxis NeueWege darf über WhatsApp mit folgenden Personen kommunizieren:</div>
+        <div id="waPersonenList"></div>
+        <button type="button" class="btn-add" onclick="addWaPerson()" style="margin-top:6px;">+ Person hinzufügen</button>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:8px;line-height:1.5;">Hinweis: WhatsApp erhält Zugriff auf Metadaten (Absender, Empfänger, Zeitpunkt) und teilt Nutzerdaten mit der Konzernmutter Meta (USA). Es gibt sichere Messenger-Alternativen — sprechen Sie uns bei Interesse gerne an.</div>
       </div>
     </div>`;
   }
@@ -1692,7 +1699,7 @@ function generatePDF(formId, blank){
     hRule();
     highlightSection('1 · VERANTWORTLICHE STELLE (ART. 13 DSGVO)','Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt\nTel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de');
     section('Zweck und Rechtsgrundlage der Datenverarbeitung',`Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach ${kdX.sgb||'SGB VIII'} durch das ${kdX.ja||''}. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).`);
-    section('Erhobene Datenkategorien','Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne).');
+    section('Erhobene Datenkategorien','Namen, Anschrift, Kontaktdaten, Geburtsdaten, Verwandtschaftsverhältnisse, Aufenthaltsstatus, schulischer/beruflicher Werdegang sowie alle weiteren zur Hilfeerfüllung erforderlichen Informationen. Ggf. auch besondere Kategorien gem. Art. 9 DSGVO (Gesundheitsdaten, Gutachten, Diagnosen, Therapiepläne). Bitte informieren Sie alle weiteren Personen, deren Daten Sie uns zur Verarbeitung übermitteln, über diese Datenverarbeitung.');
     section('Speicherdauer','Ihre Daten werden bis zum Ablauf der gesetzlichen Aufbewahrungsfristen (§ 63 SGB VIII; i.d.R. 10 Jahre nach Hilfeende) gespeichert.');
     const _odKonsent = blank ? null : (($id('ki_ds_onedrive')||{}).checked||false);
     section('Speicherung Ihrer Daten',
@@ -1703,7 +1710,7 @@ function generatePDF(formId, blank){
           ? 'Mit Ihrer unten erteilten Einwilligung erfolgt zusätzlich die Ablage in OneDrive/Microsoft 365 (Microsoft Ireland Operations Ltd.); Datenübertragung in die USA auf Basis des EU-US Data Privacy Framework.'
           : 'Eine Ablage in öffentlichen Cloud-Diensten erfolgt nicht. Eine Übertragung Ihrer Daten in Drittländer außerhalb der Europäischen Union findet nicht statt.'));
     section('Weitergabe an Dritte','Daten werden nur weitergegeben, soweit dies zur Hilfeerfüllung erforderlich ist (§ 64 SGB VIII, §§ 69 ff. SGB X) oder Sie ausdrücklich eingewilligt haben.');
-    section('Ihre Rechte (Art. 15–21 DSGVO)','Sie haben das Recht auf Auskunft (Art. 15), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung (Art. 18) und Widerspruch (Art. 21). Beschwerden: Bayer. Landesamt für Datenschutzaufsicht, Promenade 27, 91522 Ansbach.');
+    section('Ihre Rechte (Art. 15–21 DSGVO)','Sie haben das Recht auf Auskunft (Art. 15), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung (Art. 18) und Widerspruch (Art. 21). Beschwerden: Bayerisches Landesamt für Datenschutzaufsicht, Promenade 27, 91522 Ansbach · Tel.: 0981 531300 · Fax: 0981 53981300 · poststelle@lda.bayern.de · www.lda.bayern.de');
     section('Widerruf von Einwilligungen','Erteilte Einwilligungen können jederzeit ohne Angabe von Gründen schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO).');
     newPage();secN=0;
     eyebrow('DATENSCHUTZ · EINWILLIGUNGEN');capsSection('EINWILLIGUNGEN');
@@ -1715,7 +1722,28 @@ function generatePDF(formId, blank){
     consentBox('PFLICHTEINWILLIGUNG — ERFORDERLICH',`Ich habe die Datenschutzerklärung gelesen und stimme der Erhebung und Verarbeitung meiner personenbezogenen Daten zur Erfüllung der Hilfe nach ${kdX.sgb||'SGB VIII'} zu.`,basis);
     y+=2;doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('OPTIONALE EINWILLIGUNGEN — FREIWILLIG',ML,y);y+=5;
     consentBox('ONEDRIVE / MICROSOFT 365','Ablage und Austausch von Dokumenten über OneDrive (Microsoft Ireland Operations Ltd.). Datenübertragung in die USA auf Basis des EU-US Data Privacy Framework.',od);
-    consentBox('WHATSAPP-KOMMUNIKATION','Nutzung von WhatsApp (Meta Platforms Ireland Ltd.) für die Kommunikation mit der Fachkraft. Die Einwilligung ist freiwillig — bei Ablehnung wird auf andere Kommunikationswege ausgewichen.',wa);
+    consentBox('WHATSAPP-KOMMUNIKATION','Nutzung von WhatsApp (Meta Platforms Ireland Ltd.) für die Kommunikation mit der Fachkraft. WhatsApp erhält Zugriff auf Metadaten (Absender, Empfänger, Zeitpunkt) und teilt Nutzerdaten mit der Konzernmutter Meta (USA). Die Einwilligung ist freiwillig und jederzeit widerrufbar — bei Ablehnung wird auf andere Kommunikationswege ausgewichen. Auf Wunsch nennen wir gerne sichere Messenger-Alternativen.',wa);
+    // WhatsApp: einwilligende Personen als Tabelle (bei Einwilligung bzw. im Leerformular)
+    const _waPers = blank ? [] : (typeof getWaPersonen==='function' ? getWaPersonen() : []);
+    if(blank || wa){
+      y+=2;doc.setFont(F,'bold');doc.setFontSize(7);doc.setTextColor(...ACC);
+      doc.text('WHATSAPP — PRAXIS NEUEWEGE DARF MIT FOLGENDEN PERSONEN KOMMUNIZIEREN:',ML,y);y+=4;
+      const c1=ML, c2=ML+80, c3=ML+130, rowH=9;
+      doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
+      doc.text('NAME, VORNAME',c1,y);doc.text('MOBILFUNKNUMMER',c2,y);doc.text('UNTERSCHRIFT',c3,y);y+=2;
+      const nRows = blank ? 4 : Math.max(_waPers.length, 1);
+      for(let ri=0; ri<nRows; ri++){
+        pageCheck(rowH+4);
+        const p=_waPers[ri]||{};
+        doc.setFont(F,'bold');doc.setFontSize(9);doc.setTextColor(26,25,22);
+        if(p.name) doc.text(p.name,c1,y+5);
+        if(p.tel) doc.text(p.tel,c2,y+5);
+        doc.setDrawColor(...BRD);doc.setLineWidth(0.3);
+        doc.line(c1,y+rowH-2,c2-6,y+rowH-2);doc.line(c2,y+rowH-2,c3-6,y+rowH-2);doc.line(c3,y+rowH-2,PW-MR,y+rowH-2);
+        y+=rowH;
+      }
+      y+=3;
+    }
     y+=2;noteBox('Mit Ihrer Unterschrift bestätigen Sie, dass Sie diese Datenschutzerklärung erhalten und die angekreuzten Einwilligungen erteilt haben.');
     y+=4;capsSection('ANGABEN & UNTERSCHRIFT');
     fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',((kdX.plz||'')+' '+(kdX.ort||'')).trim());
@@ -1841,6 +1869,40 @@ function mockDownload(name){
   showToast('⬇️ '+name+'.pdf wird heruntergeladen …');
 }
 // ── LEERFORMULARE: echte Blanko-PDFs aus generatePDF ──
+// ── WHATSAPP: einwilligende Personen (Name + Mobilnummer) ──
+let _waPCount = 0;
+function toggleWaPersonen(){
+  const on = (document.getElementById('ki_ds_wa')||{}).checked;
+  const w = document.getElementById('waPersonenWrap');
+  if(!w) return;
+  w.style.display = on ? 'block' : 'none';
+  if(on && _waPCount === 0) addWaPerson(true);
+}
+function addWaPerson(prefill){
+  const list = document.getElementById('waPersonenList');
+  if(!list || _waPCount >= 6) return;
+  const i = ++_waPCount;
+  // Erste Zeile mit Sorgeberechtigtem/Klient + Telefon vorbelegen
+  let nm = '', tel = '';
+  if(prefill){
+    nm = ((document.getElementById('v_geb')||{}).value) || (typeof kd!=='undefined' && kd.name) || '';
+    tel = (typeof kd!=='undefined' && kd.tel) || '';
+  }
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;';
+  row.innerHTML = '<input type="text" id="wa_p_name_'+i+'" placeholder="Name, Vorname" value="'+nm.replace(/"/g,'&quot;')+'" style="flex:1;min-width:140px;font-size:14px;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;">'
+    + '<input type="tel" id="wa_p_tel_'+i+'" placeholder="Mobilfunknummer" value="'+tel.replace(/"/g,'&quot;')+'" style="flex:1;min-width:130px;font-size:14px;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;">';
+  list.appendChild(row);
+}
+function getWaPersonen(){
+  const out = [];
+  for(let i = 1; i <= _waPCount; i++){
+    const n = (document.getElementById('wa_p_name_'+i)||{}).value||'';
+    const t = (document.getElementById('wa_p_tel_'+i)||{}).value||'';
+    if(n.trim() || t.trim()) out.push({name:n.trim(), tel:t.trim()});
+  }
+  return out;
+}
 function _blankName(fid){
   const map={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass'};
   return 'PNW_Leer_'+(map[fid]||fid)+'.pdf';
