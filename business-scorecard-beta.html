@@ -130,7 +130,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
     <div class="login-title">Business Scorecard</div>
-    <div class="login-desc">Kennzahlen zu Finanzen, Auslastung, Personal und Fallentwicklung — für Geschäftsführung und Teamleitungen.</div>
+    <div class="login-desc">Kennzahlen zu Finanzen, Auslastung, Personal und Fallentwicklung — exklusiv für die Geschäftsführung.</div>
     <button class="btn btn-outline" onclick="doLogin()" style="width:100%">Mit Microsoft anmelden</button>
     <button class="btn-text" onclick="startDemo()">Demo-Modus ohne Anmeldung öffnen</button>
     <div class="alert alert-error" id="loginError" style="display:none"></div>
@@ -424,7 +424,7 @@ function renderAll(){
   </div>
 
   <div class="hint-card">
-    <strong>Hinweise:</strong> ${(scData.hinweise||[]).join(' ')} Berechtigung serverseitig im Worker: TL sieht nur das eigene Team, GF alles; Finanzblock nur GF.
+    <strong>Hinweise:</strong> ${(scData.hinweise||[]).join(' ')} Zugriff serverseitig im Worker auf die Geschäftsführung (Sonja & Markus Peltz) beschränkt — Teamleitungen und Mitarbeitende erhalten 403.
   </div>`;
 }
 function scoreTile(t, ringHtml, desc){
@@ -664,7 +664,7 @@ function monatOptionen(){
 function initViewbar(){
   const wrap = document.getElementById('rolePills');
   if (demoMode) {
-    const roles = [['tl','Teamleitung'],['gf','Geschäftsführung']];
+    const roles = [['gf','Geschäftsführung']]; // Zugriff ist GF-exklusiv (Vorgabe 21.07.2026)
     wrap.style.display = '';
     wrap.innerHTML = roles.map(([k,l]) =>
       `<button class="pill ${k===viewerRole?'active':''}" data-r="${k}">${l}</button>`).join('');
@@ -753,6 +753,11 @@ async function ladeMonat(monat){
     const t = await liveTokens();
     const r = await fetch(CFG.workerUrl + '/api/scorecard?monat=' + encodeURIComponent(monat),
       { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
+    if (r.status === 403) {
+      let detail = ''; try { detail = (await r.json()).error || ''; } catch(_){}
+      zeigeKeinZugriff(detail || 'Die Business Scorecard ist der Geschäftsführung vorbehalten.');
+      return;
+    }
     if (!r.ok) {
       let detail = ''; try { detail = (await r.json()).error || ''; } catch(_){}
       throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
@@ -771,6 +776,13 @@ async function ladeMonat(monat){
     scData = DEMO['2026-07'];
     viewerRole = 'gf';
   }
+}
+function zeigeKeinZugriff(msg){
+  scData = null;
+  document.querySelector('.viewbar').style.display = 'none';
+  document.getElementById('grid').innerHTML =
+    '<div class="card wide" style="text-align:center;padding:32px"><h3 style="justify-content:center">🔒 Kein Zugriff</h3>' +
+    '<div class="legend" style="margin-top:8px">' + msg + '</div></div>';
 }
 function showApp(name){
   document.getElementById('loginScreen').style.display = 'none';
