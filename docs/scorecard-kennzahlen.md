@@ -124,3 +124,12 @@ Verwendungszweck+Auftraggeber = sicherer Treffer, (2) Betragsgleichheit
 (Saldo oder Brutto, ±1 Cent) = Treffer mit Prüfhinweis. Ergebnis: Liste
 "bezahlt, aber in Kilanka noch offen" → manuell im Kilanka-Rechnungswesen
 als bezahlt erfassen.
+
+### Rechnungsnummern-Format (Hinweis Markus, 21.07.2026)
+
+`RE<Jahr>-<Monat>-<Fortlaufnummer>`, Fortlaufnummer beginnt am Jahresanfang
+neu. Ämter schreiben teils nur die letzten 4–5 Ziffern (Fortlaufnummer) in
+den Verwendungszweck. Matching-Konsequenz: Kurzformen (mit RE/Rg/Nr-Marker,
+führende Nullen egal) werden erkannt; bei jahresübergreifend mehrdeutiger
+Kurznummer bindet die Zuordnung nur mit zusätzlichem Betragsbeweis.
+Gutschriften mit fremder Nummern-Referenz sind für Betragsvergleiche gesperrt.
