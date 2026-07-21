@@ -226,3 +226,29 @@ Abwesenheits-Workflow inkl. AU-Daten, `invoices.lines.approval` + Mahnwesen/
 Zahlungen, `clients.careLevels` (SGB-XI-relevant). Die Spec ist ein
 Maximal-Katalog — Freischaltung weiterhin über `allowed-graphs` bzw.
 Response-Probing verifizieren.
+
+## Verifikation 21.07.2026 — Scorecard-Probe (Prod, Schnittstellen-Token)
+
+Temporäre Worker-Route `/api/scorecard-probe` (Commit a5d548b, wieder entfernt),
+alle sechs Tests bestanden:
+
+- **`/accounting/invoices` freigeschaltet** inkl. `paid`, `balance`,
+  `isOverdue`, `dunningLevel`, `depositsTotal`, `totalWithTax` → Finanz-KPIs
+  (Umsatz, Forderungen, Mahnwesen) direkt baubar.
+- **`users.targetHours` + `contracts` freigeschaltet** — offizielle VZÄ-Quelle.
+  `recName` wird am `/users`-Endpunkt weiterhin still ignoriert (Name aus
+  `name` + `firstName` bauen).
+- **timeBase-Retest bestanden:** `quotas.timeBase` kommt jetzt auch über den
+  Schnittstellen-Endpunkt an → Widerspruch aus §4/§10 aufgelöst, Ticket vom
+  11.07. erledigt; timeBase-Fallbacks können bei Gelegenheit entfallen.
+- **`$filter` verifiziert:** `{ date: { $gte: { $date: … } } }` greift
+  serverseitig an `/accounting/invoices` (Plausibilitätsprüfung: keine Treffer
+  vor dem Filterdatum) → Monatsabzüge ohne Vollabzug + Client-Filterung.
+- **`/documentation` unverändert** seit 15.07.: Version 2.0.0-wip, dieselben
+  sieben Endpunkte — kein Spec-Diff nötig.
+- `approvals.quantity` bewusst **nicht** getestet (Killt-quotas-Risiko, §4) —
+  Retest weiterhin offen, wird für die Scorecard nicht gebraucht.
+
+Produktive Nutzung: Worker-Route `/api/scorecard` (Rechnungen der letzten
+12 Monate per $filter, Team-Aggregation über buildCockpit, Akquise über
+`hbUpn` in alleHbFaelle).
