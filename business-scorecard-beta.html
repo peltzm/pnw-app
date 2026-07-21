@@ -165,7 +165,7 @@ const CFG = {
   redirectUri: 'https://apps.praxisneuewege.de/business-scorecard-beta.html',
   workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
-const SCOPES = ['User.Read', 'User.ReadBasic.All']; // Graph-Token für Team-Hierarchie (X-Graph-Token)
+const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All']; // Graph: Team-Hierarchie + BWA-Liste (SharePoint)
 const APP_VERSION = 'BETA-e75dfc5'; // auto-updated on deploy
 
 /* ═══════════════════════════════════════════════════════════
@@ -177,7 +177,13 @@ const APP_VERSION = 'BETA-e75dfc5'; // auto-updated on deploy
  *  – Forderungen: Anteil überfällig · grün < 10 % · gelb 10–25 % · rot > 25 %
  *  – Netto-Akquise: Ziel +2 Fälle/Team/Quartal (LuV TL §5)
  * ═══════════════════════════════════════════════════════════ */
-const ZIEL = { auslastung: 7.5, fls: 64, krankWarn: 5, krankRot: 8, overdueWarn: 10, overdueRot: 25, akquise: 2 };
+const ZIEL = { auslastung: 7.5, fls: 64, krankWarn: 5, krankRot: 8, overdueWarn: 10, overdueRot: 25, akquise: 2,
+               pkWarn: 82, pkRot: 88 }; // Personalkostenquote-Schwellen = VORSCHLAG, mit Entgeltkalkulation abgleichen
+const SP_HOST = 'praxisneuewegesonjapeltz978.sharepoint.com';
+const BWA_LISTE = 'PNW-BWA';
+let bwaDaten = {};        // Monat (JJJJ-MM) → { spId, Umsatzerloese, Personalkosten, Gesamtkosten, Betriebsergebnis, Kommentar }
+let bwaStatus = null;     // null=nicht geladen · 'ok' · Fehlertext
+let graphToken = null;    // Access-Token aus liveTokens()
 
 /* ═══════════════════════════════════════════════════════════
  * WORKER-KONTRAKT (Zielbild) — GET /api/scorecard?monat=YYYY-MM
@@ -354,7 +360,8 @@ function renderAll(){
     <table class="mini-table"><thead><tr><th>Empfänger</th><th class="num">offen</th><th class="num">überfällig</th><th class="num">älteste</th></tr></thead><tbody>
       ${(f.topSchuldner||[]).map(s=>`<tr><td>${zeile1(s.amt)}</td><td class="num">${eur(s.offen)}</td><td class="num">${eur(s.ueberfaellig)}</td><td class="num">${s.aeltesteTage} T.</td></tr>`).join('')}
     </tbody></table>
-  </div>` : ''}
+  </div>
+  ${bwaCard(f, monat)}` : ''}
 
   <div class="section-label">Auslastung &amp; FLS</div>
   <div class="card c-ausl wide">
@@ -433,6 +440,132 @@ function maTabelle(team){
       <td class="num">${m.vzae!=null?m.vzae.toFixed(2):'—'}</td><td class="num">${m.faelle}</td>
       <td class="num">${fmtQ(m.flsQuote)}${m.flsVerdacht?warnMark:''}</td><td class="num">${m.krankTageMonat!=null?m.krankTageMonat:'—'}</td></tr>`).join('')}
   </tbody></table>`;
+}
+
+/* ═══ BWA (SharePoint-Liste PNW-BWA, nur GF) ═══ */
+const deNum = s => { const n = parseFloat(String(s).replace(/\./g,'').replace(',','.')); return Number.isFinite(n) ? n : null; };
+
+function bwaCard(f, monat){
+  const b = bwaDaten[monat];
+  const quote = b && b.Umsatzerloese ? b.Personalkosten / b.Umsatzerloese * 100 : null;
+  const aPk = ampel(quote, ZIEL.pkWarn, ZIEL.pkRot, true);
+  const diff = b && b.Umsatzerloese != null ? b.Umsatzerloese - f.umsatzMonat : null;
+  const monate = Object.keys(bwaDaten).sort().slice(-6);
+  const statusZeile = bwaStatus && bwaStatus !== 'ok'
+    ? `<div class="legend" style="color:var(--warn)">${bwaStatus}</div>` : '';
+  return `
+  <div class="card c-fin wide">
+    <h3>BWA (DATEV) — Kostenseite</h3>
+    <div class="sub">Quelle: SharePoint-Liste ${BWA_LISTE}, Erfassung je Monat (CSV-Import oder manuell)</div>
+    ${b ? `
+    <div class="score-strip">
+      ${scoreTile('Personalkostenquote', ring(ampelPunkte(aPk),'--warn'), `${fmtQ(quote)} (Personal ÷ BWA-Umsatz) · Schwellen-Vorschlag: < ${ZIEL.pkWarn} % grün`)}
+      ${scoreTile('Betriebsergebnis', ring(b.Betriebsergebnis >= 0 ? 100 : 20, '--ok'), `${eur(b.Betriebsergebnis)} im ${monatLabel(monat)}`)}
+      ${scoreTile('BWA vs. Kilanka', ring(diff != null && Math.abs(diff) < f.umsatzMonat * 0.05 ? 100 : 60, '--blue'), diff != null ? `BWA-Umsatz ${eur(b.Umsatzerloese)} · Differenz ${diff>=0?'+':''}${eur(diff)} zu Kilanka` : '—')}
+    </div>` : `<div class="legend">Für ${monatLabel(monat)} ist noch keine BWA erfasst.</div>`}
+    ${monate.length ? `<table class="mini-table"><thead><tr><th>Monat</th><th class="num">Umsatz (BWA)</th><th class="num">Personal</th><th class="num">Gesamtkosten</th><th class="num">Ergebnis</th><th class="num">PK-Quote</th></tr></thead><tbody>
+      ${monate.map(m=>{ const x=bwaDaten[m]; const q = x.Umsatzerloese ? x.Personalkosten/x.Umsatzerloese*100 : null;
+        return `<tr><td>${monatLabel(m)}</td><td class="num">${eur(x.Umsatzerloese||0)}</td><td class="num">${eur(x.Personalkosten||0)}</td><td class="num">${eur(x.Gesamtkosten||0)}</td><td class="num">${eur(x.Betriebsergebnis||0)}</td><td class="num"><span class="dot ${ampel(q, ZIEL.pkWarn, ZIEL.pkRot, true)}"></span>${fmtQ(q)}</td></tr>`; }).join('')}
+    </tbody></table>` : ''}
+    ${statusZeile}
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:12px;color:var(--accent)">BWA erfassen / aktualisieren</summary>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;align-items:flex-end">
+        <label style="font-size:11px">Monat<br><input class="select" id="bwaMonat" value="${monat}" style="width:110px"></label>
+        <label style="font-size:11px">DATEV-CSV<br><input type="file" id="bwaCsv" accept=".csv,.txt" onchange="bwaCsvGewaehlt(event)" style="font-size:11px;max-width:210px"></label>
+        <label style="font-size:11px">Umsatzerlöse €<br><input class="select" id="bwaU" type="number" step="0.01" value="${b?b.Umsatzerloese:''}" style="width:120px"></label>
+        <label style="font-size:11px">Personalkosten €<br><input class="select" id="bwaP" type="number" step="0.01" value="${b?b.Personalkosten:''}" style="width:120px"></label>
+        <label style="font-size:11px">Gesamtkosten €<br><input class="select" id="bwaG" type="number" step="0.01" value="${b?b.Gesamtkosten:''}" style="width:120px"></label>
+        <label style="font-size:11px">Betriebsergebnis €<br><input class="select" id="bwaE" type="number" step="0.01" value="${b?b.Betriebsergebnis:''}" style="width:120px"></label>
+        <button class="btn btn-outline" onclick="speichereBwa()" ${demoMode?'disabled title="Nur im Live-Modus"':''}>Speichern</button>
+        <span class="legend" id="bwaMeldung"></span>
+      </div>
+      <div class="legend">CSV-Import sucht die Zeilen Umsatzerlöse / Personalkosten / Gesamtkosten / Betriebsergebnis und übernimmt den letzten Zahlenwert der Zeile — bitte vor dem Speichern prüfen.</div>
+    </details>
+  </div>`;
+}
+
+// DATEV-BWA-CSV: Kennzahlenzeilen finden, letzten Zahlenwert übernehmen
+function bwaCsvGewaehlt(ev){
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const zeilen = String(reader.result).split(/\r?\n/);
+    const suche = [
+      [/umsatzerl/i, 'bwaU'],
+      [/personalkosten/i, 'bwaP'],
+      [/gesamtkosten/i, 'bwaG'],
+      [/betriebsergebnis/i, 'bwaE'],
+    ];
+    let treffer = 0;
+    for (const [re, feld] of suche) {
+      const zeile = zeilen.find(z => re.test(z));
+      if (!zeile) continue;
+      const werte = zeile.split(/[;\t]/).map(deNum).filter(v => v != null);
+      if (werte.length) { document.getElementById(feld).value = werte[werte.length - 1]; treffer++; }
+    }
+    document.getElementById('bwaMeldung').textContent =
+      treffer ? treffer + ' von 4 Kennzahlen aus der CSV übernommen — bitte prüfen.' : 'Keine Kennzahlenzeilen erkannt — bitte manuell eintragen.';
+  };
+  reader.readAsText(file, 'windows-1252'); // DATEV-Exporte sind meist ANSI-codiert
+}
+
+async function graphFetch(pfad, opts){
+  const r = await fetch('https://graph.microsoft.com/v1.0' + pfad, {
+    ...(opts || {}),
+    headers: { Authorization: 'Bearer ' + graphToken, 'Content-Type': 'application/json', ...((opts||{}).headers||{}) },
+  });
+  if (!r.ok) { let d=''; try { d = (await r.json()).error?.message || ''; } catch(_){}; throw new Error('Graph HTTP ' + r.status + (d?' — '+d:'')); }
+  return r.status === 204 ? null : r.json();
+}
+let bwaListePfad = null; // /sites/{siteId}/lists/{listId}
+async function bwaListe(){
+  if (bwaListePfad) return bwaListePfad;
+  const site = await graphFetch('/sites/' + SP_HOST + ':/');
+  const listen = await graphFetch(`/sites/${site.id}/lists?$filter=displayName eq '${BWA_LISTE}'`);
+  if (!listen.value || !listen.value.length) throw new Error(`Liste "${BWA_LISTE}" nicht gefunden — bitte im SharePoint anlegen (s. Hinweiskarte).`);
+  bwaListePfad = `/sites/${site.id}/lists/${listen.value[0].id}`;
+  return bwaListePfad;
+}
+async function ladeBwa(){
+  try {
+    const basis = await bwaListe();
+    const items = await graphFetch(basis + '/items?expand=fields($select=Title,Umsatzerloese,Personalkosten,Gesamtkosten,Betriebsergebnis,Kommentar)&$top=200');
+    bwaDaten = {};
+    for (const it of items.value || []) {
+      const fx = it.fields || {};
+      if (!/^\d{4}-\d{2}$/.test(fx.Title || '')) continue;
+      bwaDaten[fx.Title] = { spId: it.id, Umsatzerloese: fx.Umsatzerloese ?? null, Personalkosten: fx.Personalkosten ?? null,
+        Gesamtkosten: fx.Gesamtkosten ?? null, Betriebsergebnis: fx.Betriebsergebnis ?? null, Kommentar: fx.Kommentar || null };
+    }
+    bwaStatus = 'ok';
+  } catch(e){ bwaStatus = 'BWA-Daten nicht verfügbar: ' + e.message; }
+}
+async function speichereBwa(){
+  const meld = document.getElementById('bwaMeldung');
+  const monat = (document.getElementById('bwaMonat').value || '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat)) { meld.textContent = 'Monat bitte als JJJJ-MM angeben.'; return; }
+  const felder = {
+    Title: monat,
+    Umsatzerloese: deNum(document.getElementById('bwaU').value),
+    Personalkosten: deNum(document.getElementById('bwaP').value),
+    Gesamtkosten: deNum(document.getElementById('bwaG').value),
+    Betriebsergebnis: deNum(document.getElementById('bwaE').value),
+  };
+  try {
+    meld.textContent = 'Speichere …';
+    const basis = await bwaListe();
+    const vorhanden = bwaDaten[monat];
+    if (vorhanden && vorhanden.spId) {
+      await graphFetch(`${basis}/items/${vorhanden.spId}/fields`, { method: 'PATCH', body: JSON.stringify(felder) });
+    } else {
+      await graphFetch(`${basis}/items`, { method: 'POST', body: JSON.stringify({ fields: felder }) });
+    }
+    await ladeBwa();
+    meld.textContent = 'Gespeichert.';
+    renderAll();
+  } catch(e){ meld.textContent = 'Fehler: ' + e.message; }
 }
 
 /* ═══ SICHT-STEUERUNG ═══ */
@@ -543,6 +676,8 @@ async function ladeMonat(monat){
     scData = await r.json();
     viewerRole = scData.rolle || 'tl';
     monatCache[monat] = scData;
+    graphToken = t.graph;
+    if (viewerRole === 'gf' && bwaStatus === null) { ladeBwa().then(() => renderAll()); }
   } catch(e){
     // Endpunkt nicht erreichbar/berechtigt → transparent in den Demo-Modus
     demoMode = true;
