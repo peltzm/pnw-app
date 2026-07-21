@@ -1377,7 +1377,7 @@ async function buildCockpit(env, upn, now) {
 
 const SCORECARD_INVOICES_GRAPH = {
   id: 1, date: 1, deletedAt: 1, totalWithTax: 1, balance: 1,
-  isOverdue: 1, dunningLevel: 1, dueDate: 1,
+  isOverdue: 1, dunningLevel: 1, dueDate: 1, number: 1, displayNumber: 1,
   recipientCompany: 1, recipientName: 1,
   stateType: { name: 1 },
 };
@@ -1422,6 +1422,7 @@ function finanzBlock(invoices, monat) {
   const umsatz = new Map(monate.map((x) => [x, 0]));
   const nachAmt = new Map();
   const schuldner = new Map();
+  const offeneListe = []; // Detail für den clientseitigen Zahlungsabgleich (nur GF-Sicht)
   let offenGesamt = 0, ueberfaellig = 0, m1 = 0, m2 = 0;
   const heute = Date.now();
 
@@ -1448,6 +1449,16 @@ function finanzBlock(invoices, monat) {
         if (faellig) s.aeltesteTage = Math.max(s.aeltesteTage, Math.round((heute - faellig) / 864e5));
       }
       schuldner.set(amtVonRechnung(inv), s);
+      offeneListe.push({
+        id: String(inv.id),
+        nummer: inv.displayNumber || inv.number || "",
+        datum: (inv.date && inv.date.$date) || null,
+        faellig: (inv.dueDate && inv.dueDate.$date) || null,
+        betrag: Math.round(saldo * 100) / 100,
+        brutto: Math.round(brutto * 100) / 100,
+        empfaenger: amtVonRechnung(inv).split("\n")[0],
+        ueberfaellig: !!inv.isOverdue,
+      });
     }
   }
   const rund = (v) => Math.round(v);
@@ -1464,6 +1475,7 @@ function finanzBlock(invoices, monat) {
     topSchuldner: [...schuldner.entries()].sort((a, b) => b[1].offen - a[1].offen).slice(0, 3)
       .map(([amt, s]) => ({ amt, offen: rund(s.offen), ueberfaellig: rund(s.ueberfaellig), aeltesteTage: s.aeltesteTage })),
     umsatzNachAmt,
+    offeneRechnungen: offeneListe.sort((a, b) => (a.datum || "").localeCompare(b.datum || "")),
     basis: "Rechnungsdatum (date), brutto, ohne stornierte/gelöschte Rechnungen",
   };
 }
