@@ -710,6 +710,16 @@ function zahlungsCard(f){
 
 /* ═══ BWA (SharePoint-Liste PNW-BWA, nur GF) ═══ */
 const deNum = s => { const n = parseFloat(String(s).replace(/\./g,'').replace(',','.')); return Number.isFinite(n) ? n : null; };
+// Number-Inputs liefern Punkt-Dezimal ("133893.29") — deNum würde den Punkt
+// als Tausendertrenner entfernen (Faktor-100-Fehler). Deshalb: nur bei Komma
+// deutsch parsen, sonst Standard-parseFloat.
+const zahlAusFeld = v => {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  if (s.includes(',')) return deNum(s);
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+};
 
 function bwaCard(f, monat){
   const b = bwaDaten[monat];
@@ -960,10 +970,10 @@ async function speichereBwa(){
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat)) { meld.textContent = 'Monat bitte als JJJJ-MM angeben.'; return; }
   const felder = {
     Title: monat,
-    Umsatzerloese: deNum(document.getElementById('bwaU').value),
-    Personalkosten: deNum(document.getElementById('bwaP').value),
-    Gesamtkosten: deNum(document.getElementById('bwaG').value),
-    Betriebsergebnis: deNum(document.getElementById('bwaE').value),
+    Umsatzerloese: zahlAusFeld(document.getElementById('bwaU').value),
+    Personalkosten: zahlAusFeld(document.getElementById('bwaP').value),
+    Gesamtkosten: zahlAusFeld(document.getElementById('bwaG').value),
+    Betriebsergebnis: zahlAusFeld(document.getElementById('bwaE').value),
   };
   if (bwaSusa && bwaSusa.monat === monat){
     if (bwaSusa.Liquiditaet != null) felder.Liquiditaet = bwaSusa.Liquiditaet;
