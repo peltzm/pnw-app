@@ -1511,7 +1511,7 @@ async function buildScorecard(env, liste, monat, effNow, mgrMap) {
     personen.push({
       upn: p.upn,
       name: d.person.name || p.name || p.upn,
-      team: d.person.team || "Ohne Team-Zuordnung",
+      teamKilanka: d.person.team || null,
       vzae,
       faelle: d.klienten?.hb ?? 0,
       flsQuote,
@@ -1521,6 +1521,43 @@ async function buildScorecard(env, liste, monat, effNow, mgrMap) {
       _ist: d.fls?.istMonatsstunden ?? null,
       _sollKorr: sollKorr,
     });
+  }
+
+  // Team = Entra-Führungskraft (gleiche Hierarchie wie Organisation-App und
+  // Manager-Cockpit) — die Kilanka-orgUnits bilden die realen Teams nicht ab
+  // (Befund 21.07.2026: 18 Personen in einer Einheit "Ambulante Jugendhilfe").
+  // Regeln: GF + direkt der GF zugeordnete Personen → "GF & Verwaltung";
+  // wer selbst Führungskraft ist, führt sein eigenes Team; sonst Team der
+  // eigenen Führungskraft. Ohne Graph-Token: Fallback auf Kilanka-orgUnit.
+  const gfSet = new Set(GF_UPNS.map((g) => g.trim().toLowerCase()));
+  const managerUpns = new Set([...mgrMap.values()].map((v) => v.upn));
+  const leaderName = new Map();
+  for (const v of mgrMap.values()) if (!leaderName.has(v.upn)) leaderName.set(v.upn, v.name);
+  for (const p of personen) {
+    const u = p.upn.toLowerCase();
+    if (!leaderName.has(u)) leaderName.set(u, p.name);
+  }
+  const teamLabel = new Map(); // Team-Name → Teamleitungs-Anzeige
+  for (const p of personen) {
+    const u = p.upn.toLowerCase();
+    let label, tl;
+    if (mgrMap.size === 0) {
+      label = p.teamKilanka || "Ohne Team-Zuordnung"; tl = null;
+    } else if (gfSet.has(u)) {
+      label = "GF & Verwaltung"; tl = "Geschäftsführung";
+    } else if (managerUpns.has(u)) {
+      tl = leaderName.get(u) || p.name; label = "Team " + tl;
+    } else {
+      const mgr = mgrMap.get(p.upn) || mgrMap.get(u);
+      if (!mgr) { label = "Ohne Team-Zuordnung"; tl = null; }
+      else if (gfSet.has(mgr.upn)) { label = "GF & Verwaltung"; tl = "Geschäftsführung"; }
+      else { tl = mgr.name; label = "Team " + tl; }
+    }
+    p.team = label;
+    if (!teamLabel.has(label)) teamLabel.set(label, tl);
+    // Quote deutlich über 100 % = Soll vermutlich unvollständig
+    // (Maßnahmen ohne bewertetes Kontingent / fehlendes timeBase)
+    p.flsVerdacht = p.flsQuote != null && p.flsQuote > 105;
   }
 
   // Netto-Akquise je Team: HB-Fallmengen Quartalsanfang vs. Stichtag,
@@ -1551,6 +1588,7 @@ async function buildScorecard(env, liste, monat, effNow, mgrMap) {
       vzae: p.vzae != null ? Math.round(p.vzae * 100) / 100 : null,
       faelle: p.faelle,
       flsQuote: p.flsQuote,
+      flsVerdacht: p.flsVerdacht || false,
       krankTageMonat: p.krankTageMonat,
     });
     if (p.vzae) t.vzae += p.vzae;
@@ -1560,14 +1598,7 @@ async function buildScorecard(env, liste, monat, effNow, mgrMap) {
     teamsMap.set(p.team, t);
   }
   const teams = [...teamsMap.values()].map((t) => {
-    // Teamleitung = häufigste Führungskraft der Mitglieder (Azure-AD-Hierarchie)
-    const zaehlung = new Map();
-    for (const p of personen) {
-      if (p.team !== t.name) continue;
-      const mgr = mgrMap.get(p.upn)?.name;
-      if (mgr) zaehlung.set(mgr, (zaehlung.get(mgr) || 0) + 1);
-    }
-    const tl = [...zaehlung.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    const tl = teamLabel.get(t.name) || null;
     return {
       name: t.name,
       tl,
@@ -1575,6 +1606,7 @@ async function buildScorecard(env, liste, monat, effNow, mgrMap) {
       faelle: t.faelle,
       flsQuote: t.sollKorr ? Math.round((t.ist / t.sollKorr) * 1000) / 10 : null,
       flsVormonat: null, // Vormonatsvergleich folgt (zweiter Stichtagslauf)
+      flsVerdachtAnzahl: t.mitarbeiter.filter((m) => m.flsVerdacht).length,
       krankQuoteMonat: t.koepfeAbs && atMonat ? Math.round((t.krankM / (atMonat * t.koepfeAbs)) * 1000) / 10 : null,
       krankQuoteYtd: t.koepfeAbs && atYtd ? Math.round((t.krankY / (atYtd * t.koepfeAbs)) * 1000) / 10 : null,
       akquiseQuartal: akq.get(t.name) || { zugaenge: 0, abgaenge: 0 },
