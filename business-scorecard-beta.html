@@ -509,10 +509,27 @@ function empfaengerTokens(e){
     .filter(w => w.length >= 5 && !EMPF_STOPWORTE.has(w))
     .map(w => w.replace(/[^a-z]/g, ''));
 }
+// Explizite Rechnungsnummern-Referenzen aus einem Buchungstext ziehen
+// (RE-NR. 2026-06-00698 · Re-Nr.: 00652 · RE2026-06-00618 · RENR. …)
+function rechnungsRefs(vwz){
+  const refs = [];
+  const re = /re\s*[-.]?\s*(?:nr\.?)?\s*:?\s*((?:20\d{2}\s*[-.]?\s*\d{2}\s*[-.]?\s*)?\d{3,6})/gi;
+  let m; const roh = String(vwz || '');
+  while ((m = re.exec(roh))) refs.push(m[1].replace(/[^0-9]/g, ''));
+  return refs;
+}
+function refPasstZuRechnung(refs, nrZiffern, kurz){
+  if (!refs.length) return true; // keine Referenz im Text → Betragsvergleich zulässig
+  return refs.some(x => {
+    const xKurz = x.replace(/^0+/, '');
+    return nrZiffern.includes(x) || x.includes(nrZiffern) || (kurz && xKurz === kurz);
+  });
+}
 function matcheZahlungen(rechnungen, txs){
   const norm = s => String(s || '').toLowerCase().replace(/[^0-9a-z]/g, '');
   const treffer = [];
   const offenNachNummer = [];
+  const perNummerBelegt = new Set(); // Gutschriften mit Nummern-Zuordnung: für Betragsvergleich gesperrt
   // ── Stufe 1: Nummern-Matching (Sammelüberweisungen dürfen mehrere
   //    Rechnungen über EINE Gutschrift abdecken) ──
   for (const r of rechnungen || []){
@@ -521,27 +538,33 @@ function matcheZahlungen(rechnungen, txs){
     const bloecke = String(r.nummer || '').split(/[^0-9]+/).filter(Boolean);
     const kurz = bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
     const kurzRe = kurz.length >= 3 ? new RegExp('(?:renr|rgnr|rechnr|rechnungnr|rechnungsnr|re|rg|nr)0*' + kurz + '(?![0-9])') : null;
-    let tx = null, art = null;
-    if (nr.length >= 4) tx = txs.find(t => norm(t.vwz).includes(nr));
-    if (!tx && nrZiffern.length >= 6) tx = txs.find(t => norm(t.vwz).includes(nrZiffern));
-    if (tx) art = 'Rechnungsnr.';
-    if (!tx && kurzRe){
-      tx = txs.find(t => kurzRe.test(norm(t.vwz)));
-      if (tx) art = Math.abs(tx.betrag - r.betrag) < 0.01 || Math.abs(tx.betrag - r.brutto) < 0.01
+    let ti = -1, art = null;
+    if (nr.length >= 4) ti = txs.findIndex(t => norm(t.vwz).includes(nr));
+    if (ti < 0 && nrZiffern.length >= 6) ti = txs.findIndex(t => norm(t.vwz).includes(nrZiffern));
+    if (ti >= 0) art = 'Rechnungsnr.';
+    if (ti < 0 && kurzRe){
+      ti = txs.findIndex(t => kurzRe.test(norm(t.vwz)));
+      if (ti >= 0) art = Math.abs(txs[ti].betrag - r.betrag) < 0.01 || Math.abs(txs[ti].betrag - r.brutto) < 0.01
         ? 'Rechnungsnr.' : 'Kurz-Nr. (prüfen!)';
     }
-    if (tx) treffer.push({ ...r, art, zahlDatum: tx.datum, zahlBetrag: tx.betrag });
-    else offenNachNummer.push(r);
+    if (ti >= 0){
+      perNummerBelegt.add(ti);
+      treffer.push({ ...r, art, zahlDatum: txs[ti].datum, zahlBetrag: txs[ti].betrag });
+    } else offenNachNummer.push(r);
   }
   // ── Stufe 2: Betrags-Matching, streng plausibilisiert ──
-  //    (a) Buchungsdatum ≥ Rechnungsdatum — eine Juni-Rechnung kann nicht
-  //        durch eine frühere Gutschrift bezahlt sein
-  //    (b) jede Gutschrift begleicht höchstens EINE Rechnung
-  //    (c) der Absender/Verwendungszweck muss zum Rechnungsempfänger passen
-  const benutzt = new Set();
+  //    (a) Buchungsdatum ≥ Rechnungsdatum
+  //    (b) jede Gutschrift begleicht höchstens EINE Rechnung; per Nummer
+  //        zugeordnete Gutschriften sind komplett gesperrt
+  //    (c) Absender/Verwendungszweck muss zum Rechnungsempfänger passen
+  //    (d) nennt die Gutschrift eine ANDERE Rechnungsnummer, ist sie tabu
+  const benutzt = new Set(perNummerBelegt);
   for (const r of offenNachNummer){
     const rDatum = r.datum ? new Date(r.datum) : null;
     const tokens = empfaengerTokens(r.empfaenger);
+    const nrZiffern = norm(r.nummer).replace(/[a-z]/g, '');
+    const bloecke = String(r.nummer || '').split(/[^0-9]+/).filter(Boolean);
+    const kurz = bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
     let gefunden = -1;
     for (let i = 0; i < txs.length; i++){
       if (benutzt.has(i)) continue;
@@ -550,6 +573,7 @@ function matcheZahlungen(rechnungen, txs){
       const tDatum = parseDatumDE(t.datum);
       if (!rDatum || !tDatum || tDatum < rDatum) continue;
       if (tokens.length && !tokens.some(tok => norm(t.vwz).includes(tok))) continue;
+      if (!refPasstZuRechnung(rechnungsRefs(t.vwz), nrZiffern, kurz)) continue;
       gefunden = i;
       break;
     }
