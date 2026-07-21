@@ -133,3 +133,17 @@ den Verwendungszweck. Matching-Konsequenz: Kurzformen (mit RE/Rg/Nr-Marker,
 führende Nullen egal) werden erkannt; bei jahresübergreifend mehrdeutiger
 Kurznummer bindet die Zuordnung nur mit zusätzlichem Betragsbeweis.
 Gutschriften mit fremder Nummern-Referenz sind für Betragsvergleiche gesperrt.
+
+### BWA-PDF-Import (21.07.2026)
+
+DATEV-PDFs werden direkt im Browser geparst (pdf.js, Zeilen aus Y-Koordinaten
+rekonstruiert — Stream-Reihenfolge verwürfelt sonst die Spalten):
+**KER** → Monat, Umsatzerlöse, Personalkosten, Gesamtkosten, Betriebsergebnis
+(jeweils erster Betrag der Label-Zeile = Monatsspalte). **SuSa** → betriebliche
+Liquidität (Salden 1600 + 1800–1830, letztes S/H-Paar der Kontozeile) und
+Forderungen Kto 1200 als DATEV-Gegenprobe zu Kilanka. Liste PNW-BWA braucht
+dafür zwei weitere Zahl-Spalten: `Liquiditaet`, `ForderungenDatev` (App fällt
+ohne sie auf Kernwerte zurück). PK-Quoten-Schwellen kalibriert: grün < 60 %,
+gelb 60–70 %, rot > 70 % (Ist H1/2026: ≈ 50 %; Juni 54,8 %).
+Verifiziert gegen reale Mai-/Juni-PDFs (Liquidität Juni 279.238,42 €,
+Forderungen 183.812,94 €).
