@@ -1863,12 +1863,13 @@ export default {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
       try {
+        // Zugriff ausschließlich Geschäftsführung (GF_UPNS) — Vorgabe 21.07.2026:
+        // keine Teamleitungs- oder Mitarbeitersicht auf die Scorecard.
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
-        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
-        const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
-        if (rolle === "fk") {
-          return json({ error: "Scorecard ist Teamleitungen und GF vorbehalten" }, 403, origin);
+        if (!istGf) {
+          return json({ error: "Die Business Scorecard ist der Geschäftsführung vorbehalten" }, 403, origin);
         }
+        const rolle = "gf";
 
         // Monat wählen (?monat=YYYY-MM, Default: aktueller Monat).
         // Stichtag = erster Tag des Folgemonats 12:00 UTC (dann liefert der
@@ -1880,21 +1881,14 @@ export default {
         const folgeErster = new Date(Date.UTC(j, m, 1, 12));
         const effNow = folgeErster < heute ? folgeErster : heute;
 
-        let liste;
-        if (istGf) {
-          liste = await alleAktivenMitarbeiter(env);
-        } else {
-          const seen = new Set([caller]);
-          liste = [{ upn: caller, name: auth.name || caller }];
-          for (const r of reports) if (!seen.has(r.upn)) { seen.add(r.upn); liste.push(r); }
-        }
+        const liste = await alleAktivenMitarbeiter(env);
         const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
         const kern = await buildScorecard(env, liste, monat, effNow, mgrMap);
 
         const hinweise = ["FLS-Ist aus Rechnungen (Leistungsdoku-Graph nicht freigegeben); für den laufenden Monat zeigt FLS den Vormonat."];
         if (kern.akquiseOhneTeam > 0) hinweise.push(`${kern.akquiseOhneTeam} Fall-Bewegung(en) ohne Team-Zuordnung (HB außerhalb der Sicht) — vollständig nur in der GF-Sicht.`);
         let finanzen = null;
-        if (istGf) {
+        {
           try {
             const seit = new Date(Date.UTC(j, m - 12, 1)).toISOString().slice(0, 10);
             finanzen = finanzBlock(await fetchScorecardInvoices(env, seit), monat);
