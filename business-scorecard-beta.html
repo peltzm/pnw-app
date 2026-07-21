@@ -178,11 +178,12 @@ const APP_VERSION = 'BETA-3e1d72b'; // auto-updated on deploy
  *  – Netto-Akquise: Ziel +2 Fälle/Team/Quartal (LuV TL §5)
  * ═══════════════════════════════════════════════════════════ */
 const ZIEL = { auslastung: 7.5, fls: 64, krankWarn: 5, krankRot: 8, overdueWarn: 10, overdueRot: 25, akquise: 2,
-               pkWarn: 82, pkRot: 88 }; // Personalkostenquote-Schwellen = VORSCHLAG, mit Entgeltkalkulation abgleichen
+               pkWarn: 60, pkRot: 70 }; // PK-Quote (Personal ÷ Umsatz): kalibriert auf Ist H1/2026 ≈ 50 % — VORSCHLAG
 const SP_HOST = 'praxisneuewegesonjapeltz978.sharepoint.com';
 const BWA_LISTE = 'PNW-BWA';
 let bwaDaten = {};        // Monat (JJJJ-MM) → { spId, Umsatzerloese, Personalkosten, Gesamtkosten, Betriebsergebnis, Kommentar }
 let bwaStatus = null;     // null=nicht geladen · 'ok' · Fehlertext
+let bwaSusa = null;       // aus SuSa-PDF: { monat, Liquiditaet, ForderungenDatev }
 let zahlungsTreffer = null; // Ergebnis des Bank-CSV-Abgleichs (nur im Browser, keine Speicherung)
 let bankTxs = null;       // zuletzt geparste Gutschriften (nur im Browser)
 let bankDiag = null;
@@ -681,7 +682,8 @@ function bwaCard(f, monat){
       ${scoreTile('Personalkostenquote', ring(ampelPunkte(aPk),'--warn'), `${fmtQ(quote)} (Personal ÷ BWA-Umsatz) · Schwellen-Vorschlag: < ${ZIEL.pkWarn} % grün`)}
       ${scoreTile('Betriebsergebnis', ring(b.Betriebsergebnis >= 0 ? 100 : 20, '--ok'), `${eur(b.Betriebsergebnis)} im ${monatLabel(monat)}`)}
       ${scoreTile('BWA vs. Kilanka', ring(diff != null && Math.abs(diff) < f.umsatzMonat * 0.05 ? 100 : 60, '--blue'), diff != null ? `BWA-Umsatz ${eur(b.Umsatzerloese)} · Differenz ${diff>=0?'+':''}${eur(diff)} zu Kilanka` : '—')}
-    </div>` : `<div class="legend">Für ${monatLabel(monat)} ist noch keine BWA erfasst.</div>`}
+    </div>
+    ${b.Liquiditaet != null || b.ForderungenDatev != null ? `<div class="legend">SuSa ${monatLabel(monat)}: betriebliche Liquidität (Kasse, Bank, Festgelder) <b>${b.Liquiditaet != null ? eur(b.Liquiditaet) : '—'}</b>${b.ForderungenDatev != null ? ` · Forderungen lt. DATEV (1200) <b>${eur(b.ForderungenDatev)}</b> vs. offen lt. Kilanka ${eur(f.forderungen.offenGesamt)}` : ''}</div>` : ''}` : `<div class="legend">Für ${monatLabel(monat)} ist noch keine BWA erfasst.</div>`}
     ${monate.length ? `<table class="mini-table"><thead><tr><th>Monat</th><th class="num">Umsatz (BWA)</th><th class="num">Personal</th><th class="num">Gesamtkosten</th><th class="num">Ergebnis</th><th class="num">PK-Quote</th></tr></thead><tbody>
       ${monate.map(m=>{ const x=bwaDaten[m]; const q = x.Umsatzerloese ? x.Personalkosten/x.Umsatzerloese*100 : null;
         return `<tr><td>${monatLabel(m)}</td><td class="num">${eur(x.Umsatzerloese||0)}</td><td class="num">${eur(x.Personalkosten||0)}</td><td class="num">${eur(x.Gesamtkosten||0)}</td><td class="num">${eur(x.Betriebsergebnis||0)}</td><td class="num"><span class="dot ${ampel(q, ZIEL.pkWarn, ZIEL.pkRot, true)}"></span>${fmtQ(q)}</td></tr>`; }).join('')}
@@ -691,7 +693,7 @@ function bwaCard(f, monat){
       <summary style="cursor:pointer;font-size:12px;color:var(--accent)">BWA erfassen / aktualisieren</summary>
       <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;align-items:flex-end">
         <label style="font-size:11px">Monat<br><input class="select" id="bwaMonat" value="${monat}" style="width:110px"></label>
-        <label style="font-size:11px">DATEV-CSV<br><input type="file" id="bwaCsv" accept=".csv,.txt" onchange="bwaCsvGewaehlt(event)" style="font-size:11px;max-width:210px"></label>
+        <label style="font-size:11px">DATEV-PDF/CSV (KER, SuSa)<br><input type="file" id="bwaCsv" accept=".pdf,.csv,.txt" onchange="bwaDateiGewaehlt(event)" style="font-size:11px;max-width:230px"></label>
         <label style="font-size:11px">Umsatzerlöse €<br><input class="select" id="bwaU" type="number" step="0.01" value="${b?b.Umsatzerloese:''}" style="width:120px"></label>
         <label style="font-size:11px">Personalkosten €<br><input class="select" id="bwaP" type="number" step="0.01" value="${b?b.Personalkosten:''}" style="width:120px"></label>
         <label style="font-size:11px">Gesamtkosten €<br><input class="select" id="bwaG" type="number" step="0.01" value="${b?b.Gesamtkosten:''}" style="width:120px"></label>
@@ -702,6 +704,115 @@ function bwaCard(f, monat){
       <div class="legend">CSV-Import sucht die Zeilen Umsatzerlöse / Personalkosten / Gesamtkosten / Betriebsergebnis und übernimmt den letzten Zahlenwert der Zeile — bitte vor dem Speichern prüfen.</div>
     </details>
   </div>`;
+}
+
+// ── DATEV-PDF-Import (Kurzfristige Erfolgsrechnung + Summen und Salden) ──
+const MONATE_DE = { januar:'01', februar:'02', 'märz':'03', april:'04', mai:'05', juni:'06', juli:'07', august:'08', september:'09', oktober:'10', november:'11', dezember:'12' };
+let pdfJsGeladen = null;
+function ladePdfJs(){
+  if (pdfJsGeladen) return pdfJsGeladen;
+  pdfJsGeladen = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      res(window.pdfjsLib);
+    };
+    s.onerror = () => rej(new Error('pdf.js konnte nicht geladen werden'));
+    document.head.appendChild(s);
+  });
+  return pdfJsGeladen;
+}
+// pdf.js liefert Text in Stream-Reihenfolge — Zeilen aus den Y-Koordinaten
+// visuell rekonstruieren (sonst verrutschen die DATEV-Spalten)
+async function pdfZeilen(file){
+  const lib = await ladePdfJs();
+  const buf = await file.arrayBuffer();
+  const doc = await lib.getDocument({ data: buf }).promise;
+  const zeilen = [];
+  for (let p = 1; p <= doc.numPages; p++){
+    const seite = await doc.getPage(p);
+    const inhalt = await seite.getTextContent();
+    const items = inhalt.items
+      .filter(i => i.str && i.str.trim())
+      .map(i => ({ x: i.transform[4], y: i.transform[5], s: i.str }));
+    items.sort((a, b) => b.y - a.y || a.x - b.x);
+    let akt = null, aktY = null;
+    for (const it of items){
+      if (aktY === null || Math.abs(it.y - aktY) > 3){
+        if (akt) zeilen.push(akt.map(k => k.s).join(' '));
+        akt = [it]; aktY = it.y;
+      } else akt.push(it);
+    }
+    if (akt) zeilen.push(akt.map(k => k.s).join(' '));
+  }
+  return zeilen;
+}
+function monatAus(text){
+  const m = /(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(20\d{2})/i.exec(text);
+  return m ? m[2] + '-' + MONATE_DE[m[1].toLowerCase()] : null;
+}
+function parseKerZeilen(zeilen){
+  const erg = { monat: monatAus(zeilen.join(' ')) };
+  const felder = { Umsatzerloese: /^Umsatzerlöse\b/, Personalkosten: /^Personalkosten\b/, Gesamtkosten: /^Gesamtkosten\b/, Betriebsergebnis: /^Betriebsergebnis\b/ };
+  for (const [k, re] of Object.entries(felder)){
+    const z = zeilen.find(x => re.test(x.trim()));
+    const w = z && /(-?[\d.]+,\d{2})/.exec(z);
+    if (w) erg[k] = deNum(w[1]);
+  }
+  return erg;
+}
+function susaSaldo(zeilen, kto){
+  for (const z of zeilen){
+    if (new RegExp('^\\s*' + kto + '\\s+\\D').test(z)){
+      const paare = [...z.matchAll(/(-?[\d.]+,\d{2})\s+(S|H)\b/g)];
+      if (paare.length){
+        const [, b, sh] = paare[paare.length - 1];
+        return deNum(b) * (sh === 'S' ? 1 : -1);
+      }
+      return 0; // Konto vorhanden, Saldo 0,00 ohne S/H-Kennzeichen
+    }
+  }
+  return null;
+}
+function parseSusaZeilen(zeilen){
+  const liqKonten = ['1600', '1800', '1810', '1820', '1830'];
+  let liq = 0, gefunden = 0;
+  for (const kto of liqKonten){
+    const s = susaSaldo(zeilen, kto);
+    if (s !== null){ liq += s; gefunden++; }
+  }
+  return {
+    monat: monatAus(zeilen.join(' ')),
+    Liquiditaet: gefunden ? Math.round(liq * 100) / 100 : null,
+    ForderungenDatev: susaSaldo(zeilen, '1200'),
+  };
+}
+async function bwaDateiGewaehlt(ev){
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const meld = document.getElementById('bwaMeldung');
+  if (!/\.pdf$/i.test(file.name)) { bwaCsvGewaehlt(ev); return; }
+  try {
+    meld.textContent = 'Lese PDF …';
+    const zeilen = await pdfZeilen(file);
+    const text = zeilen.join(' ');
+    if (/Kurzfristige Erfolgsrechnung/i.test(text)){
+      const k = parseKerZeilen(zeilen);
+      if (k.monat) document.getElementById('bwaMonat').value = k.monat;
+      let n = 0;
+      for (const f of ['Umsatzerloese','Personalkosten','Gesamtkosten','Betriebsergebnis']){
+        if (k[f] != null){ document.getElementById({Umsatzerloese:'bwaU',Personalkosten:'bwaP',Gesamtkosten:'bwaG',Betriebsergebnis:'bwaE'}[f]).value = k[f]; n++; }
+      }
+      meld.textContent = `KER ${k.monat || ''}: ${n} von 4 Kennzahlen übernommen — bitte prüfen, dann Speichern.`;
+    } else if (/Summen und Salden/i.test(text)){
+      bwaSusa = parseSusaZeilen(zeilen);
+      if (bwaSusa.monat) document.getElementById('bwaMonat').value = bwaSusa.monat;
+      meld.textContent = `SuSa ${bwaSusa.monat || ''}: Liquidität ${bwaSusa.Liquiditaet != null ? eur(bwaSusa.Liquiditaet) : '—'}, Forderungen (1200) ${bwaSusa.ForderungenDatev != null ? eur(bwaSusa.ForderungenDatev) : '—'} — wird beim Speichern mit abgelegt.`;
+    } else {
+      meld.textContent = 'PDF erkannt, aber weder KER noch SuSa — bitte manuell eintragen.';
+    }
+  } catch(e){ meld.textContent = 'PDF-Fehler: ' + e.message; }
 }
 
 // DATEV-BWA-CSV: Kennzahlenzeilen finden, letzten Zahlenwert übernehmen
@@ -750,13 +861,14 @@ async function bwaListe(){
 async function ladeBwa(){
   try {
     const basis = await bwaListe();
-    const items = await graphFetch(basis + '/items?expand=fields($select=Title,Umsatzerloese,Personalkosten,Gesamtkosten,Betriebsergebnis,Kommentar)&$top=200');
+    const items = await graphFetch(basis + '/items?expand=fields&$top=200');
     bwaDaten = {};
     for (const it of items.value || []) {
       const fx = it.fields || {};
       if (!/^\d{4}-\d{2}$/.test(fx.Title || '')) continue;
       bwaDaten[fx.Title] = { spId: it.id, Umsatzerloese: fx.Umsatzerloese ?? null, Personalkosten: fx.Personalkosten ?? null,
-        Gesamtkosten: fx.Gesamtkosten ?? null, Betriebsergebnis: fx.Betriebsergebnis ?? null, Kommentar: fx.Kommentar || null };
+        Gesamtkosten: fx.Gesamtkosten ?? null, Betriebsergebnis: fx.Betriebsergebnis ?? null,
+        Liquiditaet: fx.Liquiditaet ?? null, ForderungenDatev: fx.ForderungenDatev ?? null, Kommentar: fx.Kommentar || null };
     }
     bwaStatus = 'ok';
   } catch(e){ bwaStatus = 'BWA-Daten nicht verfügbar: ' + e.message; }
@@ -772,14 +884,29 @@ async function speichereBwa(){
     Gesamtkosten: deNum(document.getElementById('bwaG').value),
     Betriebsergebnis: deNum(document.getElementById('bwaE').value),
   };
+  if (bwaSusa && bwaSusa.monat === monat){
+    if (bwaSusa.Liquiditaet != null) felder.Liquiditaet = bwaSusa.Liquiditaet;
+    if (bwaSusa.ForderungenDatev != null) felder.ForderungenDatev = bwaSusa.ForderungenDatev;
+  }
   try {
     meld.textContent = 'Speichere …';
     const basis = await bwaListe();
     const vorhanden = bwaDaten[monat];
-    if (vorhanden && vorhanden.spId) {
-      await graphFetch(`${basis}/items/${vorhanden.spId}/fields`, { method: 'PATCH', body: JSON.stringify(felder) });
-    } else {
-      await graphFetch(`${basis}/items`, { method: 'POST', body: JSON.stringify({ fields: felder }) });
+    const schreibe = async (f) => {
+      if (vorhanden && vorhanden.spId) {
+        await graphFetch(`${basis}/items/${vorhanden.spId}/fields`, { method: 'PATCH', body: JSON.stringify(f) });
+      } else {
+        await graphFetch(`${basis}/items`, { method: 'POST', body: JSON.stringify({ fields: f }) });
+      }
+    };
+    try { await schreibe(felder); }
+    catch(e){
+      // Liste hat die SuSa-Spalten (noch) nicht → Kernwerte trotzdem sichern
+      if (felder.Liquiditaet != null || felder.ForderungenDatev != null){
+        const { Liquiditaet, ForderungenDatev, ...kern } = felder;
+        await schreibe(kern);
+        meld.textContent = 'Kernwerte gespeichert — Spalten "Liquiditaet"/"ForderungenDatev" fehlen in der Liste (Typ Zahl anlegen für die SuSa-Werte). ';
+      } else throw e;
     }
     await ladeBwa();
     meld.textContent = 'Gespeichert.';
