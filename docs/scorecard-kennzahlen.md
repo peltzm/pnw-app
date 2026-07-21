@@ -28,9 +28,11 @@ Vorschlag** (sozialwirtschaftsüblich) — vor Produktivgang mit Sonja abstimmen
 
 - Single-File-App nach PNW-Muster (MSAL 2.38, CFG identisch zu Cockpit,
   Kodchasan, gleiche CSS-Variablen, Demo-/Live-Modus, Version-Badge).
-- Berechtigung **serverseitig** im Worker (GF_UPNS + directReports):
-  GF → alle Teams + Finanzblock, TL → nur eigenes Team ohne Finanzen,
-  Fachkraft → 403. Rollen-Pills existieren nur im Demo-Modus.
+- Berechtigung **serverseitig** im Worker: Zugriff AUSSCHLIESSLICH für
+  GF_UPNS (Sonja + Markus Peltz) — Vorgabe 21.07.2026. Teamleitungen und
+  Mitarbeitende erhalten 403; das Frontend zeigt dann eine Zugriffsmeldung
+  (kein Demo-Fallback). Die Beta-Store-Kachel bleibt sichtbar, trägt aber
+  den Hinweis "nur Geschäftsführung".
 - **Team-Zuordnung über die Entra-Hierarchie** (Manager laut Azure AD, wie
   Organisation-App): GF und direkt der GF Zugeordnete → "GF & Verwaltung",
   Führungskräfte führen ihr eigenes Team, alle anderen folgen ihrer
