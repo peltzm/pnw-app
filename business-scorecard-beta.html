@@ -457,10 +457,7 @@ function spalten(z, d){
   return out.map(s => s.trim());
 }
 function parseBankCsv(text){
-  const zeilen = String(text).split(/\r?\n/).filter(z => z.trim());
-  // Kopfzeile: unter den ersten 40 Zeilen die mit der besten Kombination aus
-  // Betrag-/Verwendungszweck-Schlüsselwörtern und den meisten Trennzeichen —
-  // überspringt Präambeln wie "Umsätze Girokonto; Zeitraum ..."
+  const zeilen = String(text).replace(/^\uFEFF/, '').split(/\r?\n/).filter(z => z.trim());
   let hi = 0, best = -1;
   for (let i = 0; i < Math.min(zeilen.length, 40); i++){
     const z = zeilen[i].toLowerCase();
@@ -471,39 +468,55 @@ function parseBankCsv(text){
     if (score > best) { best = score; hi = i; }
   }
   const delim = (zeilen[hi].match(/;/g) || []).length >= (zeilen[hi].match(/,/g) || []).length ? ';' : ',';
-  const kopf = spalten(zeilen[hi], delim).map(s => s.toLowerCase());
+  const kopf = spalten(zeilen[hi], delim).map(s => s.toLowerCase().replace(/^\uFEFF/, ''));
   const idx = re => kopf.findIndex(k => re.test(k));
-  const iBetrag = idx(/betrag(?!.*w(ae|ä)hrung)|umsatz|amount/);
+  // Betragsspalte PRIORISIERT suchen — "Umsatzart" (Commerzbank) darf nicht
+  // fälschlich als Betragsspalte greifen
+  let iBetrag = idx(/^betrag\b|(^|\s)betrag($|\s|\()/);
+  if (iBetrag < 0) iBetrag = idx(/umsatz(?!art|steuer)/);
+  if (iBetrag < 0) iBetrag = idx(/amount/);
   const iSH = idx(/soll.?haben|^s\/h$|^h\/s$/);
   const iDatum = idx(/buchung|valuta|datum|date/);
+  const istGeldbetrag = s => /^-?\d{1,3}(\.\d{3})*(,\d{1,2})?$|^-?\d+([.,]\d{1,2})?$/.test(String(s).trim());
   const txs = [];
   for (let i = hi + 1; i < zeilen.length; i++){
     const c = spalten(zeilen[i], delim);
     if (c.length < 2) continue;
-    // Betrag: erkannte Spalte, sonst der letzte parsebare Zahlenwert der Zeile
-    let betrag = iBetrag >= 0 ? deNum(c[iBetrag]) : null;
+    let betrag = iBetrag >= 0 && istGeldbetrag(c[iBetrag]) ? deNum(c[iBetrag]) : null;
     if (betrag == null){
-      for (let k = c.length - 1; k >= 0; k--){ const v = deNum(c[k]); if (v != null){ betrag = v; break; } }
+      // Fallback: letzter Wert der Zeile, der wie ein Geldbetrag aussieht
+      for (let k = c.length - 1; k >= 0; k--){
+        if (istGeldbetrag(c[k])) { betrag = deNum(c[k]); break; }
+      }
     }
     if (betrag == null) continue;
-    if (iSH >= 0 && /^s$/i.test(c[iSH] || '')) betrag = -Math.abs(betrag); // Soll-Kennzeichen
+    if (iSH >= 0 && /^s$/i.test(c[iSH] || '')) betrag = -Math.abs(betrag);
     if (betrag <= 0) continue; // nur Gutschriften
-    // Suchtext: ALLE Textspalten der Zeile (deckt VWZ1..n, Auftraggeber usw. ab)
     const vwz = c.filter((_, k) => k !== iBetrag).join(' ');
     txs.push({ betrag, vwz, datum: iDatum >= 0 ? (c[iDatum] || '') : '' });
   }
-  return { txs, diag: { kopfzeile: hi + 1, delim, betragSpalte: iBetrag >= 0 ? kopf[iBetrag] : 'letzter Zahlenwert je Zeile' } };
+  return { txs, diag: { kopfzeile: hi + 1, delim, betragSpalte: iBetrag >= 0 ? kopf[iBetrag] : 'letzter Geldbetrag je Zeile' } };
 }
 function matcheZahlungen(rechnungen, txs){
   const norm = s => String(s || '').toLowerCase().replace(/[^0-9a-z]/g, '');
   const treffer = [];
   for (const r of rechnungen || []){
-    const nr = norm(r.nummer);                 // z. B. re20260600651
-    const nrZiffern = nr.replace(/[a-z]/g, ''); // z. B. 20260600651 (Ämter lassen "RE" oft weg)
+    const nr = norm(r.nummer);                  // re20260600651
+    const nrZiffern = nr.replace(/[a-z]/g, ''); // 20260600651
+    // Kurzform: letzter Ziffernblock ohne führende Nullen (Ämter schreiben
+    // oft nur "Re-Nr.: 00651")
+    const bloecke = String(r.nummer || '').split(/[^0-9]+/).filter(Boolean);
+    const kurz = bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
+    const kurzRe = kurz.length >= 3 ? new RegExp('(?:renr|rgnr|rechnr|rechnungnr|rechnungsnr|re|rg|nr)0*' + kurz + '(?![0-9])') : null;
     let tx = null, art = null;
     if (nr.length >= 4) tx = txs.find(t => norm(t.vwz).includes(nr));
     if (!tx && nrZiffern.length >= 6) tx = txs.find(t => norm(t.vwz).includes(nrZiffern));
     if (tx) art = 'Rechnungsnr.';
+    if (!tx && kurzRe){
+      tx = txs.find(t => kurzRe.test(norm(t.vwz)));
+      if (tx) art = Math.abs(tx.betrag - r.betrag) < 0.01 || Math.abs(tx.betrag - r.brutto) < 0.01
+        ? 'Rechnungsnr.' : 'Kurz-Nr. (prüfen!)';
+    }
     if (!tx){
       tx = txs.find(t => Math.abs(t.betrag - r.betrag) < 0.01 || Math.abs(t.betrag - r.brutto) < 0.01);
       if (tx) art = 'Betrag (prüfen!)';
@@ -517,12 +530,16 @@ function bankCsvGewaehlt(ev){
   if (!file || !scData || !scData.finanzen) return;
   const reader = new FileReader();
   reader.onload = () => {
-    const p = parseBankCsv(reader.result);
+    // Encoding erkennen: erst UTF-8; bei Ersatzzeichen als windows-1252 (ANSI)
+    const bytes = new Uint8Array(reader.result);
+    let text = new TextDecoder('utf-8').decode(bytes);
+    if (text.includes('\uFFFD')) text = new TextDecoder('windows-1252').decode(bytes);
+    const p = parseBankCsv(text);
     zahlungsTreffer = matcheZahlungen(scData.finanzen.offeneRechnungen, p.txs);
     zahlungsTreffer.diag = p.diag;
     renderAll();
   };
-  reader.readAsText(file, 'windows-1252');
+  reader.readAsArrayBuffer(file);
 }
 function zahlungsCard(f){
   const offene = f.offeneRechnungen || [];
