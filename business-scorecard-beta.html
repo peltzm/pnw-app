@@ -1147,7 +1147,14 @@ function showApp(name){
   document.getElementById('logoutBtn').style.display = name==='Demo' ? 'none' : 'inline-flex';
 }
 
-initMsal();
+// Läuft diese Seite als MSAL-Auth-Popup (z. B. Listen-Anlage)? Dann NICHT die
+// App starten — das Hauptfenster liest die Antwort aus der URL und schließt
+// das Popup selbst. Sonst blockiert MSAL mit block_nested_popups.
+if (window.opener && window.opener !== window && /^msal/.test(window.name || '')) {
+  document.body.innerHTML = '<div style="font-family:Kodchasan,sans-serif;padding:40px;text-align:center;color:#6b6860">Anmeldung wird abgeschlossen — dieses Fenster schließt sich gleich …</div>';
+} else {
+  initMsal();
+}
 </script>
 </body>
 </html>
