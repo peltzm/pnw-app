@@ -107,3 +107,18 @@ Direkteingabe. Kennzahlen: **Personalkostenquote** = Personalkosten ÷
 BWA-Umsatz (Schwellen-VORSCHLAG: grün < 82 %, gelb 82–88 %, rot > 88 % —
 mit Entgeltkalkulation abgleichen!), **Betriebsergebnis**, **Abgleich**
 BWA-Umsatz vs. Kilanka-Umsatz (Toleranz 5 % grün). Kein Worker-Anteil.
+
+## Zahlungsabgleich (umgesetzt 21.07.2026)
+
+Karte "Zahlungsabgleich" (nur GF): Kontoauszug als CSV hochladen → Abgleich
+gegen die offenen Kilanka-Rechnungen (`finanzen.offeneRechnungen` aus dem
+Worker: Nummer, Saldo, Brutto, Empfänger, Fälligkeit). **Verarbeitung
+vollständig im Browser** — Bankdaten werden weder hochgeladen noch
+gespeichert; kein Bank-API-Zugriff (bewusste Entscheidung). Parser: Header-
+Erkennung (Betrag/Verwendungszweck/Datum/Auftraggeber, ; oder , als
+Trenner, Anführungszeichen, windows-1252, deutsche Zahlenformate), nur
+Gutschriften. Matching zweistufig: (1) normalisierte Rechnungsnummer im
+Verwendungszweck+Auftraggeber = sicherer Treffer, (2) Betragsgleichheit
+(Saldo oder Brutto, ±1 Cent) = Treffer mit Prüfhinweis. Ergebnis: Liste
+"bezahlt, aber in Kilanka noch offen" → manuell im Kilanka-Rechnungswesen
+als bezahlt erfassen.
