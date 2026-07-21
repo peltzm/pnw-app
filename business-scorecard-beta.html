@@ -518,11 +518,11 @@ function rechnungsRefs(vwz){
   while ((m = re.exec(roh))) refs.push(m[1].replace(/[^0-9]/g, ''));
   return refs;
 }
-function refPasstZuRechnung(refs, nrZiffern, kurz){
+function refPasstZuRechnung(refs, nrZiffern, varianten){
   if (!refs.length) return true; // keine Referenz im Text → Betragsvergleich zulässig
   return refs.some(x => {
     const xKurz = x.replace(/^0+/, '');
-    return nrZiffern.includes(x) || x.includes(nrZiffern) || (kurz && xKurz === kurz);
+    return nrZiffern.includes(x) || x.includes(nrZiffern) || (varianten || []).includes(xKurz);
   });
 }
 function matcheZahlungen(rechnungen, txs){
@@ -534,23 +534,35 @@ function matcheZahlungen(rechnungen, txs){
   // Format RE<Jahr>-<Monat>-<Fortlaufnummer>, Zählung beginnt am Jahresanfang.
   // Kommt dieselbe Kurznummer bei mehreren offenen Rechnungen vor
   // (Jahreswechsel), bindet die Kurzform nur zusammen mit Betragsbeweis.
-  const kurzVon = (nummer) => {
+  // Fortlaufnummer ist 5-stellig; Ämter kürzen teils auf die LETZTEN 4 Ziffern
+  // (echtes Abschneiden, nicht nur führende Nullen: 12345 → "2345").
+  const kurzVarianten = (nummer) => {
     const bloecke = String(nummer || '').split(/[^0-9]+/).filter(Boolean);
-    return bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
+    if (!bloecke.length) return [];
+    const block = bloecke[bloecke.length - 1];
+    const v = new Set();
+    const v1 = block.replace(/^0+/, '');
+    if (v1.length >= 3) v.add(v1);
+    if (block.length >= 5){
+      const v2 = block.slice(-4).replace(/^0+/, '');
+      if (v2.length >= 3) v.add(v2);
+    }
+    return [...v];
   };
   const kurzZaehler = new Map();
   for (const r of rechnungen || []){
-    const k = kurzVon(r.nummer);
-    if (k) kurzZaehler.set(k, (kurzZaehler.get(k) || 0) + 1);
+    for (const k of kurzVarianten(r.nummer)) kurzZaehler.set(k, (kurzZaehler.get(k) || 0) + 1);
   }
   // ── Stufe 1: Nummern-Matching (Sammelüberweisungen dürfen mehrere
   //    Rechnungen über EINE Gutschrift abdecken) ──
   for (const r of rechnungen || []){
     const nr = norm(r.nummer);
     const nrZiffern = nr.replace(/[a-z]/g, '');
-    const kurz = kurzVon(r.nummer);
-    const kurzRe = kurz.length >= 3 ? new RegExp('(?:renr|rgnr|rechnr|rechnungnr|rechnungsnr|re|rg|nr)0*' + kurz + '(?![0-9])') : null;
-    const kurzMehrdeutig = kurz && (kurzZaehler.get(kurz) || 0) > 1;
+    const varianten = kurzVarianten(r.nummer);
+    const kurzRe = varianten.length
+      ? new RegExp('(?:renr|rgnr|rechnr|rechnungnr|rechnungsnr|re|rg|nr)(?:' + varianten.map(v => '0*' + v).join('|') + ')(?![0-9])')
+      : null;
+    const kurzMehrdeutig = varianten.some(v => (kurzZaehler.get(v) || 0) > 1);
     let ti = -1, art = null;
     if (nr.length >= 4) ti = txs.findIndex(t => norm(t.vwz).includes(nr));
     if (ti < 0 && nrZiffern.length >= 6) ti = txs.findIndex(t => norm(t.vwz).includes(nrZiffern));
@@ -581,8 +593,7 @@ function matcheZahlungen(rechnungen, txs){
     const rDatum = r.datum ? new Date(r.datum) : null;
     const tokens = empfaengerTokens(r.empfaenger);
     const nrZiffern = norm(r.nummer).replace(/[a-z]/g, '');
-    const bloecke = String(r.nummer || '').split(/[^0-9]+/).filter(Boolean);
-    const kurz = bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
+    const varianten = kurzVarianten(r.nummer);
     let gefunden = -1;
     for (let i = 0; i < txs.length; i++){
       if (benutzt.has(i)) continue;
@@ -591,7 +602,7 @@ function matcheZahlungen(rechnungen, txs){
       const tDatum = parseDatumDE(t.datum);
       if (!rDatum || !tDatum || tDatum < rDatum) continue;
       if (tokens.length && !tokens.some(tok => norm(t.vwz).includes(tok))) continue;
-      if (!refPasstZuRechnung(rechnungsRefs(t.vwz), nrZiffern, kurz)) continue;
+      if (!refPasstZuRechnung(rechnungsRefs(t.vwz), nrZiffern, varianten)) continue;
       gefunden = i;
       break;
     }
