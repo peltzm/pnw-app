@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Erstellt die SharePoint-Liste "PNW-BWA" fuer die Business
 # Scorecard (BWA-/SuSa-Werte je Monat) inkl. aller Spalten.
 # Idempotent: existiert die Liste, werden nur fehlende
@@ -27,7 +27,16 @@ if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
 Import-Module Microsoft.Graph.Authentication
 
 Write-Host "Anmeldung bei Microsoft Graph (Sites.Manage.All) ..." -ForegroundColor Cyan
-Connect-MgGraph -Scopes "Sites.Manage.All" -NoWelcome
+try {
+    # Normale interaktive Anmeldung (Browser-Fenster)
+    Connect-MgGraph -Scopes "Sites.Manage.All" -NoWelcome -ErrorAction Stop
+} catch {
+    # WAM-Broker scheitert in ISE/eingebetteten Terminals ("window handle") ->
+    # Device-Code-Flow: Code aus dem Terminal im Browser eingeben
+    Write-Host "Interaktive Anmeldung nicht moeglich - wechsle auf Device-Code:" -ForegroundColor Yellow
+    Write-Host "Bitte den gleich angezeigten Code unter https://microsoft.com/devicelogin eingeben." -ForegroundColor Yellow
+    Connect-MgGraph -Scopes "Sites.Manage.All" -NoWelcome -UseDeviceCode
+}
 
 # --- Website aufloesen ---
 $site = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/sites/${SiteHost}:/"
