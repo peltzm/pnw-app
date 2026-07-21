@@ -530,22 +530,40 @@ function matcheZahlungen(rechnungen, txs){
   const treffer = [];
   const offenNachNummer = [];
   const perNummerBelegt = new Set(); // Gutschriften mit Nummern-Zuordnung: für Betragsvergleich gesperrt
+  // Kurznummern (Fortlaufnummer) sind nur INNERHALB eines Jahres eindeutig —
+  // Format RE<Jahr>-<Monat>-<Fortlaufnummer>, Zählung beginnt am Jahresanfang.
+  // Kommt dieselbe Kurznummer bei mehreren offenen Rechnungen vor
+  // (Jahreswechsel), bindet die Kurzform nur zusammen mit Betragsbeweis.
+  const kurzVon = (nummer) => {
+    const bloecke = String(nummer || '').split(/[^0-9]+/).filter(Boolean);
+    return bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
+  };
+  const kurzZaehler = new Map();
+  for (const r of rechnungen || []){
+    const k = kurzVon(r.nummer);
+    if (k) kurzZaehler.set(k, (kurzZaehler.get(k) || 0) + 1);
+  }
   // ── Stufe 1: Nummern-Matching (Sammelüberweisungen dürfen mehrere
   //    Rechnungen über EINE Gutschrift abdecken) ──
   for (const r of rechnungen || []){
     const nr = norm(r.nummer);
     const nrZiffern = nr.replace(/[a-z]/g, '');
-    const bloecke = String(r.nummer || '').split(/[^0-9]+/).filter(Boolean);
-    const kurz = bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
+    const kurz = kurzVon(r.nummer);
     const kurzRe = kurz.length >= 3 ? new RegExp('(?:renr|rgnr|rechnr|rechnungnr|rechnungsnr|re|rg|nr)0*' + kurz + '(?![0-9])') : null;
+    const kurzMehrdeutig = kurz && (kurzZaehler.get(kurz) || 0) > 1;
     let ti = -1, art = null;
     if (nr.length >= 4) ti = txs.findIndex(t => norm(t.vwz).includes(nr));
     if (ti < 0 && nrZiffern.length >= 6) ti = txs.findIndex(t => norm(t.vwz).includes(nrZiffern));
     if (ti >= 0) art = 'Rechnungsnr.';
     if (ti < 0 && kurzRe){
-      ti = txs.findIndex(t => kurzRe.test(norm(t.vwz)));
-      if (ti >= 0) art = Math.abs(txs[ti].betrag - r.betrag) < 0.01 || Math.abs(txs[ti].betrag - r.brutto) < 0.01
-        ? 'Rechnungsnr.' : 'Kurz-Nr. (prüfen!)';
+      // Alle Kandidaten mit passender Kurznummer; Betragsbeweis bevorzugt
+      const kandidaten = [];
+      txs.forEach((t, i) => { if (kurzRe.test(norm(t.vwz))) kandidaten.push(i); });
+      const mitBetrag = kandidaten.find(i =>
+        Math.abs(txs[i].betrag - r.betrag) < 0.01 || Math.abs(txs[i].betrag - r.brutto) < 0.01);
+      if (mitBetrag != null) { ti = mitBetrag; art = 'Rechnungsnr.'; }
+      else if (kandidaten.length && !kurzMehrdeutig) { ti = kandidaten[0]; art = 'Kurz-Nr. (prüfen!)'; }
+      // mehrdeutige Kurznummer ohne Betragsbeweis: kein Treffer (Jahreswechsel-Schutz)
     }
     if (ti >= 0){
       perNummerBelegt.add(ti);
