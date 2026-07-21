@@ -310,6 +310,113 @@ async function kilankaPost(env, model, graph) {
   throw new Error(lastErr || "Kilanka nicht erreichbar");
 }
 
+// Roh-POST gegen Kilanka mit Status + gelieferten Feldern der ersten
+// Zeile — bewusst NICHT kilankaPost(), weil wir den HTTP-Status und
+// die stille Feldignorierung sichtbar machen wollen.
+async function kilankaProbe(env, pfad, graph, erwarteteFelder) {
+  try {
+    const r = await fetch(`${KILANKA_BASE}/${pfad}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.KILANKA_TOKEN}`,
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify(graph),
+    });
+    if (!r.ok) {
+      const txt = (await r.text()).slice(0, 200);
+      return { ok: false, status: r.status, hinweis: txt };
+    }
+    const j = await r.json();
+    const rows = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [j];
+    const erste = rows[0] || {};
+    const vorhanden = Object.keys(erste);
+    const fehlende = (erwarteteFelder || []).filter((f) => !vorhanden.includes(f));
+    return { ok: true, status: r.status, anzahl: rows.length, gelieferteFelder: vorhanden, fehlendeFelder: fehlende, beispielRoh: erste };
+  } catch (e) {
+    return { ok: false, status: 0, hinweis: e.message };
+  }
+}
+
+async function scorecardProbe(env) {
+  const heute = new Date();
+  const monatsErster = `${heute.getUTCFullYear()}-${String(heute.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const tests = {};
+
+  // 1) Invoices — Kern der Scorecard-Finanzen
+  tests.invoices = await kilankaProbe(env, "accounting/invoices", {
+    $limit: 1, id: 1, number: 1, date: 1, totalWithTax: 1,
+    paid: 1, balance: 1, isOverdue: 1, dunningLevel: 1, depositsTotal: 1,
+  }, ["id", "totalWithTax", "paid", "balance", "isOverdue", "dunningLevel", "depositsTotal"]);
+  delete tests.invoices.beispielRoh; // keine Klienten-/Betragsdaten in der Diagnose-Antwort
+
+  // 2) Users — VZÄ-Quelle (targetHours/contracts)
+  tests.usersTargetHours = await kilankaProbe(env, "users", {
+    $limit: 1, id: 1, recName: 1,
+    targetHours: { monthlyHours: 1, weeklyHours: 1, validFrom: 1, validUntil: 1 },
+    contracts: { validFrom: 1, validUntil: 1 },
+  }, ["id", "targetHours", "contracts"]);
+  delete tests.usersTargetHours.beispielRoh;
+
+  // 3) Absences — Basis Krankheitsquote (Route nutzt der Worker teils schon)
+  tests.absences = await kilankaProbe(env, "users/absences", {
+    $limit: 1, id: 1, begin: 1, end: 1, totalDays: 1, status: 1,
+  }, ["id", "begin", "end", "totalDays"]);
+  delete tests.absences.beispielRoh;
+
+  // 4) timeBase-Retest am Schnittstellen-Endpunkt (offener Widerspruch §8)
+  const tb = await kilankaProbe(env, "clients", {
+    $limit: 5, id: 1,
+    actions: { id: 1, quotas: { name: 1, timeBase: 1, deletedAt: 1 } },
+  }, ["id", "actions"]);
+  let quotasMitTimeBase = null;
+  if (tb.ok && tb.beispielRoh) {
+    // über die Stichprobe zählen, wie viele quotas timeBase tragen
+    quotasMitTimeBase = 0;
+    const alle = Array.isArray(tb.beispielRoh) ? tb.beispielRoh : [tb.beispielRoh];
+    for (const c of alle) for (const a of c.actions || []) for (const q of a.quotas || [])
+      if (Object.prototype.hasOwnProperty.call(q, "timeBase")) quotasMitTimeBase++;
+  }
+  delete tb.beispielRoh;
+  tests.timeBaseRetest = { ...tb, quotasMitTimeBase };
+
+  // 5) $filter-Verdrahtung: Rechnungen ab Monatserstem
+  const f = await kilankaProbe(env, "accounting/invoices", {
+    $limit: 5, id: 1, date: 1,
+    $filter: { date: { $gte: { $date: monatsErster } } },
+  }, ["id", "date"]);
+  let filterGreift = null;
+  if (f.ok) {
+    // greift der Filter, darf kein Treffer vor dem Monatsersten liegen
+    filterGreift = true; // Annahme, wird unten ggf. widerlegt
+    const probeDatum = f.beispielRoh && f.beispielRoh.date && f.beispielRoh.date.$date;
+    if (probeDatum && probeDatum < monatsErster) filterGreift = false;
+  }
+  delete f.beispielRoh;
+  tests.filterTest = { ...f, filterAb: monatsErster, filterGreift };
+
+  // 6) /documentation — nur Version + Endpunktliste (Spec-Diff macht Markus lokal)
+  try {
+    const r = await fetch(`${KILANKA_BASE}/documentation`, {
+      headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}` },
+    });
+    if (r.ok) {
+      const spec = await r.json();
+      tests.documentation = {
+        ok: true, status: r.status,
+        version: spec.info && spec.info.version,
+        endpunkte: Object.keys(spec.paths || {}),
+      };
+    } else {
+      tests.documentation = { ok: false, status: r.status };
+    }
+  } catch (e) {
+    tests.documentation = { ok: false, status: 0, hinweis: e.message };
+  }
+
+  return tests;
+}
+
 async function fetchKilankaClients(env) {
   if (clientCache.data && Date.now() - clientCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
     return clientCache.data;
@@ -1575,6 +1682,25 @@ export default {
         return json(data, 200, origin);
       } catch (e) {
         return json({ error: `Cockpit-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    // TEMPORÄR: Scorecard-Zugriffsdiagnose — GF-exklusiv, nach Test entfernen!
+    if (url.pathname === "/api/scorecard-probe" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
+        return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      }
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Diagnose-Route ist der GF vorbehalten" }, 403, origin);
+      }
+      try {
+        const tests = await scorecardProbe(env);
+        return json({ stand: new Date().toISOString(), tokenGesetzt: Boolean(env.KILANKA_TOKEN), tests }, 200, origin);
+      } catch (e) {
+        return json({ error: `Probe fehlgeschlagen: ${e.message}` }, 502, origin);
       }
     }
 
