@@ -310,113 +310,6 @@ async function kilankaPost(env, model, graph) {
   throw new Error(lastErr || "Kilanka nicht erreichbar");
 }
 
-// Roh-POST gegen Kilanka mit Status + gelieferten Feldern der ersten
-// Zeile — bewusst NICHT kilankaPost(), weil wir den HTTP-Status und
-// die stille Feldignorierung sichtbar machen wollen.
-async function kilankaProbe(env, pfad, graph, erwarteteFelder) {
-  try {
-    const r = await fetch(`${KILANKA_BASE}/${pfad}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.KILANKA_TOKEN}`,
-        "Content-Type": "application/json; charset=utf-8",
-      },
-      body: JSON.stringify(graph),
-    });
-    if (!r.ok) {
-      const txt = (await r.text()).slice(0, 200);
-      return { ok: false, status: r.status, hinweis: txt };
-    }
-    const j = await r.json();
-    const rows = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [j];
-    const erste = rows[0] || {};
-    const vorhanden = Object.keys(erste);
-    const fehlende = (erwarteteFelder || []).filter((f) => !vorhanden.includes(f));
-    return { ok: true, status: r.status, anzahl: rows.length, gelieferteFelder: vorhanden, fehlendeFelder: fehlende, beispielRoh: erste };
-  } catch (e) {
-    return { ok: false, status: 0, hinweis: e.message };
-  }
-}
-
-async function scorecardProbe(env) {
-  const heute = new Date();
-  const monatsErster = `${heute.getUTCFullYear()}-${String(heute.getUTCMonth() + 1).padStart(2, "0")}-01`;
-  const tests = {};
-
-  // 1) Invoices — Kern der Scorecard-Finanzen
-  tests.invoices = await kilankaProbe(env, "accounting/invoices", {
-    $limit: 1, id: 1, number: 1, date: 1, totalWithTax: 1,
-    paid: 1, balance: 1, isOverdue: 1, dunningLevel: 1, depositsTotal: 1,
-  }, ["id", "totalWithTax", "paid", "balance", "isOverdue", "dunningLevel", "depositsTotal"]);
-  delete tests.invoices.beispielRoh; // keine Klienten-/Betragsdaten in der Diagnose-Antwort
-
-  // 2) Users — VZÄ-Quelle (targetHours/contracts)
-  tests.usersTargetHours = await kilankaProbe(env, "users", {
-    $limit: 1, id: 1, recName: 1,
-    targetHours: { monthlyHours: 1, weeklyHours: 1, validFrom: 1, validUntil: 1 },
-    contracts: { validFrom: 1, validUntil: 1 },
-  }, ["id", "targetHours", "contracts"]);
-  delete tests.usersTargetHours.beispielRoh;
-
-  // 3) Absences — Basis Krankheitsquote (Route nutzt der Worker teils schon)
-  tests.absences = await kilankaProbe(env, "users/absences", {
-    $limit: 1, id: 1, begin: 1, end: 1, totalDays: 1, status: 1,
-  }, ["id", "begin", "end", "totalDays"]);
-  delete tests.absences.beispielRoh;
-
-  // 4) timeBase-Retest am Schnittstellen-Endpunkt (offener Widerspruch §8)
-  const tb = await kilankaProbe(env, "clients", {
-    $limit: 5, id: 1,
-    actions: { id: 1, quotas: { name: 1, timeBase: 1, deletedAt: 1 } },
-  }, ["id", "actions"]);
-  let quotasMitTimeBase = null;
-  if (tb.ok && tb.beispielRoh) {
-    // über die Stichprobe zählen, wie viele quotas timeBase tragen
-    quotasMitTimeBase = 0;
-    const alle = Array.isArray(tb.beispielRoh) ? tb.beispielRoh : [tb.beispielRoh];
-    for (const c of alle) for (const a of c.actions || []) for (const q of a.quotas || [])
-      if (Object.prototype.hasOwnProperty.call(q, "timeBase")) quotasMitTimeBase++;
-  }
-  delete tb.beispielRoh;
-  tests.timeBaseRetest = { ...tb, quotasMitTimeBase };
-
-  // 5) $filter-Verdrahtung: Rechnungen ab Monatserstem
-  const f = await kilankaProbe(env, "accounting/invoices", {
-    $limit: 5, id: 1, date: 1,
-    $filter: { date: { $gte: { $date: monatsErster } } },
-  }, ["id", "date"]);
-  let filterGreift = null;
-  if (f.ok) {
-    // greift der Filter, darf kein Treffer vor dem Monatsersten liegen
-    filterGreift = true; // Annahme, wird unten ggf. widerlegt
-    const probeDatum = f.beispielRoh && f.beispielRoh.date && f.beispielRoh.date.$date;
-    if (probeDatum && probeDatum < monatsErster) filterGreift = false;
-  }
-  delete f.beispielRoh;
-  tests.filterTest = { ...f, filterAb: monatsErster, filterGreift };
-
-  // 6) /documentation — nur Version + Endpunktliste (Spec-Diff macht Markus lokal)
-  try {
-    const r = await fetch(`${KILANKA_BASE}/documentation`, {
-      headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}` },
-    });
-    if (r.ok) {
-      const spec = await r.json();
-      tests.documentation = {
-        ok: true, status: r.status,
-        version: spec.info && spec.info.version,
-        endpunkte: Object.keys(spec.paths || {}),
-      };
-    } else {
-      tests.documentation = { ok: false, status: r.status };
-    }
-  } catch (e) {
-    tests.documentation = { ok: false, status: 0, hinweis: e.message };
-  }
-
-  return tests;
-}
-
 async function fetchKilankaClients(env) {
   if (clientCache.data && Date.now() - clientCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
     return clientCache.data;
@@ -1001,9 +894,15 @@ async function alleHbFaelle(env, now) {
     }
 
     if (treffer && !map.has(String(client.id))) {
+      // Hauptbetreuer zum Stichtag (Fallback: irgendein HB der Maßnahme) —
+      // Basis der Team-Zuordnung in der Scorecard-Akquise
+      const hbAtt = (treffer.attendants || []).find((a) =>
+        a.user && a.attendantKind?.name === "Hauptbetreuer" && isCurrent(a.validFrom, a.validUntil, now)
+      ) || (treffer.attendants || []).find((a) => a.user && a.attendantKind?.name === "Hauptbetreuer");
       map.set(String(client.id), {
         id: String(client.id),
         name: client.recName || String(client.id),
+        hbUpn: hbAtt ? upnForAttendant(hbAtt.user) : null,
         amt: treffer.department?.name || "",
         hilfeart: treffer.legalBasis?.name || "",
         massnahme: treffer.recName || "",
@@ -1469,6 +1368,232 @@ async function buildCockpit(env, upn, now) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Business Scorecard (business-scorecard-beta.html)
+// GF: alle Teams + Finanzblock · TL: eigenes Team, ohne Finanzen.
+// Kennzahlen-Definitionen und Ampeln: docs/scorecard-kennzahlen.md
+// Feld-Freischaltung verifiziert 21.07.2026 (Scorecard-Probe, s.
+// docs/kilanka-api-erkenntnisse.md Nachtrag).
+// ═══════════════════════════════════════════════════════════════
+
+const SCORECARD_INVOICES_GRAPH = {
+  id: 1, date: 1, deletedAt: 1, totalWithTax: 1, balance: 1,
+  isOverdue: 1, dunningLevel: 1, dueDate: 1,
+  recipientCompany: 1, recipientName: 1,
+  stateType: { name: 1 },
+};
+let scorecardInvoicesCache = { data: null, fetchedAt: 0, seit: null };
+
+// Rechnungen der letzten 12 Monate — serverseitig per $filter eingegrenzt
+// (gegen Prod verifiziert 21.07.2026) statt Vollabzug + Client-Filterung.
+async function fetchScorecardInvoices(env, seitIso) {
+  if (scorecardInvoicesCache.data && scorecardInvoicesCache.seit === seitIso &&
+      Date.now() - scorecardInvoicesCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
+    return scorecardInvoicesCache.data;
+  const alle = [];
+  const seen = new Set();
+  for (let offset = 0; offset < 20000; offset += 500) {
+    const batch = await kilankaPost(env, "accounting/invoices", {
+      ...SCORECARD_INVOICES_GRAPH, $limit: 500, $offset: offset,
+      $filter: { date: { $gte: { $date: seitIso } } },
+    });
+    if (!Array.isArray(batch) || !batch.length) break;
+    let doppelt = false;
+    for (const inv of batch) {
+      // Schutz: sollte $offset den Filter ignorieren, kämen dieselben IDs erneut
+      if (seen.has(String(inv.id))) { doppelt = true; break; }
+      seen.add(String(inv.id));
+      alle.push(inv);
+    }
+    if (doppelt || batch.length < 500) break;
+    await new Promise((r) => setTimeout(r, 700)); // Rate Limit 10/5s
+  }
+  scorecardInvoicesCache = { data: alle, fetchedAt: Date.now(), seit: seitIso };
+  return alle;
+}
+
+const istStornoRechnung = (inv) => /storn/i.test(inv.stateType?.name || "");
+const amtVonRechnung = (inv) => inv.recipientCompany || inv.recipientName || "Ohne Empfänger";
+
+// Finanz-Kennzahlen aus dem 12-Monats-Rechnungsbestand
+function finanzBlock(invoices, monat) {
+  const [j, m] = monat.split("-").map(Number);
+  const monate = [];
+  for (let i = 5; i >= 0; i--) monate.push(new Date(Date.UTC(j, m - 1 - i, 1)).toISOString().slice(0, 7));
+  const umsatz = new Map(monate.map((x) => [x, 0]));
+  const nachAmt = new Map();
+  const schuldner = new Map();
+  let offenGesamt = 0, ueberfaellig = 0, m1 = 0, m2 = 0;
+  const heute = Date.now();
+
+  for (const inv of invoices || []) {
+    if (kDate(inv.deletedAt) || istStornoRechnung(inv)) continue;
+    const mo = (inv.date?.$date || "").slice(0, 7);
+    const brutto = decimalToNumber(inv.totalWithTax);
+    if (umsatz.has(mo)) umsatz.set(mo, umsatz.get(mo) + brutto);
+    if (mo === monat) {
+      const amt = amtVonRechnung(inv);
+      nachAmt.set(amt, (nachAmt.get(amt) || 0) + brutto);
+    }
+    const saldo = decimalToNumber(inv.balance);
+    if (saldo > 0.005) { // offen = Restsaldo, robust gegen paid-Feldtyp
+      offenGesamt += saldo;
+      const s = schuldner.get(amtVonRechnung(inv)) || { offen: 0, ueberfaellig: 0, aeltesteTage: 0 };
+      s.offen += saldo;
+      if (inv.isOverdue) {
+        ueberfaellig += saldo;
+        s.ueberfaellig += saldo;
+        const dl = Number(inv.dunningLevel) || 0;
+        if (dl >= 2) m2++; else if (dl >= 1) m1++;
+        const faellig = kDate(inv.dueDate);
+        if (faellig) s.aeltesteTage = Math.max(s.aeltesteTage, Math.round((heute - faellig) / 864e5));
+      }
+      schuldner.set(amtVonRechnung(inv), s);
+    }
+  }
+  const rund = (v) => Math.round(v);
+  const amtListe = [...nachAmt.entries()].sort((a, b) => b[1] - a[1]);
+  const umsatzNachAmt = amtListe.slice(0, 3).map(([amt, b]) => ({ amt, betrag: rund(b) }));
+  const rest = amtListe.slice(3).reduce((s, [, b]) => s + b, 0);
+  if (rest > 0) umsatzNachAmt.push({ amt: `Weitere (${amtListe.length - 3} Empfänger)`, betrag: rund(rest) });
+  return {
+    umsatzMonat: rund(umsatz.get(monat) || 0),
+    umsatzVormonat: rund(umsatz.get(monate[4]) || 0),
+    umsatzVerlauf: monate.map((x) => rund(umsatz.get(x) || 0)),
+    umsatzMonate: monate,
+    forderungen: { offenGesamt: rund(offenGesamt), ueberfaellig: rund(ueberfaellig), mahnstufe1: m1, mahnstufe2plus: m2 },
+    topSchuldner: [...schuldner.entries()].sort((a, b) => b[1].offen - a[1].offen).slice(0, 3)
+      .map(([amt, s]) => ({ amt, offen: rund(s.offen), ueberfaellig: rund(s.ueberfaellig), aeltesteTage: s.aeltesteTage })),
+    umsatzNachAmt,
+    basis: "Rechnungsdatum (date), brutto, ohne stornierte/gelöschte Rechnungen",
+  };
+}
+
+// Genehmigte AU-Arbeitstage (Mo–Fr, Feiertage BY, anteilige Überlappung,
+// gedeckelt auf totalDays) einer Person im Zeitraum — Zähler der Krankheitsquote
+function krankArbeitstage(absData, kilankaId, von, bis) {
+  if (!kilankaId) return null;
+  let tage = 0;
+  for (const a of absData || []) {
+    if (String(a.user?.id) !== kilankaId) continue;
+    if ((a.status || "").toLowerCase() !== "approved") continue;
+    if (classifyAbsence(a) !== "krank") continue;
+    const b = kDate(a.begin), e = kDate(a.end) || kDate(a.begin);
+    if (!b || !e || e < von || b > bis) continue;
+    const at = arbeitstageBayern(b > von ? b : von, e < bis ? e : bis);
+    const total = decimalToNumber(a.totalDays);
+    tage += total > 0 ? Math.min(at, total) : at;
+  }
+  return tage;
+}
+
+// Kern der Scorecard: Personen-Kennzahlen über buildCockpit (Kilanka-Caches →
+// nur die erste Person kostet Netz), dann Aggregation nach Kilanka-Team.
+async function buildScorecard(env, liste, monat, effNow, mgrMap) {
+  const [j, m] = monat.split("-").map(Number);
+  const mStart = new Date(Date.UTC(j, m - 1, 1));
+  const mEnde = new Date(Date.UTC(j, m, 0));
+  const jStart = new Date(Date.UTC(j, 0, 1));
+  const qStart = new Date(Date.UTC(j, Math.floor((m - 1) / 3) * 3, 1, 12));
+
+  const abs = await fetchCockpitAbsences(env);
+  const atMonat = arbeitstageBayern(mStart, mEnde);
+  const atYtd = arbeitstageBayern(jStart, mEnde);
+
+  const personen = [];
+  for (const p of liste) {
+    const d = await buildCockpit(env, p.upn, effNow);
+    const vzae = d.person.wochenstundenVertrag ? d.person.wochenstundenVertrag / 39 : null;
+    // FLS-Quote nach Cockpit-Logik: Ist ÷ (Wochensoll ÷ 5 × Netto-Arbeitstage)
+    const sollKorr = d.fls?.nettoArbeitstage != null && d.fls?.sollWochenstunden
+      ? (d.fls.sollWochenstunden / 5) * d.fls.nettoArbeitstage : null;
+    const flsQuote = sollKorr && d.fls?.istMonatsstunden != null
+      ? Math.round((d.fls.istMonatsstunden / sollKorr) * 1000) / 10 : null;
+    personen.push({
+      upn: p.upn,
+      name: d.person.name || p.name || p.upn,
+      team: d.person.team || "Ohne Team-Zuordnung",
+      vzae,
+      faelle: d.klienten?.hb ?? 0,
+      flsQuote,
+      flsMonat: d.fls?.istMonat || null,
+      krankTageMonat: abs.verfuegbar === true ? krankArbeitstage(abs.data, d.person.kilankaId, mStart, mEnde) : null,
+      krankTageYtd: abs.verfuegbar === true ? krankArbeitstage(abs.data, d.person.kilankaId, jStart, mEnde) : null,
+      _ist: d.fls?.istMonatsstunden ?? null,
+      _sollKorr: sollKorr,
+    });
+  }
+
+  // Netto-Akquise je Team: HB-Fallmengen Quartalsanfang vs. Stichtag,
+  // Team-Zuordnung über den Hauptbetreuer des Falls (hbUpn aus alleHbFaelle)
+  const upnTeam = new Map(personen.map((p) => [p.upn.toLowerCase(), p.team]));
+  const start = await alleHbFaelle(env, qStart);
+  const ende = await alleHbFaelle(env, effNow);
+  const startIds = new Set(start.map((f) => f.id));
+  const endeIds = new Set(ende.map((f) => f.id));
+  const akq = new Map();
+  let akqOhneTeam = 0;
+  const zaehl = (f, key) => {
+    const t = upnTeam.get((f.hbUpn || "").toLowerCase());
+    if (!t) { akqOhneTeam++; return; }
+    const e = akq.get(t) || { zugaenge: 0, abgaenge: 0 };
+    e[key]++;
+    akq.set(t, e);
+  };
+  for (const f of ende) if (!startIds.has(f.id)) zaehl(f, "zugaenge");
+  for (const f of start) if (!endeIds.has(f.id)) zaehl(f, "abgaenge");
+
+  // Team-Aggregation (FLS als Σ Ist ÷ Σ Soll korr., Krankheitsquote kopfbezogen)
+  const teamsMap = new Map();
+  for (const p of personen) {
+    const t = teamsMap.get(p.team) || { name: p.team, mitarbeiter: [], vzae: 0, faelle: 0, ist: 0, sollKorr: 0, krankM: 0, krankY: 0, koepfeAbs: 0 };
+    t.mitarbeiter.push({
+      name: p.name,
+      vzae: p.vzae != null ? Math.round(p.vzae * 100) / 100 : null,
+      faelle: p.faelle,
+      flsQuote: p.flsQuote,
+      krankTageMonat: p.krankTageMonat,
+    });
+    if (p.vzae) t.vzae += p.vzae;
+    t.faelle += p.faelle;
+    if (p._ist != null && p._sollKorr) { t.ist += p._ist; t.sollKorr += p._sollKorr; }
+    if (p.krankTageMonat != null) { t.krankM += p.krankTageMonat; t.krankY += p.krankTageYtd || 0; t.koepfeAbs++; }
+    teamsMap.set(p.team, t);
+  }
+  const teams = [...teamsMap.values()].map((t) => {
+    // Teamleitung = häufigste Führungskraft der Mitglieder (Azure-AD-Hierarchie)
+    const zaehlung = new Map();
+    for (const p of personen) {
+      if (p.team !== t.name) continue;
+      const mgr = mgrMap.get(p.upn)?.name;
+      if (mgr) zaehlung.set(mgr, (zaehlung.get(mgr) || 0) + 1);
+    }
+    const tl = [...zaehlung.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+    return {
+      name: t.name,
+      tl,
+      vzae: Math.round(t.vzae * 10) / 10,
+      faelle: t.faelle,
+      flsQuote: t.sollKorr ? Math.round((t.ist / t.sollKorr) * 1000) / 10 : null,
+      flsVormonat: null, // Vormonatsvergleich folgt (zweiter Stichtagslauf)
+      krankQuoteMonat: t.koepfeAbs && atMonat ? Math.round((t.krankM / (atMonat * t.koepfeAbs)) * 1000) / 10 : null,
+      krankQuoteYtd: t.koepfeAbs && atYtd ? Math.round((t.krankY / (atYtd * t.koepfeAbs)) * 1000) / 10 : null,
+      akquiseQuartal: akq.get(t.name) || { zugaenge: 0, abgaenge: 0 },
+      mitarbeiter: t.mitarbeiter.sort((a, b) => a.name.localeCompare(b.name, "de")),
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name, "de"));
+
+  // Fallbestand-Verlauf: 6 Monatsend-Stichtage (reine Rechnung auf dem Cache)
+  const fallbestandVerlauf = [];
+  for (let i = 5; i >= 0; i--) {
+    const st = new Date(Date.UTC(j, m - i, 0, 12));
+    const teil = await alleHbFaelle(env, st > effNow ? effNow : st);
+    fallbestandVerlauf.push(teil.length);
+  }
+
+  return { teams, fallbestandVerlauf, akquiseSeit: qStart.toISOString().slice(0, 10), akquiseOhneTeam: akqOhneTeam };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HTTP-Handling
 // ═══════════════════════════════════════════════════════════════
 function corsHeaders(origin) {
@@ -1685,22 +1810,67 @@ export default {
       }
     }
 
-    // TEMPORÄR: Scorecard-Zugriffsdiagnose — GF-exklusiv, nach Test entfernen!
-    if (url.pathname === "/api/scorecard-probe" && request.method === "GET") {
+    // Business Scorecard: GF = alle Teams + Finanzen, TL = eigenes Team
+    if (url.pathname === "/api/scorecard" && request.method === "GET") {
       const auth = await validateEntraToken(request.headers.get("Authorization"));
       if (!auth.ok) return json({ error: auth.error }, 401, origin);
       const caller = (auth.upn || "").trim().toLowerCase();
       if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
-      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
-        return json({ error: "Diagnose-Route ist der GF vorbehalten" }, 403, origin);
-      }
       try {
-        const tests = await scorecardProbe(env);
-        return json({ stand: new Date().toISOString(), tokenGesetzt: Boolean(env.KILANKA_TOKEN), tests }, 200, origin);
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
+        if (rolle === "fk") {
+          return json({ error: "Scorecard ist Teamleitungen und GF vorbehalten" }, 403, origin);
+        }
+
+        // Monat wählen (?monat=YYYY-MM, Default: aktueller Monat).
+        // Stichtag = erster Tag des Folgemonats 12:00 UTC (dann liefert der
+        // FLS-Rechnungslauf genau den gewählten Monat), gedeckelt auf jetzt.
+        const heute = new Date();
+        let monat = url.searchParams.get("monat") || heute.toISOString().slice(0, 7);
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat)) monat = heute.toISOString().slice(0, 7);
+        const [j, m] = monat.split("-").map(Number);
+        const folgeErster = new Date(Date.UTC(j, m, 1, 12));
+        const effNow = folgeErster < heute ? folgeErster : heute;
+
+        let liste;
+        if (istGf) {
+          liste = await alleAktivenMitarbeiter(env);
+        } else {
+          const seen = new Set([caller]);
+          liste = [{ upn: caller, name: auth.name || caller }];
+          for (const r of reports) if (!seen.has(r.upn)) { seen.add(r.upn); liste.push(r); }
+        }
+        const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
+        const kern = await buildScorecard(env, liste, monat, effNow, mgrMap);
+
+        const hinweise = ["FLS-Ist aus Rechnungen (Leistungsdoku-Graph nicht freigegeben); für den laufenden Monat zeigt FLS den Vormonat."];
+        if (kern.akquiseOhneTeam > 0) hinweise.push(`${kern.akquiseOhneTeam} Fall-Bewegung(en) ohne Team-Zuordnung (HB außerhalb der Sicht) — vollständig nur in der GF-Sicht.`);
+        let finanzen = null;
+        if (istGf) {
+          try {
+            const seit = new Date(Date.UTC(j, m - 12, 1)).toISOString().slice(0, 10);
+            finanzen = finanzBlock(await fetchScorecardInvoices(env, seit), monat);
+          } catch (e) {
+            hinweise.push("Finanzblock nicht verfügbar: " + e.message);
+          }
+        }
+        return json({
+          rolle,
+          monat,
+          stand: new Date().toISOString(),
+          stichtag: effNow.toISOString().slice(0, 10),
+          akquiseSeit: kern.akquiseSeit,
+          finanzen,
+          teams: kern.teams,
+          fallbestandVerlauf: kern.fallbestandVerlauf,
+          hinweise,
+        }, 200, origin);
       } catch (e) {
-        return json({ error: `Probe fehlgeschlagen: ${e.message}` }, 502, origin);
+        return json({ error: `Scorecard fehlgeschlagen: ${e.message}` }, 502, origin);
       }
     }
 
