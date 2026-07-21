@@ -1,0 +1,95 @@
+# Business Scorecard: Kennzahlen, Datenquellen & Worker-Kontrakt
+
+> Ablage: `docs/scorecard-kennzahlen.md` im Repo `peltzm/pnw-app`
+> Stand: 21.07.2026 · Betrifft: `business-scorecard-beta.html` + Worker-Route `/api/scorecard`
+
+## Zweck
+
+Eigenständige Scorecard-App für GF-Gesamtblick mit TL-Drilldown. Vier Bereiche:
+Finanzen, Auslastung & FLS, Personal, Fallentwicklung. Kopfkarte mit vier
+Bereichs-Scores (Ampel → 100/60/20 Punkte im Ring).
+
+## Kennzahlen & Ampellogik
+
+| KPI | Definition | Grün | Gelb | Rot | Quelle |
+|---|---|---|---|---|---|
+| Umsatz Monat | Σ `totalWithTax` der Rechnungen mit Leistungszeitraum im Monat | Trend | — | — | `/accounting/invoices` |
+| Überfällige Forderungen | Σ `balance` mit `isOverdue` ÷ Σ offene `balance` | < 10 % | 10–25 % | > 25 % | `/accounting/invoices` |
+| Team-Auslastung | HB-Fälle ÷ VZÄ (Vertragsstunden ÷ 39) | ≥ 7,5 | ≥ 6,8 | < 6,8 | `/clients` + `/users` |
+| FLS-Quote Ø | wie Cockpit (`flsAuswertung`, Soll korr.), VZÄ-gewichtet | ≥ 64 % | ≥ 58 % | < 58 % | Cockpit-Logik |
+| Krankheitsquote | AU-Tage ÷ verfügbare Arbeitstage (Mo–Fr, Feiertage BY) | < 5 % | 5–8 % | > 8 % | `/users/absences` |
+| Netto-Akquise | Zugänge − Abgänge je Team/Quartal (Bestandsdifferenz-Approximation wie Manager-Cockpit) | ≥ +2/Team | ≥ 0 | < 0 | `/clients` Stichtage |
+
+Auslastungs- und Akquise-Ziele aus LuV Teamleitung §5; FLS-Ziel aus den
+Entgeltkalkulationen (63,8 %/64,0 %). **Krankheitsquoten-Schwellen sind ein
+Vorschlag** (sozialwirtschaftsüblich) — vor Produktivgang mit Sonja abstimmen.
+
+## Architektur
+
+- Single-File-App nach PNW-Muster (MSAL 2.38, CFG identisch zu Cockpit,
+  Kodchasan, gleiche CSS-Variablen, Demo-/Live-Modus, Version-Badge).
+- Berechtigung **serverseitig** im Worker (GF_UPNS + directReports):
+  GF → alle Teams + Finanzblock, TL → nur eigenes Team ohne Finanzen,
+  Fachkraft → 403. Rollen-Pills existieren nur im Demo-Modus.
+- **Team-Zuordnung über die Entra-Hierarchie** (Manager laut Azure AD, wie
+  Organisation-App): GF und direkt der GF Zugeordnete → "GF & Verwaltung",
+  Führungskräfte führen ihr eigenes Team, alle anderen folgen ihrer
+  Führungskraft. Die Kilanka-orgUnits bilden die realen Teams NICHT ab
+  (Befund 21.07.2026: 18 Personen in "Ambulante Jugendhilfe"); sie dienen
+  nur als Fallback ohne Graph-Token.
+- **FLS-Verdachtsmarker:** Quote > 105 % ⇒ Soll vermutlich unvollständig
+  (Maßnahme ohne bewertetes Kontingent) — als ⚠ ausgewiesen, nicht als
+  Überperformance zu lesen. Teamleitungs-Quoten zusätzlich mit Vorsicht
+  (Leitungsanteil mindert das FLS-Soll fachlich).
+- Fällt der Live-Endpunkt aus, wechselt die App transparent in den
+  Demo-Modus mit Hinweisleiste (kein weißer Bildschirm).
+
+## Worker-Kontrakt (neu zu bauen)
+
+`GET /api/scorecard?monat=YYYY-MM` → JSON, Struktur = `DEMO`-Konstante in der
+App. Kernfelder: `rolle` (tl|gf, serverseitig ermittelt), `finanzen`
+(umsatzMonat/-Vormonat/-Verlauf, forderungen, topSchuldner, umsatzNachAmt),
+`teams[]` (vzae, faelle, flsQuote, krankQuoten, akquiseQuartal, mitarbeiter[]
+nur in der berechtigten Sicht), `fallbestandVerlauf`, `hinweise[]`.
+
+Empfohlene Umsetzung im `pnw-kilanka-proxy`:
+
+1. **Invoices-Route freischalten** und cachen (15 min): Vollabzug des
+   Monats via `$filter` auf `date`/`deliveryFrom` testen — falls `$filter`
+   noch nicht verdrahtet ist (WIP-Spec!), Fallback Pagination + Client-Filter.
+2. **Team-Mapping** `AMT_TEAMS` vom Frontend in den Worker ziehen (eine
+   Quelle für Cockpit und Scorecard).
+3. **Stichtags-Snapshots** für Akquise: bestehenden `stichtag`-Mechanismus
+   des Manager-Cockpits wiederverwenden; mittelfristig `$cursor`-Delta-Sync.
+4. **VZÄ** aus `users.targetHours` (offizielle Soll-Stunden-Historie) statt
+   `weeklyHours`, gültigkeitsgefiltert zum Monatsende.
+
+## Offene Zugriffe / Vorbedingungen
+
+- [x] `/accounting/invoices` verifiziert (21.07.2026): paid, balance,
+      isOverdue, dunningLevel, depositsTotal, totalWithTax kommen an
+- [x] `$filter` verifiziert (21.07.2026): date-$gte greift serverseitig an
+      /accounting/invoices — produktiv in fetchScorecardInvoices im Einsatz
+- [x] `users.targetHours`/`contracts` verifiziert (21.07.2026)
+- [x] `/documentation` geprüft (21.07.2026): unverändert 2.0.0-wip
+- [ ] Redirect-URI `business-scorecard-beta.html` in Entra-App-Registrierung
+      nachtragen (bekanntes Muster, s. Cockpit-Beta)
+- [ ] Kostendaten (BWA/DATEV) sind nicht in Kilanka — Personalkostenquote &
+      Deckungsbeitrag erst in Ausbaustufe 2 (monatlicher Upload o. manuelle
+      Eingabe mit SharePoint-Ablage statt localStorage)
+- [ ] FLS-Ist bleibt bis zur Freigabe der Leistungsdoku im API-Graphen aus
+      Rechnungen des Vormonats (Support-Anfrage offen, s. Cockpit-Doku)
+
+## Deployment
+
+Zwei-Commit-Muster: Feature-Commit + `APP_VERSION`-Badge-Bump (Git-SHA).
+Worker separat: `cd worker && npx wrangler deploy`.
+
+## Live-Befunde 21.07.2026 (Erstabruf Juni 2026)
+
+Umsatz Juni 134,8 T€ (Ø H1 ca. 143 T€), Fallbestand 118 (Ende Juni), Netto-
+Akquise Q2 gesamt +16. **Handlungsbedarf Forderungen:** 58,8 T€ offen und
+vollständig überfällig bei durchgängig Mahnstufe 0 — kein Mahnlauf in Kilanka
+aktiv; größter Posten Kelheim 32,5 T€ (älteste Fälligkeit 50 Tage). FLS-Quoten
+> 100 % bei drei Personen → Soll-Lücken in den Kontingenten prüfen (Marker in
+der App). Offen für v2: flsVormonat (zweiter Stichtagslauf), Kostendaten (BWA).
