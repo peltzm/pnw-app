@@ -304,6 +304,7 @@ function sichtbareTeams(){
 }
 const zeile1 = s => String(s || '').split('\n')[0];
 const fmtQ = v => v == null ? '—' : pct(v);
+const jvj = (cur, prev) => prev ? ` (${((cur-prev)/prev*100)>=0?'+':''}${((cur-prev)/prev*100).toLocaleString('de-DE',{maximumFractionDigits:1})} %)` : '';
 const warnMark = ' <span title="FLS-Soll vermutlich unvollständig (Kontingent ohne Bewertung/timeBase)" style="cursor:help">⚠</span>';
 
 /* ═══ RENDER ═══ */
@@ -353,6 +354,9 @@ function renderAll(){
     <div class="kpi-row"><span class="kpi-big">${eur(f.umsatzMonat)}</span>${delta(f.umsatzMonat, f.umsatzVormonat)}</div>
     ${spark(f.umsatzVerlauf, 'var(--blue)')}
     ${f.umsatzMonate ? `<div class="legend">${f.umsatzMonate.map(monatLabel).join(' · ')}</div>` : ''}
+    ${f.umsatzVorjahresmonat != null || f.umsatzYtdVorjahr != null
+      ? `<div class="legend">${f.umsatzVorjahresmonat != null ? `Vorjahresmonat: ${eur(f.umsatzVorjahresmonat)}<b>${jvj(f.umsatzMonat, f.umsatzVorjahresmonat)}</b>` : 'Vorjahresmonat: —'} · YTD: <b>${eur(f.umsatzYtd || 0)}</b>${f.umsatzYtdVorjahr != null ? ` vs. Vorjahres-YTD ${eur(f.umsatzYtdVorjahr)}<b>${jvj(f.umsatzYtd, f.umsatzYtdVorjahr)}</b>` : ''}</div>`
+      : (f.umsatzYtd != null ? `<div class="legend">YTD: <b>${eur(f.umsatzYtd)}</b> · Vorjahresvergleich: keine Vorjahresrechnungen im Kilanka-Abruffenster.</div>` : '')}
     <table class="mini-table"><tbody>
       ${(f.umsatzNachAmt||[]).map(a=>`<tr><td>${zeile1(a.amt)}</td><td class="num">${eur(a.betrag)}</td></tr>`).join('')}
     </tbody></table>
@@ -468,6 +472,18 @@ function margenCard(monat){
     <div class="kpi-row"><span class="kpi-big">${akt != null ? pct(akt) : '—'}</span>
       <span class="kpi-unit">im ${monatLabel(monat)}</span>
       ${kum != null ? `<span class="tag ${ampel(kum, ZIEL.margeGruen, ZIEL.margeGelb)}">${pct(kum)} kumuliert (${monatLabel(monate[0])}–${monatLabel(monate[monate.length-1])})</span>` : ''}</div>
+    ${(() => {
+      const jahr = monat.slice(0, 4), mEnd = monat.slice(5, 7);
+      const imJahr = jj => monate.filter(x => x.slice(0, 4) === jj && x.slice(5, 7) <= mEnd);
+      const agg = ms => {
+        const u = ms.reduce((s, x) => s + (bwaDaten[x].Umsatzerloese || 0), 0);
+        const e = ms.reduce((s, x) => s + (bwaDaten[x].Betriebsergebnis || 0), 0);
+        return { u, e, m: u ? e / u * 100 : null, n: ms.length };
+      };
+      const h = agg(imJahr(jahr)), v = agg(imJahr(String(+jahr - 1)));
+      if (!v.n) return `<div class="legend">Vorjahresvergleich: 2025er KER-PDFs importieren — YoY und Vorjahres-YTD erscheinen dann automatisch.</div>`;
+      return `<div class="legend">YTD ${jahr} (${h.n} Mon.): Ergebnis <b>${eur(h.e)}</b>, Marge ${fmtQ(h.m)} · Vorjahres-YTD (${v.n} Mon.): ${eur(v.e)}, Marge ${fmtQ(v.m)}${h.m != null && v.m != null ? ` <b>(${(h.m - v.m) >= 0 ? '+' : ''}${(h.m - v.m).toLocaleString('de-DE', { maximumFractionDigits: 1 })} pp)</b>` : ''}</div>`;
+    })()}
     ${verlauf.length >= 2 ? spark(verlauf, 'var(--blue)') : ''}
     <table class="mini-table"><thead><tr><th>Monat</th><th class="num">Umsatz</th><th class="num">Ergebnis</th><th class="num">Marge</th></tr></thead><tbody>
       ${letzte.map(m => { const b = bwaDaten[m], mg = marge(m);
