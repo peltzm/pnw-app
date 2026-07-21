@@ -93,3 +93,17 @@ vollständig überfällig bei durchgängig Mahnstufe 0 — kein Mahnlauf in Kila
 aktiv; größter Posten Kelheim 32,5 T€ (älteste Fälligkeit 50 Tage). FLS-Quoten
 > 100 % bei drei Personen → Soll-Lücken in den Kontingenten prüfen (Marker in
 der App). Offen für v2: flsVormonat (zweiter Stichtagslauf), Kostendaten (BWA).
+
+## BWA-Modul (Ausbaustufe 2, umgesetzt 21.07.2026)
+
+Quelle: SharePoint-Liste **PNW-BWA** (Website praxisneuewegesonjapeltz978),
+Zugriff clientseitig via Graph mit Sites.ReadWrite.All (wie Spesenabrechnung),
+nur in der GF-Sicht. Spalten (Typ Zahl): `Umsatzerloese`, `Personalkosten`,
+`Gesamtkosten`, `Betriebsergebnis`; `Title` = Monat im Format JJJJ-MM;
+optional `Kommentar` (Text). Erfassung in der Scorecard: DATEV-CSV-Import
+(Zeilenerkennung Umsatzerlöse/Personalkosten/Gesamtkosten/Betriebsergebnis,
+letzter Zahlenwert der Zeile, windows-1252) mit manueller Prüfung, oder
+Direkteingabe. Kennzahlen: **Personalkostenquote** = Personalkosten ÷
+BWA-Umsatz (Schwellen-VORSCHLAG: grün < 82 %, gelb 82–88 %, rot > 88 % —
+mit Entgeltkalkulation abgleichen!), **Betriebsergebnis**, **Abgleich**
+BWA-Umsatz vs. Kilanka-Umsatz (Toleranz 5 % grün). Kein Worker-Anteil.
