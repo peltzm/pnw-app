@@ -458,34 +458,52 @@ function spalten(z, d){
 }
 function parseBankCsv(text){
   const zeilen = String(text).split(/\r?\n/).filter(z => z.trim());
-  let hi = zeilen.findIndex(z => /verwendungszweck|buchungstext|umsatz|betrag/i.test(z));
-  if (hi < 0) hi = 0;
+  // Kopfzeile: unter den ersten 40 Zeilen die mit der besten Kombination aus
+  // Betrag-/Verwendungszweck-Schlüsselwörtern und den meisten Trennzeichen —
+  // überspringt Präambeln wie "Umsätze Girokonto; Zeitraum ..."
+  let hi = 0, best = -1;
+  for (let i = 0; i < Math.min(zeilen.length, 40); i++){
+    const z = zeilen[i].toLowerCase();
+    const trenner = Math.max((z.match(/;/g)||[]).length, (z.match(/,/g)||[]).length);
+    let score = trenner;
+    if (/betrag|umsatz|amount/.test(z)) score += 20;
+    if (/verwendungszweck|buchungstext|zweck|vorgang/.test(z)) score += 20;
+    if (score > best) { best = score; hi = i; }
+  }
   const delim = (zeilen[hi].match(/;/g) || []).length >= (zeilen[hi].match(/,/g) || []).length ? ';' : ',';
   const kopf = spalten(zeilen[hi], delim).map(s => s.toLowerCase());
   const idx = re => kopf.findIndex(k => re.test(k));
-  const iBetrag = idx(/betrag|umsatz(?!steuer)|amount/);
-  const iVwz = idx(/verwendungszweck|buchungstext|vwz|purpose/);
+  const iBetrag = idx(/betrag(?!.*w(ae|ä)hrung)|umsatz|amount/);
+  const iSH = idx(/soll.?haben|^s\/h$|^h\/s$/);
   const iDatum = idx(/buchung|valuta|datum|date/);
-  const iName = idx(/auftraggeber|beguenstigter|zahlungspflichtiger|name/);
   const txs = [];
   for (let i = hi + 1; i < zeilen.length; i++){
     const c = spalten(zeilen[i], delim);
     if (c.length < 2) continue;
-    const betrag = deNum(iBetrag >= 0 ? c[iBetrag] : c[c.length - 1]);
-    if (betrag == null || betrag <= 0) continue; // nur Gutschriften
-    txs.push({ betrag,
-      vwz: [iVwz >= 0 ? c[iVwz] : '', iName >= 0 ? c[iName] : ''].join(' '),
-      datum: iDatum >= 0 ? c[iDatum] : '' });
+    // Betrag: erkannte Spalte, sonst der letzte parsebare Zahlenwert der Zeile
+    let betrag = iBetrag >= 0 ? deNum(c[iBetrag]) : null;
+    if (betrag == null){
+      for (let k = c.length - 1; k >= 0; k--){ const v = deNum(c[k]); if (v != null){ betrag = v; break; } }
+    }
+    if (betrag == null) continue;
+    if (iSH >= 0 && /^s$/i.test(c[iSH] || '')) betrag = -Math.abs(betrag); // Soll-Kennzeichen
+    if (betrag <= 0) continue; // nur Gutschriften
+    // Suchtext: ALLE Textspalten der Zeile (deckt VWZ1..n, Auftraggeber usw. ab)
+    const vwz = c.filter((_, k) => k !== iBetrag).join(' ');
+    txs.push({ betrag, vwz, datum: iDatum >= 0 ? (c[iDatum] || '') : '' });
   }
-  return txs;
+  return { txs, diag: { kopfzeile: hi + 1, delim, betragSpalte: iBetrag >= 0 ? kopf[iBetrag] : 'letzter Zahlenwert je Zeile' } };
 }
 function matcheZahlungen(rechnungen, txs){
   const norm = s => String(s || '').toLowerCase().replace(/[^0-9a-z]/g, '');
   const treffer = [];
   for (const r of rechnungen || []){
-    const nr = norm(r.nummer);
-    let tx = nr.length >= 4 ? txs.find(t => norm(t.vwz).includes(nr)) : null;
-    let art = tx ? 'Rechnungsnr.' : null;
+    const nr = norm(r.nummer);                 // z. B. re20260600651
+    const nrZiffern = nr.replace(/[a-z]/g, ''); // z. B. 20260600651 (Ämter lassen "RE" oft weg)
+    let tx = null, art = null;
+    if (nr.length >= 4) tx = txs.find(t => norm(t.vwz).includes(nr));
+    if (!tx && nrZiffern.length >= 6) tx = txs.find(t => norm(t.vwz).includes(nrZiffern));
+    if (tx) art = 'Rechnungsnr.';
     if (!tx){
       tx = txs.find(t => Math.abs(t.betrag - r.betrag) < 0.01 || Math.abs(t.betrag - r.brutto) < 0.01);
       if (tx) art = 'Betrag (prüfen!)';
@@ -499,8 +517,9 @@ function bankCsvGewaehlt(ev){
   if (!file || !scData || !scData.finanzen) return;
   const reader = new FileReader();
   reader.onload = () => {
-    const txs = parseBankCsv(reader.result);
-    zahlungsTreffer = matcheZahlungen(scData.finanzen.offeneRechnungen, txs);
+    const p = parseBankCsv(reader.result);
+    zahlungsTreffer = matcheZahlungen(scData.finanzen.offeneRechnungen, p.txs);
+    zahlungsTreffer.diag = p.diag;
     renderAll();
   };
   reader.readAsText(file, 'windows-1252');
@@ -516,13 +535,20 @@ function zahlungsCard(f){
     <div class="sub">Kontoauszug (CSV) gegen ${offene.length} offene Rechnungen abgleichen · Kontodaten bleiben im Browser</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 10px">
       <input type="file" id="bankCsv" accept=".csv,.txt" onchange="bankCsvGewaehlt(event)" style="font-size:12px">
-      ${z ? `<span class="tag ${z.treffer.length ? 'warn' : 'ok'}">${z.treffer.length} von ${offene.length} offenen Rechnungen im Auszug gefunden (${eur(summe)}) · ${z.txAnzahl} Gutschriften geprüft</span>` : ''}
+      ${z ? `<span class="tag ${z.treffer.length ? 'warn' : (z.txAnzahl ? 'ok' : 'err')}">${z.treffer.length} von ${offene.length} offenen Rechnungen gefunden (${eur(summe)}) · ${z.txAnzahl} Gutschriften geprüft</span>` : ''}
     </div>
+    ${z && z.diag ? `<div class="legend">Format erkannt: Kopfzeile ${z.diag.kopfzeile}, Trenner "${z.diag.delim}", Betragsspalte "${z.diag.betragSpalte}".${z.txAnzahl === 0 ? ' <b>Keine Gutschriften erkannt — Exportformat vermutlich nicht unterstützt: bitte Kopfzeile + eine Beispielzeile (Beträge geschwärzt) an Markus/Claude.</b>' : ''}</div>` : ''}
     ${z && z.treffer.length ? `<table class="mini-table"><thead><tr><th>Rechnung</th><th>Empfänger</th><th class="num">offen</th><th>Zahlungseingang</th><th>Match</th></tr></thead><tbody>
       ${z.treffer.map(t => `<tr><td>${t.nummer || '—'}</td><td>${t.empfaenger}</td><td class="num">${eur(t.betrag)}</td><td>${t.zahlDatum || '—'} (${eur(t.zahlBetrag)})</td><td>${t.art === 'Rechnungsnr.' ? '<span class="tag ok">Rechnungsnr.</span>' : '<span class="tag warn">Betrag (prüfen!)</span>'}</td></tr>`).join('')}
     </tbody></table>
     <div class="legend">Diese Rechnungen im Kilanka-Rechnungswesen als bezahlt erfassen — dann verschwinden sie beim nächsten Abruf aus den offenen Forderungen.</div>`
-    : z ? `<div class="legend">Keine der offenen Rechnungen im Kontoauszug gefunden — entweder tatsächlich unbezahlt oder der Auszug deckt den Zeitraum nicht ab.</div>` : ''}
+    : z && z.txAnzahl ? `<div class="legend">Keine der offenen Rechnungen in den Gutschriften gefunden — Zeitraum des Exports prüfen (deckt er den Zahlungseingang ab?) und unten die Kilanka-Rechnungsnummern mit dem Kontoauszug vergleichen.</div>` : ''}
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:12px;color:var(--accent)">Offene Rechnungen laut Kilanka anzeigen (${offene.length})</summary>
+      <table class="mini-table"><thead><tr><th>Nummer</th><th>Empfänger</th><th class="num">offen</th><th class="num">fällig</th></tr></thead><tbody>
+        ${offene.map(r => `<tr><td>${r.nummer || '—'}</td><td>${r.empfaenger}</td><td class="num">${eur(r.betrag)}</td><td class="num">${r.faellig ? new Date(r.faellig).toLocaleDateString('de-DE') : '—'}</td></tr>`).join('')}
+      </tbody></table>
+    </details>
   </div>`;
 }
 
