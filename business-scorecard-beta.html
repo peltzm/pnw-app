@@ -184,6 +184,8 @@ const BWA_LISTE = 'PNW-BWA';
 let bwaDaten = {};        // Monat (JJJJ-MM) → { spId, Umsatzerloese, Personalkosten, Gesamtkosten, Betriebsergebnis, Kommentar }
 let bwaStatus = null;     // null=nicht geladen · 'ok' · Fehlertext
 let zahlungsTreffer = null; // Ergebnis des Bank-CSV-Abgleichs (nur im Browser, keine Speicherung)
+let bankTxs = null;       // zuletzt geparste Gutschriften (nur im Browser)
+let bankDiag = null;
 let graphToken = null;    // Access-Token aus liveTokens()
 
 /* ═══════════════════════════════════════════════════════════
@@ -535,6 +537,7 @@ function bankCsvGewaehlt(ev){
     let text = new TextDecoder('utf-8').decode(bytes);
     if (text.includes('\uFFFD')) text = new TextDecoder('windows-1252').decode(bytes);
     const p = parseBankCsv(text);
+    bankTxs = p.txs; bankDiag = p.diag;
     zahlungsTreffer = matcheZahlungen(scData.finanzen.offeneRechnungen, p.txs);
     zahlungsTreffer.diag = p.diag;
     renderAll();
@@ -552,6 +555,7 @@ function zahlungsCard(f){
     <div class="sub">Kontoauszug (CSV) gegen ${offene.length} offene Rechnungen abgleichen · Kontodaten bleiben im Browser</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 10px">
       <input type="file" id="bankCsv" accept=".csv,.txt" onchange="bankCsvGewaehlt(event)" style="font-size:12px">
+      <button class="btn btn-ghost" onclick="aktualisiereMonat()" title="Kilanka-Daten werden serverseitig bis zu 10 Minuten zwischengespeichert">Kilanka-Stand neu laden</button>
       ${z ? `<span class="tag ${z.treffer.length ? 'warn' : (z.txAnzahl ? 'ok' : 'err')}">${z.treffer.length} von ${offene.length} offenen Rechnungen gefunden (${eur(summe)}) · ${z.txAnzahl} Gutschriften geprüft</span>` : ''}
     </div>
     ${z && z.diag ? `<div class="legend">Format erkannt: Kopfzeile ${z.diag.kopfzeile}, Trenner "${z.diag.delim}", Betragsspalte "${z.diag.betragSpalte}".${z.txAnzahl === 0 ? ' <b>Keine Gutschriften erkannt — Exportformat vermutlich nicht unterstützt: bitte Kopfzeile + eine Beispielzeile (Beträge geschwärzt) an Markus/Claude.</b>' : ''}</div>` : ''}
@@ -819,6 +823,18 @@ async function ladeMonat(monat){
     scData = DEMO['2026-07'];
     viewerRole = 'gf';
   }
+}
+async function aktualisiereMonat(){
+  const m = document.getElementById('monatSelect').value;
+  document.getElementById('grid').innerHTML = '<div class="skel">Lade aktuellen Kilanka-Stand …</div>';
+  delete monatCache[m];
+  await ladeMonat(m);
+  if (bankTxs && scData && scData.finanzen) { // zuletzt geladene CSV automatisch neu abgleichen
+    zahlungsTreffer = matcheZahlungen(scData.finanzen.offeneRechnungen, bankTxs);
+    zahlungsTreffer.diag = bankDiag;
+  }
+  initTeamSelect();
+  renderAll();
 }
 function zeigeKeinZugriff(msg){
   scData = null;
