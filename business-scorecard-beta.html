@@ -499,14 +499,25 @@ function parseBankCsv(text){
   }
   return { txs, diag: { kopfzeile: hi + 1, delim, betragSpalte: iBetrag >= 0 ? kopf[iBetrag] : 'letzter Geldbetrag je Zeile' } };
 }
+function parseDatumDE(s){
+  const m = /(\d{2})\.(\d{2})\.(\d{4})/.exec(String(s || ''));
+  return m ? new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])) : null;
+}
+const EMPF_STOPWORTE = new Set(['landratsamt','landkreis','kreisjugendamt','jugendamt','stadtkasse','kreiskasse','abteilung','familie','jugend','bildung','stadt','kasse','sozialamt','verwaltung']);
+function empfaengerTokens(e){
+  return String(e || '').toLowerCase().split(/[^a-zäöüß]+/)
+    .filter(w => w.length >= 5 && !EMPF_STOPWORTE.has(w))
+    .map(w => w.replace(/[^a-z]/g, ''));
+}
 function matcheZahlungen(rechnungen, txs){
   const norm = s => String(s || '').toLowerCase().replace(/[^0-9a-z]/g, '');
   const treffer = [];
+  const offenNachNummer = [];
+  // ── Stufe 1: Nummern-Matching (Sammelüberweisungen dürfen mehrere
+  //    Rechnungen über EINE Gutschrift abdecken) ──
   for (const r of rechnungen || []){
-    const nr = norm(r.nummer);                  // re20260600651
-    const nrZiffern = nr.replace(/[a-z]/g, ''); // 20260600651
-    // Kurzform: letzter Ziffernblock ohne führende Nullen (Ämter schreiben
-    // oft nur "Re-Nr.: 00651")
+    const nr = norm(r.nummer);
+    const nrZiffern = nr.replace(/[a-z]/g, '');
     const bloecke = String(r.nummer || '').split(/[^0-9]+/).filter(Boolean);
     const kurz = bloecke.length ? bloecke[bloecke.length - 1].replace(/^0+/, '') : '';
     const kurzRe = kurz.length >= 3 ? new RegExp('(?:renr|rgnr|rechnr|rechnungnr|rechnungsnr|re|rg|nr)0*' + kurz + '(?![0-9])') : null;
@@ -519,12 +530,36 @@ function matcheZahlungen(rechnungen, txs){
       if (tx) art = Math.abs(tx.betrag - r.betrag) < 0.01 || Math.abs(tx.betrag - r.brutto) < 0.01
         ? 'Rechnungsnr.' : 'Kurz-Nr. (prüfen!)';
     }
-    if (!tx){
-      tx = txs.find(t => Math.abs(t.betrag - r.betrag) < 0.01 || Math.abs(t.betrag - r.brutto) < 0.01);
-      if (tx) art = 'Betrag (prüfen!)';
-    }
     if (tx) treffer.push({ ...r, art, zahlDatum: tx.datum, zahlBetrag: tx.betrag });
+    else offenNachNummer.push(r);
   }
+  // ── Stufe 2: Betrags-Matching, streng plausibilisiert ──
+  //    (a) Buchungsdatum ≥ Rechnungsdatum — eine Juni-Rechnung kann nicht
+  //        durch eine frühere Gutschrift bezahlt sein
+  //    (b) jede Gutschrift begleicht höchstens EINE Rechnung
+  //    (c) der Absender/Verwendungszweck muss zum Rechnungsempfänger passen
+  const benutzt = new Set();
+  for (const r of offenNachNummer){
+    const rDatum = r.datum ? new Date(r.datum) : null;
+    const tokens = empfaengerTokens(r.empfaenger);
+    let gefunden = -1;
+    for (let i = 0; i < txs.length; i++){
+      if (benutzt.has(i)) continue;
+      const t = txs[i];
+      if (Math.abs(t.betrag - r.betrag) >= 0.01 && Math.abs(t.betrag - r.brutto) >= 0.01) continue;
+      const tDatum = parseDatumDE(t.datum);
+      if (!rDatum || !tDatum || tDatum < rDatum) continue;
+      if (tokens.length && !tokens.some(tok => norm(t.vwz).includes(tok))) continue;
+      gefunden = i;
+      break;
+    }
+    if (gefunden >= 0){
+      benutzt.add(gefunden);
+      treffer.push({ ...r, art: 'Betrag (prüfen!)', zahlDatum: txs[gefunden].datum, zahlBetrag: txs[gefunden].betrag });
+    }
+  }
+  treffer.sort((a, b) => (a.art === b.art ? 0 : a.art === 'Rechnungsnr.' ? -1 : b.art === 'Rechnungsnr.' ? 1 : 0)
+    || String(a.nummer).localeCompare(String(b.nummer)));
   return { treffer, txAnzahl: txs.length };
 }
 function bankCsvGewaehlt(ev){
@@ -559,8 +594,8 @@ function zahlungsCard(f){
       ${z ? `<span class="tag ${z.treffer.length ? 'warn' : (z.txAnzahl ? 'ok' : 'err')}">${z.treffer.length} von ${offene.length} offenen Rechnungen gefunden (${eur(summe)}) · ${z.txAnzahl} Gutschriften geprüft</span>` : ''}
     </div>
     ${z && z.diag ? `<div class="legend">Format erkannt: Kopfzeile ${z.diag.kopfzeile}, Trenner "${z.diag.delim}", Betragsspalte "${z.diag.betragSpalte}".${z.txAnzahl === 0 ? ' <b>Keine Gutschriften erkannt — Exportformat vermutlich nicht unterstützt: bitte Kopfzeile + eine Beispielzeile (Beträge geschwärzt) an Markus/Claude.</b>' : ''}</div>` : ''}
-    ${z && z.treffer.length ? `<table class="mini-table"><thead><tr><th>Rechnung</th><th>Empfänger</th><th class="num">offen</th><th>Zahlungseingang</th><th>Match</th></tr></thead><tbody>
-      ${z.treffer.map(t => `<tr><td>${t.nummer || '—'}</td><td>${t.empfaenger}</td><td class="num">${eur(t.betrag)}</td><td>${t.zahlDatum || '—'} (${eur(t.zahlBetrag)})</td><td>${t.art === 'Rechnungsnr.' ? '<span class="tag ok">Rechnungsnr.</span>' : '<span class="tag warn">Betrag (prüfen!)</span>'}</td></tr>`).join('')}
+    ${z && z.treffer.length ? `<table class="mini-table"><thead><tr><th>Rechnung</th><th>Empfänger</th><th class="num">offen</th><th class="num">Gutschrift</th><th class="num">gebucht am</th><th>Match</th></tr></thead><tbody>
+      ${z.treffer.map(t => `<tr><td>${t.nummer || '—'}</td><td>${t.empfaenger}</td><td class="num">${eur(t.betrag)}</td><td class="num">${eur(t.zahlBetrag)}</td><td class="num">${t.zahlDatum || '—'}</td><td>${t.art === 'Rechnungsnr.' ? '<span class="tag ok">Rechnungsnr.</span>' : t.art === 'Kurz-Nr. (prüfen!)' ? '<span class="tag warn">Kurz-Nr. (prüfen!)</span>' : '<span class="tag warn">Betrag (prüfen!)</span>'}</td></tr>`).join('')}
     </tbody></table>
     <div class="legend">Diese Rechnungen im Kilanka-Rechnungswesen als bezahlt erfassen — dann verschwinden sie beim nächsten Abruf aus den offenen Forderungen.</div>`
     : z && z.txAnzahl ? `<div class="legend">Keine der offenen Rechnungen in den Gutschriften gefunden — Zeitraum des Exports prüfen (deckt er den Zahlungseingang ab?) und unten die Kilanka-Rechnungsnummern mit dem Kontoauszug vergleichen.</div>` : ''}
