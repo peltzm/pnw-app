@@ -815,11 +815,16 @@ function monatAus(text){
   return k ? k[2] + '-' + KURZ[k[1].toLowerCase().slice(0,3)] : null;
 }
 function parseKerZeilen(zeilen){
-  const erg = { monat: monatAus(zeilen.join(' ')) };
-  const felder = { Umsatzerloese: /^Umsatzerlöse\b/, Personalkosten: /^Personalkosten\b/, Gesamtkosten: /^Gesamtkosten\b/, Betriebsergebnis: /^Betriebsergebnis\b/ };
-  for (const [k, re] of Object.entries(felder)){
-    const z = zeilen.find(x => re.test(x.trim()));
-    const w = z && /(-?[\d.]+,\d{2})/.exec(z);
+  const text = zeilen.join(' ');
+  const erg = { monat: monatAus(text) };
+  const felder = { Umsatzerloese: 'Umsatzerlöse', Personalkosten: 'Personalkosten', Gesamtkosten: 'Gesamtkosten', Betriebsergebnis: 'Betriebsergebnis' };
+  for (const [k, label] of Object.entries(felder)){
+    // 1) Saubere Zeile "Label <Monatswert> …"
+    const zeile = zeilen.find(x => new RegExp('^' + label + '\\b').test(x.trim()));
+    let w = zeile && /(-?[\d.]+,\d{2})/.exec(zeile);
+    // 2) Fallback für zusammengeklebte Zeilen (ältere BWA-Form): erster
+    //    Betrag direkt hinter dem Label im Gesamttext = Monatsspalte
+    if (!w) w = new RegExp('(?:^|\\s)' + label + '\\s+(-?[\\d.]+,\\d{2})').exec(text);
     if (w) erg[k] = deNum(w[1]);
   }
   return erg;
