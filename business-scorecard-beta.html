@@ -178,7 +178,8 @@ const APP_VERSION = 'BETA-7ff66ba'; // auto-updated on deploy
  *  – Netto-Akquise: Ziel +2 Fälle/Team/Quartal (LuV TL §5)
  * ═══════════════════════════════════════════════════════════ */
 const ZIEL = { auslastung: 7.5, fls: 64, krankWarn: 5, krankRot: 8, overdueWarn: 10, overdueRot: 25, akquise: 2,
-               pkWarn: 60, pkRot: 70 }; // PK-Quote (Personal ÷ Umsatz): kalibriert auf Ist H1/2026 ≈ 50 % — VORSCHLAG
+               pkWarn: 60, pkRot: 70,  // PK-Quote (Personal ÷ Umsatz): kalibriert auf Ist H1/2026 ≈ 50 % — VORSCHLAG
+               margeGruen: 25, margeGelb: 15 }; // Betriebsergebnis-Marge: Ist H1/2026 ≈ 36 % (Mai-Tief 16,8 %) — VORSCHLAG
 const SP_HOST = 'praxisneuewegesonjapeltz978.sharepoint.com';
 const BWA_LISTE = 'PNW-BWA';
 let bwaDaten = {};        // Monat (JJJJ-MM) → { spId, Umsatzerloese, Personalkosten, Gesamtkosten, Betriebsergebnis, Kommentar }
@@ -366,6 +367,7 @@ function renderAll(){
     </tbody></table>
   </div>
   ${bwaCard(f, monat)}
+  ${margenCard(monat)}
   ${zahlungsCard(f)}` : ''}
 
   <div class="section-label">Auslastung &amp; FLS</div>
@@ -445,6 +447,34 @@ function maTabelle(team){
       <td class="num">${m.vzae!=null?m.vzae.toFixed(2):'—'}</td><td class="num">${m.faelle}</td>
       <td class="num">${fmtQ(m.flsQuote)}${m.flsVerdacht?warnMark:''}</td><td class="num">${m.krankTageMonat!=null?m.krankTageMonat:'—'}</td></tr>`).join('')}
   </tbody></table>`;
+}
+
+/* ═══ MARGEN (aus den erfassten BWA-Monaten) ═══ */
+function margenCard(monat){
+  const monate = Object.keys(bwaDaten).sort();
+  const kopf = `<h3>Margen</h3><div class="sub">Betriebsergebnis ÷ Umsatzerlöse (BWA, vorläufige Buchführung)</div>`;
+  if (!monate.length) return `<div class="card c-fin">${kopf}<div class="legend">Noch keine BWA-Monate erfasst — die Margen erscheinen automatisch nach dem KER-PDF-Import.</div></div>`;
+  const marge = m => { const b = bwaDaten[m]; return b && b.Umsatzerloese ? b.Betriebsergebnis / b.Umsatzerloese * 100 : null; };
+  const akt = marge(monat);
+  const sumU = monate.reduce((s, m) => s + (bwaDaten[m].Umsatzerloese || 0), 0);
+  const sumE = monate.reduce((s, m) => s + (bwaDaten[m].Betriebsergebnis || 0), 0);
+  const kum = sumU ? sumE / sumU * 100 : null;
+  const aAkt = ampel(akt, ZIEL.margeGruen, ZIEL.margeGelb);
+  const letzte = monate.slice(-6);
+  const verlauf = letzte.map(marge).filter(v => v != null);
+  return `
+  <div class="card c-fin">
+    ${kopf}
+    <div class="kpi-row"><span class="kpi-big">${akt != null ? pct(akt) : '—'}</span>
+      <span class="kpi-unit">im ${monatLabel(monat)}</span>
+      ${kum != null ? `<span class="tag ${ampel(kum, ZIEL.margeGruen, ZIEL.margeGelb)}">${pct(kum)} kumuliert (${monatLabel(monate[0])}–${monatLabel(monate[monate.length-1])})</span>` : ''}</div>
+    ${verlauf.length >= 2 ? spark(verlauf, 'var(--blue)') : ''}
+    <table class="mini-table"><thead><tr><th>Monat</th><th class="num">Umsatz</th><th class="num">Ergebnis</th><th class="num">Marge</th></tr></thead><tbody>
+      ${letzte.map(m => { const b = bwaDaten[m], mg = marge(m);
+        return `<tr><td>${monatLabel(m)}</td><td class="num">${eur(b.Umsatzerloese || 0)}</td><td class="num">${eur(b.Betriebsergebnis || 0)}</td><td class="num"><span class="dot ${ampel(mg, ZIEL.margeGruen, ZIEL.margeGelb)}"></span>${mg != null ? pct(mg) : '—'}</td></tr>`; }).join('')}
+    </tbody></table>
+    <div class="legend">Schwellen (Vorschlag, Ist H1 ≈ 36 %): grün ≥ ${ZIEL.margeGruen} % · gelb ${ZIEL.margeGelb}–${ZIEL.margeGruen} % · rot &lt; ${ZIEL.margeGelb} %. Achtung: aktuell ohne Unternehmerlohn (Einzelunternehmen, Entnahmen in Kl. 2) — nach der GmbH-Umwandlung mindern die GF-Gehälter die Marge strukturell.</div>
+  </div>`;
 }
 
 /* ═══ ZAHLUNGSABGLEICH (Bank-CSV vs. offene Kilanka-Rechnungen) ═══
