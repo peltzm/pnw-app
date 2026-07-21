@@ -718,7 +718,8 @@ function bwaCard(f, monat){
   const diff = b && b.Umsatzerloese != null ? b.Umsatzerloese - f.umsatzMonat : null;
   const monate = Object.keys(bwaDaten).sort().slice(-6);
   const statusZeile = bwaStatus && bwaStatus !== 'ok'
-    ? `<div class="legend" style="color:var(--warn)">${bwaStatus}</div>` : '';
+    ? `<div class="legend" style="color:var(--warn)">${bwaStatus}${/nicht gefunden/.test(bwaStatus)
+        ? ' <button class="btn btn-ghost" onclick="erstelleBwaListe()">Liste PNW-BWA jetzt anlegen</button>' : ''}</div>` : '';
   return `
   <div class="card c-fin wide">
     <h3>BWA (DATEV) — Kostenseite</h3>
@@ -747,7 +748,7 @@ function bwaCard(f, monat){
         <button class="btn btn-outline" onclick="speichereBwa()" ${demoMode?'disabled title="Nur im Live-Modus"':''}>Speichern</button>
         <span class="legend" id="bwaMeldung"></span>
       </div>
-      <div class="legend">CSV-Import sucht die Zeilen Umsatzerlöse / Personalkosten / Gesamtkosten / Betriebsergebnis und übernimmt den letzten Zahlenwert der Zeile — bitte vor dem Speichern prüfen.</div>
+      <div class="legend">PDF-Import: KER füllt Monat + Kennzahlen, SuSa ergänzt Liquidität und DATEV-Forderungen — Werte vor dem Speichern kurz prüfen. CSV geht als Fallback (Zeilensuche nach den Kennzahlen-Labels).</div>
     </details>
   </div>`;
 }
@@ -903,6 +904,40 @@ async function bwaListe(){
   if (!listen.value || !listen.value.length) throw new Error(`Liste "${BWA_LISTE}" nicht gefunden — bitte im SharePoint anlegen (s. Hinweiskarte).`);
   bwaListePfad = `/sites/${site.id}/lists/${listen.value[0].id}`;
   return bwaListePfad;
+}
+// Legt die Liste PNW-BWA samt Zahl-Spalten selbst an. Braucht Sites.Manage.All —
+// wird per Popup einmalig zusätzlich angefragt (inkrementelle Zustimmung),
+// der normale Betrieb bleibt bei Sites.ReadWrite.All.
+async function erstelleBwaListe(){
+  const meld = document.getElementById('bwaMeldung');
+  try {
+    meld.textContent = 'Lege Liste an — bitte Popup bestätigen …';
+    const t = await msalInstance.acquireTokenPopup({ scopes: ['Sites.Manage.All'], account: currentAccount });
+    const site = await fetch('https://graph.microsoft.com/v1.0/sites/' + SP_HOST + ':/', {
+      headers: { Authorization: 'Bearer ' + t.accessToken } }).then(r => r.json());
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${site.id}/lists`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + t.accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        displayName: BWA_LISTE,
+        list: { template: 'genericList' },
+        columns: [
+          { name: 'Umsatzerloese', number: {} },
+          { name: 'Personalkosten', number: {} },
+          { name: 'Gesamtkosten', number: {} },
+          { name: 'Betriebsergebnis', number: {} },
+          { name: 'Liquiditaet', number: {} },
+          { name: 'ForderungenDatev', number: {} },
+          { name: 'Kommentar', text: {} },
+        ],
+      }),
+    });
+    if (!r.ok){ const d = await r.json().catch(() => ({})); throw new Error(d.error?.message || 'HTTP ' + r.status); }
+    bwaListePfad = null; bwaStatus = null;
+    await ladeBwa();
+    meld.textContent = 'Liste angelegt — jetzt Speichern klicken.';
+    renderAll();
+  } catch(e){ meld.textContent = 'Liste anlegen fehlgeschlagen: ' + e.message; }
 }
 async function ladeBwa(){
   try {
