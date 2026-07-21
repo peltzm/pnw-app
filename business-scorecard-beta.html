@@ -867,30 +867,49 @@ function ladeSheetJs(){
   });
   return sheetJsGeladen;
 }
-// DATEV-BWA aus Excel: Label-Zelle finden, erste Zahl rechts davon = Monatswert
+// DATEV-BWA aus Excel: Label-Zelle finden, erste Zahl rechts davon = Monatswert.
+// Besonderheiten: Exporte teils in Tsd. EUR (Marker im Text ODER Plausibilitäts-
+// heuristik), Labels ggf. mit NBSP/Trennstrichen, Umsatz-Fallback = Gesamtleistung.
 async function bwaAusExcel(file){
   const XLSX = await ladeSheetJs();
   const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-  let best = { monat: null };
+  const zellNorm = c => String(c ?? '').toLowerCase().replace(/[\s\u00A0\u2011-]/g, '');
+  let best = { monat: null, _treffer: 0 };
   for (const name of wb.SheetNames){
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' });
     const text = rows.map(r => r.join(' ')).join(' ');
     const erg = { monat: monatAus(text) };
-    const labels = { Umsatzerloese: 'umsatzerlöse', Personalkosten: 'personalkosten', Gesamtkosten: 'gesamtkosten', Betriebsergebnis: 'betriebsergebnis' };
-    for (const [k, label] of Object.entries(labels)){
+    const sucheWert = (label) => {
       for (const r of rows){
-        const li = r.findIndex(c => typeof c === 'string' && c.trim().toLowerCase().startsWith(label));
+        const li = r.findIndex(c => typeof c === 'string' && zellNorm(c).startsWith(label));
         if (li < 0) continue;
         for (let ci = li + 1; ci < r.length; ci++){
           const v = typeof r[ci] === 'number' ? r[ci] : zahlAusFeld(r[ci]);
-          if (v != null){ erg[k] = Math.round(v * 100) / 100; break; }
+          if (v != null) return v;
         }
-        if (erg[k] != null) break;
       }
+      return null;
+    };
+    erg.Umsatzerloese = sucheWert('umsatzerlöse');
+    if (erg.Umsatzerloese == null){
+      const gl = sucheWert('gesamtleistung'); // bei PNW identisch (keine Bestandsveränderungen)
+      if (gl != null){ erg.Umsatzerloese = gl; erg._umsatzAusGL = true; }
     }
-    const treffer = ['Umsatzerloese','Personalkosten','Gesamtkosten','Betriebsergebnis'].filter(f => erg[f] != null).length;
-    const bisher = ['Umsatzerloese','Personalkosten','Gesamtkosten','Betriebsergebnis'].filter(f => best[f] != null).length;
-    if (treffer > bisher) best = erg; // bestes Blatt der Mappe gewinnt
+    erg.Personalkosten = sucheWert('personalkosten');
+    erg.Gesamtkosten = sucheWert('gesamtkosten');
+    erg.Betriebsergebnis = sucheWert('betriebsergebnis');
+    const kf = ['Umsatzerloese','Personalkosten','Gesamtkosten','Betriebsergebnis'];
+    // Tsd.-EUR-Erkennung: expliziter Marker oder alle Werte verdächtig klein
+    const werte = kf.map(f => erg[f]).filter(v => v != null);
+    const tsdMarker = /tsd\.?\s*(eur|€)|teur|in\s+tsd/i.test(text);
+    const tsdHeuristik = werte.length >= 3 && werte.every(v => Math.abs(v) < 2000);
+    if (tsdMarker || tsdHeuristik){
+      for (const f of kf) if (erg[f] != null) erg[f] = erg[f] * 1000;
+      erg._tsd = tsdMarker ? 'Marker' : 'Heuristik';
+    }
+    for (const f of kf) if (erg[f] != null) erg[f] = Math.round(erg[f] * 100) / 100;
+    erg._treffer = kf.filter(f => erg[f] != null).length;
+    if (erg._treffer > best._treffer) best = erg;
   }
   return best;
 }
@@ -907,8 +926,11 @@ async function bwaDateiGewaehlt(ev){
       for (const f of ['Umsatzerloese','Personalkosten','Gesamtkosten','Betriebsergebnis']){
         if (k[f] != null){ document.getElementById({Umsatzerloese:'bwaU',Personalkosten:'bwaP',Gesamtkosten:'bwaG',Betriebsergebnis:'bwaE'}[f]).value = k[f]; n++; }
       }
+      const zusatz = [];
+      if (k._tsd) zusatz.push(`Werte als Tsd. EUR erkannt (${k._tsd}) und ×1000 umgerechnet`);
+      if (k._umsatzAusGL) zusatz.push('Umsatz aus Gesamtleistung übernommen');
       meld.textContent = n
-        ? `Excel ${k.monat || ''}: ${n} von 4 Kennzahlen übernommen — bitte prüfen, dann Speichern.`
+        ? `Excel ${k.monat || ''}: ${n} von 4 Kennzahlen übernommen${zusatz.length ? ' — ' + zusatz.join('; ') : ''} — bitte prüfen, dann Speichern.`
         : 'Excel gelesen, aber keine Kennzahlen-Labels gefunden — bitte die ersten Zeilen der Datei an Markus/Claude.';
     } catch(e){ meld.textContent = 'Excel-Fehler: ' + e.message; }
     return;
