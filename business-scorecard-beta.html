@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Business Scorecard (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.version-badge{font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;min-height:28px;border-radius:4px}
+.btn-ghost:hover{border-color:var(--accent-mid);color:var(--accent)}
+.btn-text{background:none;border:none;color:var(--text-muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-top:12px}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* ── APP ── */
+#appScreen{display:none;flex-direction:column;min-height:calc(100dvh - var(--hdr-h))}
+.demo-bar{display:none;align-items:center;gap:8px;background:var(--warn-bg);border-bottom:1px solid #f3dcb8;color:var(--warn);font-size:12px;padding:7px 20px;flex-wrap:wrap}
+.demo-bar strong{font-weight:700}
+.viewbar{padding:10px 20px;display:flex;align-items:center;gap:10px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.viewbar label{font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.pill-group{display:flex;gap:6px;flex-wrap:wrap}
+.pill{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:4px 13px;font-size:12px;font-family:inherit;cursor:pointer;color:var(--text-muted);transition:all .12s}
+.pill:hover{border-color:var(--accent-mid);color:var(--accent)}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.select{height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);outline:none;max-width:240px}
+.select:focus{border-color:var(--accent-mid)}
+
+/* ── GRID & CARDS ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;padding:18px 20px 60px;max-width:1240px;margin:0 auto;width:100%}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;left:0;top:0;right:0;height:4px;background:var(--border-strong)}
+.card.c-score::before{background:var(--accent)}
+.card.c-fin::before{background:var(--blue)}
+.card.c-ausl::before{background:var(--ok)}
+.card.c-pers::before{background:var(--warn)}
+.card.c-fall::before{background:var(--accent-mid)}
+.card.wide{grid-column:1 / -1}
+.card h3{font-size:13px;font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:8px}
+.card .sub{font-size:11px;color:var(--text-hint);margin-bottom:12px}
+
+/* Bereichs-Score-Kopf */
+.score-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px}
+.score-tile{border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .12s}
+.score-tile:hover{border-color:var(--accent-mid)}
+.score-ring{width:52px;height:52px;flex-shrink:0}
+.score-ring text{font-family:'Kodchasan',sans-serif;font-size:13px;font-weight:700}
+.score-meta .t{font-size:12px;font-weight:600}
+.score-meta .d{font-size:11px;color:var(--text-muted);line-height:1.4}
+
+/* Kennzahlen */
+.kpi-row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.kpi-big{font-size:26px;font-weight:700;letter-spacing:-.5px}
+.kpi-unit{font-size:13px;color:var(--text-muted);font-weight:500}
+.delta{font-size:11px;font-weight:600;border-radius:4px;padding:1px 7px}
+.delta.up{color:var(--ok);background:var(--ok-bg)}
+.delta.down{color:var(--error);background:var(--error-bg)}
+.delta.flat{color:var(--text-muted);background:var(--bg)}
+.mini-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+.mini-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-hint);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--border)}
+.mini-table td{padding:5px 6px;border-bottom:1px solid var(--border)}
+.mini-table tr:last-child td{border-bottom:none}
+.mini-table td.num,.mini-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+.mini-table tr.sum td{font-weight:700;border-top:2px solid var(--border-strong)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--error)} .dot.na{background:var(--border-strong)}
+.tag{font-size:10px;font-weight:600;border-radius:4px;padding:1px 7px}
+.tag.ok{color:var(--ok);background:var(--ok-bg)} .tag.warn{color:var(--warn);background:var(--warn-bg)} .tag.err{color:var(--error);background:var(--error-bg)}
+.spark{display:block;margin-top:8px;width:100%;height:44px}
+.legend{font-size:11px;color:var(--text-hint);margin-top:10px;line-height:1.6}
+.hint-card{grid-column:1 / -1;background:var(--blue-bg);border:1px solid #cfe0f4;border-radius:var(--radius-lg);padding:14px 18px;font-size:12px;color:var(--text-muted);line-height:1.7}
+.hint-card strong{color:var(--text)}
+.skel{color:var(--text-hint);font-size:12px;padding:20px 0;text-align:center}
+.section-label{grid-column:1 / -1;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-hint);margin-top:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+@media (max-width:520px){.grid{padding:14px 12px 50px}.kpi-big{font-size:22px}}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand" onclick="location.href='app-central.html'">
+    <img src="assets/logo.png" alt="Praxis NeueWege" onerror="this.style.display='none'">
+    <span>Business Scorecard</span>
+    <span class="beta-badge">BETA</span>
+    <span class="version-badge" id="versionBadge"></span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge"><span class="user-dot"></span><span id="userName"></span></div>
+    <button class="btn btn-ghost" id="logoutBtn" style="display:none" onclick="doLogout()">Abmelden</button>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-title">Business Scorecard</div>
+    <div class="login-desc">Kennzahlen zu Finanzen, Auslastung, Personal und Fallentwicklung — für Geschäftsführung und Teamleitungen.</div>
+    <button class="btn btn-outline" onclick="doLogin()" style="width:100%">Mit Microsoft anmelden</button>
+    <button class="btn-text" onclick="startDemo()">Demo-Modus ohne Anmeldung öffnen</button>
+    <div class="alert alert-error" id="loginError" style="display:none"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="demo-bar" id="demoBar">
+    <strong>Demo-Modus</strong><span>— fiktive Zahlen. Struktur entspricht 1:1 dem geplanten Worker-Response von <code>GET /api/scorecard</code>.</span>
+  </div>
+  <div class="viewbar">
+    <label>Sicht</label>
+    <div class="pill-group" id="rolePills"></div>
+    <label for="teamSelect">Team</label>
+    <select class="select" id="teamSelect" onchange="renderAll()"></select>
+    <label for="monatSelect">Monat</label>
+    <select class="select" id="monatSelect" onchange="onMonatChange()"></select>
+  </div>
+  <div class="grid" id="grid"><div class="skel">Lade Kennzahlen …</div></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zur Organisation-App / Cockpit
+ * Hinweis: redirectUri dieser Seite muss in Entra ID
+ * (App-Registrierung → Authentifizierung) nachgetragen werden!
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/business-scorecard-beta.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read', 'User.ReadBasic.All']; // Graph-Token für Team-Hierarchie (X-Graph-Token)
+const APP_VERSION = 'BETA-dev'; // auto-updated on deploy
+
+/* ═══════════════════════════════════════════════════════════
+ * KENNZAHLEN-DEFINITION & AMPELN (s. docs/scorecard-kennzahlen.md)
+ *  – Auslastung: Fälle/VZÄ, Ziel 7,5 (LuV TL §5) · gelb < 6,8 · rot < 6,0
+ *  – FLS-Quote Ø: Ziel ≥ 64 % · gelb < 58 % · rot < 50 % (Cockpit-Logik)
+ *  – Krankheitsquote: AU-Tage ÷ verfügbare Arbeitstage ·
+ *    VORSCHLAG: grün < 5 % · gelb 5–8 % · rot > 8 % (Sozialwirtschafts-üblich)
+ *  – Forderungen: Anteil überfällig · grün < 10 % · gelb 10–25 % · rot > 25 %
+ *  – Netto-Akquise: Ziel +2 Fälle/Team/Quartal (LuV TL §5)
+ * ═══════════════════════════════════════════════════════════ */
+const ZIEL = { auslastung: 7.5, fls: 64, krankWarn: 5, krankRot: 8, overdueWarn: 10, overdueRot: 25, akquise: 2 };
+
+/* ═══════════════════════════════════════════════════════════
+ * WORKER-KONTRAKT (Zielbild) — GET /api/scorecard?monat=YYYY-MM
+ * Berechtigung serverseitig: Entra-Gruppen → GF = alles,
+ * TL = nur eigenes Team (Worker filtert, Frontend zeigt nur an).
+ * Response-Struktur = DEMO-Konstante unten. Quellen je Block:
+ *  finanzen   ← /accounting/invoices (date/deliveryFrom, totalWithTax,
+ *               paid, balance, isOverdue, dunningLevel, client, orgUnit)
+ *  auslastung ← /clients (actions.attendants HB, department) +
+ *               /users (targetHours → VZÄ) + Cockpit-flsAuswertung
+ *  personal   ← /users/absences (AU-Tage, Typen) + berechneArbeitstage
+ *  faelle     ← /clients Stichtagsvergleich Quartalsanfang/-ende
+ *               (perspektivisch $cursor/$filter statt Vollabzug)
+ * ═══════════════════════════════════════════════════════════ */
+
+let msalInstance, currentAccount, accessToken;
+let demoMode = false;
+let viewerRole = 'gf';      // tl | gf
+let scData = null;          // Daten des aktuell gewählten Monats
+let monatCache = {};        // Live-Modus: geladene Monate
+
+/* ── DEMO-DATEN — fiktive Teams, realistische Struktur ── */
+const DEMO_MONATE = ['2026-02','2026-03','2026-04','2026-05','2026-06','2026-07'];
+const DEMO = {
+  '2026-07': {
+    monat: '2026-07', stand: '2026-07-20',
+    finanzen: {
+      umsatzMonat: 248900, umsatzVormonat: 236400,
+      umsatzVerlauf: [221000, 228500, 231200, 239800, 236400, 248900],
+      forderungen: { offenGesamt: 412600, ueberfaellig: 61300, mahnstufe1: 3, mahnstufe2plus: 1 },
+      topSchuldner: [
+        { amt: 'JA Beispielstadt', offen: 98400, ueberfaellig: 31200, aeltesteTage: 74 },
+        { amt: 'JA Musterkreis',   offen: 64100, ueberfaellig: 18900, aeltesteTage: 51 },
+        { amt: 'JA Probehausen',   offen: 47800, ueberfaellig: 11200, aeltesteTage: 38 }
+      ],
+      umsatzNachAmt: [
+        { amt: 'JA Beispielstadt', betrag: 71200 }, { amt: 'JA Musterkreis', betrag: 58400 },
+        { amt: 'JA Probehausen', betrag: 44300 }, { amt: 'Weitere (7 Ämter)', betrag: 75000 }
+      ]
+    },
+    teams: [
+      { name: 'Team Beispiel-Nord', tl: 'Muster, Jonas', vzae: 6.2, faelle: 49, flsQuote: 66.1, flsVormonat: 63.4,
+        krankQuoteMonat: 3.8, krankQuoteYtd: 4.6, akquiseQuartal: { zugaenge: 5, abgaenge: 2 },
+        mitarbeiter: [
+          { name: 'Beispiel, Mia', vzae: 0.82, faelle: 7, flsQuote: 68.2, krankTageMonat: 0 },
+          { name: 'Muster, Jonas', vzae: 1.0, faelle: 8, flsQuote: 64.9, krankTageMonat: 1 },
+          { name: 'Probe, Sara',  vzae: 0.51, faelle: 4, flsQuote: 61.0, krankTageMonat: 2 }
+        ] },
+      { name: 'Team Beispiel-Süd', tl: 'Beispiel, Lena', vzae: 7.8, faelle: 51, flsQuote: 60.8, flsVormonat: 61.9,
+        krankQuoteMonat: 6.4, krankQuoteYtd: 5.9, akquiseQuartal: { zugaenge: 3, abgaenge: 3 },
+        mitarbeiter: [
+          { name: 'Beispiel, Lena', vzae: 1.0, faelle: 7, flsQuote: 63.1, krankTageMonat: 0 },
+          { name: 'Test, Amir',     vzae: 0.9, faelle: 6, flsQuote: 57.4, krankTageMonat: 3 }
+        ] },
+      { name: 'Team Beispiel-West', tl: 'Probe, Nadja', vzae: 5.4, faelle: 36, flsQuote: 63.2, flsVormonat: 60.5,
+        krankQuoteMonat: 9.1, krankQuoteYtd: 7.2, akquiseQuartal: { zugaenge: 1, abgaenge: 3 },
+        mitarbeiter: [
+          { name: 'Probe, Nadja', vzae: 1.0, faelle: 7, flsQuote: 65.0, krankTageMonat: 0 },
+          { name: 'Demo, Kilian', vzae: 0.77, faelle: 5, flsQuote: 59.8, krankTageMonat: 6 }
+        ] }
+    ],
+    fallbestandVerlauf: [128, 131, 133, 134, 135, 136],
+    hinweise: ['FLS-Ist weiterhin aus Rechnungen des Vormonats (Leistungsdoku-Graph noch nicht freigegeben).']
+  }
+};
+// übrige Demo-Monate: leicht variierte Kopie
+DEMO_MONATE.slice(0,5).forEach((m,i) => {
+  const d = JSON.parse(JSON.stringify(DEMO['2026-07']));
+  d.monat = m; d.stand = m + '-28';
+  d.finanzen.umsatzMonat = d.finanzen.umsatzVerlauf[i];
+  d.finanzen.umsatzVormonat = i>0 ? d.finanzen.umsatzVerlauf[i-1] : 214000;
+  d.finanzen.umsatzVerlauf = d.finanzen.umsatzVerlauf.slice(0, i+1);
+  d.fallbestandVerlauf = d.fallbestandVerlauf.slice(0, i+1);
+  d.teams.forEach(t => { t.flsQuote = +(t.flsQuote - (5-i)*0.6).toFixed(1); });
+  DEMO[m] = d;
+});
+
+/* ═══ HELPERS ═══ */
+const eur = v => v.toLocaleString('de-DE', { style:'currency', currency:'EUR', maximumFractionDigits:0 });
+const pct = v => v.toLocaleString('de-DE', { maximumFractionDigits:1 }) + ' %';
+const monatLabel = m => { const [y,mo]=m.split('-'); return ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][+mo-1]+' '+y; };
+function ampel(wert, gruenAb, gelbAb, invers=false){ // invers: kleiner = besser
+  if (wert == null) return 'na';
+  if (!invers) return wert >= gruenAb ? 'ok' : (wert >= gelbAb ? 'warn' : 'err');
+  return wert < gruenAb ? 'ok' : (wert < gelbAb ? 'warn' : 'err');
+}
+const ampelPunkte = a => a==='ok'?100 : a==='warn'?60 : a==='err'?20 : null;
+function spark(vals, color){
+  if (!vals || vals.length < 2) return '';
+  const w=260, h=44, min=Math.min(...vals), max=Math.max(...vals), span=(max-min)||1;
+  const pts = vals.map((v,i)=>[(i/(vals.length-1))*(w-8)+4, h-6-((v-min)/span)*(h-14)]);
+  const line = pts.map(p=>p.map(n=>n.toFixed(1)).join(',')).join(' ');
+  const last = pts[pts.length-1];
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}"/></svg>`;
+}
+function ring(punkte, farbeVar){
+  const r=22, c=2*Math.PI*r, off = punkte==null ? c : c*(1-punkte/100);
+  return `<svg class="score-ring" viewBox="0 0 52 52" role="img" aria-label="Score ${punkte??'—'} von 100">
+    <circle cx="26" cy="26" r="${r}" fill="none" stroke="var(--border)" stroke-width="5"/>
+    <circle cx="26" cy="26" r="${r}" fill="none" stroke="var(${farbeVar})" stroke-width="5"
+      stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" stroke-linecap="round"
+      transform="rotate(-90 26 26)"/>
+    <text x="26" y="31" text-anchor="middle" fill="var(--text)">${punkte==null?'—':punkte}</text></svg>`;
+}
+
+/* ═══ SICHT / FILTER ═══ */
+function sichtbareTeams(){
+  const sel = document.getElementById('teamSelect').value;
+  if (viewerRole === 'tl') return scData.teams; // Worker liefert nur das eigene Team
+  return sel === '*' ? scData.teams : scData.teams.filter(t => t.name === sel);
+}
+const zeile1 = s => String(s || '').split('\n')[0];
+const fmtQ = v => v == null ? '—' : pct(v);
+const warnMark = ' <span title="FLS-Soll vermutlich unvollständig (Kontingent ohne Bewertung/timeBase)" style="cursor:help">⚠</span>';
+
+/* ═══ RENDER ═══ */
+function renderAll(){
+  if (!scData) return;
+  const teams = sichtbareTeams();
+  const monat = scData.monat || document.getElementById('monatSelect').value;
+  const gesamtSicht = viewerRole === 'gf' && document.getElementById('teamSelect').value === '*';
+
+  const sumFaelle = teams.reduce((s,t)=>s+t.faelle,0);
+  const sumVzae = teams.reduce((s,t)=>s+(t.vzae||0),0);
+  const auslast = sumVzae ? sumFaelle/sumVzae : null;
+  const flsTeams = teams.filter(t=>t.flsQuote!=null && t.vzae);
+  const flsVz = flsTeams.reduce((s,t)=>s+t.vzae,0);
+  const flsAvg = flsVz ? flsTeams.reduce((s,t)=>s+t.flsQuote*t.vzae,0)/flsVz : null;
+  const krTeams = teams.filter(t=>t.krankQuoteMonat!=null && t.vzae);
+  const krVz = krTeams.reduce((s,t)=>s+t.vzae,0);
+  const krankAvg = krVz ? krTeams.reduce((s,t)=>s+t.krankQuoteMonat*t.vzae,0)/krVz : null;
+  const nettoAkq = teams.reduce((s,t)=>s+t.akquiseQuartal.zugaenge-t.akquiseQuartal.abgaenge,0);
+  const f = scData.finanzen; // TL-Sicht: null
+  const overduePct = f && f.forderungen.offenGesamt ? f.forderungen.ueberfaellig/f.forderungen.offenGesamt*100 : null;
+
+  const aFin = f ? ampel(overduePct, ZIEL.overdueWarn, ZIEL.overdueRot, true) : 'na';
+  const aAusl = ampel(auslast, ZIEL.auslastung, ZIEL.auslastung*0.9);
+  const aFls = ampel(flsAvg, ZIEL.fls, 58);
+  const aKrank = ampel(krankAvg, ZIEL.krankWarn, ZIEL.krankRot, true);
+  const aAkq = ampel(nettoAkq, ZIEL.akquise*teams.length, 0);
+  const aAuslFls = (aAusl==='err'||aFls==='err') ? 'err' : (aAusl==='warn'||aFls==='warn') ? 'warn' : (aAusl==='na'&&aFls==='na') ? 'na' : 'ok';
+
+  const g = document.getElementById('grid');
+  g.innerHTML = `
+  <div class="card c-score wide">
+    <h3>Gesamtbild ${gesamtSicht ? '— alle Teams' : '— ' + teams.map(t=>t.name).join(', ')}</h3>
+    <div class="sub">Monat ${monatLabel(monat)} · Stichtag ${scData.stichtag ? new Date(scData.stichtag).toLocaleDateString('de-DE') : new Date(scData.stand).toLocaleDateString('de-DE')}</div>
+    <div class="score-strip">
+      ${f ? scoreTile('Finanzen', ring(ampelPunkte(aFin),'--blue'), `${eur(f.umsatzMonat)} Umsatz · ${overduePct!=null?pct(overduePct):'—'} der Forderungen überfällig`) : ''}
+      ${scoreTile('Auslastung & FLS', ring(ampelPunkte(aAuslFls),'--ok'), `${auslast!=null?auslast.toFixed(1):'—'} Fälle/VZÄ (Ziel ${ZIEL.auslastung}) · FLS Ø ${fmtQ(flsAvg)}`)}
+      ${scoreTile('Personal', ring(ampelPunkte(aKrank),'--warn'), `Krankheitsquote ${fmtQ(krankAvg)} · ${sumVzae.toFixed(1)} VZÄ`)}
+      ${scoreTile('Fallentwicklung', ring(ampelPunkte(aAkq),'--accent-mid'), `${nettoAkq>=0?'+':''}${nettoAkq} Fälle netto seit ${scData.akquiseSeit ? new Date(scData.akquiseSeit).toLocaleDateString('de-DE') : 'Quartalsanfang'} · Bestand ${sumFaelle}`)}
+    </div>
+  </div>
+
+  ${f ? `
+  <div class="section-label">Finanzen</div>
+  <div class="card c-fin">
+    <h3>Umsatz</h3><div class="sub">${f.basis || 'Rechnungen des Monats'}</div>
+    <div class="kpi-row"><span class="kpi-big">${eur(f.umsatzMonat)}</span>${delta(f.umsatzMonat, f.umsatzVormonat)}</div>
+    ${spark(f.umsatzVerlauf, 'var(--blue)')}
+    ${f.umsatzMonate ? `<div class="legend">${f.umsatzMonate.map(monatLabel).join(' · ')}</div>` : ''}
+    <table class="mini-table"><tbody>
+      ${(f.umsatzNachAmt||[]).map(a=>`<tr><td>${zeile1(a.amt)}</td><td class="num">${eur(a.betrag)}</td></tr>`).join('')}
+    </tbody></table>
+  </div>
+  <div class="card c-fin">
+    <h3>Offene Forderungen</h3><div class="sub">Restsalden offener Rechnungen, Mahnwesen</div>
+    <div class="kpi-row"><span class="kpi-big">${eur(f.forderungen.offenGesamt)}</span>
+      <span class="tag ${aFin}">${eur(f.forderungen.ueberfaellig)} überfällig${overduePct!=null?' ('+pct(overduePct)+')':''}</span></div>
+    <div class="legend">Mahnstufe 1: ${f.forderungen.mahnstufe1} Rechnungen · Mahnstufe ≥ 2: ${f.forderungen.mahnstufe2plus}${(f.forderungen.mahnstufe1+f.forderungen.mahnstufe2plus)===0 && f.forderungen.ueberfaellig>0 ? ' — überfällige Posten ohne Mahnlauf!' : ''}</div>
+    <table class="mini-table"><thead><tr><th>Empfänger</th><th class="num">offen</th><th class="num">überfällig</th><th class="num">älteste</th></tr></thead><tbody>
+      ${(f.topSchuldner||[]).map(s=>`<tr><td>${zeile1(s.amt)}</td><td class="num">${eur(s.offen)}</td><td class="num">${eur(s.ueberfaellig)}</td><td class="num">${s.aeltesteTage} T.</td></tr>`).join('')}
+    </tbody></table>
+  </div>` : ''}
+
+  <div class="section-label">Auslastung &amp; FLS</div>
+  <div class="card c-ausl wide">
+    <h3>Team-Auslastung &amp; FLS-Quote</h3>
+    <div class="sub">Fälle (nur Hauptbetreuung) je VZÄ · FLS-Quote = Σ Ist ÷ Σ Soll korr. (Feiertage/Abwesenheiten)</div>
+    <table class="mini-table"><thead><tr><th>Team</th><th class="num">Fälle</th><th class="num">VZÄ</th><th class="num">Fälle/VZÄ</th><th class="num">FLS Ø</th><th class="num">Δ Vormonat</th></tr></thead><tbody>
+      ${teams.map(t=>{
+        const av = t.vzae ? t.faelle/t.vzae : null;
+        const aa = ampel(av, ZIEL.auslastung, ZIEL.auslastung*0.9);
+        const af = ampel(t.flsQuote, ZIEL.fls, 58);
+        const dfl = (t.flsQuote!=null && t.flsVormonat!=null) ? (t.flsQuote-t.flsVormonat).toFixed(1)+' pp' : '—';
+        return `<tr><td><span class="dot ${aa}"></span>${t.name}${t.tl?` <span style="color:var(--text-hint)">(${t.tl})</span>`:''}</td>
+          <td class="num">${t.faelle}</td><td class="num">${t.vzae!=null?t.vzae.toFixed(1):'—'}</td>
+          <td class="num">${av!=null?av.toFixed(1):'—'}</td>
+          <td class="num"><span class="dot ${af}"></span>${fmtQ(t.flsQuote)}${t.flsVerdachtAnzahl?warnMark:''}</td>
+          <td class="num">${dfl}</td></tr>`;
+      }).join('')}
+      <tr class="sum"><td>Σ ${gesamtSicht?'Gesamt':''}</td><td class="num">${sumFaelle}</td><td class="num">${sumVzae.toFixed(1)}</td>
+        <td class="num">${auslast!=null?auslast.toFixed(1):'—'}</td><td class="num">${fmtQ(flsAvg)}</td><td class="num">—</td></tr>
+    </tbody></table>
+    ${teams.length===1 ? maTabelle(teams[0]) : ''}
+    <div class="legend">Ziel Auslastung ≥ ${ZIEL.auslastung} Fälle/VZÄ (LuV TL §5) · FLS-Soll ≥ ${ZIEL.fls} % (Entgeltkalkulation) · ⚠ = Soll vermutlich unvollständig</div>
+  </div>
+
+  <div class="section-label">Personal</div>
+  <div class="card c-pers">
+    <h3>Krankheitsquote</h3><div class="sub">Genehmigte AU-Arbeitstage ÷ verfügbare Arbeitstage (Mo–Fr, Feiertage BY)</div>
+    <div class="kpi-row"><span class="kpi-big">${fmtQ(krankAvg)}</span><span class="kpi-unit">im ${monatLabel(monat)}</span></div>
+    <table class="mini-table"><thead><tr><th>Team</th><th class="num">Monat</th><th class="num">YTD</th></tr></thead><tbody>
+      ${teams.map(t=>`<tr><td><span class="dot ${ampel(t.krankQuoteMonat, ZIEL.krankWarn, ZIEL.krankRot, true)}"></span>${t.name}</td>
+        <td class="num">${fmtQ(t.krankQuoteMonat)}</td><td class="num">${fmtQ(t.krankQuoteYtd)}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="legend">Schwellen (Vorschlag): grün &lt; ${ZIEL.krankWarn} % · gelb ${ZIEL.krankWarn}–${ZIEL.krankRot} % · rot &gt; ${ZIEL.krankRot} %</div>
+  </div>
+  <div class="card c-pers">
+    <h3>Personal-Kapazität</h3><div class="sub">VZÄ aus targetHours/Verträgen (÷ 39 h)</div>
+    <div class="kpi-row"><span class="kpi-big">${sumVzae.toFixed(1)}</span><span class="kpi-unit">VZÄ in ${teams.length} Team${teams.length>1?'s':''}</span></div>
+    <table class="mini-table"><tbody>
+      ${teams.map(t=>`<tr><td>${t.name}</td><td class="num">${t.vzae!=null?t.vzae.toFixed(1):'—'} VZÄ · ${(t.mitarbeiter||[]).length} Köpfe</td></tr>`).join('')}
+    </tbody></table>
+  </div>
+
+  <div class="section-label">Fallentwicklung</div>
+  <div class="card c-fall">
+    <h3>Fallbestand</h3><div class="sub">aktive HB-Fälle zum Stichtag (Archiv-Doppelfilter, 7-Tage-Karenz)</div>
+    <div class="kpi-row"><span class="kpi-big">${sumFaelle}</span><span class="kpi-unit">aktive Fälle</span></div>
+    ${gesamtSicht && scData.fallbestandVerlauf ? spark(scData.fallbestandVerlauf, 'var(--accent-mid)') + '<div class="legend">Monatsend-Stichtage, letzte 6 Monate</div>' : ''}
+  </div>
+  <div class="card c-fall">
+    <h3>Netto-Akquise (Quartal)</h3><div class="sub">Zugänge − Abgänge seit ${scData.akquiseSeit ? new Date(scData.akquiseSeit).toLocaleDateString('de-DE') : 'Quartalsanfang'} · Ziel +${ZIEL.akquise} je Team</div>
+    <table class="mini-table"><thead><tr><th>Team</th><th class="num">Zu</th><th class="num">Ab</th><th class="num">Netto</th></tr></thead><tbody>
+      ${teams.map(t=>{ const n=t.akquiseQuartal.zugaenge-t.akquiseQuartal.abgaenge;
+        return `<tr><td><span class="dot ${ampel(n, ZIEL.akquise, 0)}"></span>${t.name}</td>
+        <td class="num">+${t.akquiseQuartal.zugaenge}</td><td class="num">−${t.akquiseQuartal.abgaenge}</td>
+        <td class="num" style="font-weight:700">${n>=0?'+':''}${n}</td></tr>`; }).join('')}
+    </tbody></table>
+    <div class="legend">Zuordnung über den Hauptbetreuer des Falls (Entra-Team); Bestandsdifferenz-Logik wie Manager-Cockpit.</div>
+  </div>
+
+  <div class="hint-card">
+    <strong>Hinweise:</strong> ${(scData.hinweise||[]).join(' ')} Berechtigung serverseitig im Worker: TL sieht nur das eigene Team, GF alles; Finanzblock nur GF.
+  </div>`;
+}
+function scoreTile(t, ringHtml, desc){
+  return `<div class="score-tile">${ringHtml}<div class="score-meta"><div class="t">${t}</div><div class="d">${desc}</div></div></div>`;
+}
+function delta(cur, prev){
+  if (prev == null || prev === 0) return '';
+  const d = (cur-prev)/prev*100, cls = d > 0.5 ? 'up' : (d < -0.5 ? 'down' : 'flat');
+  return `<span class="delta ${cls}">${d>=0?'+':''}${d.toLocaleString('de-DE',{maximumFractionDigits:1})} % vs. Vormonat</span>`;
+}
+function maTabelle(team){
+  return `<h3 style="margin-top:16px">Mitarbeitende — ${team.name}</h3>
+  <table class="mini-table"><thead><tr><th>Name</th><th class="num">VZÄ</th><th class="num">Fälle</th><th class="num">FLS</th><th class="num">AU-Tage Monat</th></tr></thead><tbody>
+    ${(team.mitarbeiter||[]).map(m=>`<tr><td><span class="dot ${ampel(m.flsQuote, ZIEL.fls, 58)}"></span>${m.name}</td>
+      <td class="num">${m.vzae!=null?m.vzae.toFixed(2):'—'}</td><td class="num">${m.faelle}</td>
+      <td class="num">${fmtQ(m.flsQuote)}${m.flsVerdacht?warnMark:''}</td><td class="num">${m.krankTageMonat!=null?m.krankTageMonat:'—'}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+/* ═══ SICHT-STEUERUNG ═══ */
+function monatOptionen(){
+  if (demoMode) return DEMO_MONATE.slice().reverse();
+  const heute = new Date(); const liste = [];
+  for (let i = 0; i < 6; i++) {
+    liste.push(new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - i, 1)).toISOString().slice(0, 7));
+  }
+  return liste;
+}
+function initViewbar(){
+  const wrap = document.getElementById('rolePills');
+  if (demoMode) {
+    const roles = [['tl','Teamleitung'],['gf','Geschäftsführung']];
+    wrap.style.display = '';
+    wrap.innerHTML = roles.map(([k,l]) =>
+      `<button class="pill ${k===viewerRole?'active':''}" data-r="${k}">${l}</button>`).join('');
+    wrap.querySelectorAll('.pill').forEach(p => p.onclick = () => {
+      viewerRole = p.dataset.r; initViewbar(); renderAll();
+    });
+  } else {
+    wrap.style.display = 'none'; // Rolle kommt serverseitig vom Worker
+  }
+  initTeamSelect();
+  const ms = document.getElementById('monatSelect');
+  const gewaehlt = ms.value;
+  ms.innerHTML = monatOptionen().map(m=>`<option value="${m}">${monatLabel(m)}</option>`).join('');
+  if ([...ms.options].some(o=>o.value===gewaehlt)) ms.value = gewaehlt;
+}
+function initTeamSelect(){
+  const ts = document.getElementById('teamSelect');
+  const teams = scData ? scData.teams : [];
+  if (viewerRole === 'tl') {
+    ts.innerHTML = teams.map(t=>`<option value="${t.name}">${t.name}</option>`).join('');
+    ts.disabled = true;
+  } else {
+    ts.disabled = false;
+    ts.innerHTML = `<option value="*">Alle Teams</option>` + teams.map(t=>`<option value="${t.name}">${t.name}</option>`).join('');
+  }
+}
+async function onMonatChange(){
+  const m = document.getElementById('monatSelect').value;
+  if (demoMode) { scData = DEMO[m] || DEMO['2026-07']; }
+  else {
+    document.getElementById('grid').innerHTML = '<div class="skel">Lade ' + monatLabel(m) + ' … (erster Abruf kann bis zu einer Minute dauern)</div>';
+    await ladeMonat(m);
+    initTeamSelect();
+  }
+  renderAll();
+}
+
+/* ═══ AUTH & DATEN ═══ */
+async function initMsal(){
+  document.getElementById('versionBadge').textContent = APP_VERSION;
+  msalInstance = new msal.PublicClientApplication({
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage' }
+  });
+  const resp = await msalInstance.handleRedirectPromise().catch(()=>null);
+  currentAccount = resp?.account || msalInstance.getAllAccounts()[0] || null;
+  if (currentAccount) startApp();
+}
+async function doLogin(){
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e){ showLoginError('Anmeldung fehlgeschlagen: ' + e.message); }
+}
+function doLogout(){ msalInstance?.logoutRedirect({ account: currentAccount }); }
+function showLoginError(msg){ const el = document.getElementById('loginError'); el.textContent = msg; el.style.display = 'block'; }
+
+// ID-Token (Worker-Auth) + Access-Token (Graph, X-Graph-Token) — mit
+// forceRefresh, wenn das gecachte ID-Token kurz vor Ablauf steht
+async function liveTokens(){
+  let r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+  const exp = r.idTokenClaims && r.idTokenClaims.exp;
+  if (exp && exp * 1000 - Date.now() < 60000) {
+    r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount, forceRefresh: true });
+  }
+  return { id: r.idToken, graph: r.accessToken };
+}
+
+function startDemo(){
+  demoMode = true; viewerRole = 'gf';
+  document.getElementById('demoBar').style.display = 'flex';
+  showApp('Demo');
+  scData = DEMO['2026-07'];
+  initViewbar(); renderAll();
+}
+async function startApp(){
+  showApp(currentAccount.name || currentAccount.username);
+  const monat = monatOptionen()[0];
+  document.getElementById('grid').innerHTML = '<div class="skel">Lade Kennzahlen … (erster Abruf kann bis zu einer Minute dauern)</div>';
+  await ladeMonat(monat);
+  initViewbar();
+  document.getElementById('monatSelect').value = (scData && scData.monat) || monat;
+  renderAll();
+}
+async function ladeMonat(monat){
+  if (monatCache[monat]) { scData = monatCache[monat]; viewerRole = scData.rolle || viewerRole; return; }
+  try {
+    const t = await liveTokens();
+    const r = await fetch(CFG.workerUrl + '/api/scorecard?monat=' + encodeURIComponent(monat),
+      { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
+    if (!r.ok) {
+      let detail = ''; try { detail = (await r.json()).error || ''; } catch(_){}
+      throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
+    }
+    scData = await r.json();
+    viewerRole = scData.rolle || 'tl';
+    monatCache[monat] = scData;
+  } catch(e){
+    // Endpunkt nicht erreichbar/berechtigt → transparent in den Demo-Modus
+    demoMode = true;
+    document.getElementById('demoBar').style.display = 'flex';
+    document.querySelector('#demoBar span').textContent =
+      '— Live-Abruf fehlgeschlagen (' + e.message + '). Fiktive Zahlen.';
+    scData = DEMO['2026-07'];
+    viewerRole = 'gf';
+  }
+}
+function showApp(name){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'flex';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userName').textContent = name;
+  document.getElementById('logoutBtn').style.display = name==='Demo' ? 'none' : 'inline-flex';
+}
+
+initMsal();
+</script>
+</body>
+</html>
