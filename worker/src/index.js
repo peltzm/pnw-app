@@ -1436,7 +1436,10 @@ function finanzBlock(invoices, monat) {
       nachAmt.set(amt, (nachAmt.get(amt) || 0) + brutto);
     }
     const saldo = decimalToNumber(inv.balance);
-    if (saldo > 0.005) { // offen = Restsaldo, robust gegen paid-Feldtyp
+    // Bezahlt-Flag respektieren: in Kilanka als bezahlt markierte Rechnungen
+    // zählen NICHT als offen, auch wenn (noch) ein Restsaldo steht
+    const bezahltFlag = inv.paid === true || inv.paid === 1 || /^(true|ja|1)$/i.test(String(inv.paid ?? ""));
+    if (saldo > 0.005 && !bezahltFlag) { // offen = Restsaldo ohne Bezahlt-Flag
       offenGesamt += saldo;
       const s = schuldner.get(amtVonRechnung(inv)) || { offen: 0, ueberfaellig: 0, aeltesteTage: 0 };
       s.offen += saldo;
