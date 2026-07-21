@@ -183,6 +183,7 @@ const SP_HOST = 'praxisneuewegesonjapeltz978.sharepoint.com';
 const BWA_LISTE = 'PNW-BWA';
 let bwaDaten = {};        // Monat (JJJJ-MM) → { spId, Umsatzerloese, Personalkosten, Gesamtkosten, Betriebsergebnis, Kommentar }
 let bwaStatus = null;     // null=nicht geladen · 'ok' · Fehlertext
+let zahlungsTreffer = null; // Ergebnis des Bank-CSV-Abgleichs (nur im Browser, keine Speicherung)
 let graphToken = null;    // Access-Token aus liveTokens()
 
 /* ═══════════════════════════════════════════════════════════
@@ -361,7 +362,8 @@ function renderAll(){
       ${(f.topSchuldner||[]).map(s=>`<tr><td>${zeile1(s.amt)}</td><td class="num">${eur(s.offen)}</td><td class="num">${eur(s.ueberfaellig)}</td><td class="num">${s.aeltesteTage} T.</td></tr>`).join('')}
     </tbody></table>
   </div>
-  ${bwaCard(f, monat)}` : ''}
+  ${bwaCard(f, monat)}
+  ${zahlungsCard(f)}` : ''}
 
   <div class="section-label">Auslastung &amp; FLS</div>
   <div class="card c-ausl wide">
@@ -440,6 +442,88 @@ function maTabelle(team){
       <td class="num">${m.vzae!=null?m.vzae.toFixed(2):'—'}</td><td class="num">${m.faelle}</td>
       <td class="num">${fmtQ(m.flsQuote)}${m.flsVerdacht?warnMark:''}</td><td class="num">${m.krankTageMonat!=null?m.krankTageMonat:'—'}</td></tr>`).join('')}
   </tbody></table>`;
+}
+
+/* ═══ ZAHLUNGSABGLEICH (Bank-CSV vs. offene Kilanka-Rechnungen) ═══
+   Kontodaten bleiben vollständig im Browser — kein Upload, keine Ablage. */
+function spalten(z, d){
+  const out = []; let cur = '', q = false;
+  for (const ch of z){
+    if (ch === '"') q = !q;
+    else if (ch === d && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+function parseBankCsv(text){
+  const zeilen = String(text).split(/\r?\n/).filter(z => z.trim());
+  let hi = zeilen.findIndex(z => /verwendungszweck|buchungstext|umsatz|betrag/i.test(z));
+  if (hi < 0) hi = 0;
+  const delim = (zeilen[hi].match(/;/g) || []).length >= (zeilen[hi].match(/,/g) || []).length ? ';' : ',';
+  const kopf = spalten(zeilen[hi], delim).map(s => s.toLowerCase());
+  const idx = re => kopf.findIndex(k => re.test(k));
+  const iBetrag = idx(/betrag|umsatz(?!steuer)|amount/);
+  const iVwz = idx(/verwendungszweck|buchungstext|vwz|purpose/);
+  const iDatum = idx(/buchung|valuta|datum|date/);
+  const iName = idx(/auftraggeber|beguenstigter|zahlungspflichtiger|name/);
+  const txs = [];
+  for (let i = hi + 1; i < zeilen.length; i++){
+    const c = spalten(zeilen[i], delim);
+    if (c.length < 2) continue;
+    const betrag = deNum(iBetrag >= 0 ? c[iBetrag] : c[c.length - 1]);
+    if (betrag == null || betrag <= 0) continue; // nur Gutschriften
+    txs.push({ betrag,
+      vwz: [iVwz >= 0 ? c[iVwz] : '', iName >= 0 ? c[iName] : ''].join(' '),
+      datum: iDatum >= 0 ? c[iDatum] : '' });
+  }
+  return txs;
+}
+function matcheZahlungen(rechnungen, txs){
+  const norm = s => String(s || '').toLowerCase().replace(/[^0-9a-z]/g, '');
+  const treffer = [];
+  for (const r of rechnungen || []){
+    const nr = norm(r.nummer);
+    let tx = nr.length >= 4 ? txs.find(t => norm(t.vwz).includes(nr)) : null;
+    let art = tx ? 'Rechnungsnr.' : null;
+    if (!tx){
+      tx = txs.find(t => Math.abs(t.betrag - r.betrag) < 0.01 || Math.abs(t.betrag - r.brutto) < 0.01);
+      if (tx) art = 'Betrag (prüfen!)';
+    }
+    if (tx) treffer.push({ ...r, art, zahlDatum: tx.datum, zahlBetrag: tx.betrag });
+  }
+  return { treffer, txAnzahl: txs.length };
+}
+function bankCsvGewaehlt(ev){
+  const file = ev.target.files && ev.target.files[0];
+  if (!file || !scData || !scData.finanzen) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const txs = parseBankCsv(reader.result);
+    zahlungsTreffer = matcheZahlungen(scData.finanzen.offeneRechnungen, txs);
+    renderAll();
+  };
+  reader.readAsText(file, 'windows-1252');
+}
+function zahlungsCard(f){
+  const offene = f.offeneRechnungen || [];
+  if (!offene.length) return '';
+  const z = zahlungsTreffer;
+  const summe = z ? z.treffer.reduce((s, t) => s + t.betrag, 0) : 0;
+  return `
+  <div class="card c-fin wide">
+    <h3>Zahlungsabgleich — bezahlt, aber in Kilanka noch offen</h3>
+    <div class="sub">Kontoauszug (CSV) gegen ${offene.length} offene Rechnungen abgleichen · Kontodaten bleiben im Browser</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 10px">
+      <input type="file" id="bankCsv" accept=".csv,.txt" onchange="bankCsvGewaehlt(event)" style="font-size:12px">
+      ${z ? `<span class="tag ${z.treffer.length ? 'warn' : 'ok'}">${z.treffer.length} von ${offene.length} offenen Rechnungen im Auszug gefunden (${eur(summe)}) · ${z.txAnzahl} Gutschriften geprüft</span>` : ''}
+    </div>
+    ${z && z.treffer.length ? `<table class="mini-table"><thead><tr><th>Rechnung</th><th>Empfänger</th><th class="num">offen</th><th>Zahlungseingang</th><th>Match</th></tr></thead><tbody>
+      ${z.treffer.map(t => `<tr><td>${t.nummer || '—'}</td><td>${t.empfaenger}</td><td class="num">${eur(t.betrag)}</td><td>${t.zahlDatum || '—'} (${eur(t.zahlBetrag)})</td><td>${t.art === 'Rechnungsnr.' ? '<span class="tag ok">Rechnungsnr.</span>' : '<span class="tag warn">Betrag (prüfen!)</span>'}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="legend">Diese Rechnungen im Kilanka-Rechnungswesen als bezahlt erfassen — dann verschwinden sie beim nächsten Abruf aus den offenen Forderungen.</div>`
+    : z ? `<div class="legend">Keine der offenen Rechnungen im Kontoauszug gefunden — entweder tatsächlich unbezahlt oder der Auszug deckt den Zeitraum nicht ab.</div>` : ''}
+  </div>`;
 }
 
 /* ═══ BWA (SharePoint-Liste PNW-BWA, nur GF) ═══ */
