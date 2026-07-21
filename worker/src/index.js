@@ -1419,7 +1419,7 @@ function finanzBlock(invoices, monat) {
   const [j, m] = monat.split("-").map(Number);
   const monate = [];
   for (let i = 5; i >= 0; i--) monate.push(new Date(Date.UTC(j, m - 1 - i, 1)).toISOString().slice(0, 7));
-  const umsatz = new Map(monate.map((x) => [x, 0]));
+  const proMonat = new Map(); // Bruttoumsatz je Monat über das gesamte Abruffenster
   const nachAmt = new Map();
   const schuldner = new Map();
   const offeneListe = []; // Detail für den clientseitigen Zahlungsabgleich (nur GF-Sicht)
@@ -1430,7 +1430,7 @@ function finanzBlock(invoices, monat) {
     if (kDate(inv.deletedAt) || istStornoRechnung(inv)) continue;
     const mo = (inv.date?.$date || "").slice(0, 7);
     const brutto = decimalToNumber(inv.totalWithTax);
-    if (umsatz.has(mo)) umsatz.set(mo, umsatz.get(mo) + brutto);
+    if (mo) proMonat.set(mo, (proMonat.get(mo) || 0) + brutto);
     if (mo === monat) {
       const amt = amtVonRechnung(inv);
       nachAmt.set(amt, (nachAmt.get(amt) || 0) + brutto);
@@ -1469,11 +1469,23 @@ function finanzBlock(invoices, monat) {
   const umsatzNachAmt = amtListe.slice(0, 3).map(([amt, b]) => ({ amt, betrag: rund(b) }));
   const rest = amtListe.slice(3).reduce((s, [, b]) => s + b, 0);
   if (rest > 0) umsatzNachAmt.push({ amt: `Weitere (${amtListe.length - 3} Empfänger)`, betrag: rund(rest) });
+  // YoY / YTD (Vorjahr nur, wenn Kilanka dafür Rechnungen enthält)
+  const mm = String(m).padStart(2, "0");
+  const vjMonat = (j - 1) + "-" + mm;
+  const summeBis = (jahr, bisM) => {
+    let s = 0;
+    for (let k = 1; k <= bisM; k++) s += proMonat.get(jahr + "-" + String(k).padStart(2, "0")) || 0;
+    return s;
+  };
+  const ytdVj = summeBis(j - 1, m);
   return {
-    umsatzMonat: rund(umsatz.get(monat) || 0),
-    umsatzVormonat: rund(umsatz.get(monate[4]) || 0),
-    umsatzVerlauf: monate.map((x) => rund(umsatz.get(x) || 0)),
+    umsatzMonat: rund(proMonat.get(monat) || 0),
+    umsatzVormonat: rund(proMonat.get(monate[4]) || 0),
+    umsatzVerlauf: monate.map((x) => rund(proMonat.get(x) || 0)),
     umsatzMonate: monate,
+    umsatzVorjahresmonat: proMonat.has(vjMonat) ? rund(proMonat.get(vjMonat)) : null,
+    umsatzYtd: rund(summeBis(j, m)),
+    umsatzYtdVorjahr: ytdVj > 0 ? rund(ytdVj) : null,
     forderungen: { offenGesamt: rund(offenGesamt), ueberfaellig: rund(ueberfaellig), mahnstufe1: m1, mahnstufe2plus: m2 },
     topSchuldner: [...schuldner.entries()].sort((a, b) => b[1].offen - a[1].offen).slice(0, 3)
       .map(([amt, s]) => ({ amt, offen: rund(s.offen), ueberfaellig: rund(s.ueberfaellig), aeltesteTage: s.aeltesteTage })),
@@ -1893,7 +1905,7 @@ export default {
         let finanzen = null;
         {
           try {
-            const seit = new Date(Date.UTC(j, m - 12, 1)).toISOString().slice(0, 10);
+            const seit = new Date(Date.UTC(j - 1, 0, 1)).toISOString().slice(0, 10); // ab 1. Jan. Vorjahr — YoY/YTD-Vergleiche
             finanzen = finanzBlock(await fetchScorecardInvoices(env, seit), monat);
           } catch (e) {
             hinweise.push("Finanzblock nicht verfügbar: " + e.message);
