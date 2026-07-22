@@ -652,6 +652,7 @@ const COCKPIT_ABSENCES_GRAPH = {
   begin: 1, end: 1, totalDays: 1, type: 1, status: 1,
   absenceType: { name: 1, internalName: 1 },
   vacationEntitlement: { description: 1 }, // Urlaubsanspruch (Text, Zahl wird geparst)
+  attestationType: 1, attestationDate: 1,  // eAU/AU (lt. offizieller Referenz; Freischaltung wird zur Laufzeit erkannt)
   user: { id: 1, recName: 1 },
   $limit: 1000,
 };
@@ -1016,6 +1017,18 @@ function jugendamtFaelle(clients, now, amtKurz) {
   return rows;
 }
 
+// Werktage (Mo–Fr) zwischen zwei ISO-Daten, beide inklusive
+function werktage(vonIso, bisIso) {
+  let n = 0;
+  const d = new Date(vonIso + "T12:00:00Z"), ende = new Date(bisIso + "T12:00:00Z");
+  while (d <= ende) {
+    const w = d.getUTCDay();
+    if (w >= 1 && w <= 5) n++;
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return n;
+}
+
 // Vertretungslage: HB-Fälle einer Person mit der Frage, ob im Zeitraum
 // [von, bis] eine Vertretung (attendantKind "Vertretung") eingetragen ist.
 async function vertretungsLage(env, kilankaUserId, von, bis) {
@@ -1239,7 +1252,15 @@ async function buildCockpit(env, upn, now) {
       const abwEnde = kDate(a.end) || begin;
       const horizont = new Date(now.getTime() + 42 * 24 * 3600 * 1000);
       if (art === "krank" && begin <= now && abwEnde >= now) {
-        abwesenheitenAktuell.push({ art: "krank", von: isoDate(begin), bis: isoDate(abwEnde) });
+        // eAU: stille Feldignorierung erkennen — nur werten, wenn die AU-Felder
+        // überhaupt im Datensatz ankommen (sonst keine falschen "fehlt"-Warnungen)
+        const auFelderDa = a.attestationType !== undefined || a.attestationDate !== undefined;
+        const kalendertage = Math.round((abwEnde - begin) / 86400000) + 1;
+        abwesenheitenAktuell.push({
+          art: "krank", von: isoDate(begin), bis: isoDate(abwEnde),
+          kalendertage,
+          au: auFelderDa ? !!(a.attestationType || a.attestationDate) : null,
+        });
       } else if (art === "urlaub" && abwEnde >= now && begin <= horizont) {
         abwesenheitenAktuell.push({ art: "urlaub", von: isoDate(begin), bis: isoDate(abwEnde) });
       }
@@ -1516,15 +1537,19 @@ export default {
         const rows = [];
         for (const m of liste) {
           const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
+          // Vertretung ist erst ab einer Woche Abwesenheit (≥ 5 Werktage) nötig —
+          // kürzere Abwesenheiten werden nur angezeigt, ohne Vertretungs-Analyse.
+          const abwesenheiten = (d.abwesenheiten || []).map((x) => ({ ...x, wochenlang: werktage(x.von, x.bis) >= 5 }));
+          const lange = abwesenheiten.filter((x) => x.wochenlang);
           let vertretungsFaelle = null;
-          if (d.abwesenheiten?.length && d.person.kilankaId) {
-            const von = new Date(d.abwesenheiten[0].von + "T00:00:00Z");
-            const bis = new Date(d.abwesenheiten.map((x) => x.bis).sort().pop() + "T23:59:59Z");
+          if (lange.length && d.person.kilankaId) {
+            const von = new Date(lange[0].von + "T00:00:00Z");
+            const bis = new Date(lange.map((x) => x.bis).sort().pop() + "T23:59:59Z");
             try { vertretungsFaelle = await vertretungsLage(env, d.person.kilankaId, von, bis); } catch (e) { /* optional */ }
           }
           rows.push({
             upn: m.upn,
-            abwesenheiten: d.abwesenheiten || [],
+            abwesenheiten,
             vertretungsFaelle,
             dienstplan: (dpMap && d.person.kilankaId && dpMap.get(d.person.kilankaId)) || null,
             leitung: mgrMap.get(m.upn) || null,
