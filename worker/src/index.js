@@ -702,12 +702,26 @@ async function fetchCockpitAbsences(env) {
     if (cockpitAbsencesCache.verfuegbar === false && alter < 45 * 1000) return cockpitAbsencesCache;
   }
   try {
-    const data = [];
-    const limit = COCKPIT_ABSENCES_GRAPH.$limit || 1000;
-    for (let offset = 0; ; offset += limit) {
-      const page = await kilankaPost(env, "users/absences", { ...COCKPIT_ABSENCES_GRAPH, $offset: offset });
-      if (Array.isArray(page)) data.push(...page);
-      if (!Array.isArray(page) || page.length < limit) break;
+    // Die attestation-Felder stammen aus dem WIP-Katalog. Falls der Endpunkt
+    // sie (anders als /clients) NICHT still ignoriert, sondern den Request
+    // ablehnt, würde die komplette Abwesenheitslogik ausfallen — deshalb:
+    // erst mit AU-Feldern versuchen, bei Fehlschlag ohne sie wiederholen.
+    const laden = async (graph) => {
+      const data = [];
+      const limit = graph.$limit || 1000;
+      for (let offset = 0; ; offset += limit) {
+        const page = await kilankaPost(env, "users/absences", { ...graph, $offset: offset });
+        if (Array.isArray(page)) data.push(...page);
+        if (!Array.isArray(page) || page.length < limit) break;
+      }
+      return data;
+    };
+    let data;
+    try {
+      data = await laden(COCKPIT_ABSENCES_GRAPH);
+    } catch (e) {
+      const { attestationType, attestationDate, ...ohneAu } = COCKPIT_ABSENCES_GRAPH;
+      data = await laden(ohneAu);
     }
     cockpitAbsencesCache = { data, fetchedAt: Date.now(), verfuegbar: true };
   } catch (e) {
