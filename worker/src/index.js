@@ -1653,6 +1653,159 @@ async function buildScorecard(env, liste, monat, effNow, mgrMap) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Umsatz-Prognose (Stufe A) — Kapazität × Kalibrierung.
+// Ohne Tages-Leistungsdaten (Graph nicht freigegeben): Prognose =
+// Ø-Tagesumsatz der letzten 3 abgeschlossenen Monate × Arbeitstage
+// des Zielzeitraums × Kapazitätsfaktor (Soll-FLS heute ÷ Soll-FLS
+// der Basismonate) × Abwesenheits-Deltafaktor. Definition:
+// docs/scorecard-kennzahlen.md. Stufe B (Ist-Nowcast) folgt nach
+// Freigabe des Leistungsdoku-Graphen.
+// ═══════════════════════════════════════════════════════════════
+
+// Bewilligte FLS-Wochenstunden der gesamten Organisation zum Stichtag
+// (je aktiver Maßnahme das erste verwertbare Kontingent, volle Stunden
+// ohne Betreuer-Anteile — org-weit summieren sich Anteile zu 1)
+async function orgSollFlsWoche(env, stichtag) {
+  const clients = await fetchKilankaClients(env);
+  let soll = 0, massnahmen = 0, ohneBewertung = 0;
+  for (const client of clients) {
+    if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
+    for (const action of client.actions || []) {
+      if (isArchived(action.recName)) continue;
+      const hbAktiv = (action.attendants || []).some((a) => a.user &&
+        a.attendantKind?.name === "Hauptbetreuer" && isCurrent(a.validFrom, a.validUntil, stichtag));
+      if (!hbAktiv) continue;
+      massnahmen++;
+      let beitrag = null;
+      for (const q of action.quotas || []) {
+        if (kDate(q.deletedAt)) continue;
+        if (q.timeBase === "quantity") continue;
+        const appr = pickApproval(q.approvals, stichtag);
+        if (!appr || appr.stunden == null || appr.status !== "aktuell") continue;
+        switch (q.timeBase) {
+          case "week": beitrag = appr.stunden; break;
+          case "month_current": beitrag = (appr.stunden * 12) / 52; break;
+          case "pool": {
+            const wochen = appr.von && appr.bis ? Math.max(1, (appr.bis - appr.von) / 6048e5) : null;
+            if (wochen) beitrag = appr.stunden / wochen;
+            break;
+          }
+        }
+        if (beitrag != null) break;
+      }
+      if (beitrag != null) soll += beitrag; else ohneBewertung++;
+    }
+  }
+  return { soll: Math.round(soll * 10) / 10, massnahmen, ohneBewertung };
+}
+
+async function buildPrognose(env) {
+  const heute = new Date();
+  const j = heute.getUTCFullYear(), m = heute.getUTCMonth() + 1;
+  const basisMonate = [];
+  for (let i = 3; i >= 1; i--) basisMonate.push(new Date(Date.UTC(j, m - 1 - i, 1)).toISOString().slice(0, 7));
+
+  // Umsatzbasis aus dem vorhandenen Rechnungs-Cache (seit 1.1. Vorjahr)
+  const seit = new Date(Date.UTC(j - 1, 0, 1)).toISOString().slice(0, 10);
+  const invoices = await fetchScorecardInvoices(env, seit);
+  const umsatzMonat = (mo) => {
+    let s = 0;
+    for (const inv of invoices) {
+      if (kDate(inv.deletedAt) || istStornoRechnung(inv)) continue;
+      if (((inv.date && inv.date.$date) || "").slice(0, 7) === mo) s += decimalToNumber(inv.totalWithTax);
+    }
+    return s;
+  };
+  const basisUmsaetze = basisMonate.map(umsatzMonat);
+  const basisAt = basisMonate.map((mo) => {
+    const [bj, bm] = mo.split("-").map(Number);
+    return arbeitstageBayern(new Date(Date.UTC(bj, bm - 1, 1)), new Date(Date.UTC(bj, bm, 0)));
+  });
+  const tagesUmsatzBasis = basisUmsaetze.reduce((s, v) => s + v, 0) / Math.max(1, basisAt.reduce((s, v) => s + v, 0));
+
+  // Kapazität: bewilligte Wochenstunden heute vs. Ø der Basismonats-Mitten
+  const sollJetzt = await orgSollFlsWoche(env, heute);
+  let sollBasisSumme = 0;
+  for (const mo of basisMonate) {
+    const [bj, bm] = mo.split("-").map(Number);
+    sollBasisSumme += (await orgSollFlsWoche(env, new Date(Date.UTC(bj, bm - 1, 15, 12)))).soll;
+  }
+  const sollBasisAvg = sollBasisSumme / basisMonate.length;
+  const kapFaktor = sollBasisAvg ? sollJetzt.soll / sollBasisAvg : 1;
+
+  // Abwesenheiten (genehmigt, alle Typen): Zielzeitraum relativ zum Basisniveau
+  const abs = await fetchCockpitAbsences(env);
+  const koepfe = (await alleAktivenMitarbeiter(env)).length || 1;
+  const abwTage = (von, bis) => {
+    if (abs.verfuegbar !== true) return null;
+    let t = 0;
+    for (const a of abs.data || []) {
+      if ((a.status || "").toLowerCase() !== "approved") continue;
+      const b = kDate(a.begin), e = kDate(a.end) || kDate(a.begin);
+      if (!b || !e || e < von || b > bis) continue;
+      const at = arbeitstageBayern(b > von ? b : von, e < bis ? e : bis);
+      const total = decimalToNumber(a.totalDays);
+      t += total > 0 ? Math.min(at, total) : at;
+    }
+    return t;
+  };
+  let basisAbwQuote = null;
+  if (abs.verfuegbar === true) {
+    let t = 0, kap = 0;
+    basisMonate.forEach((mo, i) => {
+      const [bj, bm] = mo.split("-").map(Number);
+      t += abwTage(new Date(Date.UTC(bj, bm - 1, 1)), new Date(Date.UTC(bj, bm, 0))) || 0;
+      kap += basisAt[i] * koepfe;
+    });
+    basisAbwQuote = kap ? t / kap : null;
+  }
+  const zeitraumFaktor = (von, bis) => {
+    const at = arbeitstageBayern(von, bis);
+    if (basisAbwQuote == null || !at) return { at, faktor: 1, abwQuote: null };
+    const quote = (abwTage(von, bis) || 0) / (at * koepfe);
+    return {
+      at,
+      faktor: Math.max(0, 1 - quote) / Math.max(0.5, 1 - basisAbwQuote),
+      abwQuote: Math.round(quote * 1000) / 10,
+    };
+  };
+
+  // Zielzeiträume: laufende Kalenderwoche (Mo–Fr) und laufender Monat
+  const dow = (heute.getUTCDay() + 6) % 7;
+  const wStart = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth(), heute.getUTCDate() - dow));
+  const wEnde = new Date(wStart.getTime() + 4 * 864e5);
+  const mStart = new Date(Date.UTC(j, m - 1, 1));
+  const mEnde = new Date(Date.UTC(j, m, 0));
+  const w = zeitraumFaktor(wStart, wEnde);
+  const mo = zeitraumFaktor(mStart, mEnde);
+
+  // Bandbreite = Streuung der Basis-Tagesumsätze (mindestens ±5 %)
+  const tages = basisUmsaetze.map((u, i) => u / Math.max(1, basisAt[i]));
+  const avgT = tages.reduce((s, v) => s + v, 0) / tages.length;
+  const sigma = avgT ? Math.sqrt(tages.reduce((s, v) => s + (v - avgT) ** 2, 0) / tages.length) / avgT : 0;
+  const band = Math.max(0.05, Math.round(sigma * 100) / 100);
+
+  const progWoche = tagesUmsatzBasis * w.at * kapFaktor * w.faktor;
+  const progMonat = tagesUmsatzBasis * mo.at * kapFaktor * mo.faktor;
+  return {
+    stand: new Date().toISOString(),
+    modell: "Stufe A: Ø-Tagesumsatz × Arbeitstage × Kapazität (bewilligte Wochenstunden) × Abwesenheits-Delta — ohne Tages-Leistungsdaten",
+    basisMonate,
+    basisUmsaetze: basisUmsaetze.map((v) => Math.round(v)),
+    tagesUmsatzBasis: Math.round(tagesUmsatzBasis),
+    sollFlsWoche: sollJetzt.soll,
+    sollFlsWocheBasis: Math.round(sollBasisAvg * 10) / 10,
+    kapazitaetsFaktor: Math.round(kapFaktor * 1000) / 1000,
+    massnahmenOhneBewertung: sollJetzt.ohneBewertung,
+    bandbreiteProzent: Math.round(band * 100),
+    woche: { von: wStart.toISOString().slice(0, 10), bis: wEnde.toISOString().slice(0, 10), arbeitstage: w.at,
+      abwesenheitsQuote: w.abwQuote, prognose: Math.round(progWoche), min: Math.round(progWoche * (1 - band)), max: Math.round(progWoche * (1 + band)) },
+    monat: { monat: mStart.toISOString().slice(0, 7), arbeitstage: mo.at,
+      abwesenheitsQuote: mo.abwQuote, prognose: Math.round(progMonat), min: Math.round(progMonat * (1 - band)), max: Math.round(progMonat * (1 + band)) },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HTTP-Handling
 // ═══════════════════════════════════════════════════════════════
 function corsHeaders(origin) {
@@ -1925,6 +2078,86 @@ export default {
       } catch (e) {
         return json({ error: `Scorecard fehlgeschlagen: ${e.message}` }, 502, origin);
       }
+    }
+
+    // Umsatz-Prognose (Stufe A) — nur GF
+    if (url.pathname === "/api/prognose" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Die Prognose ist der Geschäftsführung vorbehalten" }, 403, origin);
+      }
+      try {
+        return json(await buildPrognose(env), 200, origin);
+      } catch (e) {
+        return json({ error: `Prognose fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    // TEMPORÄR: Applet-Endpunkt auf Leistungsdoku-Modelle sondieren — nach
+    // Auswertung wieder entfernen (Muster wie scorecard-probe)
+    if (url.pathname === "/api/applet-probe" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Diagnose-Route ist der GF vorbehalten" }, 403, origin);
+      }
+      const basen = {
+        schnittstelle: KILANKA_BASE,
+        applet: KILANKA_BASE.replace("/public/", "/applet/"),
+      };
+      const modelle = ["services", "performances", "documentations", "activities", "worklogs", "timeentries", "records"];
+      const tests = {};
+      for (const [bName, basis] of Object.entries(basen)) {
+        for (const modell of modelle) {
+          try {
+            const r = await fetch(`${basis}/${modell}`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
+              body: JSON.stringify({ $limit: 1, id: 1 }),
+            });
+            let keys = null;
+            if (r.ok) {
+              const jx = await r.json().catch(() => null);
+              const rows = Array.isArray(jx?.data) ? jx.data : Array.isArray(jx) ? jx : [jx];
+              keys = rows[0] ? Object.keys(rows[0]) : [];
+            }
+            tests[`${bName}:${modell}`] = { status: r.status, keys };
+          } catch (e) {
+            tests[`${bName}:${modell}`] = { status: 0, fehler: e.message };
+          }
+          await new Promise((res) => setTimeout(res, 600));
+        }
+      }
+      // Feld-Drop-Test: unbekannte Untergraphen an actions werden still ignoriert —
+      // taucht "services"/"performances" im Response auf, existiert das Feld
+      try {
+        const r = await fetch(`${KILANKA_BASE}/clients`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ $limit: 3, id: 1, actions: { id: 1, services: { id: 1 }, performances: { id: 1 }, documentations: { id: 1 } } }),
+        });
+        const jx = await r.json().catch(() => null);
+        const rows = Array.isArray(jx?.data) ? jx.data : Array.isArray(jx) ? jx : [];
+        const felder = new Set();
+        for (const c of rows) for (const a of c.actions || []) Object.keys(a).forEach((k) => felder.add(k));
+        tests["feldDropTest:actions"] = { status: r.status, actionFelder: [...felder] };
+      } catch (e) {
+        tests["feldDropTest:actions"] = { status: 0, fehler: e.message };
+      }
+      try {
+        const r = await fetch(`${basen.applet}/documentation`, {
+          headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}` },
+        });
+        let info = null;
+        if (r.ok) { const spec = await r.json().catch(() => null); info = spec && { version: spec.info?.version, endpunkte: Object.keys(spec.paths || {}) }; }
+        tests["applet:documentation"] = { status: r.status, info };
+      } catch (e) {
+        tests["applet:documentation"] = { status: 0, fehler: e.message };
+      }
+      return json({ stand: new Date().toISOString(), tests }, 200, origin);
     }
 
     return json({ error: "Nicht gefunden" }, 404, origin);
