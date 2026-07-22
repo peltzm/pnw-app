@@ -1242,6 +1242,7 @@ async function buildCockpit(env, upn, now) {
     let regenH1 = null, regenH2 = null, anspruch = null, anspruchQuelle = null;
     let anspruchInklUebertrag = false;
     const abwesenheitenAktuell = []; // laufend krank / Urlaub jetzt + 6 Wochen
+    const wegFenster = [];            // alle Abwesenheiten im Fenster (Block-Bildung)
     const uProJahr = new Map();       // Jahr → genommene Urlaubstage (für Übertrag)
     const anspruchProJahr = new Map(); // Jahr → geparster Anspruch
     const geplanteTermine = []; // kommende genehmigte Urlaube inkl. Datum
@@ -1265,6 +1266,12 @@ async function buildCockpit(env, upn, now) {
       // jetzt laufen oder in den nächsten 6 Wochen beginnen (jahresunabhängig)
       const abwEnde = kDate(a.end) || begin;
       const horizont = new Date(now.getTime() + 42 * 24 * 3600 * 1000);
+      // Für die Wochen-Regel zählen ALLE Abwesenheitsarten (auch Fortbildung,
+      // Freizeitausgleich …) — ein Urlaub, der von einer anderen Abwesenheit
+      // unterbrochen wird, bleibt dadurch ein zusammenhängender Block.
+      if (abwEnde >= now && begin <= horizont) {
+        wegFenster.push({ von: begin.getTime(), bis: abwEnde.getTime() });
+      }
       if (art === "krank" && begin <= now && abwEnde >= now) {
         // eAU: stille Feldignorierung erkennen — nur werten, wenn die AU-Felder
         // überhaupt im Datensatz ankommen (sonst keine falschen "fehlt"-Warnungen)
@@ -1333,6 +1340,23 @@ async function buildCockpit(env, upn, now) {
       }
     }
 
+    // Zusammenhängende Blöcke: Überlappungen und Lücken ≤ 3 Kalendertage
+    // (Wochenende/Brückentag) verschmelzen. Vertretung ist ab einer Woche
+    // (≥ 5 Werktage) nötig — gemessen am Block, nicht am Einzeleintrag.
+    wegFenster.sort((x, y) => x.von - y.von);
+    const bloecke = [];
+    for (const w of wegFenster) {
+      const letzter = bloecke[bloecke.length - 1];
+      if (letzter && w.von - letzter.bis <= 3 * 86400000) letzter.bis = Math.max(letzter.bis, w.bis);
+      else bloecke.push({ ...w });
+    }
+    for (const e of abwesenheitenAktuell) {
+      const von = Date.parse(e.von + "T12:00:00Z");
+      const block = bloecke.find((b) => von >= b.von - 86400000 && von <= b.bis + 86400000);
+      e.wochenlang = block
+        ? werktage(isoDate(new Date(block.von)), isoDate(new Date(block.bis))) >= 5
+        : werktage(e.von, e.bis) >= 5;
+    }
     abwesenheiten = abwesenheitenAktuell.sort((x, y) => x.von.localeCompare(y.von));
     urlaub = {
       jahr,
@@ -1553,7 +1577,7 @@ export default {
           const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
           // Vertretung ist erst ab einer Woche Abwesenheit (≥ 5 Werktage) nötig —
           // kürzere Abwesenheiten werden nur angezeigt, ohne Vertretungs-Analyse.
-          const abwesenheiten = (d.abwesenheiten || []).map((x) => ({ ...x, wochenlang: werktage(x.von, x.bis) >= 5 }));
+          const abwesenheiten = (d.abwesenheiten || []).map((x) => ({ ...x, wochenlang: x.wochenlang ?? (werktage(x.von, x.bis) >= 5) }));
           const lange = abwesenheiten.filter((x) => x.wochenlang);
           let vertretungsFaelle = null;
           if (lange.length && d.person.kilankaId) {
