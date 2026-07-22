@@ -186,6 +186,7 @@ let bwaDaten = {};        // Monat (JJJJ-MM) → { spId, Umsatzerloese, Personal
 let bwaStatus = null;     // null=nicht geladen · 'ok' · Fehlertext
 let bwaSusa = null;       // aus SuSa-PDF: { monat, Liquiditaet, ForderungenDatev }
 let zahlungsTreffer = null; // Ergebnis des Bank-CSV-Abgleichs (nur im Browser, keine Speicherung)
+let prognoseDaten = null;  // /api/prognose (GF, einmal je Sitzung)
 let bankTxs = null;       // zuletzt geparste Gutschriften (nur im Browser)
 let bankDiag = null;
 let graphToken = null;    // Access-Token aus liveTokens()
@@ -361,6 +362,7 @@ function renderAll(){
       ${(f.umsatzNachAmt||[]).map(a=>`<tr><td>${zeile1(a.amt)}</td><td class="num">${eur(a.betrag)}</td></tr>`).join('')}
     </tbody></table>
   </div>
+  ${prognoseCard()}
   <div class="card c-fin">
     <h3>Offene Forderungen</h3><div class="sub">Restsalden offener Rechnungen, Mahnwesen</div>
     <div class="kpi-row"><span class="kpi-big">${eur(f.forderungen.offenGesamt)}</span>
@@ -705,6 +707,32 @@ function zahlungsCard(f){
         ${offene.map(r => `<tr><td>${r.nummer || '—'}</td><td>${r.empfaenger}</td><td class="num">${eur(r.betrag)}</td><td class="num">${r.faellig ? new Date(r.faellig).toLocaleDateString('de-DE') : '—'}</td></tr>`).join('')}
       </tbody></table>
     </details>
+  </div>`;
+}
+
+/* ═══ UMSATZ-PROGNOSE (Stufe A, nur GF) ═══ */
+function prognoseCard(){
+  const kopf = `<h3>Umsatz-Prognose</h3><div class="sub">Kapazitätsmodell aus bewilligten Wochenstunden — noch ohne Tages-Leistungsdaten (Stufe A)</div>`;
+  if (prognoseDaten === 'laedt' || prognoseDaten === null)
+    return `<div class="card c-fin">${kopf}<div class="skel">Berechne Prognose …</div></div>`;
+  if (prognoseDaten === 'fehler')
+    return `<div class="card c-fin">${kopf}<div class="legend" style="color:var(--warn)">Prognose derzeit nicht verfügbar.</div></div>`;
+  const p = prognoseDaten;
+  const kapDelta = (p.kapazitaetsFaktor - 1) * 100;
+  return `
+  <div class="card c-fin">
+    ${kopf}
+    <div class="kpi-row"><span class="kpi-big">${eur(p.monat.prognose)}</span>
+      <span class="kpi-unit">${monatLabel(p.monat.monat)} erwartet</span>
+      <span class="tag ${kapDelta >= 0 ? 'ok' : 'warn'}">Bandbreite ${eur(p.monat.min)}–${eur(p.monat.max)}</span></div>
+    <table class="mini-table"><tbody>
+      <tr><td>Laufende Woche (${new Date(p.woche.von).toLocaleDateString('de-DE')}–${new Date(p.woche.bis).toLocaleDateString('de-DE')})</td>
+        <td class="num"><b>${eur(p.woche.prognose)}</b> <span style="color:var(--text-hint)">(${eur(p.woche.min)}–${eur(p.woche.max)})</span></td></tr>
+      <tr><td>Basis: Ø Tagesumsatz ${p.basisMonate.map(monatLabel).join('/')}</td><td class="num">${eur(p.tagesUmsatzBasis)}</td></tr>
+      <tr><td>Kapazität: bewilligte Wochenstunden</td><td class="num">${p.sollFlsWoche.toLocaleString('de-DE')} h <span style="color:var(--text-hint)">(Basis ${p.sollFlsWocheBasis.toLocaleString('de-DE')} h, ${kapDelta>=0?'+':''}${kapDelta.toLocaleString('de-DE',{maximumFractionDigits:1})} %)</span></td></tr>
+      ${p.monat.abwesenheitsQuote != null ? `<tr><td>Abwesenheiten im Monat (genehmigt)</td><td class="num">${pct(p.monat.abwesenheitsQuote)} der Personentage</td></tr>` : ''}
+    </tbody></table>
+    <div class="legend">${p.massnahmenOhneBewertung ? p.massnahmenOhneBewertung + ' Maßnahme(n) ohne bewertetes Kontingent (fließen nicht ins Soll ein). ' : ''}Modell: ${p.modell}. Stufe B (Ist-Nowcast) folgt nach Freigabe des Leistungsdoku-Graphen.</div>
   </div>`;
 }
 
@@ -1206,6 +1234,13 @@ async function ladeMonat(monat){
     monatCache[monat] = scData;
     graphToken = t.graph;
     if (viewerRole === 'gf' && bwaStatus === null) { ladeBwa().then(() => renderAll()); }
+    if (viewerRole === 'gf' && prognoseDaten === null) {
+      prognoseDaten = 'laedt';
+      fetch(CFG.workerUrl + '/api/prognose', { headers: { Authorization: 'Bearer ' + t.id } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { prognoseDaten = d || 'fehler'; renderAll(); })
+        .catch(() => { prognoseDaten = 'fehler'; });
+    }
   } catch(e){
     // Endpunkt nicht erreichbar/berechtigt → transparent in den Demo-Modus
     demoMode = true;
