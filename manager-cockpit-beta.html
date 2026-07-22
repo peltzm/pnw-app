@@ -93,6 +93,22 @@ tr{cursor:pointer}
 .ziel-zulage{display:flex;align-items:baseline;justify-content:space-between;margin-top:8px}
 .ziel-zulage .lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
 .ziel-zulage .val{font-size:18px;font-weight:700;color:var(--accent)}
+/* Abwesenheiten & Vertretungen */
+.abwsection{margin-top:24px}
+.abwsection h3{font-size:15px;font-weight:600;margin-bottom:10px}
+.abwgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.abwcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px}
+.abwcard h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.abweintrag{padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px}
+.abweintrag:last-child{border-bottom:none}
+.abweintrag .kopfzeile{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.abweintrag .kopfzeile b{font-weight:600}
+.abweintrag .zeitraum{font-size:12px;color:var(--text-muted);white-space:nowrap}
+.vfall{font-size:12px;margin-top:3px;padding-left:10px}
+.vfall .ok{color:var(--ok)}
+.vfall .offen{color:var(--error);font-weight:600}
+.vfall .tipp{color:var(--text-hint)}
+.abwleer{font-size:12px;color:var(--text-hint);padding:6px 0}
 .netto-btn{background:none;border:none;font:inherit;font-weight:600;color:var(--accent);cursor:pointer;text-decoration:underline dotted;padding:0}
 .falldiff{display:none;background:var(--accent-light);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:12px}
 .falldiff.open{display:block}
@@ -162,6 +178,26 @@ tr{cursor:pointer}
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+    </div>
+
+    <!-- Abwesenheiten & Vertretungen (GF + Teamleitungen) -->
+    <div class="abwsection" id="abwSection" style="display:none">
+      <h3>Abwesenheiten &amp; Vertretungen</h3>
+      <div class="abwgrid">
+        <div class="abwcard">
+          <h4>🤒 Aktuell krank</h4>
+          <div id="abwKrank"></div>
+        </div>
+        <div class="abwcard">
+          <h4>🏖️ Urlaub — aktuell &amp; nächste 6 Wochen</h4>
+          <div id="abwUrlaub"></div>
+        </div>
+      </div>
+      <div class="legend">
+        Vertretungslage bezieht sich auf die Hauptbetreuungs-Fälle der abwesenden Person im Abwesenheitszeitraum
+        (Vertretungs-Eintrag in Kilanka). „Verfügbar" schlägt anwesende Kolleg:innen vor — eigenes Team zuerst,
+        dann nach geringster Fallbelastung; die fachliche Entscheidung bleibt bei euch.
+      </div>
     </div>
 
     <!-- Urlaubs-Abgleich (GF): berechnete Kette vs. Kilanka-Stundenkonto -->
@@ -360,6 +396,7 @@ function render() {
   document.getElementById('tbl').style.display = '';
   const rolleTxt = daten.vorschauAls ? 'Vorschau als Teamleitung — ' + esc(daten.vorschauAls) : (daten.rolle === 'gf' ? 'Geschäftsführung (alle Mitarbeitenden)' : 'Teamleitung (eigenes Team)');
   document.getElementById('urlaubCheckBtn').style.display = daten.rolle === 'gf' ? '' : 'none';
+  renderAbwesenheiten();
   if (document.getElementById('urlaubCheck').style.display !== 'none') renderUrlaubCheck();
   const stichtagTxt = daten.stichtag ? ` · Stichtag: ${new Date(daten.stichtag).toLocaleDateString('de-DE')} (Nachweise: aktueller Stand)` : '';
   document.getElementById('pageSub').textContent =
@@ -513,6 +550,62 @@ const unzugeordneteAemter = dataset => {
   return [...alle].sort((a, b) => a.localeCompare(b, 'de'));
 };
 function toggleFallDiff(id) { document.getElementById(id)?.classList.toggle('open'); }
+
+/* ── Abwesenheiten & Vertretungen ── */
+const dFmt = iso => iso ? iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.' : '';
+const abwUeberlappt = (a, von, bis) => a.von <= bis && a.bis >= von;
+
+// Anwesende Kolleg:innen als Vertretungs-Vorschlag: eigenes Team zuerst,
+// dann geringste Fallbelastung (HB-Fälle je Vertragsstunde)
+function verfuegbareKollegen(r, von, bis, n = 3) {
+  return (daten.rows || [])
+    .filter(k => k.upn !== r.upn && !(k.abwesenheiten || []).some(a => abwUeberlappt(a, von, bis)))
+    .sort((a, b) => {
+      const teamA = a.team === r.team ? 0 : 1, teamB = b.team === r.team ? 0 : 1;
+      if (teamA !== teamB) return teamA - teamB;
+      const lastA = (a.klienten?.hb || 0) / (a.wochenstunden || 39);
+      const lastB = (b.klienten?.hb || 0) / (b.wochenstunden || 39);
+      return lastA - lastB;
+    })
+    .slice(0, n).map(k => (k.name || k.upn).split(',')[0]);
+}
+
+function abwEintrag(r, a) {
+  const laufend = a.von <= heuteIso();
+  const zeitraum = `${dFmt(a.von)} – ${dFmt(a.bis)}${laufend ? '' : ' <span class="chip chip-warn" style="font-size:10px">ab ' + dFmt(a.von) + '</span>'}`;
+  let faelle = '';
+  if (r.vertretungsFaelle?.length) {
+    faelle = r.vertretungsFaelle.map(f => f.vertretung
+      ? `<div class="vfall"><span class="ok">✓</span> ${esc(f.fall)} <span class="tipp">→ Vertretung: ${esc(f.vertretung)}</span></div>`
+      : `<div class="vfall"><span class="offen">✗ ${esc(f.fall)} — keine Vertretung</span> <span class="tipp">· verfügbar: ${verfuegbareKollegen(r, a.von, a.bis).map(esc).join(', ') || '—'}</span></div>`
+    ).join('');
+  } else if (r.vertretungsFaelle) {
+    faelle = '<div class="vfall tipp">keine eigenen HB-Fälle im Zeitraum</div>';
+  }
+  return `<div class="abweintrag">
+    <div class="kopfzeile"><b>${esc(r.name || r.upn)}</b><span class="zeitraum">${zeitraum}</span></div>
+    ${faelle}</div>`;
+}
+
+function heuteIso() { return new Date().toISOString().slice(0, 10); }
+
+function renderAbwesenheiten() {
+  const sec = document.getElementById('abwSection');
+  if (!daten?.rows) { sec.style.display = 'none'; return; }
+  const krank = [], urlaub = [];
+  for (const r of daten.rows) {
+    for (const a of r.abwesenheiten || []) {
+      (a.art === 'krank' ? krank : urlaub).push({ r, a });
+    }
+  }
+  krank.sort((x, y) => x.a.bis.localeCompare(y.a.bis));
+  urlaub.sort((x, y) => x.a.von.localeCompare(y.a.von));
+  document.getElementById('abwKrank').innerHTML =
+    krank.map(({ r, a }) => abwEintrag(r, a)).join('') || '<div class="abwleer">Aktuell niemand krankgemeldet.</div>';
+  document.getElementById('abwUrlaub').innerHTML =
+    urlaub.map(({ r, a }) => abwEintrag(r, a)).join('') || '<div class="abwleer">Keine Urlaube im Zeitfenster.</div>';
+  sec.style.display = '';
+}
 
 /* ── Urlaubs-Abgleich (GF): alle Mitarbeitenden mit berechneter Urlaubskette ── */
 function toggleUrlaubCheck() {
