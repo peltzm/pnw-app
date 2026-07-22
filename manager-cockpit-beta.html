@@ -194,8 +194,10 @@ tr{cursor:pointer}
         </div>
       </div>
       <div class="legend">
-        Vertretungslage bezieht sich auf die Hauptbetreuungs-Fälle der abwesenden Person im Abwesenheitszeitraum
-        (Vertretungs-Eintrag in Kilanka). „Verfügbar" schlägt anwesende Kolleg:innen vor — eigenes Team zuerst,
+        eAU wird erst ab dem dritten Krankheitstag erwartet — der Hinweis „eAU fehlt" erscheint nur bei
+        Krankmeldungen ab 3 Kalendertagen ohne erfasste AU. Vertretungslage wird ab einer Woche Abwesenheit (≥ 5 Werktage) geprüft — kürzere Abwesenheiten
+        erscheinen ohne Vertretungs-Analyse. Bezug sind die Hauptbetreuungs-Fälle der abwesenden Person im
+        Abwesenheitszeitraum (Vertretungs-Eintrag in Kilanka). „Verfügbar" schlägt anwesende Kolleg:innen vor — eigenes Team zuerst,
         dann nach geringster Fallbelastung; die fachliche Entscheidung bleibt bei euch.
       </div>
     </div>
@@ -572,14 +574,23 @@ function verfuegbareKollegen(r, von, bis, n = 3) {
 
 function abwEintrag(r, a) {
   const laufend = a.von <= heuteIso();
-  const zeitraum = `${dFmt(a.von)} – ${dFmt(a.bis)}${laufend ? '' : ' <span class="chip chip-warn" style="font-size:10px">ab ' + dFmt(a.von) + '</span>'}`;
+  // eAU-Pflicht erst ab dem dritten Krankheitstag; davor kein Hinweis.
+  // a.au === null heißt: AU-Felder (noch) nicht in der API freigeschaltet → keine Aussage.
+  let auChip = '';
+  if (a.art === 'krank' && a.au !== null && a.au !== undefined) {
+    if (a.au) auChip = ' <span class="chip chip-ok" style="font-size:10px">eAU ✓</span>';
+    else if ((a.kalendertage || 0) >= 3) auChip = ' <span class="chip chip-err" style="font-size:10px">eAU fehlt (ab 3. Tag)</span>';
+  }
+  const zeitraum = `${dFmt(a.von)} – ${dFmt(a.bis)}${auChip}${laufend ? '' : ' <span class="chip chip-warn" style="font-size:10px">ab ' + dFmt(a.von) + '</span>'}`;
   let faelle = '';
-  if (r.vertretungsFaelle?.length) {
+  if (!a.wochenlang) {
+    // Vertretung erst ab einer Woche Abwesenheit nötig — kurze Einträge ohne Analyse
+  } else if (r.vertretungsFaelle?.length) {
     faelle = r.vertretungsFaelle.map(f => f.vertretung
       ? `<div class="vfall"><span class="ok">✓</span> ${esc(f.fall)} <span class="tipp">→ Vertretung: ${esc(f.vertretung)}</span></div>`
       : `<div class="vfall"><span class="offen">✗ ${esc(f.fall)} — keine Vertretung</span> <span class="tipp">· verfügbar: ${verfuegbareKollegen(r, a.von, a.bis).map(esc).join(', ') || '—'}</span></div>`
     ).join('');
-  } else if (r.vertretungsFaelle) {
+  } else if (a.wochenlang && r.vertretungsFaelle) {
     faelle = '<div class="vfall tipp">keine eigenen HB-Fälle im Zeitraum</div>';
   }
   return `<div class="abweintrag">
