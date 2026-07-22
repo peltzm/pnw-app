@@ -147,3 +147,18 @@ ohne sie auf Kernwerte zurück). PK-Quoten-Schwellen kalibriert: grün < 60 %,
 gelb 60–70 %, rot > 70 % (Ist H1/2026: ≈ 50 %; Juni 54,8 %).
 Verifiziert gegen reale Mai-/Juni-PDFs (Liquidität Juni 279.238,42 €,
 Forderungen 183.812,94 €).
+
+## Umsatz-Prognose (Stufe A, 22.07.2026)
+
+`GET /api/prognose` (GF-only): **Prognose = Ø-Tagesumsatz der letzten 3
+abgeschlossenen Monate × Arbeitstage des Zielzeitraums × Kapazitätsfaktor
+× Abwesenheits-Delta.** Kapazitätsfaktor = bewilligte FLS-Wochenstunden
+heute ÷ Ø der Basismonats-Mitten (orgSollFlsWoche: je aktiver Maßnahme das
+erste verwertbare Kontingent, timeBase week/month_current/pool, approvals
+"aktuell"; quantity und gelöschte Kontingente ignoriert). Abwesenheits-Delta
+= (1 − Abwesenheitsquote Zielzeitraum) ÷ (1 − Basisniveau), genehmigte
+Abwesenheiten aller Typen, kopfbezogen. Bandbreite = max(σ der
+Basis-Tagesumsätze, ±5 %). Grenzen: Kapazitäts-, keine Aktivitätsprognose —
+Tagesgenauigkeit erst mit Stufe B (Leistungsdoku-Graph, Support-Ticket).
+Temporäre Route `/api/applet-probe` sondiert Schnittstellen- und
+Applet-Endpunkt auf Leistungs-Modelle (nach Auswertung entfernen).
