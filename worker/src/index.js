@@ -909,9 +909,15 @@ async function alleHbFaelle(env, now) {
     }
 
     if (treffer && !map.has(String(client.id))) {
+      // Hauptbetreuer zum Stichtag (Fallback: irgendein HB der Maßnahme) —
+      // Basis der Team-Zuordnung in der Scorecard-Akquise
+      const hbAtt = (treffer.attendants || []).find((a) =>
+        a.user && a.attendantKind?.name === "Hauptbetreuer" && isCurrent(a.validFrom, a.validUntil, now)
+      ) || (treffer.attendants || []).find((a) => a.user && a.attendantKind?.name === "Hauptbetreuer");
       map.set(String(client.id), {
         id: String(client.id),
         name: client.recName || String(client.id),
+        hbUpn: hbAtt ? upnForAttendant(hbAtt.user) : null,
         amt: treffer.department?.name || "",
         hilfeart: treffer.legalBasis?.name || "",
         massnahme: treffer.recName || "",
@@ -1460,6 +1466,444 @@ async function buildCockpit(env, upn, now) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Business Scorecard (business-scorecard-beta.html)
+// GF: alle Teams + Finanzblock · TL: eigenes Team, ohne Finanzen.
+// Kennzahlen-Definitionen und Ampeln: docs/scorecard-kennzahlen.md
+// Feld-Freischaltung verifiziert 21.07.2026 (Scorecard-Probe, s.
+// docs/kilanka-api-erkenntnisse.md Nachtrag).
+// ═══════════════════════════════════════════════════════════════
+
+const SCORECARD_INVOICES_GRAPH = {
+  id: 1, date: 1, deletedAt: 1, totalWithTax: 1, balance: 1,
+  isOverdue: 1, dunningLevel: 1, dueDate: 1, number: 1, displayNumber: 1,
+  recipientCompany: 1, recipientName: 1,
+  stateType: { name: 1 },
+};
+let scorecardInvoicesCache = { data: null, fetchedAt: 0, seit: null };
+
+// Rechnungen der letzten 12 Monate — serverseitig per $filter eingegrenzt
+// (gegen Prod verifiziert 21.07.2026) statt Vollabzug + Client-Filterung.
+async function fetchScorecardInvoices(env, seitIso) {
+  if (scorecardInvoicesCache.data && scorecardInvoicesCache.seit === seitIso &&
+      Date.now() - scorecardInvoicesCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000)
+    return scorecardInvoicesCache.data;
+  const alle = [];
+  const seen = new Set();
+  for (let offset = 0; offset < 20000; offset += 500) {
+    const batch = await kilankaPost(env, "accounting/invoices", {
+      ...SCORECARD_INVOICES_GRAPH, $limit: 500, $offset: offset,
+      $filter: { date: { $gte: { $date: seitIso } } },
+    });
+    if (!Array.isArray(batch) || !batch.length) break;
+    let doppelt = false;
+    for (const inv of batch) {
+      // Schutz: sollte $offset den Filter ignorieren, kämen dieselben IDs erneut
+      if (seen.has(String(inv.id))) { doppelt = true; break; }
+      seen.add(String(inv.id));
+      alle.push(inv);
+    }
+    if (doppelt || batch.length < 500) break;
+    await new Promise((r) => setTimeout(r, 700)); // Rate Limit 10/5s
+  }
+  scorecardInvoicesCache = { data: alle, fetchedAt: Date.now(), seit: seitIso };
+  return alle;
+}
+
+const istStornoRechnung = (inv) => /storn/i.test(inv.stateType?.name || "");
+const amtVonRechnung = (inv) => inv.recipientCompany || inv.recipientName || "Ohne Empfänger";
+
+// Finanz-Kennzahlen aus dem 12-Monats-Rechnungsbestand
+function finanzBlock(invoices, monat) {
+  const [j, m] = monat.split("-").map(Number);
+  const monate = [];
+  for (let i = 5; i >= 0; i--) monate.push(new Date(Date.UTC(j, m - 1 - i, 1)).toISOString().slice(0, 7));
+  const proMonat = new Map(); // Bruttoumsatz je Monat über das gesamte Abruffenster
+  const nachAmt = new Map();
+  const schuldner = new Map();
+  const offeneListe = []; // Detail für den clientseitigen Zahlungsabgleich (nur GF-Sicht)
+  let offenGesamt = 0, ueberfaellig = 0, m1 = 0, m2 = 0;
+  const heute = Date.now();
+
+  for (const inv of invoices || []) {
+    if (kDate(inv.deletedAt) || istStornoRechnung(inv)) continue;
+    const mo = (inv.date?.$date || "").slice(0, 7);
+    const brutto = decimalToNumber(inv.totalWithTax);
+    if (mo) proMonat.set(mo, (proMonat.get(mo) || 0) + brutto);
+    if (mo === monat) {
+      const amt = amtVonRechnung(inv);
+      nachAmt.set(amt, (nachAmt.get(amt) || 0) + brutto);
+    }
+    const saldo = decimalToNumber(inv.balance);
+    // Bezahlt-Flag respektieren: in Kilanka als bezahlt markierte Rechnungen
+    // zählen NICHT als offen, auch wenn (noch) ein Restsaldo steht
+    const bezahltFlag = inv.paid === true || inv.paid === 1 || /^(true|ja|1)$/i.test(String(inv.paid ?? ""));
+    if (saldo > 0.005 && !bezahltFlag) { // offen = Restsaldo ohne Bezahlt-Flag
+      offenGesamt += saldo;
+      const s = schuldner.get(amtVonRechnung(inv)) || { offen: 0, ueberfaellig: 0, aeltesteTage: 0 };
+      s.offen += saldo;
+      if (inv.isOverdue) {
+        ueberfaellig += saldo;
+        s.ueberfaellig += saldo;
+        const dl = Number(inv.dunningLevel) || 0;
+        if (dl >= 2) m2++; else if (dl >= 1) m1++;
+        const faellig = kDate(inv.dueDate);
+        if (faellig) s.aeltesteTage = Math.max(s.aeltesteTage, Math.round((heute - faellig) / 864e5));
+      }
+      schuldner.set(amtVonRechnung(inv), s);
+      offeneListe.push({
+        id: String(inv.id),
+        nummer: inv.displayNumber || inv.number || "",
+        datum: (inv.date && inv.date.$date) || null,
+        faellig: (inv.dueDate && inv.dueDate.$date) || null,
+        betrag: Math.round(saldo * 100) / 100,
+        brutto: Math.round(brutto * 100) / 100,
+        empfaenger: amtVonRechnung(inv).split("\n")[0],
+        ueberfaellig: !!inv.isOverdue,
+      });
+    }
+  }
+  const rund = (v) => Math.round(v);
+  const amtListe = [...nachAmt.entries()].sort((a, b) => b[1] - a[1]);
+  const umsatzNachAmt = amtListe.slice(0, 3).map(([amt, b]) => ({ amt, betrag: rund(b) }));
+  const rest = amtListe.slice(3).reduce((s, [, b]) => s + b, 0);
+  if (rest > 0) umsatzNachAmt.push({ amt: `Weitere (${amtListe.length - 3} Empfänger)`, betrag: rund(rest) });
+  // YoY / YTD (Vorjahr nur, wenn Kilanka dafür Rechnungen enthält)
+  const mm = String(m).padStart(2, "0");
+  const vjMonat = (j - 1) + "-" + mm;
+  const summeBis = (jahr, bisM) => {
+    let s = 0;
+    for (let k = 1; k <= bisM; k++) s += proMonat.get(jahr + "-" + String(k).padStart(2, "0")) || 0;
+    return s;
+  };
+  const ytdVj = summeBis(j - 1, m);
+  return {
+    umsatzMonat: rund(proMonat.get(monat) || 0),
+    umsatzVormonat: rund(proMonat.get(monate[4]) || 0),
+    umsatzVerlauf: monate.map((x) => rund(proMonat.get(x) || 0)),
+    umsatzMonate: monate,
+    umsatzVorjahresmonat: proMonat.has(vjMonat) ? rund(proMonat.get(vjMonat)) : null,
+    umsatzYtd: rund(summeBis(j, m)),
+    umsatzYtdVorjahr: ytdVj > 0 ? rund(ytdVj) : null,
+    forderungen: { offenGesamt: rund(offenGesamt), ueberfaellig: rund(ueberfaellig), mahnstufe1: m1, mahnstufe2plus: m2 },
+    topSchuldner: [...schuldner.entries()].sort((a, b) => b[1].offen - a[1].offen).slice(0, 3)
+      .map(([amt, s]) => ({ amt, offen: rund(s.offen), ueberfaellig: rund(s.ueberfaellig), aeltesteTage: s.aeltesteTage })),
+    umsatzNachAmt,
+    offeneRechnungen: offeneListe.sort((a, b) => (a.datum || "").localeCompare(b.datum || "")),
+    basis: "Rechnungsdatum (date), brutto, ohne stornierte/gelöschte Rechnungen",
+  };
+}
+
+// Genehmigte AU-Arbeitstage (Mo–Fr, Feiertage BY, anteilige Überlappung,
+// gedeckelt auf totalDays) einer Person im Zeitraum — Zähler der Krankheitsquote
+function krankArbeitstage(absData, kilankaId, von, bis) {
+  if (!kilankaId) return null;
+  let tage = 0;
+  for (const a of absData || []) {
+    if (String(a.user?.id) !== kilankaId) continue;
+    if ((a.status || "").toLowerCase() !== "approved") continue;
+    if (classifyAbsence(a) !== "krank") continue;
+    const b = kDate(a.begin), e = kDate(a.end) || kDate(a.begin);
+    if (!b || !e || e < von || b > bis) continue;
+    const at = arbeitstageBayern(b > von ? b : von, e < bis ? e : bis);
+    const total = decimalToNumber(a.totalDays);
+    tage += total > 0 ? Math.min(at, total) : at;
+  }
+  return tage;
+}
+
+// Kern der Scorecard: Personen-Kennzahlen über buildCockpit (Kilanka-Caches →
+// nur die erste Person kostet Netz), dann Aggregation nach Kilanka-Team.
+async function buildScorecard(env, liste, monat, effNow, mgrMap) {
+  const [j, m] = monat.split("-").map(Number);
+  const mStart = new Date(Date.UTC(j, m - 1, 1));
+  const mEnde = new Date(Date.UTC(j, m, 0));
+  const jStart = new Date(Date.UTC(j, 0, 1));
+  const qStart = new Date(Date.UTC(j, Math.floor((m - 1) / 3) * 3, 1, 12));
+
+  const abs = await fetchCockpitAbsences(env);
+  const atMonat = arbeitstageBayern(mStart, mEnde);
+  const atYtd = arbeitstageBayern(jStart, mEnde);
+
+  const personen = [];
+  for (const p of liste) {
+    const d = await buildCockpit(env, p.upn, effNow);
+    const vzae = d.person.wochenstundenVertrag ? d.person.wochenstundenVertrag / 39 : null;
+    // FLS-Quote nach Cockpit-Logik: Ist ÷ (Wochensoll ÷ 5 × Netto-Arbeitstage)
+    const sollKorr = d.fls?.nettoArbeitstage != null && d.fls?.sollWochenstunden
+      ? (d.fls.sollWochenstunden / 5) * d.fls.nettoArbeitstage : null;
+    const flsQuote = sollKorr && d.fls?.istMonatsstunden != null
+      ? Math.round((d.fls.istMonatsstunden / sollKorr) * 1000) / 10 : null;
+    personen.push({
+      upn: p.upn,
+      name: d.person.name || p.name || p.upn,
+      teamKilanka: d.person.team || null,
+      vzae,
+      faelle: d.klienten?.hb ?? 0,
+      flsQuote,
+      flsMonat: d.fls?.istMonat || null,
+      krankTageMonat: abs.verfuegbar === true ? krankArbeitstage(abs.data, d.person.kilankaId, mStart, mEnde) : null,
+      krankTageYtd: abs.verfuegbar === true ? krankArbeitstage(abs.data, d.person.kilankaId, jStart, mEnde) : null,
+      _ist: d.fls?.istMonatsstunden ?? null,
+      _sollKorr: sollKorr,
+    });
+  }
+
+  // Team = Entra-Führungskraft (gleiche Hierarchie wie Organisation-App und
+  // Manager-Cockpit) — die Kilanka-orgUnits bilden die realen Teams nicht ab
+  // (Befund 21.07.2026: 18 Personen in einer Einheit "Ambulante Jugendhilfe").
+  // Regeln: GF + direkt der GF zugeordnete Personen → "GF & Verwaltung";
+  // wer selbst Führungskraft ist, führt sein eigenes Team; sonst Team der
+  // eigenen Führungskraft. Ohne Graph-Token: Fallback auf Kilanka-orgUnit.
+  const gfSet = new Set(GF_UPNS.map((g) => g.trim().toLowerCase()));
+  const managerUpns = new Set([...mgrMap.values()].map((v) => v.upn));
+  const leaderName = new Map();
+  for (const v of mgrMap.values()) if (!leaderName.has(v.upn)) leaderName.set(v.upn, v.name);
+  for (const p of personen) {
+    const u = p.upn.toLowerCase();
+    if (!leaderName.has(u)) leaderName.set(u, p.name);
+  }
+  const teamLabel = new Map(); // Team-Name → Teamleitungs-Anzeige
+  for (const p of personen) {
+    const u = p.upn.toLowerCase();
+    let label, tl;
+    if (mgrMap.size === 0) {
+      label = p.teamKilanka || "Ohne Team-Zuordnung"; tl = null;
+    } else if (gfSet.has(u)) {
+      label = "GF & Verwaltung"; tl = "Geschäftsführung";
+    } else if (managerUpns.has(u)) {
+      tl = leaderName.get(u) || p.name; label = "Team " + tl;
+    } else {
+      const mgr = mgrMap.get(p.upn) || mgrMap.get(u);
+      if (!mgr) { label = "Ohne Team-Zuordnung"; tl = null; }
+      else if (gfSet.has(mgr.upn)) { label = "GF & Verwaltung"; tl = "Geschäftsführung"; }
+      else { tl = mgr.name; label = "Team " + tl; }
+    }
+    p.team = label;
+    if (!teamLabel.has(label)) teamLabel.set(label, tl);
+    // Quote deutlich über 100 % = Soll vermutlich unvollständig
+    // (Maßnahmen ohne bewertetes Kontingent / fehlendes timeBase)
+    p.flsVerdacht = p.flsQuote != null && p.flsQuote > 105;
+  }
+
+  // Netto-Akquise je Team: HB-Fallmengen Quartalsanfang vs. Stichtag,
+  // Team-Zuordnung über den Hauptbetreuer des Falls (hbUpn aus alleHbFaelle)
+  const upnTeam = new Map(personen.map((p) => [p.upn.toLowerCase(), p.team]));
+  const start = await alleHbFaelle(env, qStart);
+  const ende = await alleHbFaelle(env, effNow);
+  const startIds = new Set(start.map((f) => f.id));
+  const endeIds = new Set(ende.map((f) => f.id));
+  const akq = new Map();
+  let akqOhneTeam = 0;
+  const zaehl = (f, key) => {
+    const t = upnTeam.get((f.hbUpn || "").toLowerCase());
+    if (!t) { akqOhneTeam++; return; }
+    const e = akq.get(t) || { zugaenge: 0, abgaenge: 0 };
+    e[key]++;
+    akq.set(t, e);
+  };
+  for (const f of ende) if (!startIds.has(f.id)) zaehl(f, "zugaenge");
+  for (const f of start) if (!endeIds.has(f.id)) zaehl(f, "abgaenge");
+
+  // Team-Aggregation (FLS als Σ Ist ÷ Σ Soll korr., Krankheitsquote kopfbezogen)
+  const teamsMap = new Map();
+  for (const p of personen) {
+    const t = teamsMap.get(p.team) || { name: p.team, mitarbeiter: [], vzae: 0, faelle: 0, ist: 0, sollKorr: 0, krankM: 0, krankY: 0, koepfeAbs: 0 };
+    t.mitarbeiter.push({
+      name: p.name,
+      vzae: p.vzae != null ? Math.round(p.vzae * 100) / 100 : null,
+      faelle: p.faelle,
+      flsQuote: p.flsQuote,
+      flsVerdacht: p.flsVerdacht || false,
+      krankTageMonat: p.krankTageMonat,
+    });
+    if (p.vzae) t.vzae += p.vzae;
+    t.faelle += p.faelle;
+    if (p._ist != null && p._sollKorr) { t.ist += p._ist; t.sollKorr += p._sollKorr; }
+    if (p.krankTageMonat != null) { t.krankM += p.krankTageMonat; t.krankY += p.krankTageYtd || 0; t.koepfeAbs++; }
+    teamsMap.set(p.team, t);
+  }
+  const teams = [...teamsMap.values()].map((t) => {
+    const tl = teamLabel.get(t.name) || null;
+    return {
+      name: t.name,
+      tl,
+      vzae: Math.round(t.vzae * 10) / 10,
+      faelle: t.faelle,
+      flsQuote: t.sollKorr ? Math.round((t.ist / t.sollKorr) * 1000) / 10 : null,
+      flsVormonat: null, // Vormonatsvergleich folgt (zweiter Stichtagslauf)
+      flsVerdachtAnzahl: t.mitarbeiter.filter((m) => m.flsVerdacht).length,
+      krankQuoteMonat: t.koepfeAbs && atMonat ? Math.round((t.krankM / (atMonat * t.koepfeAbs)) * 1000) / 10 : null,
+      krankQuoteYtd: t.koepfeAbs && atYtd ? Math.round((t.krankY / (atYtd * t.koepfeAbs)) * 1000) / 10 : null,
+      akquiseQuartal: akq.get(t.name) || { zugaenge: 0, abgaenge: 0 },
+      mitarbeiter: t.mitarbeiter.sort((a, b) => a.name.localeCompare(b.name, "de")),
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name, "de"));
+
+  // Fallbestand-Verlauf: 6 Monatsend-Stichtage (reine Rechnung auf dem Cache)
+  const fallbestandVerlauf = [];
+  for (let i = 5; i >= 0; i--) {
+    const st = new Date(Date.UTC(j, m - i, 0, 12));
+    const teil = await alleHbFaelle(env, st > effNow ? effNow : st);
+    fallbestandVerlauf.push(teil.length);
+  }
+
+  return { teams, fallbestandVerlauf, akquiseSeit: qStart.toISOString().slice(0, 10), akquiseOhneTeam: akqOhneTeam };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Umsatz-Prognose (Stufe A) — Kapazität × Kalibrierung.
+// Ohne Tages-Leistungsdaten (Graph nicht freigegeben): Prognose =
+// Ø-Tagesumsatz der letzten 3 abgeschlossenen Monate × Arbeitstage
+// des Zielzeitraums × Kapazitätsfaktor (Soll-FLS heute ÷ Soll-FLS
+// der Basismonate) × Abwesenheits-Deltafaktor. Definition:
+// docs/scorecard-kennzahlen.md. Stufe B (Ist-Nowcast) folgt nach
+// Freigabe des Leistungsdoku-Graphen.
+// ═══════════════════════════════════════════════════════════════
+
+// Bewilligte FLS-Wochenstunden der gesamten Organisation zum Stichtag
+// (je aktiver Maßnahme das erste verwertbare Kontingent, volle Stunden
+// ohne Betreuer-Anteile — org-weit summieren sich Anteile zu 1)
+async function orgSollFlsWoche(env, stichtag) {
+  const clients = await fetchKilankaClients(env);
+  let soll = 0, massnahmen = 0, ohneBewertung = 0;
+  for (const client of clients) {
+    if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
+    for (const action of client.actions || []) {
+      if (isArchived(action.recName)) continue;
+      const hbAktiv = (action.attendants || []).some((a) => a.user &&
+        a.attendantKind?.name === "Hauptbetreuer" && isCurrent(a.validFrom, a.validUntil, stichtag));
+      if (!hbAktiv) continue;
+      massnahmen++;
+      let beitrag = null;
+      for (const q of action.quotas || []) {
+        if (kDate(q.deletedAt)) continue;
+        if (q.timeBase === "quantity") continue;
+        const appr = pickApproval(q.approvals, stichtag);
+        if (!appr || appr.stunden == null || appr.status !== "aktuell") continue;
+        switch (q.timeBase) {
+          case "week": beitrag = appr.stunden; break;
+          case "month_current": beitrag = (appr.stunden * 12) / 52; break;
+          case "pool": {
+            const wochen = appr.von && appr.bis ? Math.max(1, (appr.bis - appr.von) / 6048e5) : null;
+            if (wochen) beitrag = appr.stunden / wochen;
+            break;
+          }
+        }
+        if (beitrag != null) break;
+      }
+      if (beitrag != null) soll += beitrag; else ohneBewertung++;
+    }
+  }
+  return { soll: Math.round(soll * 10) / 10, massnahmen, ohneBewertung };
+}
+
+async function buildPrognose(env) {
+  const heute = new Date();
+  const j = heute.getUTCFullYear(), m = heute.getUTCMonth() + 1;
+  const basisMonate = [];
+  for (let i = 3; i >= 1; i--) basisMonate.push(new Date(Date.UTC(j, m - 1 - i, 1)).toISOString().slice(0, 7));
+
+  // Umsatzbasis aus dem vorhandenen Rechnungs-Cache (seit 1.1. Vorjahr)
+  const seit = new Date(Date.UTC(j - 1, 0, 1)).toISOString().slice(0, 10);
+  const invoices = await fetchScorecardInvoices(env, seit);
+  const umsatzMonat = (mo) => {
+    let s = 0;
+    for (const inv of invoices) {
+      if (kDate(inv.deletedAt) || istStornoRechnung(inv)) continue;
+      if (((inv.date && inv.date.$date) || "").slice(0, 7) === mo) s += decimalToNumber(inv.totalWithTax);
+    }
+    return s;
+  };
+  const basisUmsaetze = basisMonate.map(umsatzMonat);
+  const basisAt = basisMonate.map((mo) => {
+    const [bj, bm] = mo.split("-").map(Number);
+    return arbeitstageBayern(new Date(Date.UTC(bj, bm - 1, 1)), new Date(Date.UTC(bj, bm, 0)));
+  });
+  const tagesUmsatzBasis = basisUmsaetze.reduce((s, v) => s + v, 0) / Math.max(1, basisAt.reduce((s, v) => s + v, 0));
+
+  // Kapazität: bewilligte Wochenstunden heute vs. Ø der Basismonats-Mitten
+  const sollJetzt = await orgSollFlsWoche(env, heute);
+  let sollBasisSumme = 0;
+  for (const mo of basisMonate) {
+    const [bj, bm] = mo.split("-").map(Number);
+    sollBasisSumme += (await orgSollFlsWoche(env, new Date(Date.UTC(bj, bm - 1, 15, 12)))).soll;
+  }
+  const sollBasisAvg = sollBasisSumme / basisMonate.length;
+  const kapFaktor = sollBasisAvg ? sollJetzt.soll / sollBasisAvg : 1;
+
+  // Abwesenheiten (genehmigt, alle Typen): Zielzeitraum relativ zum Basisniveau
+  const abs = await fetchCockpitAbsences(env);
+  const koepfe = (await alleAktivenMitarbeiter(env)).length || 1;
+  const abwTage = (von, bis) => {
+    if (abs.verfuegbar !== true) return null;
+    let t = 0;
+    for (const a of abs.data || []) {
+      if ((a.status || "").toLowerCase() !== "approved") continue;
+      const b = kDate(a.begin), e = kDate(a.end) || kDate(a.begin);
+      if (!b || !e || e < von || b > bis) continue;
+      const at = arbeitstageBayern(b > von ? b : von, e < bis ? e : bis);
+      const total = decimalToNumber(a.totalDays);
+      t += total > 0 ? Math.min(at, total) : at;
+    }
+    return t;
+  };
+  let basisAbwQuote = null;
+  if (abs.verfuegbar === true) {
+    let t = 0, kap = 0;
+    basisMonate.forEach((mo, i) => {
+      const [bj, bm] = mo.split("-").map(Number);
+      t += abwTage(new Date(Date.UTC(bj, bm - 1, 1)), new Date(Date.UTC(bj, bm, 0))) || 0;
+      kap += basisAt[i] * koepfe;
+    });
+    basisAbwQuote = kap ? t / kap : null;
+  }
+  const zeitraumFaktor = (von, bis) => {
+    const at = arbeitstageBayern(von, bis);
+    if (basisAbwQuote == null || !at) return { at, faktor: 1, abwQuote: null };
+    const quote = (abwTage(von, bis) || 0) / (at * koepfe);
+    return {
+      at,
+      faktor: Math.max(0, 1 - quote) / Math.max(0.5, 1 - basisAbwQuote),
+      abwQuote: Math.round(quote * 1000) / 10,
+    };
+  };
+
+  // Zielzeiträume: laufende Kalenderwoche (Mo–Fr) und laufender Monat
+  const dow = (heute.getUTCDay() + 6) % 7;
+  const wStart = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth(), heute.getUTCDate() - dow));
+  const wEnde = new Date(wStart.getTime() + 4 * 864e5);
+  const mStart = new Date(Date.UTC(j, m - 1, 1));
+  const mEnde = new Date(Date.UTC(j, m, 0));
+  const w = zeitraumFaktor(wStart, wEnde);
+  const mo = zeitraumFaktor(mStart, mEnde);
+
+  // Bandbreite = Streuung der Basis-Tagesumsätze (mindestens ±5 %)
+  const tages = basisUmsaetze.map((u, i) => u / Math.max(1, basisAt[i]));
+  const avgT = tages.reduce((s, v) => s + v, 0) / tages.length;
+  const sigma = avgT ? Math.sqrt(tages.reduce((s, v) => s + (v - avgT) ** 2, 0) / tages.length) / avgT : 0;
+  const band = Math.max(0.05, Math.round(sigma * 100) / 100);
+
+  const progWoche = tagesUmsatzBasis * w.at * kapFaktor * w.faktor;
+  const progMonat = tagesUmsatzBasis * mo.at * kapFaktor * mo.faktor;
+  return {
+    stand: new Date().toISOString(),
+    modell: "Stufe A: Ø-Tagesumsatz × Arbeitstage × Kapazität (bewilligte Wochenstunden) × Abwesenheits-Delta — ohne Tages-Leistungsdaten",
+    basisMonate,
+    basisUmsaetze: basisUmsaetze.map((v) => Math.round(v)),
+    tagesUmsatzBasis: Math.round(tagesUmsatzBasis),
+    sollFlsWoche: sollJetzt.soll,
+    sollFlsWocheBasis: Math.round(sollBasisAvg * 10) / 10,
+    kapazitaetsFaktor: Math.round(kapFaktor * 1000) / 1000,
+    massnahmenOhneBewertung: sollJetzt.ohneBewertung,
+    bandbreiteProzent: Math.round(band * 100),
+    woche: { von: wStart.toISOString().slice(0, 10), bis: wEnde.toISOString().slice(0, 10), arbeitstage: w.at,
+      abwesenheitsQuote: w.abwQuote, prognose: Math.round(progWoche), min: Math.round(progWoche * (1 - band)), max: Math.round(progWoche * (1 + band)) },
+    monat: { monat: mStart.toISOString().slice(0, 7), arbeitstage: mo.at,
+      abwesenheitsQuote: mo.abwQuote, prognose: Math.round(progMonat), min: Math.round(progMonat * (1 - band)), max: Math.round(progMonat * (1 + band)) },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HTTP-Handling
 // ═══════════════════════════════════════════════════════════════
 function corsHeaders(origin) {
@@ -1686,6 +2130,144 @@ export default {
       } catch (e) {
         return json({ error: `Cockpit-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
       }
+    }
+
+    // Business Scorecard: GF = alle Teams + Finanzen, TL = eigenes Team
+    if (url.pathname === "/api/scorecard" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
+        return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      }
+      try {
+        // Zugriff ausschließlich Geschäftsführung (GF_UPNS) — Vorgabe 21.07.2026:
+        // keine Teamleitungs- oder Mitarbeitersicht auf die Scorecard.
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        if (!istGf) {
+          return json({ error: "Die Business Scorecard ist der Geschäftsführung vorbehalten" }, 403, origin);
+        }
+        const rolle = "gf";
+
+        // Monat wählen (?monat=YYYY-MM, Default: aktueller Monat).
+        // Stichtag = erster Tag des Folgemonats 12:00 UTC (dann liefert der
+        // FLS-Rechnungslauf genau den gewählten Monat), gedeckelt auf jetzt.
+        const heute = new Date();
+        let monat = url.searchParams.get("monat") || heute.toISOString().slice(0, 7);
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat)) monat = heute.toISOString().slice(0, 7);
+        const [j, m] = monat.split("-").map(Number);
+        const folgeErster = new Date(Date.UTC(j, m, 1, 12));
+        const effNow = folgeErster < heute ? folgeErster : heute;
+
+        const liste = await alleAktivenMitarbeiter(env);
+        const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
+        const kern = await buildScorecard(env, liste, monat, effNow, mgrMap);
+
+        const hinweise = ["FLS-Ist aus Rechnungen (Leistungsdoku-Graph nicht freigegeben); für den laufenden Monat zeigt FLS den Vormonat."];
+        if (kern.akquiseOhneTeam > 0) hinweise.push(`${kern.akquiseOhneTeam} Fall-Bewegung(en) ohne Team-Zuordnung (HB außerhalb der Sicht) — vollständig nur in der GF-Sicht.`);
+        let finanzen = null;
+        {
+          try {
+            const seit = new Date(Date.UTC(j - 1, 0, 1)).toISOString().slice(0, 10); // ab 1. Jan. Vorjahr — YoY/YTD-Vergleiche
+            finanzen = finanzBlock(await fetchScorecardInvoices(env, seit), monat);
+          } catch (e) {
+            hinweise.push("Finanzblock nicht verfügbar: " + e.message);
+          }
+        }
+        return json({
+          rolle,
+          monat,
+          stand: new Date().toISOString(),
+          stichtag: effNow.toISOString().slice(0, 10),
+          akquiseSeit: kern.akquiseSeit,
+          finanzen,
+          teams: kern.teams,
+          fallbestandVerlauf: kern.fallbestandVerlauf,
+          hinweise,
+        }, 200, origin);
+      } catch (e) {
+        return json({ error: `Scorecard fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    // Umsatz-Prognose (Stufe A) — nur GF
+    if (url.pathname === "/api/prognose" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Die Prognose ist der Geschäftsführung vorbehalten" }, 403, origin);
+      }
+      try {
+        return json(await buildPrognose(env), 200, origin);
+      } catch (e) {
+        return json({ error: `Prognose fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    // TEMPORÄR: Applet-Endpunkt auf Leistungsdoku-Modelle sondieren — nach
+    // Auswertung wieder entfernen (Muster wie scorecard-probe)
+    if (url.pathname === "/api/applet-probe" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Diagnose-Route ist der GF vorbehalten" }, 403, origin);
+      }
+      const basen = {
+        schnittstelle: KILANKA_BASE,
+        applet: KILANKA_BASE.replace("/public/", "/applet/"),
+      };
+      const modelle = ["services", "performances", "documentations", "activities", "worklogs", "timeentries", "records"];
+      const tests = {};
+      for (const [bName, basis] of Object.entries(basen)) {
+        for (const modell of modelle) {
+          try {
+            const r = await fetch(`${basis}/${modell}`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
+              body: JSON.stringify({ $limit: 1, id: 1 }),
+            });
+            let keys = null;
+            if (r.ok) {
+              const jx = await r.json().catch(() => null);
+              const rows = Array.isArray(jx?.data) ? jx.data : Array.isArray(jx) ? jx : [jx];
+              keys = rows[0] ? Object.keys(rows[0]) : [];
+            }
+            tests[`${bName}:${modell}`] = { status: r.status, keys };
+          } catch (e) {
+            tests[`${bName}:${modell}`] = { status: 0, fehler: e.message };
+          }
+          await new Promise((res) => setTimeout(res, 600));
+        }
+      }
+      // Feld-Drop-Test: unbekannte Untergraphen an actions werden still ignoriert —
+      // taucht "services"/"performances" im Response auf, existiert das Feld
+      try {
+        const r = await fetch(`${KILANKA_BASE}/clients`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}`, "Content-Type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ $limit: 3, id: 1, actions: { id: 1, services: { id: 1 }, performances: { id: 1 }, documentations: { id: 1 } } }),
+        });
+        const jx = await r.json().catch(() => null);
+        const rows = Array.isArray(jx?.data) ? jx.data : Array.isArray(jx) ? jx : [];
+        const felder = new Set();
+        for (const c of rows) for (const a of c.actions || []) Object.keys(a).forEach((k) => felder.add(k));
+        tests["feldDropTest:actions"] = { status: r.status, actionFelder: [...felder] };
+      } catch (e) {
+        tests["feldDropTest:actions"] = { status: 0, fehler: e.message };
+      }
+      try {
+        const r = await fetch(`${basen.applet}/documentation`, {
+          headers: { Authorization: `Bearer ${env.KILANKA_TOKEN}` },
+        });
+        let info = null;
+        if (r.ok) { const spec = await r.json().catch(() => null); info = spec && { version: spec.info?.version, endpunkte: Object.keys(spec.paths || {}) }; }
+        tests["applet:documentation"] = { status: r.status, info };
+      } catch (e) {
+        tests["applet:documentation"] = { status: 0, fehler: e.message };
+      }
+      return json({ stand: new Date().toISOString(), tests }, 200, origin);
     }
 
     return json({ error: "Nicht gefunden" }, 404, origin);
