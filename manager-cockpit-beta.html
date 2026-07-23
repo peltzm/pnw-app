@@ -858,7 +858,12 @@ async function parseZeitenDateien(files) {
         const name = String(r[iMA]).replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').trim();
         const e = mp.get(name) || { termine: 0, stunden: 0, liste: [] };
         e.termine += 1; e.stunden += h;
-        e.liste.push({ d: tag, k: String((iKli >= 0 && r[iKli]) || '').trim(), h: Math.round(h * 100) / 100 });
+        let klientName = String((iKli >= 0 && r[iKli]) || '').trim();
+        if (!klientName) {
+          const kst = String((iKst >= 0 && r[iKst]) || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          if (kst === 'nordstern erziehung und betreuung') klientName = 'Nordstern';
+        }
+        e.liste.push({ d: tag, k: klientName, h: Math.round(h * 100) / 100 });
         mp.set(name, e);
       }
       const basis = f.name.replace(/\.xlsx$/i, '');
