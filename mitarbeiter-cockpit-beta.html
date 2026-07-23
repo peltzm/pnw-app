@@ -801,6 +801,9 @@ async function loadLive(upn) {
       if (!liveSicht) { liveSicht = data.sicht; setupLiveViewbar(); }
     }
     renderLivePerson(data);
+    // Personen-Dropdown mit der tatsächlich geladenen Person synchronisieren
+    const psel = document.getElementById('personSelect');
+    if (psel && psel.style.display !== 'none' && [...psel.options].some(o => o.value === data.upn)) psel.value = data.upn;
     return true;
   } catch(e) {
     console.warn('Live nicht verfügbar:', e.message);
@@ -1014,7 +1017,12 @@ async function showApp() {
   document.getElementById('userBadge').style.display = 'flex';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   document.getElementById('logoutBtn').style.display = '';
-  if (await loadLive(null)) { liveMode = true; return; }
+  const qUpn = (new URLSearchParams(location.search).get('mitarbeiter') || '').trim().toLowerCase() || null;
+  if (await loadLive(qUpn)) {
+    liveMode = true;
+    if (location.hash === '#zbk') setTimeout(() => document.querySelector('.card.c-fls')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    return;
+  }
   // Fallback: Demo-Daten — mit sichtbarer Fehlerursache
   const bar = document.getElementById('demoBar');
   bar.style.display = 'flex';

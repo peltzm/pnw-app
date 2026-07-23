@@ -183,7 +183,7 @@ tr{cursor:pointer}
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet).
-      Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (alle Leistungen außer Codes 97/98/20/42/43/119, ohne ausgefallene TA-Termine, plus Kostenstelle „Nordstern Erziehung und Betreuung"); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+      Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (alle Leistungen außer Codes 97/98/20/42/43/119, ohne ausgefallene TA-Termine, plus Kostenstelle „Nordstern Erziehung und Betreuung"); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit der jeweiligen Person (direkt bei Ø Zeit beim Klienten).
     </div>
 
     <!-- Abwesenheiten & Vertretungen (GF + Teamleitungen) -->
@@ -503,7 +503,7 @@ function render() {
           : '<span class="chip chip-warn">kein Dienstplan</span>')
       : (kz.auslastung == null ? '—'
           : `<span class="chip ${kz.auslastung>=95?'chip-ok':kz.auslastung>=80?'chip-warn':'chip-err'}">${kz.auslastung} %</span>`);
-    return `<tr onclick="location.href='mitarbeiter-cockpit-beta.html'">
+    return `<tr onclick="location.href='mitarbeiter-cockpit-beta.html?mitarbeiter=${encodeURIComponent(r.upn)}#zbk'">
       <td><span class="name">${esc(r.name)}</span><br><span class="team">${esc(r.team || '')}</span></td>
       <td>${r.klienten?.aktiv ?? '—'} <span class="team">(${r.klienten?.hb ?? 0}/${r.klienten?.mb ?? 0}/${r.klienten?.v ?? 0})</span></td>
       <td>${fmtNum(kz.sollMonat,1)}</td>
