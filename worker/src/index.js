@@ -1484,6 +1484,20 @@ async function buildCockpit(env, upn, now, zbkMonat) {
     fls.istQuelle = approvalIds.size > 0 ? "rechnungen (approval-id)" : "rechnungen (klient-fallback)";
     fls.istRechnungen = treffer;
 
+    // Ist bevorzugt aus der hochgeladenen Zeiterfassung — gleiche Klassifikations-
+    // logik wie "Ø Zeit beim Klienten" (KV-Aggregate). Rechnungswert bleibt als
+    // abgerechnetMonatsstunden erhalten (Abgleich Erfasst vs. Fakturiert).
+    try {
+      const tMap = await zeitenTermineMap(env, monatIso);
+      const zE = tMap && person ? tMap.get(normName(person.name)) : null;
+      if (zE && zE.stunden > 0) {
+        fls.abgerechnetMonatsstunden = fls.istMonatsstunden;
+        fls.istMonatsstunden = Math.round(zE.stunden * 100) / 100;
+        fls.istTermine = zE.termine;
+        fls.istQuelle = "zeiterfassung (Kilanka-Export)";
+      }
+    } catch (e) { /* Zeiterfassung optional */ }
+
     // Abwesenheitstage im Ist-Monat — Basis für das arbeitstags-korrigierte
     // Soll im Cockpit (fls-Soll ÷ 5 × [Arbeitstage − Abwesenheitstage]).
     // Alle genehmigten Abwesenheiten zählen (Urlaub, Krankheit, Kind krank,
@@ -2387,7 +2401,7 @@ export default {
         const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
         const kern = await buildScorecard(env, liste, monat, effNow, mgrMap);
 
-        const hinweise = ["FLS-Ist aus Rechnungen (Leistungsdoku-Graph nicht freigegeben); für den laufenden Monat zeigt FLS den Vormonat."];
+        const hinweise = ["FLS-Ist aus hochgeladener Zeiterfassung (gleiche Logik wie Ø Zeit beim Klienten), ohne Upload aus Rechnungen; für den laufenden Monat zeigt FLS den Vormonat."];
         if (kern.akquiseOhneTeam > 0) hinweise.push(`${kern.akquiseOhneTeam} Fall-Bewegung(en) ohne Team-Zuordnung (HB außerhalb der Sicht) — vollständig nur in der GF-Sicht.`);
         let finanzen = null;
         {

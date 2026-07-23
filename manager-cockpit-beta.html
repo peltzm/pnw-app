@@ -182,7 +182,7 @@ tr{cursor:pointer}
       Nachweise: FZ = Führungszeugnis (5 J.) · DS = Datenschutz (einmalig) · EH = Ersthelfer/BEH (jährl., 3 Mon. Vorwarnung, nur Nordstern) —
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
-      Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet).
+      Auslastung = Ist-Stunden des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet); Ist aus der hochgeladenen Zeiterfassung (gleiche Logik wie Ø Zeit/Klient), ohne Upload aus abgerechneten FLS.
       Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (alle Leistungen außer Codes 97/98/20/42/43/119, ohne ausgefallene TA-Termine, plus Kostenstelle „Nordstern Erziehung und Betreuung"); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit der jeweiligen Person (direkt bei Ø Zeit beim Klienten).
     </div>
 
@@ -484,7 +484,7 @@ function render() {
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">= ${fmtNum(rows.reduce((s,r)=>s+(r.wochenstunden||0),0)/39, 1)} VZÄ (39 h/Wo)${rows.some(r=>r.wochenstunden==null) ? ' · ' + rows.filter(r=>r.wochenstunden==null).length + ' ohne Vertragsstunden' : ''}</div></div>
     <div class="kpi"><div class="v">${sumKli}</div><div class="l">Aktive Klienten</div><div class="s">HB + MB + Vertretung</div></div>
-    <div class="kpi"><div class="v">${avgAusl != null ? avgAusl + ' %' : '—'}</div><div class="l">Ø FLS-Auslastung</div><div class="s">abgerechneter Vormonat</div></div>
+    <div class="kpi"><div class="v">${avgAusl != null ? avgAusl + ' %' : '—'}</div><div class="l">Ø FLS-Auslastung</div><div class="s">Vormonat · Zeiterfassung, sonst Rechnungen</div></div>
     <div class="kpi"><div class="v">${zbkKpi != null ? fmtNum(zbkKpi,jeTermin?2:1) + ' h' : '—'}</div><div class="l">Ø Zeit beim Klienten</div><div class="s">${jeTermin ? 'je Termin · Zeiterfassung' : 'je Klient/Monat · Rechnungen'} · ${zbkMonatLabel()}${zbkYtd != null ? ' · YtD Ø ' + fmtNum(zbkYtd,2) + ' h' : ''}</div></div>
     <div class="kpi"><div class="v">${fmtNum(sumKrank,1)}</div><div class="l">Krank-Tage YTD</div><div class="s">Summe Team</div></div>
     <div class="kpi"><div class="v" style="color:${kritisch ? 'var(--error)' : 'var(--ok)'}">${kritisch}</div><div class="l">Nachweise überfällig</div><div class="s">Führungszeugnis / Datenschutz</div></div>`;
