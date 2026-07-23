@@ -183,7 +183,7 @@ tr{cursor:pointer}
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet).
-      Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (alle Leistungen außer Codes 97/98/20/42/43/119, ohne ausgefallene TA-Termine); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+      Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (alle Leistungen außer Codes 97/98/20/42/43/119, ohne ausgefallene TA-Termine, plus Kostenstelle „Nordstern Erziehung und Betreuung"); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
     </div>
 
     <!-- Abwesenheiten & Vertretungen (GF + Teamleitungen) -->
@@ -218,7 +218,8 @@ tr{cursor:pointer}
               Excel-Export der Zeiterfassung (z. B. <code>Zeiterfassung_2605H1.xlsx</code>). Die Datei wird lokal im Browser
               ausgewertet — an den Server gehen nur Aggregate je Mitarbeiter:in und Monat (Termine, Stunden), keine Klientendaten.
               Klienten-Termin = jeder Eintrag mit Leistung, deren Code nicht mit 97, 98, 20, 42, 43 oder 119 beginnt
-              (mediale Kontakte, Berichtszeit, KM/Fahrzeit), ohne ausgefallene Termine (Tätigkeit „TA").
+              (mediale Kontakte, Berichtszeit, KM/Fahrzeit), ohne ausgefallene Termine (Tätigkeit „TA");
+              zusätzlich zählen Einträge mit Kostenstelle „Nordstern Erziehung und Betreuung".
               Erneuter Upload derselben Datei überschreibt deren Stand.
             </div>
           </div>
@@ -817,9 +818,13 @@ function monatVon(v) {
 // ausgefallene Termine (Tätigkeit "TA") zählen ebenfalls nicht.
 const ZBK_AUSSCHLUSS_CODES = ['97', '98', '20', '42', '43', '119'];
 function klassifiziereEintrag(r) {
-  const L = String(r.leistung || '').trim();
-  if (!L) return 'sonstiges';
   if (/^TA\b/.test(String(r.taetigkeit || '').trim())) return 'ausgefallen';
+  const L = String(r.leistung || '').trim();
+  if (!L) {
+    // Nordstern-Dienste laufen ohne Leistung über die Kostenstelle — zählen als Klientenzeit
+    const K = String(r.kostenstelle || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    return K === 'nordstern erziehung und betreuung' ? 'termin' : 'sonstiges';
+  }
   const code = (L.match(/^(\d+)/) || [])[1] || '';
   return ZBK_AUSSCHLUSS_CODES.includes(code) ? 'ausgeschlossen' : 'termin';
 }
