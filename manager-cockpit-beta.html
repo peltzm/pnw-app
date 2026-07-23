@@ -756,6 +756,7 @@ function klassifiziereEintrag(r) {
   return ZBK_AUSSCHLUSS_CODES.includes(code) ? 'ausgeschlossen' : 'termin';
 }
 async function parseZeitenDateien(files) {
+  files = [...files]; // Kopie! this.value='' leert die Live-FileList während der Auswertung
   const out = document.getElementById('zeitenVorschau');
   out.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">Dateien werden ausgewertet …</div>';
   zeitenPayloads = [];
@@ -800,10 +801,13 @@ async function parseZeitenDateien(files) {
     out.innerHTML = '<span style="color:var(--error);font-size:12px">Keine Klienten-Termine gefunden.' + (fehler.length ? ' ' + esc(fehler.join(' · ')) : '') + '</span>';
     return;
   }
-  out.innerHTML = zeitenPayloads.map(p => `
-    <div style="font-weight:600;font-size:13px;margin-top:8px">${p.monat} · ${esc(p.kennung)} — ${p.werte.length} Mitarbeiter:innen <span style="font-weight:400;color:var(--ok)">(inkl. Termin-Details)</span></div>
+  out.innerHTML = zeitenPayloads.map(p => {
+    const sTer = p.werte.reduce((s,w)=>s+w.termine,0), sStd = p.werte.reduce((s,w)=>s+w.stunden,0);
+    return `<details style="margin-top:8px">
+    <summary style="cursor:pointer;font-weight:600;font-size:13px">${p.monat} · ${esc(p.kennung)} — ${p.werte.length} Mitarbeiter:innen · ${sTer} Termine · ${fmtNum(sStd,1)} h · Ø ${fmtNum(sTer ? sStd/sTer : 0,2)} h <span style="font-weight:400;color:var(--ok)">(inkl. Termin-Details)</span></summary>
     <table class="tbl" style="font-size:12px;margin-top:4px"><tr><th style="text-align:left">Mitarbeiter:in</th><th style="text-align:right">Termine</th><th style="text-align:right">Stunden</th><th style="text-align:right">Ø je Termin</th></tr>
-    ${p.werte.map(w => `<tr><td>${esc(w.name)}</td><td style="text-align:right">${w.termine}</td><td style="text-align:right">${fmtNum(w.stunden,2)}</td><td style="text-align:right">${fmtNum(w.stunden / w.termine, 2)} h</td></tr>`).join('')}</table>`).join('')
+    ${p.werte.map(w => `<tr><td>${esc(w.name)}</td><td style="text-align:right">${w.termine}</td><td style="text-align:right">${fmtNum(w.stunden,2)}</td><td style="text-align:right">${fmtNum(w.stunden / w.termine, 2)} h</td></tr>`).join('')}</table></details>`;
+  }).join('')
     + (fehler.length ? `<div style="color:var(--error);font-size:12px;margin-top:6px">${esc(fehler.join(' · '))}</div>` : '')
     + `<button class="btn" style="margin-top:10px;padding:6px 14px;font-size:13px" onclick="uploadZeiten(this)">Hochladen (${zeitenPayloads.length} Monat${zeitenPayloads.length === 1 ? '' : 'e'})</button>`;
 }
