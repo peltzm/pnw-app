@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNW Klienten-Cockpit</title>
+<link rel="icon" href="assets/logo-pnw-neu.png">
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --text:#1a1916;
+  --text-muted:#6b6860; --text-hint:#a09e99; --accent:#7b3f1e;
+  --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2; --radius:8px; --radius-lg:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-brand img{height:28px}
+.header-brand span{font-size:13px;font-weight:600}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.header-right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:inherit}
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - 56px);padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:400px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:60px;margin-bottom:1rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.4rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem;display:none}
+#appScreen{display:none}
+.page-header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header h2{font-size:17px;font-weight:600}
+.page-header p{font-size:12px;color:var(--text-muted)}
+.wrap{max-width:1360px;margin:0 auto;padding:18px 20px 60px}
+/* KPI-Kacheln */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px}
+.kpi .v{font-size:26px;font-weight:700;line-height:1.15}
+.kpi .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.kpi .s{font-size:11px;color:var(--text-hint);margin-top:2px}
+/* Tabelle */
+.tablecard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:1050px;font-size:12.5px}
+th{position:sticky;top:0;background:var(--surface);text-align:right;padding:10px 10px;border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);cursor:pointer;white-space:nowrap;user-select:none}
+th:first-child,td:first-child{text-align:left;padding-left:16px}
+th.sorted{color:var(--accent)}
+td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+tr:hover td{background:var(--accent-light)}
+tr{cursor:pointer}
+.name{font-weight:600}
+.team{font-size:11px;color:var(--text-hint)}
+.chip{display:inline-block;font-size:11px;font-weight:600;border-radius:12px;padding:1px 9px}
+.chip-ok{background:var(--ok-bg);color:var(--ok)}
+.chip-warn{background:var(--warn-bg);color:var(--warn)}
+.chip-err{background:var(--error-bg);color:var(--error)}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin:0 2px;vertical-align:-1px}
+.d-ok{background:var(--ok)}.d-warn{background:#e6a23c}.d-err{background:#d9534f}.d-neutral{background:var(--border)}
+.legend{font-size:11px;color:var(--text-hint);margin-top:10px;line-height:1.7}
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:70px 20px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Zielerreichung Teamleitungen */
+.zielsection{margin-top:28px}
+.ziel-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.ziel-head h3{font-size:15px;font-weight:600}
+.ziel-head p{font-size:11px;color:var(--text-hint)}
+.zielcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.zielcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px}
+.zielcard .tl-name{font-size:14px;font-weight:600;margin-bottom:2px}
+.zielcard .tl-sub{font-size:11px;color:var(--text-hint);margin-bottom:10px}
+.zielrow{display:grid;grid-template-columns:1fr 78px 64px;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px}
+.zielrow:last-of-type{border-bottom:none}
+.zielrow .zl{color:var(--text-muted)}
+.zielrow .zl b{color:var(--text);font-weight:600}
+.zielrow .zl .zt{font-size:10.5px;color:var(--text-hint)}
+.zielrow .zi{text-align:right;font-weight:600}
+.zielrow input{width:100%;height:28px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-family:inherit;text-align:right;background:var(--accent-light)}
+.zielrow .ze{text-align:right}
+.ziel-total{display:flex;align-items:baseline;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:2px solid var(--border)}
+.ziel-total .lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.ziel-total .val{font-size:26px;font-weight:700}
+.ziel-hint{font-size:11px;color:var(--text-hint);margin-top:8px;line-height:1.5}
+.ziel-gehalt{display:grid;grid-template-columns:1fr 110px;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px}
+.ziel-gehalt .zl{color:var(--text-muted)}
+.ziel-gehalt input{width:100%;height:28px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-family:inherit;text-align:right;background:var(--accent-light)}
+.ziel-zulage{display:flex;align-items:baseline;justify-content:space-between;margin-top:8px}
+.ziel-zulage .lbl{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.ziel-zulage .val{font-size:18px;font-weight:700;color:var(--accent)}
+/* Abwesenheiten & Vertretungen */
+.abwsection{margin-top:24px}
+.abwsection h3{font-size:15px;font-weight:600;margin-bottom:10px}
+.abwgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.abwcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px}
+.abwcard h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.abweintrag{padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px}
+.abweintrag:last-child{border-bottom:none}
+.abweintrag .kopfzeile{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.abweintrag .kopfzeile b{font-weight:600}
+.abweintrag .zeitraum{font-size:12px;color:var(--text-muted);white-space:nowrap}
+.vfall{font-size:12px;margin-top:3px;padding-left:10px}
+.vfall .ok{color:var(--ok)}
+.vfall .offen{color:var(--error);font-weight:600}
+.vfall .tipp{color:var(--text-hint)}
+.abwleer{font-size:12px;color:var(--text-hint);padding:6px 0}
+.netto-btn{background:none;border:none;font:inherit;font-weight:600;color:var(--accent);cursor:pointer;text-decoration:underline dotted;padding:0}
+.falldiff{display:none;background:var(--accent-light);border-radius:8px;padding:10px 12px;margin:8px 0;font-size:12px}
+.falldiff.open{display:block}
+.falldiff h5{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);margin:6px 0 2px}
+.falldiff h5:first-child{margin-top:0}
+.falldiff ul{list-style:none;margin:0;padding:0}
+.falldiff li{padding:1px 0}
+.fd-plus{color:var(--ok);font-weight:700;margin-right:4px}
+.fd-minus{color:var(--error);font-weight:700;margin-right:4px}
+@media (max-width:640px){.wrap{padding:14px 10px 50px}}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-brand">
+    <img src="assets/logo-pnw-neu.png" alt="PNW">
+    <span>Klienten-Cockpit</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <span id="userName"></span>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="assets/logo-pnw-neu.png" alt="PNW">
+    <div class="login-title">Klienten-Cockpit <span class="beta-badge">BETA</span></div>
+    <div class="login-desc">Kontingent-Auslastung je Klient:in — Bewilligung vs. erfasste Zeiten vs. Abrechnung. Nur für die Geschäftsführung.</div>
+    <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
+      <svg width="16" height="16" viewBox="0 0 21 21"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <div class="alert-error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="page-header">
+    <div>
+      <h2>Klienten-Übersicht</h2>
+      <p id="pageSub">wird geladen …</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Monat</label>
+      <select id="monatFilter" onchange="reload()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)"></select>
+      <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Fachkraft</label>
+      <select id="fkFilter" onchange="render()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)"><option value="">Alle</option></select>
+      <input id="suche" oninput="render()" placeholder="Klient suchen …" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)">
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="reload()">Aktualisieren</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="kpis" id="kpis"></div>
+    <div class="tablecard">
+      <table class="tbl" id="tabelle"></table>
+      <div class="note" id="legende"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const APP_VERSION = 'BETA-dev'; // auto-updated on deploy
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/klienten-cockpit-beta.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read'];
+let msalInstance = null, currentAccount = null, daten = null;
+let sortKey = 'delta', sortDir = -1, offenId = null;
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtNum(v, nk) { return Number(v ?? 0).toLocaleString('de-DE', { minimumFractionDigits: nk, maximumFractionDigits: nk }); }
+function tokenAblauf(jwt) { try { return (JSON.parse(atob(jwt.split('.')[1])).exp || 0) * 1000; } catch(_) { return 0; } }
+
+async function tokens() {
+  try {
+    let r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    if (tokenAblauf(r.idToken) < Date.now() + 60000) {
+      r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount, forceRefresh: true });
+    }
+    return { id: r.idToken };
+  } catch (e) {
+    const code = e.errorCode || '';
+    if (code === 'monitor_window_timeout' || code === 'interaction_required' ||
+        code === 'consent_required' || code === 'login_required' ||
+        e instanceof msal.InteractionRequiredAuthError) {
+      await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account: currentAccount });
+    }
+    throw e;
+  }
+}
+function login() { msalInstance.loginRedirect({ scopes: SCOPES }); }
+function logout() { msalInstance.logoutRedirect({ account: currentAccount }); }
+
+function fuelleMonate() {
+  const sel = document.getElementById('monatFilter');
+  const heute = new Date(); let html = '';
+  for (let i = 0; i <= 13; i++) {
+    const dt = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - i, 1));
+    const iso = dt.toISOString().slice(0, 7);
+    const label = dt.toLocaleDateString('de-DE', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+    html += '<option value="' + iso + '"' + (i === 1 ? ' selected' : '') + '>' + label + '</option>';
+  }
+  sel.innerHTML = html;
+}
+
+async function reload() {
+  document.getElementById('pageSub').textContent = 'wird geladen …';
+  try {
+    const t = await tokens();
+    const monat = document.getElementById('monatFilter').value;
+    const r = await fetch(CFG.workerUrl + '/api/klienten-cockpit?monat=' + monat, { headers: { Authorization: 'Bearer ' + t.id } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    daten = d;
+    // Fachkraft-Filter aus den Betreuungen befüllen (Auswahl erhalten)
+    const alle = new Set();
+    d.rows.forEach(row => row.betreuer.forEach(b => alle.add(b.name)));
+    const fkSel = document.getElementById('fkFilter'), alt = fkSel.value;
+    fkSel.innerHTML = '<option value="">Alle</option>' + [...alle].sort().map(n => '<option>' + esc(n) + '</option>').join('');
+    if ([...fkSel.options].some(o => o.value === alt)) fkSel.value = alt;
+    document.getElementById('pageSub').textContent =
+      'Stand: ' + new Date(d.stand).toLocaleString('de-DE') + ' · ' + d.rows.length + ' Klient:innen mit aktiver Maßnahme im ' + monatLabel(d.monat) +
+      (d.zeitenVorhanden ? '' : ' · Für diesen Monat ist keine Zeiterfassung hochgeladen (Spalte Erfasst bleibt leer).');
+    render();
+  } catch (e) {
+    document.getElementById('pageSub').innerHTML = '<span style="color:var(--error)">Fehler: ' + esc(e.message) + '</span>';
+  }
+}
+function monatLabel(iso) { return new Date(iso + '-15').toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }); }
+
+function sortWert(r) {
+  switch (sortKey) {
+    case 'klient': return String(r.klient || '').toLowerCase();
+    case 'kontingent': return r.kontingentMonat ?? -1;
+    case 'erfasst': return r.erfasst?.stunden ?? -1;
+    case 'abgerechnet': return r.abgerechnet ?? -1;
+    case 'auslastung': return r.auslastungErfasst ?? r.auslastungAbgerechnet ?? -1;
+    case 'delta': return r.deltaStunden ?? -1;
+    default: return 0;
+  }
+}
+function setSort(k) {
+  if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = k === 'klient' ? 1 : -1; }
+  render();
+}
+function auslChip(p) {
+  if (p == null) return '<span class="team">—</span>';
+  const cls = p >= 85 ? 'chip chip-ok' : p >= 60 ? 'chip chip-warn' : 'chip chip-err';
+  return '<span class="' + cls + '">' + p + ' %</span>';
+}
+function toggleDetail(id) { offenId = offenId === id ? null : id; render(); }
+
+function render() {
+  if (!daten) return;
+  const fk = document.getElementById('fkFilter').value;
+  const suche = (document.getElementById('suche').value || '').toLowerCase();
+  let rows = daten.rows.filter(r =>
+    (!fk || r.betreuer.some(b => b.name === fk)) &&
+    (!suche || String(r.klient).toLowerCase().includes(suche)));
+  rows = rows.slice().sort((a, b) => {
+    const x = sortWert(a), y = sortWert(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+
+  const sKon = rows.reduce((s, r) => s + (r.kontingentMonat || 0), 0);
+  const sErf = rows.reduce((s, r) => s + (r.erfasst?.stunden || 0), 0);
+  const sAbg = rows.reduce((s, r) => s + (r.abgerechnet || 0), 0);
+  const sOffen = rows.reduce((s, r) => s + Math.max(0, r.deltaStunden || 0), 0);
+  document.getElementById('kpis').innerHTML =
+    '<div class="kpi"><div class="v">' + fmtNum(sKon, 0) + ' h</div><div class="l">Kontingent</div><div class="s">bewilligt, auf den Monat gerechnet</div></div>' +
+    '<div class="kpi"><div class="v">' + fmtNum(sErf, 0) + ' h</div><div class="l">Erfasst</div><div class="s">Zeiterfassung aller Fachkräfte</div></div>' +
+    '<div class="kpi"><div class="v">' + fmtNum(sAbg, 0) + ' h</div><div class="l">Abgerechnet</div><div class="s">Rechnungspositionen ohne Fahrt</div></div>' +
+    '<div class="kpi"><div class="v">' + (sKon ? Math.round(sErf / sKon * 100) : 0) + ' %</div><div class="l">Ø Auslastung</div><div class="s">erfasst ÷ Kontingent</div></div>' +
+    '<div class="kpi"><div class="v" style="color:var(--error)">' + fmtNum(sOffen, 0) + ' h</div><div class="l">Liegen gelassen</div><div class="s">Kontingent minus erfasste Zeit</div></div>';
+
+  const pfeil = k => sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : '';
+  let html = '<tr>' + [
+    ['klient', 'Klient:in'], ['', 'Betreuung'], ['kontingent', 'Kontingent h/Mon'],
+    ['erfasst', 'Erfasst'], ['abgerechnet', 'Abgerechnet'], ['auslastung', 'Auslastung'], ['delta', 'Offen h'],
+  ].map(([k, t]) => '<th' + (k ? ' style="cursor:pointer" onclick="setSort(\'' + k + '\')"' : '') + '>' + t + (k ? pfeil(k) : '') + '</th>').join('') + '</tr>';
+
+  for (const r of rows) {
+    const hb = r.betreuer.filter(b => b.rolle === 'Hauptbetreuer').map(b => b.name);
+    const rest = r.betreuer.filter(b => b.rolle !== 'Hauptbetreuer');
+    html += '<tr onclick="toggleDetail(\'' + esc(r.klientId) + '\')" style="cursor:pointer">' +
+      '<td><b>' + esc(r.klient) + '</b>' + (r.hinweis ? '<br><span class="team" style="color:var(--warn)">' + esc(r.hinweis) + '</span>' : '') + '</td>' +
+      '<td>' + esc(hb.join(', ') || '—') + (rest.length ? '<br><span class="team">' + esc(rest.map(b => b.name + ' (' + (b.rolle || '?') + ')').join(', ')) + '</span>' : '') + '</td>' +
+      '<td style="text-align:right">' + fmtNum(r.kontingentMonat, 1) + '</td>' +
+      '<td style="text-align:right">' + (r.erfasst ? fmtNum(r.erfasst.stunden, 1) + ' <span class="team">(' + r.erfasst.termine + ' T.)</span>' : '<span class="team">—</span>') + '</td>' +
+      '<td style="text-align:right">' + fmtNum(r.abgerechnet, 1) + '</td>' +
+      '<td>' + auslChip(r.auslastungErfasst ?? r.auslastungAbgerechnet) + '</td>' +
+      '<td style="text-align:right;' + ((r.deltaStunden || 0) > 0 ? 'color:var(--error);font-weight:600' : 'color:var(--ok)') + '">' + fmtNum(r.deltaStunden, 1) + '</td></tr>';
+    if (offenId === r.klientId) {
+      html += '<tr><td colspan="7" style="background:var(--bg)">' +
+        '<div style="padding:6px 4px;font-size:12px">' +
+        '<b>Maßnahmen:</b> ' + esc(r.massnahmen.join(' · ') || '—') +
+        (r.erfasst && r.erfasst.fachkraefte.length ? '<br><b>Erfasst von:</b> ' + r.erfasst.fachkraefte.map(f => esc(f.name) + ' (' + fmtNum(f.stunden, 1) + ' h)').join(' · ') : '') +
+        '<br><b>Bilanz:</b> Kontingent ' + fmtNum(r.kontingentMonat, 1) + ' h · erfasst ' + fmtNum(r.erfasst?.stunden || 0, 1) + ' h · abgerechnet ' + fmtNum(r.abgerechnet, 1) + ' h' +
+        '</div></td></tr>';
+    }
+  }
+  document.getElementById('tabelle').innerHTML = html;
+  document.getElementById('legende').innerHTML =
+    'Kontingent = bewilligte Stunden der im Monat aktiven Maßnahmen, anteilig auf den Monat umgerechnet. ' +
+    'Erfasst = Zeiterfassung (gleiche Klassifikationslogik wie Ø Zeit beim Klienten, über alle Fachkräfte des Klienten). ' +
+    'Abgerechnet = Rechnungspositionen mit Bewilligungsbezug ohne Fahrt-/km-Anteile. ' +
+    'Offen = Kontingent − erfasste Zeit (rot = ungenutzte bewilligte Stunden). Zeile anklicken zeigt Maßnahmen und die Fachkraft-Aufschlüsselung. Sortierung per Spaltenkopf.';
+}
+
+async function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
+  document.getElementById('logoutBtn').style.display = '';
+  fuelleMonate();
+  reload();
+}
+
+async function initApp() {
+  document.getElementById('versionBadge').textContent = APP_VERSION;
+  msalInstance = new msal.PublicClientApplication({
+    auth: { clientId: CFG.clientId, authority: 'https://login.microsoftonline.com/' + CFG.tenantId, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  });
+  await msalInstance.initialize();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; showApp(); return; }
+  } catch(e) { console.warn(e); document.getElementById('loginError').textContent = e.message || String(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; showApp(); }
+}
+initApp();
+</script>
+</body>
+</html>

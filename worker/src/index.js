@@ -2196,6 +2196,140 @@ export default {
       }
     }
 
+    // ── Klienten-Cockpit (GF): Kontingent vs. Erfasst vs. Abgerechnet je Klient/Monat ──
+    // Kontingent: Zeit-Quotas der im Monat aktiven Maßnahmen, Bewilligungsstunden
+    // anteilig auf den Monat umgerechnet (gleiche Wochenlogik wie FLS-Soll).
+    // Erfasst: KV-Terminlisten (Zeiterfassung), je Klient über alle Fachkräfte.
+    // Abgerechnet: Invoice-approval-Zeilen ohne Fahrt (gleiche Logik wie Ø-Kennzahl).
+    if (url.pathname === "/api/klienten-cockpit" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Klienten-Cockpit ist der GF vorbehalten" }, 403, origin);
+      }
+      try {
+        let monat = url.searchParams.get("monat") || "";
+        const jetzt = new Date();
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat) || monat > jetzt.toISOString().slice(0, 7) || monat < "2024-01") {
+          monat = new Date(Date.UTC(jetzt.getUTCFullYear(), jetzt.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+        }
+        const mStart = new Date(monat + "-01T00:00:00Z");
+        const mEnde = new Date(Date.UTC(mStart.getUTCFullYear(), mStart.getUTCMonth() + 1, 0, 23, 59, 59));
+
+        const clients = await fetchKilankaClients(env);
+        const invoices = await fetchCockpitInvoices(env);
+
+        // Erfasst je Klient aus den KV-Terminlisten (inkl. Fachkraft-Aufschlüsselung)
+        const erfMap = new Map();
+        let zeitenVorhanden = false;
+        if (env.PNW_DATEN) {
+          const raw = await env.PNW_DATEN.get(`zeiten:${monat}`);
+          if (raw) {
+            const obj = JSON.parse(raw);
+            for (const datei of Object.values(obj.dateien || {})) {
+              for (const w of datei.werte || []) {
+                for (const t of w.liste || []) {
+                  zeitenVorhanden = true;
+                  const k = normName(t.k);
+                  if (!k) continue;
+                  const e = erfMap.get(k) || { stunden: 0, termine: 0, fachkraefte: {} };
+                  const h = Number(t.h) || 0;
+                  e.stunden += h; e.termine += 1;
+                  e.fachkraefte[w.name] = (e.fachkraefte[w.name] || 0) + h;
+                  erfMap.set(k, e);
+                }
+              }
+            }
+          }
+        }
+
+        // Abgerechnet je Klient (approval-Zeilen ohne Fahrt-/km-Positionen)
+        const abgMap = new Map();
+        for (const inv of invoices || []) {
+          if (kDate(inv.deletedAt)) continue;
+          const von = kDate(inv.deliveryFrom);
+          if (!von || von.toISOString().slice(0, 7) !== monat) continue;
+          for (const l of inv.lines || []) {
+            if (!l.approval?.id || istFahrtZeile(l)) continue;
+            const q = decimalToNumber(l.quantity);
+            if (!(q > 0)) continue;
+            const cid = String(inv.client?.id || "");
+            abgMap.set(cid, (abgMap.get(cid) || 0) + q);
+          }
+        }
+
+        const rows = [];
+        for (const c of clients || []) {
+          if (kDate(c.deletedAt) || /^\[archiviert\]/i.test(c.recName || "")) continue;
+          let kontingent = 0, hatMassnahme = false;
+          const hinweise = [];
+          const betreuer = new Map();
+          const massnahmen = [];
+          for (const a of c.actions || []) {
+            if (kDate(a.deletedAt)) continue;
+            const av = kDate(a.validFrom), ab = kDate(a.validUntil);
+            if ((av && av > mEnde) || (ab && ab < mStart)) continue;
+            hatMassnahme = true;
+            if (a.recName) massnahmen.push(a.recName);
+            for (const att of a.attendants || []) {
+              const bv = kDate(att.validFrom), bb = kDate(att.validUntil);
+              if ((bv && bv > mEnde) || (bb && bb < mStart)) continue;
+              if (att.user?.recName) betreuer.set(att.user.recName, att.attendantKind?.name || "");
+            }
+            // erstes verwertbares Zeit-Kontingent je Maßnahme (wie buildClientProfile)
+            for (const q of a.quotas || []) {
+              if (kDate(q.deletedAt) || q.timeBase === "quantity") continue;
+              let beitrag = 0, gefunden = false;
+              for (const ap of q.approvals || []) {
+                const von = kDate(ap.validFrom), bis = kDate(ap.validUntil);
+                const std = durationToHours(ap.hours);
+                if (std == null || !von || !bis || bis < von) continue;
+                const oVon = von > mStart ? von : mStart;
+                const oBis = bis < mEnde ? bis : mEnde;
+                if (oBis < oVon) continue;
+                const wochenGesamt = Math.max(1, (bis - von) / 6048e5);
+                const wochenImMonat = ((oBis - oVon) / 864e5 + 1) / 7;
+                beitrag += (std / wochenGesamt) * wochenImMonat;
+                gefunden = true;
+              }
+              if (gefunden) kontingent += beitrag;
+              else if ((q.approvals || []).length) hinweise.push("Bewilligung außerhalb des Monats");
+              break;
+            }
+          }
+          if (!hatMassnahme) continue;
+          const erf = erfMap.get(normName(c.recName)) || null;
+          const abg = Math.round((abgMap.get(String(c.id)) || 0) * 100) / 100;
+          const k100 = Math.round(kontingent * 100) / 100;
+          rows.push({
+            klientId: String(c.id),
+            klient: c.recName,
+            massnahmen,
+            betreuer: [...betreuer.entries()]
+              .map(([name, rolle]) => ({ name, rolle }))
+              .sort((x, y) => (x.rolle === "Hauptbetreuer" ? 0 : 1) - (y.rolle === "Hauptbetreuer" ? 0 : 1)),
+            kontingentMonat: k100,
+            erfasst: erf ? {
+              stunden: Math.round(erf.stunden * 100) / 100,
+              termine: erf.termine,
+              fachkraefte: Object.entries(erf.fachkraefte)
+                .map(([n, h]) => ({ name: n, stunden: Math.round(h * 100) / 100 }))
+                .sort((x, y) => y.stunden - x.stunden),
+            } : null,
+            abgerechnet: abg,
+            auslastungErfasst: k100 > 0 && erf ? Math.round((erf.stunden / k100) * 100) : null,
+            auslastungAbgerechnet: k100 > 0 ? Math.round((abg / k100) * 100) : null,
+            deltaStunden: Math.round((kontingent - (erf ? erf.stunden : 0)) * 100) / 100,
+            hinweis: hinweise[0] || null,
+          });
+        }
+        return json({ monat, zeitenVorhanden, stand: new Date().toISOString(), rows }, 200, origin);
+      } catch (e) {
+        return json({ error: `Klienten-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
     if (url.pathname === "/api/manager-cockpit" && request.method === "GET") {
       const auth = await validateEntraToken(request.headers.get("Authorization"));
       if (!auth.ok) return json({ error: auth.error }, 401, origin);
