@@ -663,34 +663,22 @@ function renderCards(d, own) {
     }).join('')}` : ''}
   </div>
 
-  <!-- FLS -->
+  <!-- Ø Zeit beim Klienten (FLS-Ist/Soll/Benchmarks auf GF-Wunsch 07/2026 entfernt —
+       Auslastung bleibt im Manager-Cockpit sichtbar) -->
   <div class="card c-fls">
     <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Fachleistungsstunden</div>
-      ${flsLive ? '<span class="src-badge src-kilanka">Kilanka · invoices</span>' : '<span class="src-badge src-offen">Demo</span>'}
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Ø Zeit beim Klienten</div>
+      ${flsLive ? '<span class="src-badge src-kilanka">Kilanka</span>' : '<span class="src-badge src-offen">Demo</span>'}
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      <div class="big-row" style="margin:0"><span class="big">${fmtNum(flsIst,1)}</span><span class="big-unit">h Ist${flsMonatLabel ? ' ('+flsMonatLabel+')' : ''} · Soll ${fmtNum(flsSollAnzeige,1)} h${flsLive ? '/Monat' : ''}</span></div>
-      ${flsChip}
-    </div>
-    ${flsPct != null ? `<div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>` : ''}
-
-    ${d.person && d.person.wochenstundenVertrag ? `<div class="sub-grid" style="margin-top:10px">
-      <div class="sub-item"><div class="sl">Benchmark am Klienten</div>
-        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quote, 1)} h/Wo</div></div>
-      <div class="sub-item"><div class="sl">inkl. Fahrtzeit</div>
-        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quoteInklFahrt, 1)} h/Wo</div></div>
-    </div>` : ''}
-
-    ${d.zeitBeimKlienten ? `<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+    ${d.zeitBeimKlienten ? `<div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <div class="sl">Ø Zeit beim Klienten <span style="font-weight:400;color:var(--text-hint)">(ohne Fahrzeit)</span></div>
+        <div class="sl">Monat <span style="font-weight:400;color:var(--text-hint)">(ohne Fahrzeit)</span></div>
         <select id="zbkMonatSel" onchange="ladeZbk(this.value)" style="height:26px;border:1px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;font-family:inherit;background:var(--surface)">
           ${zbkMonatOptionen(d.zeitBeimKlienten.monat)}
         </select>
       </div>
       <div id="zbkWert" style="margin-top:4px">${zbkWertHtml(d.zeitBeimKlienten)}</div>
-    </div>` : ''}
+    </div>` : '<div style="color:var(--text-hint);font-size:13px">Keine Daten verfügbar.</div>'}
 
   </div>
 
