@@ -156,6 +156,8 @@ tr{cursor:pointer}
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Stichtag</label>
       <select id="stichtagFilter" onchange="reload()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)"></select>
+      <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px" title="Monat der Kennzahl Ø Zeit beim Klienten">Ø-Monat</label>
+      <select id="zbkMonatFilter" onchange="reload()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)"></select>
       <label style="font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px">Team</label>
       <select id="teamFilter" onchange="render()" style="height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface)">
         <option value="">Alle</option>
@@ -177,7 +179,8 @@ tr{cursor:pointer}
       Nachweise: FZ = Führungszeugnis (5 J.) · DS = Datenschutz (einmalig) · EH = Ersthelfer/BEH (jährl., 3 Mon. Vorwarnung, nur Nordstern) —
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
-      Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet). Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+      Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet).
+      Ø Zeit/Klient = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl abgerechneter Klienten im gewählten Ø-Monat (Rechnungen tragen Monatssummen — Kennzahl je Klient und Monat, nicht je Termin). Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
     </div>
 
     <!-- Abwesenheiten & Vertretungen (GF + Teamleitungen) -->
@@ -264,6 +267,23 @@ function fuelleStichtage() {
   sel.innerHTML = '<option value="">Heute</option>' +
     quartale.reverse().map(([iso, label]) => `<option value="${iso}">${label}</option>`).join('');
 }
+
+// Monatswahl der Kennzahl "Ø Zeit beim Klienten" (Vormonat bis 13 Monate zurück)
+function fuelleZbkMonate() {
+  const sel = document.getElementById('zbkMonatFilter');
+  const heute = new Date(); let html = '';
+  for (let i = 1; i <= 13; i++) {
+    const dt = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - i, 1));
+    const iso = dt.toISOString().slice(0, 7);
+    const label = dt.toLocaleDateString('de-DE', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+    html += `<option value="${iso}">${label}</option>`;
+  }
+  sel.innerHTML = html; // erster Eintrag (Vormonat) = Standard, deckt sich mit Worker-Default
+}
+function zbkMonatLabel() {
+  const iso = daten?.zbkMonat || document.getElementById('zbkMonatFilter')?.value;
+  return iso ? new Date(iso + '-15').toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : 'Vormonat';
+}
 let sortKey = 'auslastung', sortDir = -1;
 
 const fmtNum = (n, d=0) => n == null ? '—' : n.toLocaleString('de-DE', {minimumFractionDigits:d, maximumFractionDigits:d});
@@ -294,6 +314,7 @@ const SPALTEN = [
   { k:'sollMonat',   t:'Soll h/Mon' },
   { k:'ist',         t:'Ist (Vormon.)' },
   { k:'auslastung',  t:'Auslastung' },
+  { k:'zbk',         t:'Ø Zeit/Klient' },
   { k:'urlaub',      t:'Urlaub gen.' },
   { k:'krank',       t:'Krank YTD' },
   { k:'nachweise',   t:'FZ · DS · EH' },
@@ -309,6 +330,7 @@ function sortWert(r, key) {
     case 'sollMonat': return kz.sollMonat;
     case 'ist': return kz.ist ?? -1;
     case 'auslastung': return kz.auslastung ?? -1;
+    case 'zbk': return r.zeitBeimKlienten?.oProKlient ?? -1;
     case 'urlaub': return r.urlaub?.genommenTage ?? -1;
     case 'krank': return r.krankheit?.tage ?? -1;
     case 'nachweise': return Math.max(monate(r.nachweise?.fuehrungszeugnis), r.nachweise?.datenschutz ? 0 : Infinity);
@@ -356,10 +378,15 @@ function render() {
   const sumKli = rows.reduce((s,r)=>s+(r.klienten?.aktiv||0),0);
   const sumKrank = rows.reduce((s,r)=>s+(r.krankheit?.tage||0),0);
   const kritisch = rows.filter(r => monate(r.nachweise?.fuehrungszeugnis) >= 60 || !r.nachweise?.datenschutz || (/nordstern/i.test(r.team || '') && monate(r.nachweise?.behAusbildung) >= 12)).length;
+  // Ø Zeit beim Klienten: gewichtetes Mittel = Summe Stunden ÷ Summe Klienten
+  const zbkStd = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.stundenGesamt||0),0);
+  const zbkKli = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.klienten||0),0);
+  const zbkKpi = zbkKli ? zbkStd / zbkKli : null;
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">= ${fmtNum(rows.reduce((s,r)=>s+(r.wochenstunden||0),0)/39, 1)} VZÄ (39 h/Wo)${rows.some(r=>r.wochenstunden==null) ? ' · ' + rows.filter(r=>r.wochenstunden==null).length + ' ohne Vertragsstunden' : ''}</div></div>
     <div class="kpi"><div class="v">${sumKli}</div><div class="l">Aktive Klienten</div><div class="s">HB + MB + Vertretung</div></div>
     <div class="kpi"><div class="v">${avgAusl != null ? avgAusl + ' %' : '—'}</div><div class="l">Ø FLS-Auslastung</div><div class="s">abgerechneter Vormonat</div></div>
+    <div class="kpi"><div class="v">${zbkKpi != null ? fmtNum(zbkKpi,1) + ' h' : '—'}</div><div class="l">Ø Zeit beim Klienten</div><div class="s">je Klient · ohne Fahrzeit · ${zbkMonatLabel()}</div></div>
     <div class="kpi"><div class="v">${fmtNum(sumKrank,1)}</div><div class="l">Krank-Tage YTD</div><div class="s">Summe Team</div></div>
     <div class="kpi"><div class="v" style="color:${kritisch ? 'var(--error)' : 'var(--ok)'}">${kritisch}</div><div class="l">Nachweise überfällig</div><div class="s">Führungszeugnis / Datenschutz</div></div>`;
 
@@ -383,6 +410,9 @@ function render() {
       <td>${fmtNum(kz.sollMonat,1)}</td>
       <td>${fmtNum(kz.ist,1)}</td>
       <td>${auslChip}</td>
+      <td>${r.zeitBeimKlienten?.oProKlient != null
+        ? `<span title="${fmtNum(r.zeitBeimKlienten.stundenGesamt,1)} h gesamt bei ${r.zeitBeimKlienten.klienten} Klienten (${esc(r.zeitBeimKlienten.monat||'')})">${fmtNum(r.zeitBeimKlienten.oProKlient,1)} h</span>`
+        : '—'}</td>
       <td>${r.urlaub ? fmtNum(r.urlaub.genommenTage,1) + (r.urlaub.geplantTage ? ' <span class="team">+' + fmtNum(r.urlaub.geplantTage,1) + ' gepl.</span>' : '') : '—'}</td>
       <td>${r.krankheit ? fmtNum(r.krankheit.tage,1) : '—'}</td>
       <td style="text-align:center">${ampel(r.nachweise?.fuehrungszeugnis, 54, 60)}${ampel(r.nachweise?.datenschutz, Infinity, Infinity)}${ampel(r.nachweise?.behAusbildung, 9, 12, kz.nordstern)}</td>
@@ -813,7 +843,10 @@ async function laden() {
   try {
     const t = await tokens();
     const stichtag = document.getElementById('stichtagFilter').value;
-    const r = await fetch(CFG.workerUrl + '/api/manager-cockpit' + (stichtag ? '?stichtag=' + stichtag + alsQuery('&') : alsQuery('?')), {
+    const zbkMonat = document.getElementById('zbkMonatFilter')?.value || '';
+    let q = (stichtag ? '?stichtag=' + stichtag + alsQuery('&') : alsQuery('?'));
+    if (zbkMonat) q += (q.includes('?') ? '&' : '?') + 'monat=' + zbkMonat;
+    const r = await fetch(CFG.workerUrl + '/api/manager-cockpit' + q, {
       headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
     });
     if (!r.ok) {
@@ -856,6 +889,7 @@ async function login() {
 async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
 function showApp() {
   fuelleStichtage();
+  fuelleZbkMonate();
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userName').textContent = currentAccount?.name || '';

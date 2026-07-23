@@ -682,6 +682,16 @@ function renderCards(d, own) {
         <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quoteInklFahrt, 1)} h/Wo</div></div>
     </div>` : ''}
 
+    ${d.zeitBeimKlienten ? `<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div class="sl">Ø Zeit beim Klienten <span style="font-weight:400;color:var(--text-hint)">(ohne Fahrzeit)</span></div>
+        <select id="zbkMonatSel" onchange="ladeZbk(this.value)" style="height:26px;border:1px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;font-family:inherit;background:var(--surface)">
+          ${zbkMonatOptionen(d.zeitBeimKlienten.monat)}
+        </select>
+      </div>
+      <div id="zbkWert" style="margin-top:4px">${zbkWertHtml(d.zeitBeimKlienten)}</div>
+    </div>` : ''}
+
   </div>
 
 `;
@@ -812,9 +822,44 @@ async function loadLive(upn) {
 }
 
 function renderLivePerson(d) {
+  zbkUpn = d.upn; // für die Monats-Nachladung der Ø-Zeit-Kennzahl
   renderCards(d, d.upn === (currentAccount?.username || '').toLowerCase());
   if (liveSicht && liveSicht.mitarbeiter && liveSicht.mitarbeiter.length > 1) appendTeamCard();
   ladeProfilFoto(d.upn);
+}
+
+// ── Ø Zeit beim Klienten (ohne Fahrzeit): Monatswahl + Nachladen ──
+let zbkUpn = null;
+function zbkMonatOptionen(gewaehlt) {
+  const heute = new Date(); let html = '';
+  for (let i = 1; i <= 13; i++) { // Vormonat bis 13 Monate zurück
+    const dt = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - i, 1));
+    const iso = dt.toISOString().slice(0, 7);
+    const label = dt.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    html += `<option value="${iso}"${iso === gewaehlt ? ' selected' : ''}>${label}</option>`;
+  }
+  return html;
+}
+function zbkWertHtml(z) {
+  if (!z || z.oProKlient == null) return '<span style="color:var(--text-hint);font-size:13px">Keine abgerechneten Betreuungsstunden in diesem Monat.</span>';
+  return `<span class="big" style="font-size:22px">${fmtNum(z.oProKlient, 1)}</span>
+    <span class="big-unit">h je Klient · ${fmtNum(z.stundenGesamt, 1)} h gesamt bei ${z.klienten} Klient${z.klienten === 1 ? '' : 'en'}</span>`;
+}
+async function ladeZbk(monat) {
+  const el = document.getElementById('zbkWert');
+  if (!el || !zbkUpn) return;
+  el.innerHTML = '<span style="color:var(--text-hint);font-size:13px">Wird geladen …</span>';
+  try {
+    const t = await liveTokens();
+    const r = await fetch(CFG.workerUrl + '/api/mitarbeiter-cockpit?mitarbeiter=' + encodeURIComponent(zbkUpn) + '&monat=' + monat,
+      { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    el.innerHTML = zbkWertHtml(d.zeitBeimKlienten);
+    if (liveCache[d.upn]) liveCache[d.upn].zeitBeimKlienten = d.zeitBeimKlienten; // Auswahl übersteht Re-Render
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--error);font-size:13px">Laden fehlgeschlagen (' + esc(e.message) + ')</span>';
+  }
 }
 
 /* ── Profilfoto aus M365 (Graph, Scope User.ReadBasic.All deckt Fotos ab).

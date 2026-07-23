@@ -662,8 +662,17 @@ const COCKPIT_INVOICES_GRAPH = {
   id: 1, number: 1, deletedAt: 1,
   deliveryFrom: 1, deliveryUntil: 1,
   client: { id: 1 },
-  lines: { approval: { id: 1 }, quantity: 1, costCenter: 1 },
+  // description/service.name: nötig, um Fahrtzeit-Zeilen zu erkennen, falls
+  // ein Amt sie MIT approval.id fakturiert (Ø Zeit beim Klienten ohne Fahrt)
+  lines: { approval: { id: 1 }, quantity: 1, costCenter: 1, description: 1, service: { name: 1 } },
 };
+
+// Fahrt-/Kilometer-Zeile? (Kostenstelle 498 = Kilometer; sonst Textmuster)
+function istFahrtZeile(l) {
+  if (String(l?.costCenter ?? "") === "498") return true;
+  const t = `${l?.description || ""} ${l?.service?.name || ""}`.toLowerCase();
+  return /fahrt|fahrzeit|kilometer|(^|[^a-zäöü])km([^a-zäöü]|$)/.test(t);
+}
 
 let cockpitUsersCache = { data: null, fetchedAt: 0 };
 let cockpitAbsencesCache = { data: null, fetchedAt: 0, verfuegbar: null };
@@ -1076,7 +1085,7 @@ async function vertretungsLage(env, kilankaUserId, von, bis) {
   return res.sort((x, y) => x.fall.localeCompare(y.fall, "de"));
 }
 
-async function buildCockpit(env, upn, now) {
+async function buildCockpit(env, upn, now, zbkMonat) {
   const jahr = now.getFullYear();
 
   // ── a) Klienten, FLS-Soll, approval-IDs, HB-Klienten-IDs ──
@@ -1449,6 +1458,49 @@ async function buildCockpit(env, upn, now) {
     }
   } catch (e) { /* Rechnungs-Zweig optional */ }
 
+  // ── e) Ø Zeit beim Klienten (ohne Fahrzeit), Monat wählbar ──
+  // Basis: accounting/invoices. Approval-Zeilen = abgerechnete Betreuungs-
+  // stunden; Fahrt-/km-Zeilen fliegen zusätzlich per istFahrtZeile() raus
+  // (Kostenstelle 498 bzw. Textmuster), falls ein Amt Fahrtzeit mit
+  // approval.id fakturiert. Rechnungen tragen Monatssummen je Maßnahme —
+  // die Kennzahl ist daher Ø Stunden JE KLIENT UND MONAT (nicht je Termin;
+  // Leistungsdoku-Modelle sind lt. Probe 22.07.2026 nicht im API-Katalog).
+  let zeitBeimKlienten = null;
+  try {
+    const zMonat = /^\d{4}-(0[1-9]|1[0-2])$/.test(zbkMonat || "")
+      ? zbkMonat
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+    const invoices = await fetchCockpitInvoices(env); // Cache — kein Zweitabruf
+    const perApproval = approvalIds.size > 0;
+    const proKlient = new Map();
+    let stunden = 0;
+    for (const inv of invoices || []) {
+      if (kDate(inv.deletedAt)) continue;
+      const von = kDate(inv.deliveryFrom);
+      if (!von || von.toISOString().slice(0, 7) !== zMonat) continue;
+      const clientMatch = hbClientIds.has(String(inv.client?.id));
+      for (const l of inv.lines || []) {
+        const apId = l.approval?.id ? String(l.approval.id) : null;
+        if (!apId) continue; // Pauschalen/Kilometer ohne approval sowieso raus
+        if (perApproval ? !approvalIds.has(apId) : !clientMatch) continue;
+        if (istFahrtZeile(l)) continue;
+        const q = decimalToNumber(l.quantity);
+        if (!(q > 0)) continue;
+        stunden += q;
+        const cid = String(inv.client?.id || inv.id);
+        proKlient.set(cid, (proKlient.get(cid) || 0) + q);
+      }
+    }
+    const klienten = proKlient.size;
+    zeitBeimKlienten = {
+      monat: zMonat,
+      stundenGesamt: Math.round(stunden * 100) / 100,
+      klienten,
+      oProKlient: klienten ? Math.round((stunden / klienten) * 100) / 100 : null,
+      quelle: (perApproval ? "rechnungen (approval-id" : "rechnungen (klient-fallback") + ", ohne Fahrt-/km-Zeilen)",
+    };
+  } catch (e) { /* Kennzahl optional */ }
+
   return {
     upn,
     person: person || { name: null, rolle: null, team: null, qualifikation: null, eintritt: null, wochenstundenVertrag: null },
@@ -1457,6 +1509,7 @@ async function buildCockpit(env, upn, now) {
     abwesenheitenVerfuegbar: abs.verfuegbar === true,
     abwesenheiten,
     nachweise,
+    zeitBeimKlienten,
     erhoehung, // nur TL/GF — Route entfernt das Feld für Fachkraft-Sicht
     firmenwagen: { vorhanden: false, quelle: "fuhrpark-liste folgt" },
     klienten: { aktiv: hb + mb + v, hb, mb, v, status: klientenStatus, hbIds: [...hbClientIds], hbFaelle: [...hbFallNamen].map(([id, f]) => ({ id, name: f.name, amt: f.amt, hilfeart: f.hilfeart, massnahme: f.massnahme })) },
@@ -2016,9 +2069,12 @@ export default {
         }
         let dpMap = null;
         try { dpMap = await dienstplanMap(env, now); } catch (e) { /* Dienstplan optional */ }
+        // ?monat=YYYY-MM: Monat der Kennzahl "Ø Zeit beim Klienten" (Default: Vormonat)
+        let zbkMonat = url.searchParams.get("monat") || null;
+        if (zbkMonat && (!/^\d{4}-(0[1-9]|1[0-2])$/.test(zbkMonat) || zbkMonat > new Date().toISOString().slice(0, 7) || zbkMonat < "2024-01")) zbkMonat = null;
         const rows = [];
         for (const m of liste) {
-          const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
+          const d = await buildCockpit(env, m.upn, now, zbkMonat); // Kilanka-Caches → nur 1. Person kostet Netz
           // Vertretung ist erst ab einer Woche Abwesenheit (≥ 5 Werktage) nötig —
           // kürzere Abwesenheiten werden nur angezeigt, ohne Vertretungs-Analyse.
           const abwesenheiten = (d.abwesenheiten || []).map((x) => ({ ...x, wochenlang: x.wochenlang ?? (werktage(x.von, x.bis) >= 5) }));
@@ -2040,6 +2096,7 @@ export default {
             wochenstunden: d.person.wochenstundenVertrag,
             klienten: d.klienten,
             fls: d.fls,
+            zeitBeimKlienten: d.zeitBeimKlienten,
             urlaub: d.urlaub,
             krankheit: d.krankheit,
             nachweise: d.nachweise,
@@ -2048,7 +2105,7 @@ export default {
         }
         let amtFaelle = [];
         try { amtFaelle = await alleHbFaelle(env, now); } catch (e) { /* Ziel-Basis optional */ }
-        return json({ rolle, vorschauAls: vorschau ? alsParam : null, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows, amtFaelle }, 200, origin);
+        return json({ rolle, vorschauAls: vorschau ? alsParam : null, stand: new Date().toISOString(), stichtag: stichtagParam || null, zbkMonat: rows[0]?.zeitBeimKlienten?.monat || null, rows, amtFaelle }, 200, origin);
       } catch (e) {
         return json({ error: `Manager-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
       }
@@ -2119,7 +2176,11 @@ export default {
           return json({ error: "Keine Berechtigung für diese Mitarbeiter-Sicht" }, 403, origin);
         }
 
-        const data = await buildCockpit(env, target, new Date());
+        // ?monat=YYYY-MM steuert NUR die Kennzahl "Ø Zeit beim Klienten"
+        // (FLS-Block bleibt Vormonat). Nicht in der Zukunft, ab 2024.
+        let zbkMonat = url.searchParams.get("monat") || null;
+        if (zbkMonat && (!/^\d{4}-(0[1-9]|1[0-2])$/.test(zbkMonat) || zbkMonat > new Date().toISOString().slice(0, 7) || zbkMonat < "2024-01")) zbkMonat = null;
+        const data = await buildCockpit(env, target, new Date(), zbkMonat);
         if (rolle === "fk") delete data.erhoehung; // Gehaltsdaten nur für TL/GF
         data.sicht = {
           rolle,
