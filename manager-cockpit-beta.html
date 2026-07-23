@@ -705,6 +705,16 @@ function parseDe(v) {
   if (!s) return NaN;
   return s.includes(',') ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : parseFloat(s);
 }
+// Monat (YYYY-MM) aus Beginn — kann Date-Zelle, "13.05.2026 20:00" oder ISO sein
+function monatVon(v) {
+  if (v instanceof Date && !isNaN(v)) return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0');
+  const s = String(v ?? '');
+  let m = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (m) return m[3] + '-' + m[2].padStart(2, '0');
+  m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2];
+  return null;
+}
 function klassifiziereEintrag(r) {
   const L = String(r.leistung || ''), T = String(r.taetigkeit || '').trim(), K = String(r.kostenstelle || '').trim();
   if (/KM und|KM \+|Fahrzeit|Fahrtzeit/i.test(L) || K === 'Fahrtzeiten') return 'fahrt';
@@ -720,8 +730,8 @@ async function parseZeitenDateien(files) {
   const fehler = [];
   for (const f of files) {
     try {
-      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false });
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true });
       const kopf = rows[0].map(h => String(h || '').trim());
       const ix = n => kopf.findIndex(h => h === n);
       const iMA = ix('Mitarbeiter'), iBeg = ix('Beginn'), iGes = ix('Gesamt'),
@@ -732,9 +742,8 @@ async function parseZeitenDateien(files) {
         const r = rows[i]; if (!r || !r[iMA]) continue;
         const art = klassifiziereEintrag({ leistung: r[iLst], taetigkeit: iTat >= 0 ? r[iTat] : '', kostenstelle: iKst >= 0 ? r[iKst] : '', klient: iKli >= 0 ? r[iKli] : '' });
         if (art !== 'termin') continue;
-        const m = String(r[iBeg] || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-        if (!m) continue;
-        const monat = `${m[3]}-${m[2].padStart(2, '0')}`;
+        const monat = monatVon(r[iBeg]);
+        if (!monat) continue;
         const h = parseDe(r[iGes]);
         if (!Number.isFinite(h) || h <= 0) continue;
         if (!proMonat.has(monat)) proMonat.set(monat, new Map());
