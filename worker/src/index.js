@@ -674,6 +674,39 @@ function istFahrtZeile(l) {
   return /fahrt|fahrzeit|kilometer|(^|[^a-zäöü])km([^a-zäöü]|$)/.test(t);
 }
 
+// ── Zeiterfassungs-Aggregate aus KV (Ø Zeit beim Klienten JE TERMIN) ──
+// Quelle: Kilanka-Zeiterfassungs-Export, im Manager-Cockpit (GF) hochgeladen.
+// KV-Key zeiten:YYYY-MM → { dateien: { kennung: { hochgeladen, von, werte:[{name,termine,stunden}] } } }
+// Mehrere Dateien je Monat (H1/H2) werden beim Lesen aufsummiert.
+function normName(s) {
+  return String(s || "").toLowerCase().replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ").trim();
+}
+let zeitenMemo = { monat: null, fetchedAt: 0, map: null };
+async function zeitenTermineMap(env, monat) {
+  if (!env.PNW_DATEN) return null; // KV-Binding (noch) nicht vorhanden
+  if (zeitenMemo.monat === monat && Date.now() - zeitenMemo.fetchedAt < 60 * 1000) return zeitenMemo.map;
+  let map = null;
+  try {
+    const raw = await env.PNW_DATEN.get(`zeiten:${monat}`);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      map = new Map();
+      for (const datei of Object.values(obj.dateien || {})) {
+        for (const w of datei.werte || []) {
+          const k = normName(w.name);
+          if (!k) continue;
+          const e = map.get(k) || { termine: 0, stunden: 0 };
+          e.termine += Number(w.termine) || 0;
+          e.stunden += Number(w.stunden) || 0;
+          map.set(k, e);
+        }
+      }
+    }
+  } catch (e) { map = null; }
+  zeitenMemo = { monat, fetchedAt: Date.now(), map };
+  return map;
+}
+
 let cockpitUsersCache = { data: null, fetchedAt: 0 };
 let cockpitAbsencesCache = { data: null, fetchedAt: 0, verfuegbar: null };
 let cockpitInvoicesCache = { data: null, fetchedAt: 0 };
@@ -1499,6 +1532,19 @@ async function buildCockpit(env, upn, now, zbkMonat) {
       oProKlient: klienten ? Math.round((stunden / klienten) * 100) / 100 : null,
       quelle: (perApproval ? "rechnungen (approval-id" : "rechnungen (klient-fallback") + ", ohne Fahrt-/km-Zeilen)",
     };
+    // Ø je Termin aus der hochgeladenen Zeiterfassung (KV) — falls für den
+    // Monat vorhanden. Zuordnung über "Name, Vorname" (userRecName-Format).
+    try {
+      const tMap = await zeitenTermineMap(env, zMonat);
+      zeitBeimKlienten.zeiterfassungVorhanden = !!(tMap && tMap.size);
+      const e = tMap ? tMap.get(normName(person?.name)) : null;
+      zeitBeimKlienten.jeTermin = e && e.termine > 0 ? {
+        termine: e.termine,
+        stunden: Math.round(e.stunden * 100) / 100,
+        oProTermin: Math.round((e.stunden / e.termine) * 100) / 100,
+        quelle: "zeiterfassung (Kilanka-Export)",
+      } : null;
+    } catch (e) { /* Zeiterfassung optional */ }
   } catch (e) { /* Kennzahl optional */ }
 
   return {
@@ -2019,6 +2065,71 @@ export default {
         );
       } catch (e) {
         return json({ error: `Kilanka-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    // ── Zeiterfassungs-Upload (GF): Aggregate je Mitarbeiter/Monat in KV ──
+    if (url.pathname === "/api/zeiten-upload" && request.method === "POST") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Zeiten-Upload ist der GF vorbehalten" }, 403, origin);
+      }
+      if (!env.PNW_DATEN) return json({ error: "KV-Binding PNW_DATEN fehlt (Worker-Deploy mit wrangler.toml-Binding nötig)" }, 500, origin);
+      try {
+        const body = await request.json();
+        const monat = String(body.monat || "");
+        const kennung = String(body.kennung || "").trim();
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat)) return json({ error: "monat muss YYYY-MM sein" }, 400, origin);
+        if (!/^[\w\-. ]{1,60}$/.test(kennung)) return json({ error: "ungültige Datei-Kennung" }, 400, origin);
+        const key = `zeiten:${monat}`;
+        const raw = await env.PNW_DATEN.get(key);
+        const obj = raw ? JSON.parse(raw) : { dateien: {} };
+        if (body.loeschen === true) {
+          delete obj.dateien[kennung];
+        } else {
+          const werte = Array.isArray(body.werte) ? body.werte.slice(0, 200) : null;
+          if (!werte || !werte.length) return json({ error: "werte fehlen" }, 400, origin);
+          const sauber = [];
+          for (const w of werte) {
+            const name = String(w.name || "").trim().slice(0, 80);
+            const termine = Number(w.termine), stunden = Number(w.stunden);
+            if (!name || !Number.isFinite(termine) || !Number.isFinite(stunden) || termine < 0 || stunden < 0) continue;
+            sauber.push({ name, termine: Math.round(termine), stunden: Math.round(stunden * 100) / 100 });
+          }
+          if (!sauber.length) return json({ error: "keine gültigen Zeilen" }, 400, origin);
+          obj.dateien[kennung] = { hochgeladen: new Date().toISOString(), von: caller, werte: sauber };
+        }
+        await env.PNW_DATEN.put(key, JSON.stringify(obj));
+        zeitenMemo = { monat: null, fetchedAt: 0, map: null }; // Memo invalidieren
+        const dateien = Object.entries(obj.dateien).map(([k, v]) => ({ kennung: k, hochgeladen: v.hochgeladen, zeilen: (v.werte || []).length }));
+        return json({ ok: true, monat, dateien }, 200, origin);
+      } catch (e) {
+        return json({ error: `Zeiten-Upload fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    // Status: welche Monate/Dateien liegen in KV? (GF)
+    if (url.pathname === "/api/zeiten-status" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "nur GF" }, 403, origin);
+      }
+      if (!env.PNW_DATEN) return json({ error: "KV-Binding PNW_DATEN fehlt" }, 500, origin);
+      try {
+        const liste = await env.PNW_DATEN.list({ prefix: "zeiten:" });
+        const monate = [];
+        for (const k of liste.keys || []) {
+          const raw = await env.PNW_DATEN.get(k.name);
+          const obj = raw ? JSON.parse(raw) : { dateien: {} };
+          monate.push({ monat: k.name.slice(7), dateien: Object.entries(obj.dateien).map(([kk, v]) => ({ kennung: kk, hochgeladen: v.hochgeladen, zeilen: (v.werte || []).length })) });
+        }
+        return json({ monate }, 200, origin);
+      } catch (e) {
+        return json({ error: `Status fehlgeschlagen: ${e.message}` }, 502, origin);
       }
     }
 

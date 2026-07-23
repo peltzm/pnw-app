@@ -8,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Manager-Cockpit (Beta) — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --text:#1a1916;
@@ -163,6 +164,7 @@ tr{cursor:pointer}
         <option value="">Alle</option>
       </select>
       <button class="btn btn-outline" id="urlaubCheckBtn" style="padding:5px 12px;font-size:12px;display:none" onclick="toggleUrlaubCheck()">Urlaubs-Abgleich</button>
+      <button class="btn btn-outline" id="zeitenUploadBtn" style="padding:5px 12px;font-size:12px;display:none" onclick="toggleZeitenUpload()">Zeiten-Upload</button>
       <button class="btn btn-outline" style="padding:5px 12px;font-size:12px" onclick="reload()">Aktualisieren</button>
     </div>
   </div>
@@ -180,7 +182,7 @@ tr{cursor:pointer}
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet).
-      Ø Zeit/Klient = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl abgerechneter Klienten im gewählten Ø-Monat (Rechnungen tragen Monatssummen — Kennzahl je Klient und Monat, nicht je Termin). Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+      Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (ohne Fahrt, ausgefallene Termine, Berichtszeit, mediale Kontakte); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
     </div>
 
     <!-- Abwesenheiten & Vertretungen (GF + Teamleitungen) -->
@@ -206,6 +208,27 @@ tr{cursor:pointer}
     </div>
 
     <!-- Urlaubs-Abgleich (GF): berechnete Kette vs. Kilanka-Stundenkonto -->
+    <div id="zeitenUpload" style="display:none;margin-top:24px">
+      <div class="tablecard" style="padding:16px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:600">Zeiterfassung hochladen (Kilanka-Export)</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+              Excel-Export der Zeiterfassung (z. B. <code>Zeiterfassung_2605H1.xlsx</code>). Die Datei wird lokal im Browser
+              ausgewertet — an den Server gehen nur Aggregate je Mitarbeiter:in und Monat (Termine, Stunden), keine Klientendaten.
+              Klienten-Termin = Eintrag mit Klient + Leistung, ohne Fahrt-Leistungen (KM/Fahrzeit), ausgefallene Termine (TA),
+              Berichtszeit und mediale Kontakte. Erneuter Upload derselben Datei überschreibt deren Stand.
+            </div>
+          </div>
+          <label class="btn btn-outline" style="padding:5px 12px;font-size:12px;cursor:pointer">Dateien wählen
+            <input type="file" accept=".xlsx" multiple style="display:none" onchange="parseZeitenDateien(this.files)">
+          </label>
+        </div>
+        <div id="zeitenStatus" style="font-size:12px;color:var(--text-muted);margin-top:10px">Lade Status …</div>
+        <div id="zeitenVorschau" style="margin-top:10px"></div>
+      </div>
+    </div>
+
     <div id="urlaubCheck" style="display:none;margin-top:24px">
       <h3 style="font-size:15px;font-weight:600;margin-bottom:4px">Urlaubs-Abgleich (berechnete Jahreskette)</h3>
       <p style="font-size:11px;color:var(--text-hint);margin-bottom:10px">
@@ -330,7 +353,7 @@ function sortWert(r, key) {
     case 'sollMonat': return kz.sollMonat;
     case 'ist': return kz.ist ?? -1;
     case 'auslastung': return kz.auslastung ?? -1;
-    case 'zbk': return r.zeitBeimKlienten?.oProKlient ?? -1;
+    case 'zbk': return r.zeitBeimKlienten?.jeTermin?.oProTermin ?? r.zeitBeimKlienten?.oProKlient ?? -1;
     case 'urlaub': return r.urlaub?.genommenTage ?? -1;
     case 'krank': return r.krankheit?.tage ?? -1;
     case 'nachweise': return Math.max(monate(r.nachweise?.fuehrungszeugnis), r.nachweise?.datenschutz ? 0 : Infinity);
@@ -378,15 +401,18 @@ function render() {
   const sumKli = rows.reduce((s,r)=>s+(r.klienten?.aktiv||0),0);
   const sumKrank = rows.reduce((s,r)=>s+(r.krankheit?.tage||0),0);
   const kritisch = rows.filter(r => monate(r.nachweise?.fuehrungszeugnis) >= 60 || !r.nachweise?.datenschutz || (/nordstern/i.test(r.team || '') && monate(r.nachweise?.behAusbildung) >= 12)).length;
-  // Ø Zeit beim Klienten: gewichtetes Mittel = Summe Stunden ÷ Summe Klienten
+  // Ø Zeit beim Klienten: bevorzugt je Termin (Zeiterfassung), sonst je Klient/Monat (Rechnungen)
+  const jtStd = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.jeTermin?.stunden||0),0);
+  const jtTer = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.jeTermin?.termine||0),0);
   const zbkStd = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.stundenGesamt||0),0);
   const zbkKli = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.klienten||0),0);
-  const zbkKpi = zbkKli ? zbkStd / zbkKli : null;
+  const jeTermin = jtTer > 0;
+  const zbkKpi = jeTermin ? jtStd / jtTer : (zbkKli ? zbkStd / zbkKli : null);
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">= ${fmtNum(rows.reduce((s,r)=>s+(r.wochenstunden||0),0)/39, 1)} VZÄ (39 h/Wo)${rows.some(r=>r.wochenstunden==null) ? ' · ' + rows.filter(r=>r.wochenstunden==null).length + ' ohne Vertragsstunden' : ''}</div></div>
     <div class="kpi"><div class="v">${sumKli}</div><div class="l">Aktive Klienten</div><div class="s">HB + MB + Vertretung</div></div>
     <div class="kpi"><div class="v">${avgAusl != null ? avgAusl + ' %' : '—'}</div><div class="l">Ø FLS-Auslastung</div><div class="s">abgerechneter Vormonat</div></div>
-    <div class="kpi"><div class="v">${zbkKpi != null ? fmtNum(zbkKpi,1) + ' h' : '—'}</div><div class="l">Ø Zeit beim Klienten</div><div class="s">je Klient · ohne Fahrzeit · ${zbkMonatLabel()}</div></div>
+    <div class="kpi"><div class="v">${zbkKpi != null ? fmtNum(zbkKpi,jeTermin?2:1) + ' h' : '—'}</div><div class="l">Ø Zeit beim Klienten</div><div class="s">${jeTermin ? 'je Termin · Zeiterfassung' : 'je Klient/Monat · Rechnungen'} · ${zbkMonatLabel()}</div></div>
     <div class="kpi"><div class="v">${fmtNum(sumKrank,1)}</div><div class="l">Krank-Tage YTD</div><div class="s">Summe Team</div></div>
     <div class="kpi"><div class="v" style="color:${kritisch ? 'var(--error)' : 'var(--ok)'}">${kritisch}</div><div class="l">Nachweise überfällig</div><div class="s">Führungszeugnis / Datenschutz</div></div>`;
 
@@ -410,8 +436,10 @@ function render() {
       <td>${fmtNum(kz.sollMonat,1)}</td>
       <td>${fmtNum(kz.ist,1)}</td>
       <td>${auslChip}</td>
-      <td>${r.zeitBeimKlienten?.oProKlient != null
-        ? `<span title="${fmtNum(r.zeitBeimKlienten.stundenGesamt,1)} h gesamt bei ${r.zeitBeimKlienten.klienten} Klienten (${esc(r.zeitBeimKlienten.monat||'')})">${fmtNum(r.zeitBeimKlienten.oProKlient,1)} h</span>`
+      <td>${r.zeitBeimKlienten?.jeTermin?.oProTermin != null
+        ? `<span title="Zeiterfassung: ${r.zeitBeimKlienten.jeTermin.termine} Termine · ${fmtNum(r.zeitBeimKlienten.jeTermin.stunden,1)} h (${esc(r.zeitBeimKlienten.monat||'')})">${fmtNum(r.zeitBeimKlienten.jeTermin.oProTermin,2)} h<span class="team">/Termin</span></span>`
+        : r.zeitBeimKlienten?.oProKlient != null
+        ? `<span title="Rechnungen: ${fmtNum(r.zeitBeimKlienten.stundenGesamt,1)} h gesamt bei ${r.zeitBeimKlienten.klienten} Klienten (${esc(r.zeitBeimKlienten.monat||'')})">${fmtNum(r.zeitBeimKlienten.oProKlient,1)} h<span class="team">/Mon.</span></span>`
         : '—'}</td>
       <td>${r.urlaub ? fmtNum(r.urlaub.genommenTage,1) + (r.urlaub.geplantTage ? ' <span class="team">+' + fmtNum(r.urlaub.geplantTage,1) + ' gepl.</span>' : '') : '—'}</td>
       <td>${r.krankheit ? fmtNum(r.krankheit.tage,1) : '—'}</td>
@@ -428,6 +456,7 @@ function render() {
   document.getElementById('tbl').style.display = '';
   const rolleTxt = daten.vorschauAls ? 'Vorschau als Teamleitung — ' + esc(daten.vorschauAls) : (daten.rolle === 'gf' ? 'Geschäftsführung (alle Mitarbeitenden)' : 'Teamleitung (eigenes Team)');
   document.getElementById('urlaubCheckBtn').style.display = daten.rolle === 'gf' ? '' : 'none';
+  document.getElementById('zeitenUploadBtn').style.display = daten.rolle === 'gf' ? '' : 'none';
   renderAbwesenheiten();
   if (document.getElementById('urlaubCheck').style.display !== 'none') renderUrlaubCheck();
   const stichtagTxt = daten.stichtag ? ` · Stichtag: ${new Date(daten.stichtag).toLocaleDateString('de-DE')} (Nachweise: aktueller Stand)` : '';
@@ -649,6 +678,117 @@ function renderAbwesenheiten() {
 }
 
 /* ── Urlaubs-Abgleich (GF): alle Mitarbeitenden mit berechneter Urlaubskette ── */
+// ── Zeiten-Upload (GF): Kilanka-Zeiterfassungs-Export → Aggregate → Worker/KV ──
+let zeitenPayloads = []; // [{monat, kennung, werte:[{name,termine,stunden}]}]
+function toggleZeitenUpload() {
+  const el = document.getElementById('zeitenUpload');
+  const offen = el.style.display !== 'none';
+  el.style.display = offen ? 'none' : '';
+  if (!offen) ladeZeitenStatus();
+}
+async function ladeZeitenStatus() {
+  const el = document.getElementById('zeitenStatus');
+  try {
+    const t = await tokens();
+    const r = await fetch(CFG.workerUrl + '/api/zeiten-status', { headers: { Authorization: 'Bearer ' + t.id } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    el.innerHTML = d.monate.length
+      ? '<b>Bereits hochgeladen:</b> ' + d.monate.map(m => `${m.monat} (${m.dateien.map(f => esc(f.kennung)).join(', ')})`).join(' · ')
+      : 'Noch keine Zeiterfassung hochgeladen.';
+  } catch (e) { el.innerHTML = '<span style="color:var(--error)">Status: ' + esc(e.message) + '</span>'; }
+}
+// Deutsche Zahl format-bewusst parsen (nur bei Komma als Dezimalzeichen umbauen)
+function parseDe(v) {
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '').trim();
+  if (!s) return NaN;
+  return s.includes(',') ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : parseFloat(s);
+}
+function klassifiziereEintrag(r) {
+  const L = String(r.leistung || ''), T = String(r.taetigkeit || '').trim(), K = String(r.kostenstelle || '').trim();
+  if (/KM und|KM \+|Fahrzeit|Fahrtzeit/i.test(L) || K === 'Fahrtzeiten') return 'fahrt';
+  if (/^TA\b/.test(T)) return 'ausgefallen';
+  if (/Berichtszeit|Mediale Kontakte/i.test(L)) return 'indirekt';
+  if (String(r.klient || '').trim() && L.trim()) return 'termin';
+  return 'sonstiges';
+}
+async function parseZeitenDateien(files) {
+  const out = document.getElementById('zeitenVorschau');
+  out.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">Dateien werden ausgewertet …</div>';
+  zeitenPayloads = [];
+  const fehler = [];
+  for (const f of files) {
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false });
+      const kopf = rows[0].map(h => String(h || '').trim());
+      const ix = n => kopf.findIndex(h => h === n);
+      const iMA = ix('Mitarbeiter'), iBeg = ix('Beginn'), iGes = ix('Gesamt'),
+            iKli = ix('Klient'), iLst = ix('Leistung'), iTat = ix('Tätigkeit'), iKst = ix('Kostenstelle');
+      if (iMA < 0 || iBeg < 0 || iGes < 0 || iLst < 0) throw new Error('Spalten Mitarbeiter/Beginn/Gesamt/Leistung nicht gefunden');
+      const proMonat = new Map(); // monat → Map(name → {termine, stunden})
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i]; if (!r || !r[iMA]) continue;
+        const art = klassifiziereEintrag({ leistung: r[iLst], taetigkeit: iTat >= 0 ? r[iTat] : '', kostenstelle: iKst >= 0 ? r[iKst] : '', klient: iKli >= 0 ? r[iKli] : '' });
+        if (art !== 'termin') continue;
+        const m = String(r[iBeg] || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+        if (!m) continue;
+        const monat = `${m[3]}-${m[2].padStart(2, '0')}`;
+        const h = parseDe(r[iGes]);
+        if (!Number.isFinite(h) || h <= 0) continue;
+        if (!proMonat.has(monat)) proMonat.set(monat, new Map());
+        const mp = proMonat.get(monat);
+        const name = String(r[iMA]).replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').trim();
+        const e = mp.get(name) || { termine: 0, stunden: 0 };
+        e.termine += 1; e.stunden += h;
+        mp.set(name, e);
+      }
+      const basis = f.name.replace(/\.xlsx$/i, '');
+      for (const [monat, mp] of proMonat) {
+        zeitenPayloads.push({
+          monat, kennung: proMonat.size > 1 ? `${basis}-${monat}` : basis,
+          werte: [...mp.entries()].map(([name, e]) => ({ name, termine: e.termine, stunden: Math.round(e.stunden * 100) / 100 })),
+        });
+      }
+    } catch (e) { fehler.push(`${f.name}: ${e.message}`); }
+  }
+  if (!zeitenPayloads.length) {
+    out.innerHTML = '<span style="color:var(--error);font-size:12px">Keine Klienten-Termine gefunden.' + (fehler.length ? ' ' + esc(fehler.join(' · ')) : '') + '</span>';
+    return;
+  }
+  out.innerHTML = zeitenPayloads.map(p => `
+    <div style="font-weight:600;font-size:13px;margin-top:8px">${p.monat} · ${esc(p.kennung)} — ${p.werte.length} Mitarbeiter:innen</div>
+    <table class="tbl" style="font-size:12px;margin-top:4px"><tr><th style="text-align:left">Mitarbeiter:in</th><th style="text-align:right">Termine</th><th style="text-align:right">Stunden</th><th style="text-align:right">Ø je Termin</th></tr>
+    ${p.werte.map(w => `<tr><td>${esc(w.name)}</td><td style="text-align:right">${w.termine}</td><td style="text-align:right">${fmtNum(w.stunden,2)}</td><td style="text-align:right">${fmtNum(w.stunden / w.termine, 2)} h</td></tr>`).join('')}</table>`).join('')
+    + (fehler.length ? `<div style="color:var(--error);font-size:12px;margin-top:6px">${esc(fehler.join(' · '))}</div>` : '')
+    + `<button class="btn" style="margin-top:10px;padding:6px 14px;font-size:13px" onclick="uploadZeiten(this)">Hochladen (${zeitenPayloads.length} Monat${zeitenPayloads.length === 1 ? '' : 'e'})</button>`;
+}
+async function uploadZeiten(btn) {
+  btn.disabled = true; btn.textContent = 'Wird hochgeladen …';
+  try {
+    const t = await tokens();
+    for (const p of zeitenPayloads) {
+      const r = await fetch(CFG.workerUrl + '/api/zeiten-upload', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + t.id, 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    }
+    document.getElementById('zeitenVorschau').innerHTML =
+      '<div style="color:var(--ok);font-size:13px;font-weight:600">Hochgeladen. Die Cockpits zeigen jetzt Ø je Termin für die betroffenen Monate.</div>';
+    zeitenPayloads = [];
+    ladeZeitenStatus();
+    reload();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Erneut versuchen';
+    document.getElementById('zeitenVorschau').insertAdjacentHTML('beforeend',
+      '<div style="color:var(--error);font-size:12px;margin-top:6px">' + esc(e.message) + '</div>');
+  }
+}
+
 function toggleUrlaubCheck() {
   const el = document.getElementById('urlaubCheck');
   const offen = el.style.display !== 'none';

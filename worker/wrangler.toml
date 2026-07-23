@@ -3,5 +3,10 @@ main = "src/index.js"
 compatibility_date = "2026-07-01"
 workers_dev = true
 
+# KV: Zeiterfassungs-Aggregate (Ø Zeit beim Klienten je Termin) u. a.
+kv_namespaces = [
+  { binding = "PNW_DATEN", id = "49a9da6b75f54428b1669f6f47468435" }
+]
+
 # Secret KILANKA_TOKEN wird in Cloudflare verwaltet (Settings -> Variables and Secrets)
 # und bleibt bei Git-Deploys erhalten.
