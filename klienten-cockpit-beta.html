@@ -289,16 +289,16 @@ function render() {
   const sAbg = rows.reduce((s, r) => s + (r.abgerechnet || 0), 0);
   const sOffen = rows.reduce((s, r) => s + Math.max(0, r.deltaStunden || 0), 0);
   document.getElementById('kpis').innerHTML =
-    '<div class="kpi"><div class="v">' + fmtNum(sKon / wf, 0) + ' h/Wo</div><div class="l">Kontingent</div><div class="s">bewilligt · ' + fmtNum(sKon, 0) + ' h im Monat</div></div>' +
-    '<div class="kpi"><div class="v">' + fmtNum(sErf / wf, 0) + ' h/Wo</div><div class="l">Erfasst</div><div class="s">Zeiterfassung · ' + fmtNum(sErf, 0) + ' h im Monat</div></div>' +
-    '<div class="kpi"><div class="v">' + fmtNum(sAbg / wf, 0) + ' h/Wo</div><div class="l">Abgerechnet</div><div class="s">ohne Fahrt · ' + fmtNum(sAbg, 0) + ' h im Monat</div></div>' +
+    '<div class="kpi"><div class="v">' + fmtNum(sKon, 0) + ' h</div><div class="l">Kontingent</div><div class="s">bewilligt · ' + fmtNum(sKon / wf, 0) + ' h/Wo</div></div>' +
+    '<div class="kpi"><div class="v">' + fmtNum(sErf, 0) + ' h</div><div class="l">Erfasst</div><div class="s">Zeiterfassung · ' + fmtNum(sErf / wf, 0) + ' h/Wo</div></div>' +
+    '<div class="kpi"><div class="v">' + fmtNum(sAbg, 0) + ' h</div><div class="l">Abgerechnet</div><div class="s">ohne Fahrt · ' + fmtNum(sAbg / wf, 0) + ' h/Wo</div></div>' +
     '<div class="kpi"><div class="v">' + (sKon ? Math.round(sErf / sKon * 100) : 0) + ' %</div><div class="l">Ø Auslastung</div><div class="s">erfasst ÷ Kontingent</div></div>' +
-    '<div class="kpi"><div class="v" style="color:var(--error)">' + fmtNum(sOffen / wf, 1) + ' h/Wo</div><div class="l">Liegen gelassen</div><div class="s">' + fmtNum(sOffen, 0) + ' h im Monat</div></div>';
+    '<div class="kpi"><div class="v" style="color:var(--error)">' + fmtNum(sOffen, 0) + ' h</div><div class="l">Liegen gelassen</div><div class="s">' + fmtNum(sOffen / wf, 1) + ' h/Wo</div></div>';
 
   const pfeil = k => sortKey === k ? (sortDir < 0 ? ' ↓' : ' ↑') : '';
   let html = '<tr>' + [
-    ['klient', 'Klient:in'], ['', 'Betreuung'], ['kontingent', 'Kontingent h/Wo'],
-    ['erfasst', 'Erfasst h/Wo'], ['abgerechnet', 'Abger. h/Wo'], ['auslastung', 'Auslastung'], ['delta', 'Offen h/Wo'],
+    ['klient', 'Klient:in'], ['', 'Betreuung'], ['kontingent', 'Kontingent h/Mon'],
+    ['erfasst', 'Erfasst'], ['abgerechnet', 'Abgerechnet'], ['auslastung', 'Auslastung'], ['delta', 'Offen h'],
   ].map(([k, t]) => '<th' + (k ? ' style="cursor:pointer" onclick="setSort(\'' + k + '\')"' : '') + '>' + t + (k ? pfeil(k) : '') + '</th>').join('') + '</tr>';
 
   for (const r of rows) {
@@ -307,11 +307,11 @@ function render() {
     html += '<tr onclick="toggleDetail(\'' + esc(r.klientId) + '\')" style="cursor:pointer">' +
       '<td><b>' + esc(r.klient) + '</b>' + (r.hinweis ? '<br><span class="team" style="color:var(--warn)">' + esc(r.hinweis) + '</span>' : '') + '</td>' +
       '<td>' + esc(hb.join(', ') || '—') + (rest.length ? '<br><span class="team">' + esc(rest.map(b => b.name + ' (' + (b.rolle || '?') + ')').join(', ')) + '</span>' : '') + '</td>' +
-      '<td style="text-align:right" title="' + fmtNum(r.kontingentMonat, 1) + ' h im Monat">' + fmtNum(r.kontingentMonat / wf, 1) + '</td>' +
-      '<td style="text-align:right"' + (r.erfasst ? ' title="' + fmtNum(r.erfasst.stunden, 1) + ' h im Monat"' : '') + '>' + (r.erfasst ? fmtNum(r.erfasst.stunden / wf, 1) + ' <span class="team">(' + r.erfasst.termine + ' T.)</span>' : '<span class="team">—</span>') + '</td>' +
-      '<td style="text-align:right" title="' + fmtNum(r.abgerechnet, 1) + ' h im Monat">' + fmtNum(r.abgerechnet / wf, 1) + '</td>' +
+      '<td style="text-align:right" title="' + fmtNum(r.kontingentMonat / wf, 1) + ' h/Woche">' + fmtNum(r.kontingentMonat, 1) + '</td>' +
+      '<td style="text-align:right"' + (r.erfasst ? ' title="' + fmtNum(r.erfasst.stunden / wf, 1) + ' h/Woche"' : '') + '>' + (r.erfasst ? fmtNum(r.erfasst.stunden, 1) + ' <span class="team">(' + r.erfasst.termine + ' T.)</span>' : '<span class="team">—</span>') + '</td>' +
+      '<td style="text-align:right" title="' + fmtNum(r.abgerechnet / wf, 1) + ' h/Woche">' + fmtNum(r.abgerechnet, 1) + '</td>' +
       '<td>' + auslChip(r.auslastungErfasst ?? r.auslastungAbgerechnet) + '</td>' +
-      '<td style="text-align:right;' + ((r.deltaStunden || 0) > 0 ? 'color:var(--error);font-weight:600' : 'color:var(--ok)') + '" title="' + fmtNum(r.deltaStunden, 1) + ' h im Monat">' + fmtNum(r.deltaStunden / wf, 1) + '</td></tr>';
+      '<td style="text-align:right;' + ((r.deltaStunden || 0) > 0 ? 'color:var(--error);font-weight:600' : 'color:var(--ok)') + '" title="' + fmtNum(r.deltaStunden / wf, 1) + ' h/Woche">' + fmtNum(r.deltaStunden, 1) + '</td></tr>';
     if (offenId === r.klientId) {
       html += '<tr><td colspan="7" style="background:var(--bg)">' +
         '<div style="padding:6px 4px;font-size:12px">' +
@@ -323,8 +323,8 @@ function render() {
   }
   document.getElementById('tabelle').innerHTML = html;
   document.getElementById('legende').innerHTML =
-    'Alle Spalten in Wochenstunden (Monatswert ÷ Wochen des Monats; Monatssummen im Tooltip und in der Detailzeile). ' +
-    'Kontingent = bewilligte Stunden der im Monat aktiven Maßnahmen. ' +
+    'Alle Spalten in Monatsstunden (Wochenwert im Tooltip). ' +
+    'Kontingent = bewilligte Stunden der im Monat aktiven Maßnahmen, anteilig auf den Monat umgerechnet. ' +
     'Erfasst = Zeiterfassung (gleiche Klassifikationslogik wie Ø Zeit beim Klienten, über alle Fachkräfte des Klienten). ' +
     'Abgerechnet = Rechnungspositionen mit Bewilligungsbezug ohne Fahrt-/km-Anteile. ' +
     'Offen = Kontingent − erfasste Zeit (rot = ungenutzte bewilligte Stunden). Zeile anklicken zeigt Maßnahmen und die Fachkraft-Aufschlüsselung. Sortierung per Spaltenkopf.';
