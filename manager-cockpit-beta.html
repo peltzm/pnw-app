@@ -170,6 +170,7 @@ tr{cursor:pointer}
   </div>
   <div class="wrap">
     <div class="kpis" id="kpis"></div>
+    <div id="zbkKarte" style="display:none;margin-bottom:16px"></div>
     <div class="tablecard">
       <div class="loading-state" id="loading"><div class="spinner"></div>Team-Daten werden zusammengestellt … (erster Abruf ~15 s)</div>
       <table id="tbl" style="display:none">
@@ -304,6 +305,49 @@ function fuelleZbkMonate() {
   }
   sel.innerHTML = html; // erster Eintrag (Vormonat) = Standard, deckt sich mit Worker-Default
 }
+function jeTerminVorab(zbkRows) {
+  return zbkRows.some(r => r.zeitBeimKlienten?.jeTermin?.oProTermin != null);
+}
+// Karte "Ø Zeit beim Klienten" (Team): Ø je MA aufsteigend, ohne Termindetails
+function renderZbkKarte(zbkRows, hatDaten) {
+  const el = document.getElementById('zbkKarte');
+  if (!el) return;
+  if (!hatDaten) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const eintraege = zbkRows
+    .filter(r => r.zeitBeimKlienten?.jeTermin?.oProTermin != null)
+    .map(r => ({ name: r.name, team: r.team, o: r.zeitBeimKlienten.jeTermin.oProTermin,
+                 termine: r.zeitBeimKlienten.jeTermin.termine, stunden: r.zeitBeimKlienten.jeTermin.stunden }))
+    .sort((a, b) => a.o - b.o);
+  const sStd = eintraege.reduce((s, e) => s + e.stunden, 0);
+  const sTer = eintraege.reduce((s, e) => s + e.termine, 0);
+  const maxO = eintraege.length ? eintraege[eintraege.length - 1].o : 0;
+  el.style.display = '';
+  el.innerHTML = `<div class="tablecard" style="padding:16px 18px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Ø Zeit beim Klienten <span style="font-weight:400;color:var(--text-hint)">(ohne Fahrzeit) · ${zbkMonatLabel()}</span>
+      </div>
+      <span style="font-size:11px;letter-spacing:.6px;background:var(--accent-light);color:var(--accent);border-radius:6px;padding:3px 8px;font-weight:600">KILANKA · ZEITERFASSUNG</span>
+    </div>
+    <div style="margin:8px 0 12px"><span style="font-size:26px;font-weight:700">${fmtNum(sTer ? sStd / sTer : 0, 2)}</span>
+      <span style="color:var(--text-muted)"> h je Termin im Team · ${sTer} Termine · ${fmtNum(sStd, 1)} h · ${eintraege.length} Fachkräfte</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:4px 20px">
+      ${eintraege.map(e => `<div style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <span style="flex:0 0 170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.team || '')}">${esc(e.name)}</span>
+        <span style="flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:${maxO ? Math.round(e.o / maxO * 100) : 0}%;background:var(--accent-mid)"></span></span>
+        <span style="flex:0 0 92px;text-align:right"><b>${fmtNum(e.o, 2)} h</b> <span class="team">(${e.termine})</span></span>
+      </div>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--text-hint);margin-top:8px">Aufsteigend sortiert · Klammerwert = Termine im Monat · Verwaltung (M. Peltz, Tischoff) zählt nicht mit.</div>
+  </div>`;
+}
+// Nicht-pädagogische Konten, die in der Kennzahl NIE mitzählen (GF-Vorgabe)
+const ZBK_AUSGESCHLOSSENE_MA = ['peltz, markus', 'tischoff'];
+function zbkRelevant(r) {
+  const n = String(r.name || '').toLowerCase().replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').trim();
+  return !ZBK_AUSGESCHLOSSENE_MA.some(a => n.includes(a));
+}
 function zbkMonatLabel() {
   const iso = daten?.zbkMonat || document.getElementById('zbkMonatFilter')?.value;
   return iso ? new Date(iso + '-15').toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : 'Vormonat';
@@ -403,14 +447,16 @@ function render() {
   const sumKrank = rows.reduce((s,r)=>s+(r.krankheit?.tage||0),0);
   const kritisch = rows.filter(r => monate(r.nachweise?.fuehrungszeugnis) >= 60 || !r.nachweise?.datenschutz || (/nordstern/i.test(r.team || '') && monate(r.nachweise?.behAusbildung) >= 12)).length;
   // Ø Zeit beim Klienten: bevorzugt je Termin (Zeiterfassung), sonst je Klient/Monat (Rechnungen)
-  const jtStd = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.jeTermin?.stunden||0),0);
-  const jtTer = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.jeTermin?.termine||0),0);
-  const zbkStd = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.stundenGesamt||0),0);
-  const zbkKli = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.klienten||0),0);
+  const zbkRows = rows.filter(zbkRelevant);
+  const jtStd = zbkRows.reduce((s,r)=>s+(r.zeitBeimKlienten?.jeTermin?.stunden||0),0);
+  const jtTer = zbkRows.reduce((s,r)=>s+(r.zeitBeimKlienten?.jeTermin?.termine||0),0);
+  const zbkStd = zbkRows.reduce((s,r)=>s+(r.zeitBeimKlienten?.stundenGesamt||0),0);
+  const zbkKli = zbkRows.reduce((s,r)=>s+(r.zeitBeimKlienten?.klienten||0),0);
   const jeTermin = jtTer > 0;
   const zbkKpi = jeTermin ? jtStd / jtTer : (zbkKli ? zbkStd / zbkKli : null);
-  const ytdStd = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.ytd?.stunden||0),0);
-  const ytdTer = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.ytd?.termine||0),0);
+  const ytdStd = zbkRows.reduce((s,r)=>s+(r.zeitBeimKlienten?.ytd?.stunden||0),0);
+  const ytdTer = zbkRows.reduce((s,r)=>s+(r.zeitBeimKlienten?.ytd?.termine||0),0);
+  renderZbkKarte(zbkRows, jeTerminVorab(zbkRows));
   const zbkYtd = ytdTer > 0 ? ytdStd / ytdTer : null;
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">= ${fmtNum(rows.reduce((s,r)=>s+(r.wochenstunden||0),0)/39, 1)} VZÄ (39 h/Wo)${rows.some(r=>r.wochenstunden==null) ? ' · ' + rows.filter(r=>r.wochenstunden==null).length + ' ohne Vertragsstunden' : ''}</div></div>
