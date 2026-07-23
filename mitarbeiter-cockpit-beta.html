@@ -843,7 +843,7 @@ function zbkWertHtml(z) {
     const liste = Array.isArray(z.jeTermin.liste) ? z.jeTermin.liste : [];
     const termineTxt = liste.length
       ? `<a href="#" onclick="toggleZbkTermine(event)" style="color:inherit;text-decoration:underline dotted;cursor:pointer">${z.jeTermin.termine} Termine</a>`
-      : `${z.jeTermin.termine} Termine`;
+      : `<span title="Termin-Details liegen für diesen Monat noch nicht vor — Monatsdatei im Manager-Cockpit erneut hochladen." style="cursor:help;border-bottom:1px dotted var(--text-hint)">${z.jeTermin.termine} Termine</span>`;
     const tabelle = liste.length ? `<div id="zbkTermine" style="display:none;background:var(--bg);border-radius:8px;padding:8px 12px;margin-top:6px">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <tr style="color:var(--text-hint);text-align:left"><th style="padding:2px 6px 4px 0;font-weight:600">Datum</th><th style="padding:2px 6px 4px 0;font-weight:600">Klient:in</th><th style="padding:2px 0 4px;font-weight:600;text-align:right">Stunden</th></tr>
