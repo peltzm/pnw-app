@@ -698,7 +698,8 @@ async function ladeZeitenStatus() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
     el.innerHTML = d.monate.length
-      ? '<b>Bereits hochgeladen:</b> ' + d.monate.map(m => `${m.monat} (${m.dateien.map(f => esc(f.kennung)).join(', ')})`).join(' · ')
+      ? '<b>Bereits hochgeladen:</b> ' + d.monate.map(m => `${m.monat} (${m.dateien.map(f => esc(f.kennung) + (f.mitDetails ? ' ✓ Details' : ' <span style="color:var(--warn)">ohne Details</span>')).join(', ')})`).join(' · ')
+        + '<div style="margin-top:4px;color:var(--text-hint)">„ohne Details" = Upload lief über eine ältere Seiten-/Worker-Version — Datei mit dieser Seite (Badge unten prüfen!) erneut hochladen, dann werden die Termin-Details gespeichert.</div>'
       : 'Noch keine Zeiterfassung hochgeladen.';
   } catch (e) { el.innerHTML = '<span style="color:var(--error)">Status: ' + esc(e.message) + '</span>'; }
 }
@@ -786,7 +787,7 @@ async function parseZeitenDateien(files) {
     return;
   }
   out.innerHTML = zeitenPayloads.map(p => `
-    <div style="font-weight:600;font-size:13px;margin-top:8px">${p.monat} · ${esc(p.kennung)} — ${p.werte.length} Mitarbeiter:innen</div>
+    <div style="font-weight:600;font-size:13px;margin-top:8px">${p.monat} · ${esc(p.kennung)} — ${p.werte.length} Mitarbeiter:innen <span style="font-weight:400;color:var(--ok)">(inkl. Termin-Details)</span></div>
     <table class="tbl" style="font-size:12px;margin-top:4px"><tr><th style="text-align:left">Mitarbeiter:in</th><th style="text-align:right">Termine</th><th style="text-align:right">Stunden</th><th style="text-align:right">Ø je Termin</th></tr>
     ${p.werte.map(w => `<tr><td>${esc(w.name)}</td><td style="text-align:right">${w.termine}</td><td style="text-align:right">${fmtNum(w.stunden,2)}</td><td style="text-align:right">${fmtNum(w.stunden / w.termine, 2)} h</td></tr>`).join('')}</table>`).join('')
     + (fehler.length ? `<div style="color:var(--error);font-size:12px;margin-top:6px">${esc(fehler.join(' · '))}</div>` : '')

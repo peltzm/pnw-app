@@ -2152,7 +2152,7 @@ export default {
         await env.PNW_DATEN.put(key, JSON.stringify(obj));
         zeitenMemo.delete(monat); // Memos invalidieren
         zeitenYtdMemo = { bis: null, fetchedAt: 0, map: null, monate: [] };
-        const dateien = Object.entries(obj.dateien).map(([k, v]) => ({ kennung: k, hochgeladen: v.hochgeladen, zeilen: (v.werte || []).length }));
+        const dateien = Object.entries(obj.dateien).map(([k, v]) => ({ kennung: k, hochgeladen: v.hochgeladen, zeilen: (v.werte || []).length, mitDetails: (v.werte || []).some((w) => Array.isArray(w.liste) && w.liste.length > 0) }));
         return json({ ok: true, monat, dateien }, 200, origin);
       } catch (e) {
         return json({ error: `Zeiten-Upload fehlgeschlagen: ${e.message}` }, 502, origin);
@@ -2174,7 +2174,7 @@ export default {
         for (const k of liste.keys || []) {
           const raw = await env.PNW_DATEN.get(k.name);
           const obj = raw ? JSON.parse(raw) : { dateien: {} };
-          monate.push({ monat: k.name.slice(7), dateien: Object.entries(obj.dateien).map(([kk, v]) => ({ kennung: kk, hochgeladen: v.hochgeladen, zeilen: (v.werte || []).length })) });
+          monate.push({ monat: k.name.slice(7), dateien: Object.entries(obj.dateien).map(([kk, v]) => ({ kennung: kk, hochgeladen: v.hochgeladen, zeilen: (v.werte || []).length, mitDetails: (v.werte || []).some((w) => Array.isArray(w.liste) && w.liste.length > 0) })) });
         }
         return json({ monate }, 200, origin);
       } catch (e) {
