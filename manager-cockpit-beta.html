@@ -182,7 +182,7 @@ tr{cursor:pointer}
       <span class="dot d-ok"></span> gültig · <span class="dot d-warn"></span> bald fällig · <span class="dot d-err"></span> abgelaufen/fehlt · <span class="dot d-neutral"></span> nicht relevant.
       Klienten-Status: Bew = Bewilligungs-Status · DSV = Datenschutzvereinbarung · SPE = Schweigepflichtentbindung (erteilt/gesamt der betreuten Klienten).
       Auslastung = abgerechnete FLS des Vormonats gegen Kontingent-Soll (auf Monat umgerechnet).
-      Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (ohne Fahrt, ausgefallene Termine, Berichtszeit, mediale Kontakte); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
+      Ø Zeit/Klient: mit hochgeladener Zeiterfassung = Ø Dauer je Klienten-Termin (alle Leistungen außer Codes 97/98/20/42/43); ohne Zeiterfassung = abgerechnete Betreuungsstunden ohne Fahrt-/km-Positionen ÷ Anzahl Klienten (je Klient und Monat). Monat über den Ø-Monat-Filter. Team Nordstern (stationär, keine FLS-Logik): stattdessen Dienstplan-Status — grün = in einem veröffentlichten, zum Stichtag gültigen Kilanka-Dienstplan eingeplant (Tooltip zeigt den Plan), gelb = kein Plan. Zeile anklicken öffnet das Mitarbeiter-Cockpit.
     </div>
 
     <!-- Abwesenheiten & Vertretungen (GF + Teamleitungen) -->
@@ -216,8 +216,8 @@ tr{cursor:pointer}
             <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
               Excel-Export der Zeiterfassung (z. B. <code>Zeiterfassung_2605H1.xlsx</code>). Die Datei wird lokal im Browser
               ausgewertet — an den Server gehen nur Aggregate je Mitarbeiter:in und Monat (Termine, Stunden), keine Klientendaten.
-              Klienten-Termin = Eintrag mit Klient + Leistung, ohne Fahrt-Leistungen (KM/Fahrzeit), ausgefallene Termine (TA),
-              Berichtszeit und mediale Kontakte. Erneuter Upload derselben Datei überschreibt deren Stand.
+              Klienten-Termin = jeder Eintrag mit Leistung, deren Code nicht mit 97, 98, 20, 42 oder 43 beginnt
+              (mediale Kontakte, Berichtszeit, KM/Fahrzeit). Erneuter Upload derselben Datei überschreibt deren Stand.
             </div>
           </div>
           <label class="btn btn-outline" style="padding:5px 12px;font-size:12px;cursor:pointer">Dateien wählen
@@ -715,13 +715,14 @@ function monatVon(v) {
   if (m) return m[1] + '-' + m[2];
   return null;
 }
+// Vorgabe GF 07/2026: relevant sind alle Einträge, deren Leistung nicht leer
+// ist und deren Code NICHT mit 97, 98, 20, 42 oder 43 beginnt.
+const ZBK_AUSSCHLUSS_CODES = ['97', '98', '20', '42', '43'];
 function klassifiziereEintrag(r) {
-  const L = String(r.leistung || ''), T = String(r.taetigkeit || '').trim(), K = String(r.kostenstelle || '').trim();
-  if (/KM und|KM \+|Fahrzeit|Fahrtzeit/i.test(L) || K === 'Fahrtzeiten') return 'fahrt';
-  if (/^TA\b/.test(T)) return 'ausgefallen';
-  if (/Berichtszeit|Mediale Kontakte/i.test(L)) return 'indirekt';
-  if (String(r.klient || '').trim() && L.trim()) return 'termin';
-  return 'sonstiges';
+  const L = String(r.leistung || '').trim();
+  if (!L) return 'sonstiges';
+  const code = (L.match(/^(\d+)/) || [])[1] || '';
+  return ZBK_AUSSCHLUSS_CODES.includes(code) ? 'ausgeschlossen' : 'termin';
 }
 async function parseZeitenDateien(files) {
   const out = document.getElementById('zeitenVorschau');
