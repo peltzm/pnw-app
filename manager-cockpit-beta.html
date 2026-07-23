@@ -709,6 +709,16 @@ function parseDe(v) {
   if (!s) return NaN;
   return s.includes(',') ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : parseFloat(s);
 }
+// Tag (YYYY-MM-DD) aus Beginn — kann Date-Zelle, "13.05.2026 20:00" oder ISO sein
+function tagVon(v) {
+  if (v instanceof Date && !isNaN(v)) return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+  const s = String(v ?? '');
+  let m = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (m) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  return null;
+}
 // Monat (YYYY-MM) aus Beginn — kann Date-Zelle, "13.05.2026 20:00" oder ISO sein
 function monatVon(v) {
   if (v instanceof Date && !isNaN(v)) return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0');
@@ -749,22 +759,24 @@ async function parseZeitenDateien(files) {
         const r = rows[i]; if (!r || !r[iMA]) continue;
         const art = klassifiziereEintrag({ leistung: r[iLst], taetigkeit: iTat >= 0 ? r[iTat] : '', kostenstelle: iKst >= 0 ? r[iKst] : '', klient: iKli >= 0 ? r[iKli] : '' });
         if (art !== 'termin') continue;
-        const monat = monatVon(r[iBeg]);
-        if (!monat) continue;
+        const tag = tagVon(r[iBeg]);
+        if (!tag) continue;
+        const monat = tag.slice(0, 7);
         const h = parseDe(r[iGes]);
         if (!Number.isFinite(h) || h <= 0) continue;
         if (!proMonat.has(monat)) proMonat.set(monat, new Map());
         const mp = proMonat.get(monat);
         const name = String(r[iMA]).replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').trim();
-        const e = mp.get(name) || { termine: 0, stunden: 0 };
+        const e = mp.get(name) || { termine: 0, stunden: 0, liste: [] };
         e.termine += 1; e.stunden += h;
+        e.liste.push({ d: tag, k: String((iKli >= 0 && r[iKli]) || '').trim(), h: Math.round(h * 100) / 100 });
         mp.set(name, e);
       }
       const basis = f.name.replace(/\.xlsx$/i, '');
       for (const [monat, mp] of proMonat) {
         zeitenPayloads.push({
           monat, kennung: proMonat.size > 1 ? `${basis}-${monat}` : basis,
-          werte: [...mp.entries()].map(([name, e]) => ({ name, termine: e.termine, stunden: Math.round(e.stunden * 100) / 100 })),
+          werte: [...mp.entries()].map(([name, e]) => ({ name, termine: e.termine, stunden: Math.round(e.stunden * 100) / 100, liste: e.liste })),
         });
       }
     } catch (e) { fehler.push(`${f.name}: ${e.message}`); }

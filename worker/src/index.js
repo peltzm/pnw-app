@@ -696,9 +696,10 @@ async function zeitenTermineMap(env, monat) {
         for (const w of datei.werte || []) {
           const k = normName(w.name);
           if (!k) continue;
-          const e = map.get(k) || { termine: 0, stunden: 0 };
+          const e = map.get(k) || { termine: 0, stunden: 0, liste: [] };
           e.termine += Number(w.termine) || 0;
           e.stunden += Number(w.stunden) || 0;
+          if (Array.isArray(w.liste)) e.liste.push(...w.liste);
           map.set(k, e);
         }
       }
@@ -723,7 +724,7 @@ async function zeitenYtd(env, bisMonat) {
       if (!m || !m.size) continue;
       monate.push(monat);
       for (const [name, e] of m) {
-        const s = map.get(name) || { termine: 0, stunden: 0 };
+        const s = map.get(name) || { termine: 0, stunden: 0 }; // bewusst ohne liste
         s.termine += e.termine; s.stunden += e.stunden;
         map.set(name, s);
       }
@@ -1569,6 +1570,8 @@ async function buildCockpit(env, upn, now, zbkMonat) {
         stunden: Math.round(e.stunden * 100) / 100,
         oProTermin: Math.round((e.stunden / e.termine) * 100) / 100,
         quelle: "zeiterfassung (Kilanka-Export)",
+        liste: (e.liste || []).slice().sort((a, b) => String(a.d).localeCompare(String(b.d)))
+          .map((t) => ({ d: t.d, k: t.k, h: Math.round((Number(t.h) || 0) * 100) / 100 })),
       } : null;
       // YtD: Jahresdurchschnitt je Termin über alle hochgeladenen Monate ≤ zMonat
       const ytd = await zeitenYtd(env, zMonat);
@@ -2134,7 +2137,14 @@ export default {
             const name = String(w.name || "").trim().slice(0, 80);
             const termine = Number(w.termine), stunden = Number(w.stunden);
             if (!name || !Number.isFinite(termine) || !Number.isFinite(stunden) || termine < 0 || stunden < 0) continue;
-            sauber.push({ name, termine: Math.round(termine), stunden: Math.round(stunden * 100) / 100 });
+            const liste = [];
+            for (const t of (Array.isArray(w.liste) ? w.liste : []).slice(0, 600)) {
+              const dTag = String(t.d || "");
+              const h = Number(t.h);
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(dTag) || !Number.isFinite(h) || h < 0) continue;
+              liste.push({ d: dTag, k: String(t.k || "").trim().slice(0, 80), h: Math.round(h * 100) / 100 });
+            }
+            sauber.push({ name, termine: Math.round(termine), stunden: Math.round(stunden * 100) / 100, liste });
           }
           if (!sauber.length) return json({ error: "keine gültigen Zeilen" }, 400, origin);
           obj.dateien[kennung] = { hochgeladen: new Date().toISOString(), von: caller, werte: sauber };
@@ -2246,7 +2256,10 @@ export default {
             wochenstunden: d.person.wochenstundenVertrag,
             klienten: d.klienten,
             fls: d.fls,
-            zeitBeimKlienten: d.zeitBeimKlienten,
+            zeitBeimKlienten: d.zeitBeimKlienten ? {
+              ...d.zeitBeimKlienten,
+              jeTermin: d.zeitBeimKlienten.jeTermin ? { ...d.zeitBeimKlienten.jeTermin, liste: undefined } : null,
+            } : null,
             urlaub: d.urlaub,
             krankheit: d.krankheit,
             nachweise: d.nachweise,
