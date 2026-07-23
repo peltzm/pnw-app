@@ -681,10 +681,11 @@ function istFahrtZeile(l) {
 function normName(s) {
   return String(s || "").toLowerCase().replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ").trim();
 }
-let zeitenMemo = { monat: null, fetchedAt: 0, map: null };
+const zeitenMemo = new Map(); // monat → { fetchedAt, map } (60 s TTL)
 async function zeitenTermineMap(env, monat) {
   if (!env.PNW_DATEN) return null; // KV-Binding (noch) nicht vorhanden
-  if (zeitenMemo.monat === monat && Date.now() - zeitenMemo.fetchedAt < 60 * 1000) return zeitenMemo.map;
+  const hit = zeitenMemo.get(monat);
+  if (hit && Date.now() - hit.fetchedAt < 60 * 1000) return hit.map;
   let map = null;
   try {
     const raw = await env.PNW_DATEN.get(`zeiten:${monat}`);
@@ -703,8 +704,33 @@ async function zeitenTermineMap(env, monat) {
       }
     }
   } catch (e) { map = null; }
-  zeitenMemo = { monat, fetchedAt: Date.now(), map };
+  zeitenMemo.set(monat, { fetchedAt: Date.now(), map });
   return map;
+}
+
+// YtD-Sicht: alle KV-Monate des Jahres bis einschließlich bisMonat aufsummieren
+let zeitenYtdMemo = { bis: null, fetchedAt: 0, map: null, monate: [] };
+async function zeitenYtd(env, bisMonat) {
+  if (!env.PNW_DATEN) return null;
+  if (zeitenYtdMemo.bis === bisMonat && Date.now() - zeitenYtdMemo.fetchedAt < 60 * 1000) return zeitenYtdMemo;
+  const map = new Map(), monate = [];
+  try {
+    const liste = await env.PNW_DATEN.list({ prefix: `zeiten:${bisMonat.slice(0, 4)}-` });
+    for (const k of (liste.keys || []).sort((a, b) => a.name.localeCompare(b.name))) {
+      const monat = k.name.slice(7);
+      if (monat > bisMonat) continue;
+      const m = await zeitenTermineMap(env, monat);
+      if (!m || !m.size) continue;
+      monate.push(monat);
+      for (const [name, e] of m) {
+        const s = map.get(name) || { termine: 0, stunden: 0 };
+        s.termine += e.termine; s.stunden += e.stunden;
+        map.set(name, s);
+      }
+    }
+  } catch (e) { /* optional */ }
+  zeitenYtdMemo = { bis: bisMonat, fetchedAt: Date.now(), map, monate };
+  return zeitenYtdMemo;
 }
 
 let cockpitUsersCache = { data: null, fetchedAt: 0 };
@@ -1544,6 +1570,18 @@ async function buildCockpit(env, upn, now, zbkMonat) {
         oProTermin: Math.round((e.stunden / e.termine) * 100) / 100,
         quelle: "zeiterfassung (Kilanka-Export)",
       } : null;
+      // YtD: Jahresdurchschnitt je Termin über alle hochgeladenen Monate ≤ zMonat
+      const ytd = await zeitenYtd(env, zMonat);
+      if (ytd && ytd.monate.length) {
+        const y = ytd.map.get(normName(person?.name));
+        zeitBeimKlienten.ytd = y && y.termine > 0 ? {
+          termine: y.termine,
+          stunden: Math.round(y.stunden * 100) / 100,
+          oProTermin: Math.round((y.stunden / y.termine) * 100) / 100,
+          von: ytd.monate[0], bis: ytd.monate[ytd.monate.length - 1],
+          monate: ytd.monate.length,
+        } : null;
+      }
     } catch (e) { /* Zeiterfassung optional */ }
   } catch (e) { /* Kennzahl optional */ }
 
@@ -2102,7 +2140,8 @@ export default {
           obj.dateien[kennung] = { hochgeladen: new Date().toISOString(), von: caller, werte: sauber };
         }
         await env.PNW_DATEN.put(key, JSON.stringify(obj));
-        zeitenMemo = { monat: null, fetchedAt: 0, map: null }; // Memo invalidieren
+        zeitenMemo.delete(monat); // Memos invalidieren
+        zeitenYtdMemo = { bis: null, fetchedAt: 0, map: null, monate: [] };
         const dateien = Object.entries(obj.dateien).map(([k, v]) => ({ kennung: k, hochgeladen: v.hochgeladen, zeilen: (v.werte || []).length }));
         return json({ ok: true, monat, dateien }, 200, origin);
       } catch (e) {

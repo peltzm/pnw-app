@@ -840,20 +840,26 @@ function zbkMonatOptionen(gewaehlt) {
   }
   return html;
 }
+function zbkMonatKurz(iso) {
+  return iso ? new Date(iso + '-15').toLocaleDateString('de-DE', { month: 'short' }) : '';
+}
 function zbkWertHtml(z) {
   if (!z) return '<span style="color:var(--text-hint);font-size:13px">Keine Daten für diesen Monat.</span>';
+  const ytdZeile = z.ytd ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">YtD (${zbkMonatKurz(z.ytd.von)}–${zbkMonatKurz(z.ytd.bis)}): Ø <b>${fmtNum(z.ytd.oProTermin,2)} h</b> je Termin · ${z.ytd.termine} Termine · ${fmtNum(z.ytd.stunden,1)} h</div>` : '';
   if (z.jeTermin && z.jeTermin.oProTermin != null) {
     return `<span class="big" style="font-size:22px">${fmtNum(z.jeTermin.oProTermin, 2)}</span>
       <span class="big-unit">h je Termin · ${z.jeTermin.termine} Termine · ${fmtNum(z.jeTermin.stunden, 1)} h gesamt <span style="color:var(--text-hint)">(Zeiterfassung)</span></span>
+      ${ytdZeile}
       ${z.oProKlient != null ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Abgerechnet: ${fmtNum(z.oProKlient,1)} h je Klient/Monat (${z.klienten} Klienten)</div>` : ''}`;
   }
   if (z.zeiterfassungVorhanden) {
     return '<span style="color:var(--text-hint);font-size:13px">Zeiterfassung für den Monat vorhanden, aber keine Klienten-Termine für diese Person.</span>'
       + (z.oProKlient != null ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Abgerechnet: ${fmtNum(z.oProKlient,1)} h je Klient/Monat</div>` : '');
   }
-  if (z.oProKlient == null) return '<span style="color:var(--text-hint);font-size:13px">Keine abgerechneten Betreuungsstunden in diesem Monat.</span>';
+  if (z.oProKlient == null) return '<span style="color:var(--text-hint);font-size:13px">Keine abgerechneten Betreuungsstunden in diesem Monat.</span>' + ytdZeile;
   return `<span class="big" style="font-size:22px">${fmtNum(z.oProKlient, 1)}</span>
-    <span class="big-unit">h je Klient/Monat · ${fmtNum(z.stundenGesamt, 1)} h gesamt bei ${z.klienten} Klient${z.klienten === 1 ? '' : 'en'} <span style="color:var(--text-hint)">(Rechnungen — Ø je Termin erst nach Zeiterfassungs-Upload)</span></span>`;
+    <span class="big-unit">h je Klient/Monat · ${fmtNum(z.stundenGesamt, 1)} h gesamt bei ${z.klienten} Klient${z.klienten === 1 ? '' : 'en'} <span style="color:var(--text-hint)">(Rechnungen — Ø je Termin erst nach Zeiterfassungs-Upload)</span></span>
+    ${ytdZeile}`;
 }
 async function ladeZbk(monat) {
   const el = document.getElementById('zbkWert');

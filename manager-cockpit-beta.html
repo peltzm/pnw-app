@@ -409,11 +409,14 @@ function render() {
   const zbkKli = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.klienten||0),0);
   const jeTermin = jtTer > 0;
   const zbkKpi = jeTermin ? jtStd / jtTer : (zbkKli ? zbkStd / zbkKli : null);
+  const ytdStd = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.ytd?.stunden||0),0);
+  const ytdTer = rows.reduce((s,r)=>s+(r.zeitBeimKlienten?.ytd?.termine||0),0);
+  const zbkYtd = ytdTer > 0 ? ytdStd / ytdTer : null;
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="v">${rows.length}</div><div class="l">Mitarbeitende</div><div class="s">= ${fmtNum(rows.reduce((s,r)=>s+(r.wochenstunden||0),0)/39, 1)} VZÄ (39 h/Wo)${rows.some(r=>r.wochenstunden==null) ? ' · ' + rows.filter(r=>r.wochenstunden==null).length + ' ohne Vertragsstunden' : ''}</div></div>
     <div class="kpi"><div class="v">${sumKli}</div><div class="l">Aktive Klienten</div><div class="s">HB + MB + Vertretung</div></div>
     <div class="kpi"><div class="v">${avgAusl != null ? avgAusl + ' %' : '—'}</div><div class="l">Ø FLS-Auslastung</div><div class="s">abgerechneter Vormonat</div></div>
-    <div class="kpi"><div class="v">${zbkKpi != null ? fmtNum(zbkKpi,jeTermin?2:1) + ' h' : '—'}</div><div class="l">Ø Zeit beim Klienten</div><div class="s">${jeTermin ? 'je Termin · Zeiterfassung' : 'je Klient/Monat · Rechnungen'} · ${zbkMonatLabel()}</div></div>
+    <div class="kpi"><div class="v">${zbkKpi != null ? fmtNum(zbkKpi,jeTermin?2:1) + ' h' : '—'}</div><div class="l">Ø Zeit beim Klienten</div><div class="s">${jeTermin ? 'je Termin · Zeiterfassung' : 'je Klient/Monat · Rechnungen'} · ${zbkMonatLabel()}${zbkYtd != null ? ' · YtD Ø ' + fmtNum(zbkYtd,2) + ' h' : ''}</div></div>
     <div class="kpi"><div class="v">${fmtNum(sumKrank,1)}</div><div class="l">Krank-Tage YTD</div><div class="s">Summe Team</div></div>
     <div class="kpi"><div class="v" style="color:${kritisch ? 'var(--error)' : 'var(--ok)'}">${kritisch}</div><div class="l">Nachweise überfällig</div><div class="s">Führungszeugnis / Datenschutz</div></div>`;
 
@@ -438,7 +441,7 @@ function render() {
       <td>${fmtNum(kz.ist,1)}</td>
       <td>${auslChip}</td>
       <td>${r.zeitBeimKlienten?.jeTermin?.oProTermin != null
-        ? `<span title="Zeiterfassung: ${r.zeitBeimKlienten.jeTermin.termine} Termine · ${fmtNum(r.zeitBeimKlienten.jeTermin.stunden,1)} h (${esc(r.zeitBeimKlienten.monat||'')})">${fmtNum(r.zeitBeimKlienten.jeTermin.oProTermin,2)} h<span class="team">/Termin</span></span>`
+        ? `<span title="Zeiterfassung: ${r.zeitBeimKlienten.jeTermin.termine} Termine · ${fmtNum(r.zeitBeimKlienten.jeTermin.stunden,1)} h (${esc(r.zeitBeimKlienten.monat||'')})${r.zeitBeimKlienten.ytd ? ' — YtD: Ø ' + fmtNum(r.zeitBeimKlienten.ytd.oProTermin,2) + ' h über ' + r.zeitBeimKlienten.ytd.termine + ' Termine' : ''}">${fmtNum(r.zeitBeimKlienten.jeTermin.oProTermin,2)} h<span class="team">/Termin</span>${r.zeitBeimKlienten.ytd ? '<br><span class="team">YtD Ø ' + fmtNum(r.zeitBeimKlienten.ytd.oProTermin,2) + ' h</span>' : ''}</span>`
         : r.zeitBeimKlienten?.oProKlient != null
         ? `<span title="Rechnungen: ${fmtNum(r.zeitBeimKlienten.stundenGesamt,1)} h gesamt bei ${r.zeitBeimKlienten.klienten} Klienten (${esc(r.zeitBeimKlienten.monat||'')})">${fmtNum(r.zeitBeimKlienten.oProKlient,1)} h<span class="team">/Mon.</span></span>`
         : '—'}</td>
