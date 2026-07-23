@@ -209,7 +209,7 @@ tr{cursor:pointer}
 
     <!-- Urlaubs-Abgleich (GF): berechnete Kette vs. Kilanka-Stundenkonto -->
     <div id="zeitenUpload" style="display:none;margin-top:24px">
-      <div class="tablecard" style="padding:16px 18px">
+      <div class="tablecard" id="zeitenDrop" style="padding:16px 18px;border:2px dashed transparent;transition:border-color .15s, background .15s">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
           <div>
             <div style="font-weight:600">Zeiterfassung hochladen (Kilanka-Export)</div>
@@ -221,8 +221,8 @@ tr{cursor:pointer}
               Erneuter Upload derselben Datei überschreibt deren Stand.
             </div>
           </div>
-          <label class="btn btn-outline" style="padding:5px 12px;font-size:12px;cursor:pointer">Dateien wählen
-            <input type="file" accept=".xlsx" multiple style="display:none" onchange="parseZeitenDateien(this.files)">
+          <label class="btn btn-outline" style="padding:5px 12px;font-size:12px;cursor:pointer">Dateien wählen (Mehrfachauswahl)
+            <input type="file" accept=".xlsx" multiple style="display:none" onchange="parseZeitenDateien(this.files); this.value=''">
           </label>
         </div>
         <div id="zeitenStatus" style="font-size:12px;color:var(--text-muted);margin-top:10px">Lade Status …</div>
@@ -688,7 +688,21 @@ function toggleZeitenUpload() {
   const el = document.getElementById('zeitenUpload');
   const offen = el.style.display !== 'none';
   el.style.display = offen ? 'none' : '';
-  if (!offen) ladeZeitenStatus();
+  if (!offen) { ladeZeitenStatus(); initZeitenDrop(); }
+}
+let zeitenDropInit = false;
+function initZeitenDrop() {
+  if (zeitenDropInit) return;
+  zeitenDropInit = true;
+  const dz = document.getElementById('zeitenDrop');
+  const an = () => { dz.style.borderColor = 'var(--accent-mid)'; dz.style.background = 'var(--accent-light)'; };
+  const aus = () => { dz.style.borderColor = 'transparent'; dz.style.background = ''; };
+  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); an(); }));
+  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); aus(); }));
+  dz.addEventListener('drop', e => {
+    const xlsx = [...(e.dataTransfer?.files || [])].filter(f => /\.xlsx$/i.test(f.name));
+    if (xlsx.length) parseZeitenDateien(xlsx);
+  });
 }
 async function ladeZeitenStatus() {
   const el = document.getElementById('zeitenStatus');
@@ -797,7 +811,9 @@ async function uploadZeiten(btn) {
   btn.disabled = true; btn.textContent = 'Wird hochgeladen …';
   try {
     const t = await tokens();
+    let i = 0;
     for (const p of zeitenPayloads) {
+      btn.textContent = `Wird hochgeladen … (${++i}/${zeitenPayloads.length})`;
       const r = await fetch(CFG.workerUrl + '/api/zeiten-upload', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + t.id, 'Content-Type': 'application/json' },
