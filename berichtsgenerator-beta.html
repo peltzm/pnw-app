@@ -1042,6 +1042,39 @@ function fachkraftKontakt(name) {
   return { email: m.mail || '', telefon };
 }
 
+
+// ── Sorg-Zusammenfuehrung NUR fuer die DOCX-Templates (auf einer Kopie!) ──
+// Die Templates haben einen einzelnen Sorg-Slot; alle weiteren Sorgeberechtigten
+// werden dort zeilenweise angehaengt. Wichtig: Die gespeicherten/geladenen Daten
+// bleiben unveraendert — die fruehere destruktive Variante zerstoerte beim
+// Speichern/Neuladen die Einzelwerte (Namen wurden zusammengeklebt).
+function withMergedSorgTokens(data) {
+  const d = { ...data };
+  if (d._extraSorg && d._extraSorg.length > 0) {
+    const allSorg = [{ vorname: d['Sorg_Vorname'], name: d['Sorg_Familienname'] }, ...d._extraSorg];
+    d['Sorg_Vorname']      = allSorg.map(s => s.vorname || '').join('\n');
+    d['Sorg_Familienname'] = allSorg.map(s => s.name || '').join('\n');
+  }
+  return d;
+}
+
+// ── Reparatur alter Entwuerfe: zusammengefuehrte Sorg-Felder wieder auftrennen ──
+function healMergedSorg(data) {
+  if (typeof data.Sorg_Vorname === 'string' && data.Sorg_Vorname.includes('\n')) {
+    const vn = data.Sorg_Vorname.split('\n');
+    const nn = String(data.Sorg_Familienname || '').split('\n');
+    data.Sorg_Vorname = (vn[0] || '').trim();
+    data.Sorg_Familienname = (nn[0] || '').trim();
+    // Falls die Extra-Liste verloren ging: aus den restlichen Zeilen rekonstruieren
+    if (!(data._extraSorg && data._extraSorg.length)) {
+      data._extraSorg = vn.slice(1).map((v, i) => ({
+        vorname: (v || '').trim(), name: (nn[i + 1] || '').trim(), beziehung: ''
+      })).filter(s => s.vorname || s.name);
+    }
+  }
+  return data;
+}
+
 function collectData() {
   const ids = ['Hilfeart','Jugendamt','Sachbearbeitung_JA','Fachkraft_NeueWege',
     'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Stunden_Typ','Letztes_HPG','Naechstes_HPG','HPG_Begruendung','Fallleitung','Betreuungszeitraum',
@@ -1285,7 +1318,7 @@ async function downloadLocal() {
   try {
     const data = collectData();
     const templateBytes = await fetchTemplate();
-    const filled = await fillTemplate(templateBytes, data);
+    const filled = await fillTemplate(templateBytes, withMergedSorgTokens(data));
     const _datum = data.Datum_Unterschrift || '';
     const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
     const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
@@ -1317,7 +1350,7 @@ async function uploadToSharePoint() {
   try {
     const data = collectData();
     const templateBytes = await fetchTemplate();
-    const filled = await fillTemplate(templateBytes, data);
+    const filled = await fillTemplate(templateBytes, withMergedSorgTokens(data));
     const _datum = data.Datum_Unterschrift || '';
     const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
     const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
@@ -1676,6 +1709,7 @@ async function copyStammdaten(id) {
     buildDynamicSections(true);
     // Copy only Stammdaten fields
     // Copy ALL fields from existing report
+    healMergedSorg(data);
     // Restore extra Kinder
     if (data._extraKinder?.length) {
       data._extraKinder.forEach(k => {
@@ -1812,6 +1846,7 @@ async function loadDraft(id) {
       if (parts[0]) data.BZ_Von = parts[0];
       if (parts[1]) data.BZ_Bis = parts[1];
     }
+    healMergedSorg(data);
     // Restore extra Kinder
     if (data._extraKinder?.length) {
       data._extraKinder.forEach(k => {
@@ -2792,7 +2827,7 @@ async function approveReport() {
     const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
     
     const templateBytes = await fetchTemplate();
-    const filled = await fillTemplate(templateBytes, data);
+    const filled = await fillTemplate(templateBytes, withMergedSorgTokens(data));
     
     const uploadResp = await fetch(
       `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}:/content`,
@@ -2890,7 +2925,16 @@ async function rejectReport() {
   if (reason === null) return;
   
   try {
-    const data = collectData();
+    // WICHTIG: Nicht aus dem DOM der Teamleitung einsammeln — in der Pruefansicht
+    // fehlen die Extra-Zeilen (Geschwister, weitere Sorgeberechtigte), sie wuerden
+    // beim Speichern geloescht. Stattdessen den gespeicherten Stand laden und nur
+    // Status + Kommentare aktualisieren.
+    let data;
+    try {
+      const _item = await loadItemById(currentListId);
+      data = _item.FormularDaten ? JSON.parse(_item.FormularDaten) : collectData();
+    } catch (_e) { data = collectData(); }
+    data._tlKommentare = _tlKommentare;
     data._status = 'Abgelehnt'; data._statusExplicit = true;
     data._ablehnungsgrund = reason;
     // Prüfer-Zuordnung zurücksetzen — die nächste Einreichung ist eine neue Prüfungsrunde
@@ -3304,7 +3348,12 @@ async function rejectBackToTL() {
   const reason = prompt('Grund für die Rückgabe an die Teamleitung (wird per Mail mitgesendet):');
   if (reason === null) return;
   try {
-    const data = collectData();
+    let data;
+    try {
+      const _item = await loadItemById(currentListId);
+      data = _item.FormularDaten ? JSON.parse(_item.FormularDaten) : collectData();
+    } catch (_e) { data = collectData(); }
+    data._tlKommentare = _tlKommentare;
     data._status = 'TL angenommen'; data._statusExplicit = true; // zurück auf TL-Prüfung
     data._assignedReviewer = currentAssignedReviewer;
     data._assignedReviewerMail = currentAssignedReviewerMail;
