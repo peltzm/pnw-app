@@ -148,7 +148,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 <!-- HEADER -->
 <header class="header">
   <div class="header-brand" onclick="location.href='apps.html'">
-    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
     <span>Mitarbeiter-Cockpit</span>
     <span class="beta-badge" id="versionBadge">BETA</span>
   </div>
@@ -164,7 +164,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 <!-- LOGIN -->
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
-    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
     <div class="login-title">Mitarbeiter-Cockpit <span class="beta-badge">BETA</span></div>
     <div class="login-desc">Persönliche Übersicht: Urlaub, Krankheitstage, Firmenwagen, Klienten und Fachleistungsstunden. Sichtbar nur für dich und deine Führungskraft.</div>
     <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
@@ -224,7 +224,7 @@ const CFG = {
   workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
 const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.Read.All']; // Sites.Read.All: Firmenwagen live aus SP-Liste PNW-Fahrzeuge
-const APP_VERSION = 'BETA-aec7272'; // auto-updated on deploy
+const APP_VERSION = 'BETA-4793b35'; // auto-updated on deploy
 
 let msalInstance, currentAccount, accessToken;
 let demoMode = false;
@@ -642,10 +642,20 @@ function renderCards(d, own) {
     </div>
     <div class="big-row"><span class="big">${kl.aktiv}</span><span class="big-unit">aktive Klienten</span></div>
     <div class="sub-grid cols3">
-      <div class="sub-item"><div class="sl">Hauptbetr.</div><div class="sv">${kl.hb}</div></div>
-      <div class="sub-item"><div class="sl">Mitbetr.</div><div class="sv">${kl.mb}</div></div>
-      <div class="sub-item"><div class="sl">Vertretung</div><div class="sv">${kl.v}</div></div>
+      ${[['Hauptbetr.', 'hb'], ['Mitbetr.', 'mb'], ['Vertretung', 'v']].map(([l, key]) => {
+        const liste = kl.rolleFaelle?.[key] || [];
+        const klickbar = liste.length > 0;
+        return `<div class="sub-item"><div class="sl">${l}</div>
+          <div class="sv">${klickbar
+            ? `<button style="border:none;background:none;font:inherit;font-weight:inherit;color:var(--accent);cursor:pointer;text-decoration:underline dotted;padding:0" title="Klienten anzeigen" onclick="toggleStatusListe('rl-${key}')">${kl[key]}</button>`
+            : kl[key]}</div></div>`;
+      }).join('')}
     </div>
+    ${[['Hauptbetreuung', 'hb'], ['Mitbetreuung', 'mb'], ['Vertretung', 'v']].map(([l, key]) => {
+      const liste = kl.rolleFaelle?.[key] || [];
+      return liste.length ? `<div id="rl-${key}" style="display:none;background:var(--bg);border-radius:8px;padding:8px 12px;margin-top:6px;font-size:12px">
+        <b>${l} (${liste.length}):</b> ${liste.map(esc).join(' · ')}</div>` : '';
+    }).join('')}
     ${kl.status ? `<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;gap:6px;flex-wrap:wrap">
       ${[['Bewilligung', 'bew'], ['Datenschutz', 'ds'], ['Schweigepflicht', 'spe']].map(([l, key]) => {
         const s = kl.status[key];
@@ -663,22 +673,24 @@ function renderCards(d, own) {
     }).join('')}` : ''}
   </div>
 
-  <!-- Ø Zeit beim Klienten (FLS-Ist/Soll/Benchmarks auf GF-Wunsch 07/2026 entfernt —
-       Auslastung bleibt im Manager-Cockpit sichtbar) -->
+  <!-- FLS -->
   <div class="card c-fls">
     <div class="card-head">
-      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Ø Zeit beim Klienten</div>
-      ${flsLive ? '<span class="src-badge src-kilanka">Kilanka</span>' : '<span class="src-badge src-offen">Demo</span>'}
+      <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Fachleistungsstunden</div>
+      ${flsLive ? '<span class="src-badge src-kilanka">Kilanka · invoices</span>' : '<span class="src-badge src-offen">Demo</span>'}
     </div>
-    ${d.zeitBeimKlienten ? `<div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <div class="sl">Monat <span style="font-weight:400;color:var(--text-hint)">(ohne Fahrzeit)</span></div>
-        <select id="zbkMonatSel" onchange="ladeZbk(this.value)" style="height:26px;border:1px solid var(--border);border-radius:6px;padding:0 6px;font-size:12px;font-family:inherit;background:var(--surface)">
-          ${zbkMonatOptionen(d.zeitBeimKlienten.monat)}
-        </select>
-      </div>
-      <div id="zbkWert" style="margin-top:4px">${zbkWertHtml(d.zeitBeimKlienten)}</div>
-    </div>` : '<div style="color:var(--text-hint);font-size:13px">Keine Daten verfügbar.</div>'}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="big-row" style="margin:0"><span class="big">${fmtNum(flsIst,1)}</span><span class="big-unit">h Ist${flsMonatLabel ? ' ('+flsMonatLabel+')' : ''} · Soll ${fmtNum(flsSollAnzeige,1)} h${flsLive ? '/Monat' : ''}</span></div>
+      ${flsChip}
+    </div>
+    ${flsPct != null ? `<div class="bar"><div class="bar-fill" style="width:${Math.min(flsPct,100)}%;background:${flsPct>=95?'var(--ok)':flsPct>=80?'var(--warn)':'var(--error)'}"></div></div>` : ''}
+
+    ${d.person && d.person.wochenstundenVertrag ? `<div class="sub-grid" style="margin-top:10px">
+      <div class="sub-item"><div class="sl">Benchmark am Klienten</div>
+        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quote, 1)} h/Wo</div></div>
+      <div class="sub-item"><div class="sl">inkl. Fahrtzeit</div>
+        <div class="sv">${fmtNum(d.person.wochenstundenVertrag * FLS_KALK.quoteInklFahrt, 1)} h/Wo</div></div>
+    </div>` : ''}
 
   </div>
 
@@ -801,9 +813,6 @@ async function loadLive(upn) {
       if (!liveSicht) { liveSicht = data.sicht; setupLiveViewbar(); }
     }
     renderLivePerson(data);
-    // Personen-Dropdown mit der tatsächlich geladenen Person synchronisieren
-    const psel = document.getElementById('personSelect');
-    if (psel && psel.style.display !== 'none' && [...psel.options].some(o => o.value === data.upn)) psel.value = data.upn;
     return true;
   } catch(e) {
     console.warn('Live nicht verfügbar:', e.message);
@@ -813,77 +822,9 @@ async function loadLive(upn) {
 }
 
 function renderLivePerson(d) {
-  zbkUpn = d.upn; // für die Monats-Nachladung der Ø-Zeit-Kennzahl
   renderCards(d, d.upn === (currentAccount?.username || '').toLowerCase());
   if (liveSicht && liveSicht.mitarbeiter && liveSicht.mitarbeiter.length > 1) appendTeamCard();
   ladeProfilFoto(d.upn);
-}
-
-// ── Ø Zeit beim Klienten (ohne Fahrzeit): Monatswahl + Nachladen ──
-let zbkUpn = null;
-function zbkMonatOptionen(gewaehlt) {
-  const heute = new Date(); let html = '';
-  for (let i = 1; i <= 13; i++) { // Vormonat bis 13 Monate zurück
-    const dt = new Date(Date.UTC(heute.getUTCFullYear(), heute.getUTCMonth() - i, 1));
-    const iso = dt.toISOString().slice(0, 7);
-    const label = dt.toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    html += `<option value="${iso}"${iso === gewaehlt ? ' selected' : ''}>${label}</option>`;
-  }
-  return html;
-}
-function toggleZbkTermine(ev) {
-  ev.preventDefault();
-  const el = document.getElementById('zbkTermine');
-  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
-}
-function zbkMonatKurz(iso) {
-  return iso ? new Date(iso + '-15').toLocaleDateString('de-DE', { month: 'short' }) : '';
-}
-function zbkWertHtml(z) {
-  if (!z) return '<span style="color:var(--text-hint);font-size:13px">Keine Daten für diesen Monat.</span>';
-  const ytdZeile = z.ytd ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">YtD (${zbkMonatKurz(z.ytd.von)}–${zbkMonatKurz(z.ytd.bis)}): Ø <b>${fmtNum(z.ytd.oProTermin,2)} h</b> je Termin · ${z.ytd.termine} Termine · ${fmtNum(z.ytd.stunden,1)} h</div>` : '';
-  if (z.jeTermin && z.jeTermin.oProTermin != null) {
-    const liste = Array.isArray(z.jeTermin.liste) ? z.jeTermin.liste : [];
-    const termineTxt = liste.length
-      ? `<a href="#" onclick="toggleZbkTermine(event)" style="color:inherit;text-decoration:underline dotted;cursor:pointer">${z.jeTermin.termine} Termine</a>`
-      : `<span title="Termin-Details liegen für diesen Monat noch nicht vor — Monatsdatei im Manager-Cockpit erneut hochladen." style="cursor:help;border-bottom:1px dotted var(--text-hint)">${z.jeTermin.termine} Termine</span>`;
-    const tabelle = liste.length ? `<div id="zbkTermine" style="display:none;background:var(--bg);border-radius:8px;padding:8px 12px;margin-top:6px">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <tr style="color:var(--text-hint);text-align:left"><th style="padding:2px 6px 4px 0;font-weight:600">Datum</th><th style="padding:2px 6px 4px 0;font-weight:600">Klient:in</th><th style="padding:2px 0 4px;font-weight:600;text-align:right">Stunden</th></tr>
-        ${liste.map(t => `<tr><td style="padding:2px 6px 2px 0;white-space:nowrap">${t.d.split('-').reverse().join('.')}</td><td style="padding:2px 6px 2px 0">${esc(t.k || '—')}</td><td style="padding:2px 0;text-align:right">${fmtNum(t.h, 2)}</td></tr>`).join('')}
-        <tr style="border-top:1px solid var(--border);font-weight:600"><td style="padding:3px 6px 0 0">Summe</td><td></td><td style="padding:3px 0 0;text-align:right">${fmtNum(z.jeTermin.stunden, 2)}</td></tr>
-      </table>
-    </div>` : '';
-    return `<span class="big" style="font-size:22px">${fmtNum(z.jeTermin.oProTermin, 2)}</span>
-      <span class="big-unit">h je Termin · ${termineTxt} · ${fmtNum(z.jeTermin.stunden, 1)} h gesamt <span style="color:var(--text-hint)">(Zeiterfassung)</span></span>
-      ${tabelle}
-      ${ytdZeile}
-      ${z.oProKlient != null ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Abgerechnet: ${fmtNum(z.oProKlient,1)} h je Klient/Monat (${z.klienten} Klienten)</div>` : ''}`;
-  }
-  if (z.zeiterfassungVorhanden) {
-    return '<span style="color:var(--text-hint);font-size:13px">Zeiterfassung für den Monat vorhanden, aber keine Klienten-Termine für diese Person.</span>'
-      + (z.oProKlient != null ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">Abgerechnet: ${fmtNum(z.oProKlient,1)} h je Klient/Monat</div>` : '');
-  }
-  if (z.oProKlient == null) return '<span style="color:var(--text-hint);font-size:13px">Keine abgerechneten Betreuungsstunden in diesem Monat.</span>' + ytdZeile;
-  return `<span class="big" style="font-size:22px">${fmtNum(z.oProKlient, 1)}</span>
-    <span class="big-unit">h je Klient/Monat · ${fmtNum(z.stundenGesamt, 1)} h gesamt bei ${z.klienten} Klient${z.klienten === 1 ? '' : 'en'} <span style="color:var(--text-hint)">(Rechnungen — Ø je Termin erst nach Zeiterfassungs-Upload)</span></span>
-    ${ytdZeile}`;
-}
-async function ladeZbk(monat) {
-  const el = document.getElementById('zbkWert');
-  if (!el || !zbkUpn) return;
-  el.innerHTML = '<span style="color:var(--text-hint);font-size:13px">Wird geladen …</span>';
-  try {
-    const t = await liveTokens();
-    const r = await fetch(CFG.workerUrl + '/api/mitarbeiter-cockpit?mitarbeiter=' + encodeURIComponent(zbkUpn) + '&monat=' + monat,
-      { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const d = await r.json();
-    el.innerHTML = zbkWertHtml(d.zeitBeimKlienten);
-    if (liveCache[d.upn]) liveCache[d.upn].zeitBeimKlienten = d.zeitBeimKlienten; // Auswahl übersteht Re-Render
-  } catch (e) {
-    el.innerHTML = '<span style="color:var(--error);font-size:13px">Laden fehlgeschlagen (' + esc(e.message) + ')</span>';
-  }
 }
 
 /* ── Profilfoto aus M365 (Graph, Scope User.ReadBasic.All deckt Fotos ab).
@@ -1017,12 +958,7 @@ async function showApp() {
   document.getElementById('userBadge').style.display = 'flex';
   document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
   document.getElementById('logoutBtn').style.display = '';
-  const qUpn = (new URLSearchParams(location.search).get('mitarbeiter') || '').trim().toLowerCase() || null;
-  if (await loadLive(qUpn)) {
-    liveMode = true;
-    if (location.hash === '#zbk') setTimeout(() => document.querySelector('.card.c-fls')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
-    return;
-  }
+  if (await loadLive(null)) { liveMode = true; return; }
   // Fallback: Demo-Daten — mit sichtbarer Fehlerursache
   const bar = document.getElementById('demoBar');
   bar.style.display = 'flex';
