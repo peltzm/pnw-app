@@ -1054,6 +1054,22 @@ async function graphFetch(pfad, opts){
   if (!r.ok) { let d=''; try { d = (await r.json()).error?.message || ''; } catch(_){}; throw new Error('Graph HTTP ' + r.status + (d?' — '+d:'')); }
   return r.status === 204 ? null : r.json();
 }
+/* Sammlungen IMMER hierueber laden. Graph gibt pro Antwort nur eine Seite zurueck
+ * (SharePoint-Listen: max. 200 Items, egal welches $top angefragt wurde) und
+ * verlinkt den Rest ueber @odata.nextLink. Ohne die Schleife fehlen aeltere
+ * Monatswerte stillschweigend. */
+async function graphAlleSeiten(pfad){
+  const alle = [];
+  let url = 'https://graph.microsoft.com/v1.0' + pfad;
+  for (let seite = 0; url && seite < 50; seite++){        // Sicherheitslimit: 50 Seiten
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + graphToken, 'Content-Type': 'application/json' } });
+    if (!r.ok) { let d=''; try { d = (await r.json()).error?.message || ''; } catch(_){}; throw new Error('Graph HTTP ' + r.status + (d?' — '+d:'')); }
+    const j = await r.json();
+    alle.push(...(j.value || []));
+    url = j['@odata.nextLink'] || null;
+  }
+  return alle;
+}
 let bwaListePfad = null; // /sites/{siteId}/lists/{listId}
 async function bwaListe(){
   if (bwaListePfad) return bwaListePfad;
@@ -1100,9 +1116,9 @@ async function erstelleBwaListe(){
 async function ladeBwa(){
   try {
     const basis = await bwaListe();
-    const items = await graphFetch(basis + '/items?expand=fields&$top=200');
+    const items = await graphAlleSeiten(basis + '/items?expand=fields&$top=200');
     bwaDaten = {};
-    for (const it of items.value || []) {
+    for (const it of items) {
       const fx = it.fields || {};
       if (!/^\d{4}-\d{2}$/.test(fx.Title || '')) continue;
       bwaDaten[fx.Title] = { spId: it.id, Umsatzerloese: fx.Umsatzerloese ?? null, Personalkosten: fx.Personalkosten ?? null,
