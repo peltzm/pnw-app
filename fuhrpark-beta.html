@@ -384,8 +384,8 @@ function fahrerAusBestand(){
 }
 async function ladeFahrerListe(){
   try{
-    const res = await graph('/users?$select=displayName,mail,accountEnabled&$top=999');
-    const namen = (res&&res.value?res.value:[])
+    const nutzer = await graphAlle('/users?$select=displayName,mail,accountEnabled&$top=999');
+    const namen = nutzer
       .filter(u=>u.accountEnabled!==false && u.mail && u.mail.toLowerCase().endsWith('@praxisneuewege.de'))
       .map(u=>u.displayName).filter(Boolean);
     fahrerListe = [...new Set(namen)].sort((a,b)=>a.localeCompare(b,'de'));
@@ -455,6 +455,24 @@ async function graph(pfad, opt={}){
   if(!r.ok) throw new Error('Graph '+r.status+': '+await r.text());
   return r.status===204 ? true : r.json();
 }
+/* Sammlungen IMMER hierueber laden. Graph liefert pro Antwort nur eine Seite
+ * (SharePoint-Listen: max. 200 Items, unabhaengig vom angeforderten $top) und
+ * verlinkt den Rest ueber @odata.nextLink. Ohne die Schleife fehlen Eintraege
+ * stillschweigend — es gibt weder Fehler noch Hinweis in der Oberflaeche. */
+async function graphAlle(pfad){
+  const alle=[];
+  let url='https://graph.microsoft.com/v1.0'+pfad;
+  for(let seite=0; url && seite<50; seite++){          // Sicherheitslimit: 50 Seiten
+    const t=await token();
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}});
+    if(r.status===404) return alle;
+    if(!r.ok) throw new Error('Graph '+r.status+': '+await r.text());
+    const d=await r.json();
+    alle.push(...(d.value||[]));
+    url=d['@odata.nextLink']||null;
+  }
+  return alle;
+}
 function zuFeldern(f){
   const felder={};
   for(const s of SCHEMA){
@@ -475,8 +493,8 @@ function ausFeldern(item){
   return f;
 }
 async function ladeFahrzeuge(){
-  const res = await graph(listenBasis+'/items?expand=fields&$top=200');
-  fahrzeuge = (res&&res.value)?res.value.map(ausFeldern):[];
+  const items = await graphAlle(listenBasis+'/items?expand=fields&$top=200');
+  fahrzeuge = items.map(ausFeldern);
   online = true;
   document.getElementById('demoBar').style.display = 'none';
   renderAll();
