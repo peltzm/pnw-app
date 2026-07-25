@@ -405,9 +405,24 @@ async function ladeFuhrparkLive(graphToken) {
     if (!r.ok) throw new Error('Graph HTTP ' + r.status);
     return r.json();
   };
+  /* Sammlungen seitenweise: Graph liefert bei SharePoint-Listen max. 200 Items
+     pro Antwort — unabhaengig vom angeforderten $top — und verlinkt den Rest
+     ueber @odata.nextLink. Ohne die Schleife fehlen Fahrzeuge stillschweigend. */
+  const gAlle = async (pfad) => {
+    const alle = [];
+    let url = 'https://graph.microsoft.com/v1.0' + pfad;
+    for (let seite = 0; url && seite < 50; seite++) {      // Sicherheitslimit: 50 Seiten
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + graphToken } });
+      if (!r.ok) throw new Error('Graph HTTP ' + r.status);
+      const j = await r.json();
+      alle.push(...(j.value || []));
+      url = j['@odata.nextLink'] || null;
+    }
+    return alle;
+  };
   const site = await g('/sites/praxisneuewegesonjapeltz978.sharepoint.com:/');
-  const items = await g('/sites/' + site.id + "/lists/PNW-Fahrzeuge/items?expand=fields($select=Title,Hersteller,Modell,FzStatus,Rueckgabe,Finanzierung,KmProJahr,KmStand,KmStandDatum,DGUVPruefung,Fahrer,Privatnutzung,EigenanteilMonat)&$top=200");
-  SP_FUHRPARK = (items.value || []).map(i => i.fields || {});
+  const items = await gAlle('/sites/' + site.id + "/lists/PNW-Fahrzeuge/items?expand=fields($select=Title,Hersteller,Modell,FzStatus,Rueckgabe,Finanzierung,KmProJahr,KmStand,KmStandDatum,DGUVPruefung,Fahrer,Privatnutzung,EigenanteilMonat)&$top=200");
+  SP_FUHRPARK = items.map(i => i.fields || {});
   return SP_FUHRPARK;
 }
 function spFuhrparkMatch(personName) {
