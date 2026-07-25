@@ -759,12 +759,34 @@ function sortiereTabelle(table,idx,th){
 }
 
 /* ═══════════════════════════════════════════════════════════
+ * DATUM — lokal vs. UTC
+ * new Date('2024-03-15T00:00:00') erzeugt LOKALE Mitternacht;
+ * toISOString() liest sie als UTC zurück → in CET/CEST ein Tag zu früh.
+ * Alle Datumsrechnungen laufen deshalb konsequent in UTC, die Ausgabe
+ * von "heute" dagegen über die lokalen Feldwerte.
+ * ═══════════════════════════════════════════════════════════ */
+function lokalIso(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function heuteIso(){ return lokalIso(new Date()); }
+function isoZuUtc(s){
+  const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(s||'').trim());
+  return m?new Date(Date.UTC(+m[1],+m[2]-1,+m[3])):null;
+}
+function utcZuIso(d){ return (d instanceof Date && !isNaN(d))?d.toISOString().slice(0,10):''; }
+function monateAddieren(d,n){
+  const j=d.getUTCFullYear(), m=d.getUTCMonth(), t=d.getUTCDate();
+  const letzterTag=new Date(Date.UTC(j,m+n+1,0)).getUTCDate(); // Überlauf klemmen: 31.03.+11 → 28.02., nicht 03.03.
+  return new Date(Date.UTC(j,m+n,Math.min(t,letzterTag)));
+}
+
+/* ═══════════════════════════════════════════════════════════
  * CSV-EXPORT — Flotte = alle Stammdaten; Kosten/Prognose = sichtbare Tabelle
  * (Semikolon-getrennt, UTF-8 mit BOM für Excel)
  * ═══════════════════════════════════════════════════════════ */
 function csvExport(){
   const view=document.querySelector('.view.active');
-  const datum=new Date().toISOString().slice(0,10);
+  const datum=heuteIso();
   if(!view||view.id==='view-flotte'){ stammdatenCsv(datum); return; }  // Flotte = kompletter Stammdatensatz
   const tables=[...view.querySelectorAll('table')];
   if(!tables.length){ stammdatenCsv(datum); return; }
@@ -815,7 +837,7 @@ const normKz=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const normName=s=>String(s||'').toLowerCase().replace(/[^a-zäöüß]/g,'');
 function fbDatum(v){
   if(v==null||v==='') return null;
-  if(v instanceof Date) return v.toISOString().slice(0,10);
+  if(v instanceof Date) return lokalIso(v); // SheetJS liefert lokale Felder — nicht über UTC lesen
   if(typeof v==='number') return new Date(Date.UTC(1899,11,30)+Math.round(v*86400000)).toISOString().slice(0,10);
   const m=String(v).match(/(\d{4})-(\d{2})-(\d{2})|(\d{2})\.(\d{2})\.(\d{4})/);
   if(!m) return null;
@@ -924,7 +946,7 @@ async function fbUebernehmen(){
   f.fbPrivatProzent=Math.round(a.anteil*10)/10;
   if(document.getElementById('fbKmUebernehmen').checked){
     f.kmStand=Math.round(p.gesamtMaxEnde);
-    f.kmStandDatum=p.letzterTag||p.bis||new Date().toISOString().slice(0,10);
+    f.kmStandDatum=p.letzterTag||p.bis||heuteIso();
   }
   try{
     if(online) await ensureFbSpalten();
@@ -1014,14 +1036,13 @@ function dialogAutoBerechnen(e){
   if(e&&e.target&&e.target.classList) e.target.classList.remove('auto'); // manuelle Eingabe schlägt Berechnung
   const w=key=>{const el=feldEl(key);return el?el.value:'';};
   const n=key=>{const v=parseFloat(w(key));return isNaN(v)?null:v;};
-  const ez=w('erstzulassung')?new Date(w('erstzulassung')+'T00:00:00'):null;
-  const rg=w('rueckgabe')?new Date(w('rueckgabe')+'T00:00:00'):null;
+  const ez=isoZuUtc(w('erstzulassung'));
+  const rg=isoZuUtc(w('rueckgabe'));
   // Laufzeit aus EZ + Rückgabe
   if(ez&&rg&&rg>ez) setzeAuto('laufzeitMonate',Math.round((rg-ez)/(86400000*30.4375)));
   // Rückgabe aus EZ + Laufzeit
   else if(ez&&n('laufzeitMonate')){
-    const d2=new Date(ez); d2.setMonth(d2.getMonth()+n('laufzeitMonate'));
-    setzeAuto('rueckgabe',d2.toISOString().slice(0,10));
+    setzeAuto('rueckgabe',utcZuIso(monateAddieren(ez,n('laufzeitMonate'))));
   }
   // km/Jahr aus Kontingent + Laufzeit
   const lz=n('laufzeitMonate'), kont=n('kmVertragGesamt');
@@ -1063,7 +1084,7 @@ function kmErfassen(){
   const wert=parseFloat(String(eingabe).replace(/\./g,'').replace(',','.'));
   if(isNaN(wert)){ alert('Bitte eine Zahl eingeben.'); return; }
   dialogFahrzeug.kmStand=wert;
-  dialogFahrzeug.kmStandDatum=new Date().toISOString().slice(0,10);
+  dialogFahrzeug.kmStandDatum=heuteIso();
   const felder=document.querySelectorAll('#dialogFelder [data-key]');
   felder.forEach(el=>{
     if(el.dataset.key==='kmStand') el.value=wert;
