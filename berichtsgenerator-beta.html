@@ -522,8 +522,7 @@ const CONFIG = {
   siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com',
   templatePath: '/Templates/Verlaufsbericht_Template.docx',
   outputFolder: '/Verlaufsberichte',
-  listName: 'Verlaufsberichte_Entwuerfe',
-  siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com'
+  listName: 'Verlaufsberichte_Entwuerfe'
 };
 
 const APP_VERSION = 'BETA-2e1979a'; // Kilanka-Integration, parallel zur Produktion
@@ -3632,13 +3631,26 @@ async function loadGroupMembers() {
     return d.value?.[0]?.id;
   }
   
+  // Graph liefert Sammlungen seitenweise und verlinkt den Rest ueber
+  // @odata.nextLink. Gruppenmitglieder und /users kamen bisher nur als erste
+  // Seite an — bei aktuell ~25 Konten unauffaellig, ab ~100 lautlos unvollstaendig.
+  async function graphAlleSeiten(pfad) {
+    const alle = [];
+    let url = pfad.startsWith('http') ? pfad : 'https://graph.microsoft.com/v1.0' + pfad;
+    for (let seite = 0; url && seite < 50; seite++) {   // Sicherheitslimit: 50 Seiten
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (!r.ok) throw new Error('Graph HTTP ' + r.status);
+      const d = await r.json();
+      alle.push(...(d.value || []));
+      url = d['@odata.nextLink'] || null;
+    }
+    return alle;
+  }
+
   async function getMembers(groupId) {
     if (!groupId) return [];
-    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,givenName,surname,mail,jobTitle,mobilePhone,businessPhones`, {
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    const d = await r.json();
-    return (d.value || []).filter(m => m['@odata.type'] === '#microsoft.graph.user');
+    const mitglieder = await graphAlleSeiten(`/groups/${groupId}/members?$select=id,displayName,givenName,surname,mail,jobTitle,mobilePhone,businessPhones`);
+    return mitglieder.filter(m => m['@odata.type'] === '#microsoft.graph.user');
   }
   
   async function getMyManager() {
@@ -3746,15 +3758,13 @@ async function loadGroupMembers() {
     // Fallback: static options
     // Fallback: load all org users
     try {
-      const r2 = await fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,givenName,surname,mail&$top=100&$filter=accountEnabled eq true', {
-        headers: { Authorization: 'Bearer ' + token }
-      });
-      if (r2.ok) {
-        const d2 = await r2.json();
-        _teamMembers = (d2.value || []).filter(u => u.mail);
-        _teamMembers.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
-      }
-    } catch(e2) {}
+      const alle = await graphAlleSeiten('/users?$select=id,displayName,givenName,surname,mail&$top=100&$filter=accountEnabled eq true');
+      _teamMembers = alle.filter(u => u.mail);
+      _teamMembers.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
+    } catch(e2) {
+      // Ohne Log war hier nicht erkennbar, ob die Liste leer ist oder der Abruf scheiterte.
+      console.warn('Fallback-Nutzerliste konnte nicht geladen werden:', e2.message);
+    }
     const fkSelect3 = document.getElementById('Fachkraft_NeueWege');
     if (fkSelect3 && _teamMembers.length > 0) {
       const sortName = m => { const p = (m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
