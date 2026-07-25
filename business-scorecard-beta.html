@@ -528,25 +528,41 @@ function parseBankCsv(text){
   if (iBetrag < 0) iBetrag = idx(/amount/);
   const iSH = idx(/soll.?haben|^s\/h$|^h\/s$/);
   const iDatum = idx(/buchung|valuta|datum|date/);
-  const istGeldbetrag = s => /^-?\d{1,3}(\.\d{3})*(,\d{1,2})?$|^-?\d+([.,]\d{1,2})?$/.test(String(s).trim());
+  // Spalten, die im Fallback NIE als Betrag gelten duerfen — der Saldo steht
+  // in vielen Bank-Exporten ganz rechts und wurde bisher als Betrag gebucht.
+  const gesperrt = new Set([
+    idx(/saldo|balance|kontostand/), idx(/^w(ä|ae)hrung$|^currency$/),
+    idx(/blz|bic|iban|kontonummer|konto-nr/),
+  ].filter(k => k >= 0));
+  // -? am Ende: DATEV und manche Banken setzen das Minus hinter den Betrag
+  const istGeldbetrag = s => /^-?\d{1,3}(\.\d{3})*(,\d{1,2})?-?$|^-?\d+([.,]\d{1,2})?-?$/.test(String(s).trim());
+  // Strenger Test fuer den Fallback: Dezimalstellen ZWINGEND, sonst werden
+  // Jahreszahlen, Beleg- und Kundennummern als Betrag interpretiert.
+  const istGeldbetragStreng = s => /^-?\d{1,3}(\.\d{3})*,\d{2}-?$|^-?\d+[.,]\d{2}-?$/.test(String(s).trim());
   const txs = [];
+  let fallbackZeilen = 0;
   for (let i = hi + 1; i < zeilen.length; i++){
     const c = spalten(zeilen[i], delim);
     if (c.length < 2) continue;
     let betrag = iBetrag >= 0 && istGeldbetrag(c[iBetrag]) ? deNum(c[iBetrag]) : null;
+    let iGenutzt = betrag != null ? iBetrag : -1;
     if (betrag == null){
-      // Fallback: letzter Wert der Zeile, der wie ein Geldbetrag aussieht
-      for (let k = c.length - 1; k >= 0; k--){
-        if (istGeldbetrag(c[k])) { betrag = deNum(c[k]); break; }
+      // Fallback: ERSTER strenger Geldbetrag von links, gesperrte Spalten
+      // uebersprungen. Frueher wurde von rechts gesucht — das traf regelmaessig
+      // die Saldo-Spalte statt des Buchungsbetrags.
+      for (let k = 0; k < c.length; k++){
+        if (gesperrt.has(k) || k === iDatum) continue;
+        if (istGeldbetragStreng(c[k])) { betrag = deNum(c[k]); iGenutzt = k; fallbackZeilen++; break; }
       }
     }
     if (betrag == null) continue;
     if (iSH >= 0 && /^s$/i.test(c[iSH] || '')) betrag = -Math.abs(betrag);
     if (betrag <= 0) continue; // nur Gutschriften
-    const vwz = c.filter((_, k) => k !== iBetrag).join(' ');
+    const vwz = c.filter((_, k) => k !== iGenutzt).join(' ');
     txs.push({ betrag, vwz, datum: iDatum >= 0 ? (c[iDatum] || '') : '' });
   }
-  return { txs, diag: { kopfzeile: hi + 1, delim, betragSpalte: iBetrag >= 0 ? kopf[iBetrag] : 'letzter Geldbetrag je Zeile' } };
+  return { txs, diag: { kopfzeile: hi + 1, delim, fallbackZeilen,
+    betragSpalte: iBetrag >= 0 ? kopf[iBetrag] : 'keine Betragsspalte erkannt — Fallback' } };
 }
 function parseDatumDE(s){
   const m = /(\d{2})\.(\d{2})\.(\d{4})/.exec(String(s || ''));
@@ -695,7 +711,7 @@ function zahlungsCard(f){
       <button class="btn btn-ghost" onclick="aktualisiereMonat()" title="Kilanka-Daten werden serverseitig bis zu 10 Minuten zwischengespeichert">Kilanka-Stand neu laden</button>
       ${z ? `<span class="tag ${z.treffer.length ? 'warn' : (z.txAnzahl ? 'ok' : 'err')}">${z.treffer.length} von ${offene.length} offenen Rechnungen gefunden (${eur(summe)}) · ${z.txAnzahl} Gutschriften geprüft</span>` : ''}
     </div>
-    ${z && z.diag ? `<div class="legend">Format erkannt: Kopfzeile ${z.diag.kopfzeile}, Trenner "${z.diag.delim}", Betragsspalte "${z.diag.betragSpalte}".${z.txAnzahl === 0 ? ' <b>Keine Gutschriften erkannt — Exportformat vermutlich nicht unterstützt: bitte Kopfzeile + eine Beispielzeile (Beträge geschwärzt) an Markus/Claude.</b>' : ''}</div>` : ''}
+    ${z && z.diag ? `<div class="legend">Format erkannt: Kopfzeile ${z.diag.kopfzeile}, Trenner "${z.diag.delim}", Betragsspalte "${z.diag.betragSpalte}".${z.diag.fallbackZeilen ? ` <b>${z.diag.fallbackZeilen} Zeile(n) ohne erkannte Betragsspalte — Beträge per Fallback ermittelt, bitte stichprobenartig prüfen.</b>` : ''}${z.txAnzahl === 0 ? ' <b>Keine Gutschriften erkannt — Exportformat vermutlich nicht unterstützt: bitte Kopfzeile + eine Beispielzeile (Beträge geschwärzt) an Markus/Claude.</b>' : ''}</div>` : ''}
     ${z && z.treffer.length ? `<table class="mini-table"><thead><tr><th>Rechnung</th><th>Empfänger</th><th class="num">offen</th><th class="num">Gutschrift</th><th class="num">gebucht am</th><th>Match</th></tr></thead><tbody>
       ${z.treffer.map(t => `<tr><td>${t.nummer || '—'}</td><td>${t.empfaenger}</td><td class="num">${eur(t.betrag)}</td><td class="num">${eur(t.zahlBetrag)}</td><td class="num">${t.zahlDatum || '—'}</td><td>${t.art === 'Rechnungsnr.' ? '<span class="tag ok">Rechnungsnr.</span>' : t.art === 'Kurz-Nr. (prüfen!)' ? '<span class="tag warn">Kurz-Nr. (prüfen!)</span>' : '<span class="tag warn">Betrag (prüfen!)</span>'}</td></tr>`).join('')}
     </tbody></table>
@@ -737,17 +753,25 @@ function prognoseCard(){
 }
 
 /* ═══ BWA (SharePoint-Liste PNW-BWA, nur GF) ═══ */
-const deNum = s => { const n = parseFloat(String(s).replace(/\./g,'').replace(',','.')); return Number.isFinite(n) ? n : null; };
-// Number-Inputs liefern Punkt-Dezimal ("133893.29") — deNum würde den Punkt
-// als Tausendertrenner entfernen (Faktor-100-Fehler). Deshalb: nur bei Komma
-// deutsch parsen, sonst Standard-parseFloat.
-const zahlAusFeld = v => {
-  const s = String(v ?? '').trim();
-  if (!s) return null;
-  if (s.includes(',')) return deNum(s);
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : null;
+/* Format-bewusstes Parsen — deckt alle Quellen ab (DATEV, Bank-CSV, HTML-Inputs):
+ *   "1.234,56"   → 1234.56   Komma vorhanden: Punkt = Tausendertrenner
+ *   "1.234.567"  → 1234567   reine 3er-Gruppen: Punkt = Tausendertrenner
+ *   "133893.29"  → 133893.29 sonst Punkt-Dezimal UNVERAENDERT (kein Faktor-100-Fehler)
+ *   "1.234,56-"  → -1234.56  nachgestelltes Minus = DATEV-Konvention fuer negative Werte
+ */
+const deNum = s => {
+  let t = String(s ?? '').trim().replace(/[\s\u00a0\u202f€]/g, '');
+  if (!t) return null;
+  let vz = 1;
+  if (t.endsWith('-'))                              { vz = -1; t = t.slice(0, -1); }
+  else if (t.startsWith('-') || t.startsWith('\u2212')) { vz = -1; t = t.slice(1); }
+  let n;
+  if (t.includes(','))                       n = parseFloat(t.replace(/\./g, '').replace(',', '.'));
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t))    n = parseFloat(t.replace(/\./g, ''));
+  else                                       n = parseFloat(t);
+  return Number.isFinite(n) ? vz * n : null;
 };
+const zahlAusFeld = v => deNum(v);
 
 function bwaCard(f, monat){
   const b = bwaDaten[monat];
@@ -849,10 +873,10 @@ function parseKerZeilen(zeilen){
   for (const [k, label] of Object.entries(felder)){
     // 1) Saubere Zeile "Label <Monatswert> …"
     const zeile = zeilen.find(x => new RegExp('^' + label + '\\b').test(x.trim()));
-    let w = zeile && /(-?[\d.]+,\d{2})/.exec(zeile);
+    let w = zeile && /(-?[\d.]+,\d{2}-?)/.exec(zeile);   // -? am Ende: DATEV setzt das Minus nach den Betrag
     // 2) Fallback für zusammengeklebte Zeilen (ältere BWA-Form): erster
     //    Betrag direkt hinter dem Label im Gesamttext = Monatsspalte
-    if (!w) w = new RegExp('(?:^|\\s)' + label + '\\s+(-?[\\d.]+,\\d{2})').exec(text);
+    if (!w) w = new RegExp('(?:^|\\s)' + label + '\\s+(-?[\\d.]+,\\d{2}-?)').exec(text);
     if (w) erg[k] = deNum(w[1]);
   }
   return erg;
@@ -860,7 +884,7 @@ function parseKerZeilen(zeilen){
 function susaSaldo(zeilen, kto){
   for (const z of zeilen){
     if (new RegExp('^\\s*' + kto + '\\s+\\D').test(z)){
-      const paare = [...z.matchAll(/(-?[\d.]+,\d{2})\s+(S|H)\b/g)];
+      const paare = [...z.matchAll(/(-?[\d.]+,\d{2}-?)\s+(S|H)\b/g)];
       if (paare.length){
         const [, b, sh] = paare[paare.length - 1];
         return deNum(b) * (sh === 'S' ? 1 : -1);
@@ -1003,8 +1027,18 @@ function bwaCsvGewaehlt(ev){
     for (const [re, feld] of suche) {
       const zeile = zeilen.find(z => re.test(z));
       if (!zeile) continue;
-      const werte = zeile.split(/[;\t]/).map(deNum).filter(v => v != null);
-      if (werte.length) { document.getElementById(feld).value = werte[werte.length - 1]; treffer++; }
+      // ERSTER Geldbetrag NACH dem Label = Monatsspalte — gleiche Konvention
+      // wie parseKerZeilen. Vorher wurde der LETZTE Wert der Zeile genommen;
+      // das ist in DATEV-BWAs der kumulierte Jahreswert bzw. eine %-Spalte.
+      const zellen = zeile.split(/[;\t]/);
+      const iLabel = zellen.findIndex(z => re.test(z));
+      let wert = null;
+      for (let k = Math.max(iLabel, 0) + 1; k < zellen.length; k++) {
+        const roh = zellen[k].trim();
+        if (!/^-?[\d.]+,\d{2}-?$/.test(roh)) continue;   // nur echte Geldbetraege
+        wert = deNum(roh); break;
+      }
+      if (wert != null) { document.getElementById(feld).value = wert; treffer++; }
     }
     document.getElementById('bwaMeldung').textContent =
       treffer ? treffer + ' von 4 Kennzahlen aus der CSV übernommen — bitte prüfen.' : 'Keine Kennzahlenzeilen erkannt — bitte manuell eintragen.';
