@@ -48,6 +48,39 @@ const TIMEBASE_MAP = {
 };
 
 // ── Kilanka-Graph: exakt die benötigten Felder, nichts Sensibles ──
+// Verschachtelte Sammlungen lassen sich NICHT ueber $offset nachladen — es gibt
+// nur $limit. Ohne Angabe greift ein undokumentierter Server-Default, der still
+// abschneidet. Deshalb hier bewusst grosszuegig und explizit; pruefeGrenzen()
+// meldet, sobald eine Sammlung ihr Limit tatsaechlich ausreizt.
+const N_LIMIT = {
+  actions: 200,            // Massnahmen je Klient ueber die gesamte Fallhistorie
+  attendants: 100,         // Betreuer-Zuordnungen je Massnahme
+  quotas: 100,             // Kontingente je Massnahme
+  approvals: 200,          // Bewilligungen je Kontingent (bei quartalsweiser Bewilligung ~4/Jahr)
+  workQualifications: 50,  // Qualifikationseintraege je Mitarbeiter
+};
+
+function pruefeGrenzen(clients) {
+  const treffer = new Set();
+  const pruefe = (name, arr) => {
+    if (Array.isArray(arr) && arr.length >= N_LIMIT[name]) treffer.add(`${name} (${arr.length})`);
+  };
+  for (const c of clients || []) {
+    pruefe("actions", c.actions);
+    for (const a of c.actions || []) {
+      pruefe("attendants", a.attendants);
+      pruefe("quotas", a.quotas);
+      for (const q of a.quotas || []) pruefe("approvals", q.approvals);
+    }
+  }
+  if (treffer.size) {
+    console.warn(
+      "Kilanka: verschachtelte Sammlung am $limit — Daten moeglicherweise unvollstaendig: " +
+      [...treffer].join(", ") + ". N_LIMIT in worker/src/index.js anheben."
+    );
+  }
+}
+
 const CLIENT_GRAPH = {
   id: 1, recName: 1, name: 1, firstName: 1, dayOfBirth: 1,
   street: 1, zip: 1, city: 1, deletedAt: 1,
@@ -67,13 +100,16 @@ const CLIENT_GRAPH = {
       validFrom: 1, validUntil: 1, amount: 1, // amount = Verteilungsgewicht (z. B. 50/50 bei Tandem)
       user: { id: 1, recName: 1 },
       attendantKind: { name: 1 },
+      $limit: N_LIMIT.attendants,
     },
     quotas: {
       name: 1, type: 1, limitPeriod: 1, timeBase: 1,
       deletedAt: 1, // seit 13.07. verfügbar (Kilanka-Support) — gelöschte Kontingente ausfiltern
       // ACHTUNG: "quantity" hier NIE anfragen (killt quotas-Zweig, s. Doku §4)
-      approvals: { id: 1, validFrom: 1, validUntil: 1, hours: 1 }, // id seit 13.07. freigegeben → präzise Rechnungs-Zuordnung (FLS-Ist)
+      approvals: { id: 1, validFrom: 1, validUntil: 1, hours: 1, $limit: N_LIMIT.approvals }, // id seit 13.07. freigegeben → präzise Rechnungs-Zuordnung (FLS-Ist)
+      $limit: N_LIMIT.quotas,
     },
+    $limit: N_LIMIT.actions,
   },
   $limit: 1000,
 };
@@ -86,6 +122,7 @@ const USERS_GRAPH = {
     validFrom: 1,
     validUntil: 1,
     qualification: { name: 1 },
+    $limit: N_LIMIT.workQualifications,
   },
   $limit: 1000,
 };
@@ -194,7 +231,10 @@ async function validateEntraToken(authHeader) {
   if (header.alg !== "RS256") return { ok: false, error: "Unerwarteter Algorithmus" };
 
   const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && payload.exp < now - 60) return { ok: false, error: "Token abgelaufen" };
+  // exp ist PFLICHT: ein Token ohne Ablaufangabe waere sonst unbegrenzt gueltig.
+  // Entra setzt exp immer — fehlt es, stimmt etwas grundsaetzlich nicht.
+  if (typeof payload.exp !== "number") return { ok: false, error: "Token ohne Ablaufzeit" };
+  if (payload.exp < now - 60) return { ok: false, error: "Token abgelaufen" };
   if (payload.nbf && payload.nbf > now + 60) return { ok: false, error: "Token noch nicht gültig" };
 
   const issOk =
@@ -251,8 +291,15 @@ async function fetchKilankaRosters(env) {
   if (rosterCache.data && Date.now() - rosterCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
     return rosterCache.data;
   }
-  const data = await kilankaPost(env, "rosters", ROSTER_GRAPH);
-  rosterCache = { data: Array.isArray(data) ? data : [], fetchedAt: Date.now() };
+  // Wie bei clients seitenweise laden — $limit allein liefert nur die erste Seite.
+  const data = [];
+  const limit = ROSTER_GRAPH.$limit || 100;
+  for (let offset = 0; ; offset += limit) {
+    const page = await kilankaPost(env, "rosters", { ...ROSTER_GRAPH, $offset: offset });
+    if (Array.isArray(page)) data.push(...page);
+    if (!Array.isArray(page) || page.length < limit) break;
+  }
+  rosterCache = { data, fetchedAt: Date.now() };
   return rosterCache.data;
 }
 
@@ -323,6 +370,7 @@ async function fetchKilankaClients(env) {
     if (Array.isArray(page)) data.push(...page);
     if (!Array.isArray(page) || page.length < limit) break;
   }
+  pruefeGrenzen(data);
   clientCache = { data, fetchedAt: Date.now() };
   return data;
 }
@@ -545,26 +593,41 @@ async function graphAlleSeiten(startUrl, graphToken, kontext) {
 
 // directReports des Aufrufers über SEIN Graph-Token (X-Graph-Token).
 // /me/... garantiert: Es sind zwingend die eigenen Reports — nicht fälschbar.
+// Rueckgabe { reports, fehler }: "keine Reports" und "Graph nicht erreichbar"
+// sind NICHT dasselbe. Vorher fuehrten beide zu rolle="fk" — ein Graph-429 oder
+// abgelaufenes X-Graph-Token sperrte damit eine Teamleitung mit der irrefuehrenden
+// Meldung aus, das Cockpit sei ihr "vorbehalten".
+// Fehlendes Token ist bewusst KEIN Fehler: dann greift wie bisher der fk-Pfad.
 async function fetchDirectReports(graphToken) {
-  if (!graphToken) return [];
+  if (!graphToken) return { reports: [], fehler: null };
   try {
     const value = await graphAlleSeiten(
       "https://graph.microsoft.com/v1.0/me/directReports?$select=displayName,userPrincipalName,mail&$top=999",
       graphToken,
       "me/directReports"
     );
-    return value
+    const reports = value
       .map((u) => ({
         upn: (u.mail || u.userPrincipalName || "").toLowerCase(),
         name: u.displayName || u.userPrincipalName || "",
       }))
       .filter((u) => u.upn.endsWith(`@${MAIL_DOMAIN}`));
+    return { reports, fehler: null };
   } catch (e) {
-    // Wichtig fürs Debugging: ein Graph-429 oder abgelaufenes X-Graph-Token
-    // sieht sonst aus wie "Nutzer hat keine direkten Reports" (→ Rolle fk → 403).
     console.warn("directReports nicht ermittelbar:", e.message);
-    return [];
+    return { reports: [], fehler: e.message };
   }
+}
+
+// 503 statt 403, wenn die Rolle wegen eines Graph-Ausfalls nicht bestimmbar war.
+// Ein echter Fachkraft-Zugriff liefert 200 mit leerer Liste und damit fehler=null,
+// bekommt also weiterhin sauber 403.
+function graphAusfall(dr, origin) {
+  if (!dr.fehler) return null;
+  return json(
+    { error: "Berechtigung derzeit nicht prüfbar — Microsoft Graph antwortet nicht. Bitte in einer Minute erneut versuchen.", detail: dr.fehler },
+    503, origin
+  );
 }
 
 // Betreuer-Namen aus den Klienten-Zuordnungen (upn → recName).
@@ -635,7 +698,7 @@ async function alleAktivenMitarbeiter(env) {
       if (/^\s*nicht\s/i.test(rn || "")) continue; // Alteinträge
       add((UPN_OVERRIDES[String(u.id)] ?? deriveEmail(rn) ?? "").toLowerCase(), rn);
     }
-  } catch (e) { /* users nicht verfügbar → Fallback unten */ }
+  } catch (e) { console.warn("users nicht verfügbar → Fallback unten —", e.message); }
   if (list.length === 0) {
     // recName im users-Graphen nicht freigegeben → Namen aus den
     // Klienten-Zuordnungen ableiten
@@ -867,7 +930,7 @@ async function fetchClientStatusMap(env) {
         bewText: u["Bewilligungs-Status"]?.recName || null,
       });
     }
-  } catch (e) { /* Status optional */ }
+  } catch (e) { console.warn("Status optional —", e.message); }
   clientStatusCache = { map, fetchedAt: Date.now() };
   return map;
 }
@@ -1199,7 +1262,7 @@ async function buildCockpit(env, upn, now) {
       };
       klientenStatus = { ds: zaehle((s) => s.ds), spe: zaehle((s) => s.spe), bew: zaehle((s) => s.bew) };
     }
-  } catch (e) { /* optional */ }
+  } catch (e) { console.warn("Klienten-Status (DS/SPE/Bewilligung) nicht ermittelbar —", e.message); }
 
   // ── b) Stammdaten ──
   let person = null, nachweise = null, erhoehung = null;
@@ -1249,7 +1312,7 @@ async function buildCockpit(env, upn, now) {
         wochenstundenVertrag: wochenstunden != null ? Math.round(wochenstunden * 100) / 100 : null,
       };
     }
-  } catch (e) { /* users-Zweig optional */ }
+  } catch (e) { console.warn("users-Zweig optional —", e.message); }
 
   if (!person) {
     // recName im users-Graphen nicht freigegeben → Name aus attendants
@@ -1259,7 +1322,7 @@ async function buildCockpit(env, upn, now) {
         person = { name: nm, kilankaId: null, rolle: "Fachkraft", team: null,
                    qualifikation: null, eintritt: null, wochenstundenVertrag: null };
       }
-    } catch (e) { /* optional */ }
+    } catch (e) { console.warn("Personenzuordnung ueber attendantNamen fehlgeschlagen —", e.message); }
   }
 
   // ── c) Abwesenheiten ──
@@ -1469,7 +1532,7 @@ async function buildCockpit(env, upn, now) {
         fls.benchmark80 = Math.round(nettoAT * tagesStd * 0.8 * 10) / 10;
       }
     }
-  } catch (e) { /* Rechnungs-Zweig optional */ }
+  } catch (e) { console.warn("Rechnungs-Zweig optional —", e.message); }
 
   return {
     upn,
@@ -1568,9 +1631,12 @@ export default {
         // (Rolle, Zeilen, Zielerreichung) — für alle anderen wirkungslos.
         const alsParam = (url.searchParams.get("als") || "").trim().toLowerCase();
         const vorschau = istGf && alsParam && alsParam !== caller && alsParam.endsWith(`@${MAIL_DOMAIN}`);
-        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const dr = istGf ? { reports: [], fehler: null } : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const reports = dr.reports;
         const rolle = istGf ? (vorschau ? "tl" : "gf") : reports.length ? "tl" : "fk";
         if (rolle === "fk") {
+          const ausfall = graphAusfall(dr, origin);
+          if (ausfall) return ausfall;
           return json({ error: "Manager-Cockpit ist Teamleitungen und GF vorbehalten" }, 403, origin);
         }
         const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
@@ -1601,7 +1667,7 @@ export default {
           if (!isNaN(st) && st.getUTCFullYear() >= 2024 && st <= new Date()) now = st;
         }
         let dpMap = null;
-        try { dpMap = await dienstplanMap(env, now); } catch (e) { /* Dienstplan optional */ }
+        try { dpMap = await dienstplanMap(env, now); } catch (e) { console.warn("Dienstplan optional —", e.message); }
         const rows = [];
         for (const m of liste) {
           const d = await buildCockpit(env, m.upn, now); // Kilanka-Caches → nur 1. Person kostet Netz
@@ -1613,7 +1679,7 @@ export default {
           if (lange.length && d.person.kilankaId) {
             const von = new Date(lange[0].von + "T00:00:00Z");
             const bis = new Date(lange.map((x) => x.bis).sort().pop() + "T23:59:59Z");
-            try { vertretungsFaelle = await vertretungsLage(env, d.person.kilankaId, von, bis); } catch (e) { /* optional */ }
+            try { vertretungsFaelle = await vertretungsLage(env, d.person.kilankaId, von, bis); } catch (e) { console.warn("Vertretungslage nicht ermittelbar —", e.message); }
           }
           rows.push({
             upn: m.upn,
@@ -1633,7 +1699,7 @@ export default {
           });
         }
         let amtFaelle = [];
-        try { amtFaelle = await alleHbFaelle(env, now); } catch (e) { /* Ziel-Basis optional */ }
+        try { amtFaelle = await alleHbFaelle(env, now); } catch (e) { console.warn("Ziel-Basis optional —", e.message); }
         return json({ rolle, vorschauAls: vorschau ? alsParam : null, stand: new Date().toISOString(), stichtag: stichtagParam || null, rows, amtFaelle }, 200, origin);
       } catch (e) {
         return json({ error: `Manager-Cockpit fehlgeschlagen: ${e.message}` }, 502, origin);
@@ -1649,9 +1715,12 @@ export default {
       }
       try {
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
-        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const dr = istGf ? { reports: [], fehler: null } : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const reports = dr.reports;
         const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
         if (rolle === "fk") {
+          const ausfall = graphAusfall(dr, origin);
+          if (ausfall) return ausfall;
           return json({ error: "Jugendamt-Cockpit ist Teamleitungen und GF vorbehalten" }, 403, origin);
         }
         const now = new Date();
@@ -1678,7 +1747,13 @@ export default {
       try {
         const caller = (auth.upn || "").trim().toLowerCase();
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
-        const reports = istGf ? [] : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const dr = istGf ? { reports: [], fehler: null } : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        // Hier ist "fk" ein regulaerer Zustand (eigene Daten). Nur bei echtem
+        // Graph-Ausfall abbrechen, damit eine TL nicht stillschweigend auf die
+        // Einzelsicht zurueckfaellt.
+        const ausfallDr = graphAusfall(dr, origin);
+        if (ausfallDr) return ausfallDr;
+        const reports = dr.reports;
         const rolle = istGf ? "gf" : reports.length ? "tl" : "fk";
 
         // Sichtbare Mitarbeiter für das Dropdown
