@@ -524,24 +524,45 @@ const GF_UPNS = [
   "markus.peltz@praxisneuewege.de",
 ];
 
+// Graph-Sammlungen vollständig einlesen. Graph liefert pro Antwort nur EINE
+// Seite und verlinkt den Rest über @odata.nextLink. Bei $expand ist die
+// Seitengröße zudem deutlich kleiner als ein angefordertes $top — ohne diese
+// Schleife wäre das Ergebnis still unvollständig.
+// Fehler werden geworfen, nicht verschluckt: die Aufrufer sind fail-closed und
+// sollen lieber leer als halb befüllt weiterarbeiten.
+async function graphAlleSeiten(startUrl, graphToken, kontext) {
+  const alle = [];
+  let url = startUrl;
+  for (let seite = 0; url && seite < 50; seite++) { // Sicherheitslimit: 50 Seiten
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${graphToken}` } });
+    if (!r.ok) throw new Error(`Graph ${kontext}: HTTP ${r.status} auf Seite ${seite + 1}`);
+    const j = await r.json();
+    alle.push(...(j.value || []));
+    url = j["@odata.nextLink"] || null;
+  }
+  return alle;
+}
+
 // directReports des Aufrufers über SEIN Graph-Token (X-Graph-Token).
 // /me/... garantiert: Es sind zwingend die eigenen Reports — nicht fälschbar.
 async function fetchDirectReports(graphToken) {
   if (!graphToken) return [];
   try {
-    const r = await fetch(
+    const value = await graphAlleSeiten(
       "https://graph.microsoft.com/v1.0/me/directReports?$select=displayName,userPrincipalName,mail&$top=999",
-      { headers: { Authorization: `Bearer ${graphToken}` } }
+      graphToken,
+      "me/directReports"
     );
-    if (!r.ok) return [];
-    const { value } = await r.json();
-    return (value || [])
+    return value
       .map((u) => ({
         upn: (u.mail || u.userPrincipalName || "").toLowerCase(),
         name: u.displayName || u.userPrincipalName || "",
       }))
       .filter((u) => u.upn.endsWith(`@${MAIL_DOMAIN}`));
-  } catch {
+  } catch (e) {
+    // Wichtig fürs Debugging: ein Graph-429 oder abgelaufenes X-Graph-Token
+    // sieht sonst aus wie "Nutzer hat keine direkten Reports" (→ Rolle fk → 403).
+    console.warn("directReports nicht ermittelbar:", e.message);
     return [];
   }
 }
@@ -571,13 +592,15 @@ async function fetchManagerMap(graphToken) {
   const map = new Map();
   if (!graphToken) return map;
   try {
-    const r = await fetch(
-      "https://graph.microsoft.com/v1.0/users?$select=userPrincipalName,mail&$expand=manager($select=displayName,userPrincipalName,mail)&$top=999",
-      { headers: { Authorization: `Bearer ${graphToken}` } }
+    // Bewusst OHNE $top: mit $expand begrenzt Graph die Seitengröße selbst und
+    // lehnt große $top-Werte teilweise ab. Die Seitengröße bestimmt Graph,
+    // den Rest holt graphAlleSeiten über @odata.nextLink nach.
+    const value = await graphAlleSeiten(
+      "https://graph.microsoft.com/v1.0/users?$select=userPrincipalName,mail&$expand=manager($select=displayName,userPrincipalName,mail)",
+      graphToken,
+      "users/$expand=manager"
     );
-    if (!r.ok) return map;
-    const { value } = await r.json();
-    for (const u of value || []) {
+    for (const u of value) {
       const upn = (u.mail || u.userPrincipalName || "").toLowerCase();
       const m = u.manager;
       if (!upn || !m) continue;
@@ -586,7 +609,11 @@ async function fetchManagerMap(graphToken) {
         name: m.displayName || m.userPrincipalName || "",
       });
     }
-  } catch { /* Zuordnung optional */ }
+  } catch (e) {
+    // Leere Map = GF-Vorschau zeigt nur die Leitung selbst. Ohne Log war nicht
+    // unterscheidbar, ob jemand wirklich kein Team hat oder Graph gescheitert ist.
+    console.warn("Manager-Map nicht ermittelbar:", e.message);
+  }
   return map;
 }
 
