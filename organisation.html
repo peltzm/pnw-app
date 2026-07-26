@@ -753,6 +753,28 @@ function makeRowCard(user, depth, jungerAls, cardClass, nordsternSet) {
   const jt = document.createElement('div');
   jt.className = 'row-title';
   jt.textContent = depth === 1 ? 'Teamleitung' : (user.jobTitle || roleInfo.label);
+
+  // Noch nicht gestartet? (Eintrag in KOMMENDE_MITARBEITER mit Startdatum in der
+  // Zukunft) → grauer Balken + Startdatum, ab dem Starttag automatisch regulär.
+  const kEintrag = KOMMENDE_MITARBEITER.find(k =>
+    k.start &&
+    k.name.toLowerCase().trim() === (user.displayName || '').toLowerCase().trim() &&
+    new Date(k.start + 'T00:00:00') > new Date()
+  );
+  if (kEintrag) {
+    card.classList.add('card-kommend');
+    jt.textContent = '';
+    if (kEintrag.rolle) {
+      const rz = document.createElement('div');
+      rz.textContent = kEintrag.rolle;
+      jt.appendChild(rz);
+    }
+    const dz = document.createElement('div');
+    dz.style.whiteSpace = 'nowrap';
+    dz.textContent = 'ab ' + new Date(kEintrag.start + 'T00:00:00')
+      .toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    jt.appendChild(dz);
+  }
   card.appendChild(jt);
 
   // Nordstern badge (Kompassrose) rechts oben
