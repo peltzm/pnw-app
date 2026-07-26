@@ -11,6 +11,8 @@
 <meta name="theme-color" content="#ffffff">
 <title>Organisation — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
@@ -344,6 +346,10 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
       <p id="lastSync">Lade Mitarbeiterdaten …</p>
     </div>
     <div class="page-header-actions">
+      <button class="btn btn-outline btn-sm" onclick="pdfExport()" id="pdfBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+        PDF-Export
+      </button>
       <button class="btn btn-outline btn-sm" onclick="loadOrg()" id="refreshBtn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
         Aktualisieren
@@ -759,6 +765,117 @@ function filterTree(q) {
 /* ── EXPAND / COLLAPSE ALL ── */
 function toggleAll() {
   // Not used in 3-level layout — kept for future use
+}
+
+/* ── PDF-EXPORT (html2canvas + pdfmake, Kodchasan, Logo + Datum) ── */
+let _pdfAssets = null;
+async function _ladePdfAssets() {
+  if (_pdfAssets) return _pdfAssets;
+  const basis = window.location.pathname.replace(/[^/]*$/, '');
+  async function b64(pfad) {
+    const r = await fetch(basis + pfad);
+    if (!r.ok) throw new Error(pfad + ' nicht gefunden (' + r.status + ')');
+    const buf = await r.arrayBuffer();
+    let bin = ''; const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  const namen = ['Kodchasan-Regular.ttf','Kodchasan-SemiBold.ttf','Kodchasan-Bold.ttf','Kodchasan-Italic.ttf'];
+  const geladen = await Promise.all(namen.map(n => b64('assets/fonts/' + n)));
+  const vfs = {}; namen.forEach((n, i) => vfs[n] = geladen[i]);
+  const fonts = {
+    Kodchasan:     { normal: 'Kodchasan-Regular.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+    KodchasanSemi: { normal: 'Kodchasan-SemiBold.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+  };
+  let logo = null;
+  try { logo = 'data:image/png;base64,' + await b64('assets/Logo-PraxisNeueWege-transparent.png'); } catch (e) { console.warn('Logo fehlt:', e.message); }
+  _pdfAssets = { vfs, fonts, logo };
+  return _pdfAssets;
+}
+
+async function pdfExport() {
+  const btn = document.getElementById('pdfBtn');
+  const orig = btn.innerHTML;
+  try {
+    btn.disabled = true; btn.textContent = 'PDF wird erstellt…';
+    if (typeof html2canvas === 'undefined' || typeof pdfMake === 'undefined') {
+      throw new Error('Export-Bibliotheken nicht geladen (CDN blockiert?)');
+    }
+    const el = document.getElementById('treeContainer');
+    if (!el || el.querySelector('.loading-state')) throw new Error('Organigramm ist noch nicht geladen.');
+
+    // Suchfilter für die Aufnahme neutralisieren
+    const suche = document.getElementById('searchInput');
+    const sucheAlt = suche ? suche.value : '';
+    if (suche && sucheAlt) { suche.value = ''; filterTree(''); }
+
+    const canvas = await html2canvas(el, {
+      scale: 2, backgroundColor: '#faf9f6', logging: false,
+      width: el.scrollWidth, height: el.scrollHeight,
+      windowWidth: Math.max(el.scrollWidth, window.innerWidth),
+    });
+    if (suche && sucheAlt) { suche.value = sucheAlt; filterTree(sucheAlt); }
+
+    const assets = await _ladePdfAssets();
+    pdfMake.vfs = assets.vfs; pdfMake.fonts = assets.fonts;
+
+    const C = { wood:'#3D2B1F', meta:'#8a8378', ink:'#2b241d' };
+    const heute = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const quer = canvas.width >= canvas.height;
+    const seite = quer ? { w: 841.89, h: 595.28 } : { w: 595.28, h: 841.89 };
+    const rand = 36, kopfH = 74;
+    const inhaltB = seite.w - 2 * rand;
+    const inhaltH = seite.h - 2 * rand - 14; // Fußzeile
+    const skala = inhaltB / canvas.width;   // pt je Pixel
+
+    // Seitenweise schneiden: Seite 1 mit Kopf, Folgeseiten volle Höhe
+    const ersteH = Math.floor((inhaltH - kopfH) / skala);
+    const weitereH = Math.floor(inhaltH / skala);
+    const bilder = [];
+    let y = 0;
+    while (y < canvas.height) {
+      const hoehe = Math.min(y === 0 ? ersteH : weitereH, canvas.height - y);
+      const s = document.createElement('canvas');
+      s.width = canvas.width; s.height = hoehe;
+      s.getContext('2d').drawImage(canvas, 0, y, canvas.width, hoehe, 0, 0, canvas.width, hoehe);
+      bilder.push({ data: s.toDataURL('image/png'), hPt: hoehe * skala });
+      y += hoehe;
+    }
+
+    const anzahl = (typeof orgData !== 'undefined' && Array.isArray(orgData)) ? orgData.length : null;
+    const dd = {
+      pageSize: 'A4', pageOrientation: quer ? 'landscape' : 'portrait',
+      pageMargins: [rand, rand, rand, rand + 14],
+      defaultStyle: { font: 'Kodchasan', fontSize: 9, color: C.ink },
+      footer: (cur, tot) => ({
+        columns: [
+          { text: 'Praxis NeueWege · praxisneuewege.de · Stand ' + heute, fontSize: 7, color: C.meta },
+          { text: cur + ' / ' + tot, alignment: 'right', fontSize: 7, color: C.meta },
+        ], margin: [rand, 2, rand, 0],
+      }),
+      content: [
+        {
+          columns: [
+            { stack: [
+              { text: 'PRAXIS NEUEWEGE', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: 1.2, color: C.meta },
+              { text: 'Organigramm', font: 'KodchasanSemi', fontSize: 17, color: C.wood, margin: [0, 2, 0, 0] },
+              { text: 'Stand ' + heute + (anzahl ? ' · ' + anzahl + ' Mitarbeitende' : ''), fontSize: 8.5, color: C.meta, margin: [0, 3, 0, 0] },
+            ]},
+            ...(assets.logo ? [{ image: assets.logo, width: 150, alignment: 'right', margin: [0, 2, 0, 0] }] : []),
+          ],
+          margin: [0, 0, 0, 10],
+        },
+        ...bilder.map((b, i) => ({ image: b.data, width: inhaltB, pageBreak: i > 0 ? 'before' : undefined })),
+      ],
+    };
+    const dateiname = 'PNW_Organigramm_' + new Date().toISOString().slice(0, 10) + '.pdf';
+    try { pdfMake.createPdf(dd).open(); } catch (e) { pdfMake.createPdf(dd).download(dateiname); }
+  } catch (e) {
+    alert('PDF-Export fehlgeschlagen: ' + e.message);
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.innerHTML = orig;
+  }
 }
 
 /* ── SHAREPOINT: LISTE SICHERSTELLEN ── */
