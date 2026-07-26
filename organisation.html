@@ -768,6 +768,15 @@ function toggleAll() {
 }
 
 /* ── PDF-EXPORT (html2canvas + pdfmake, Kodchasan, Logo + Datum) ── */
+// Zuständigkeiten Teamleitung → Jugendämter. Quelle: Paten-Jugendämter
+// gemäß AMT_TEAMS im Manager-Cockpit (Stand 24.07.2026) — hier bei
+// Änderungen mitpflegen!
+const TL_JUGENDAEMTER = [
+  { tl: 'Schneider, Jörg', aemter: 'Stadt Ingolstadt · LA Eichstätt · Regensburg (Stadt + Landkreis) · LA Neuburg-Schrobenhausen' },
+  { tl: 'Meier, Laura',    aemter: 'LA Kelheim · LA Freising · Landshut (Stadt + Landkreis)' },
+  { tl: 'Grund, Nadine',   aemter: 'LA Pfaffenhofen a.d. Ilm · LA Dachau' },
+];
+
 let _pdfAssets = null;
 async function _ladePdfAssets() {
   if (_pdfAssets) return _pdfAssets;
@@ -822,9 +831,9 @@ async function pdfExport() {
     const C = { wood:'#3D2B1F', meta:'#8a8378', ink:'#2b241d' };
     const heute = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     // Hochformat, eine Seite: Organigramm in den Inhaltsbereich unter dem Kopf einpassen
-    const rand = 36, kopfH = 74;
+    const rand = 36, kopfH = 74, zustH = 64;           // zustH = Zuständigkeits-Block
     const inhaltB = 595.28 - 2 * rand;                 // A4 hoch, Breite
-    const inhaltH = 841.89 - 2 * rand - 14 - kopfH;    // abzügl. Fußzeile + Kopf
+    const inhaltH = 841.89 - 2 * rand - 14 - kopfH - zustH; // abzügl. Fußzeile + Kopf + Zuständigkeiten
     const bild = canvas.toDataURL('image/png');
 
     const anzahl = (typeof orgData !== 'undefined' && Array.isArray(orgData)) ? orgData.length : null;
@@ -850,6 +859,13 @@ async function pdfExport() {
           ],
           margin: [0, 0, 0, 10],
         },
+        { text: 'ZUSTÄNDIGKEITEN TEAMLEITUNG · JUGENDÄMTER', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: '#B56B4A', margin: [0, 0, 0, 3] },
+        { table: { widths: [110, '*'], body: TL_JUGENDAEMTER.map(z => [
+            { text: z.tl, font: 'KodchasanSemi', fontSize: 8.5, color: C.wood, margin: [0, 1.5, 0, 1.5] },
+            { text: z.aemter, fontSize: 8.5, color: C.ink, margin: [0, 1.5, 0, 1.5] },
+          ]) },
+          layout: { hLineWidth: (i) => i === 0 ? 0 : .4, vLineWidth: () => 0, hLineColor: () => '#e2dfd8', paddingLeft: () => 0, paddingRight: () => 4 },
+          margin: [0, 0, 0, 8] },
         { image: bild, fit: [inhaltB, inhaltH], alignment: 'center' },
       ],
     };
