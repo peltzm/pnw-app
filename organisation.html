@@ -579,6 +579,10 @@ function buildTree(users) {
   const container = document.getElementById('treeContainer');
   container.innerHTML = '';
 
+  // Manuelle Einträge nur zeigen, solange die Person NICHT aus M365 kommt
+  const graphNamen = new Set(users.map(u => (u.displayName || '').toLowerCase().trim()));
+  const nurOhneGraphKonto = k => !graphNamen.has(k.name.toLowerCase().trim());
+
   // Sort roots: most children first (Sonja), then others (Markus)
   const sortedRoots = [...roots].sort((a,b) => (children[b.id]||[]).length - (children[a.id]||[]).length);
   const primaryRoot = sortedRoots[0]; // Sonja
@@ -628,7 +632,7 @@ function buildTree(users) {
       });
 
       // Kommende Fachkräfte dieses Teams (gestrichelt, mit Startdatum)
-      KOMMENDE_MITARBEITER.filter(k => k.team.test(tl.displayName || '')).forEach(k => {
+      KOMMENDE_MITARBEITER.filter(k => k.team.test(tl.displayName || '')).filter(nurOhneGraphKonto).forEach(k => {
         const item = document.createElement('div');
         item.className = 'fk-item';
         item.appendChild(makeKommendCard(k));
@@ -642,7 +646,7 @@ function buildTree(users) {
   });
 
   // Kommende direkt unter Sonja (Stabsstellen, z. B. Psychologin): eigene Spalte
-  KOMMENDE_MITARBEITER.filter(k => k.team.test(primaryRoot?.displayName || '')).forEach(k => {
+  KOMMENDE_MITARBEITER.filter(k => k.team.test(primaryRoot?.displayName || '')).filter(nurOhneGraphKonto).forEach(k => {
     const tlCol = document.createElement('div');
     tlCol.className = 'tl-col kommend-col';
     tlCol.appendChild(makeKommendCard(k));
@@ -846,9 +850,6 @@ function toggleAll() {
 const AUSGEBLENDETE_MITARBEITER = [ /kosikowski/i ];
 
 const KOMMENDE_MITARBEITER = [
-  // regulaer: true = bereits an Bord, erscheint als normale Karte (Stopgap,
-  // solange das Entra-Konto nicht durch den Graph-Filter kommt — Mail fehlt/extern?)
-  { name: 'Franziska Steibl',   rolle: '',            team: /meier/i,     regulaer: true },
   { name: 'Sharon Ogiemwonyi',  rolle: '',            team: /grund/i,     start: '2026-08-01', foto: 'assets/kommend/sharon-ogiemwonyi.png' },
   { name: 'Marie Reuter',       rolle: '',            team: /schneider/i, start: '2026-08-01', foto: 'assets/kommend/marie-reuter.png' },
   { name: 'Marie Leurpendeur',  rolle: 'Psychologin', team: /sonja/i,     start: '2026-09-01', foto: 'assets/kommend/marie-leurpendeur.png' },
