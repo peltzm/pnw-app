@@ -702,7 +702,15 @@ function makeKommendCard(k) {
   const jt = document.createElement('div');
   jt.className = 'row-title';
   const startTxt = new Date(k.start + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  jt.textContent = (k.rolle ? k.rolle + ' · ' : '') + 'ab ' + startTxt;
+  if (k.rolle) {
+    const rolleZeile = document.createElement('div');
+    rolleZeile.textContent = k.rolle;
+    jt.appendChild(rolleZeile);
+  }
+  const datumZeile = document.createElement('div');
+  datumZeile.textContent = 'ab ' + startTxt;
+  datumZeile.style.whiteSpace = 'nowrap';
+  jt.appendChild(datumZeile);
   card.appendChild(jt);
 
   return card;
