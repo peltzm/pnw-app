@@ -169,7 +169,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   height:115px;
 }
 .row-card.card-root{ height:130px; width:calc(var(--card-w,130px) + 20px);min-width:calc(var(--card-w,130px) + 20px) }
-.row-card.card-manager{ height:115px }
+.row-card.card-manager{ height:132px }
 .row-card.card-staff{ height:100px }
 
 .row-card:hover{border-color:var(--accent-mid);box-shadow:0 3px 12px rgba(123,63,30,.12);transform:translateY(-2px)}
@@ -194,8 +194,8 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 /* text */
 .row-name{font-size:var(--name-font,12px);font-weight:700;color:var(--text);line-height:1.3;word-break:break-word}
 .row-title{font-size:var(--title-font,10px);color:var(--text-muted);line-height:1.3}
-.row-card.card-staff .row-title,
-.row-card.card-manager .row-title{display:none}
+.row-card.card-staff .row-title{display:none}
+.row-card.card-manager .row-title{font-size:12px;margin-top:2px}
 
 /* ── PROFILE SECTION ── */
 .drawer-edit-btn{
@@ -678,10 +678,10 @@ function makeRowCard(user, depth, jungerAls, cardClass, nordsternSet) {
   nm.textContent = user.displayName;
   card.appendChild(nm);
 
-  // role/job title
+  // role/job title — Ebene 1 (TL-Karten) einheitlich wie bei der GF beschriften
   const jt = document.createElement('div');
   jt.className = 'row-title';
-  jt.textContent = user.jobTitle || roleInfo.label;
+  jt.textContent = depth === 1 ? 'Teamleitung' : (user.jobTitle || roleInfo.label);
   card.appendChild(jt);
 
   // Nordstern badge (Kompassrose) rechts oben
@@ -859,14 +859,13 @@ async function pdfExport() {
           ],
           margin: [0, 0, 0, 10],
         },
-        { text: 'ZUSTÄNDIGKEITEN TEAMLEITUNG · JUGENDÄMTER', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: '#B56B4A', margin: [0, 0, 0, 3] },
+        { image: bild, fit: [inhaltB, inhaltH], alignment: 'center' },
+        { text: 'ZUSTÄNDIGKEITEN TEAMLEITUNG · JUGENDÄMTER', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: .8, color: '#B56B4A', margin: [0, 8, 0, 3] },
         { table: { widths: [110, '*'], body: TL_JUGENDAEMTER.map(z => [
             { text: z.tl, font: 'KodchasanSemi', fontSize: 8.5, color: C.wood, margin: [0, 1.5, 0, 1.5] },
             { text: z.aemter, fontSize: 8.5, color: C.ink, margin: [0, 1.5, 0, 1.5] },
           ]) },
-          layout: { hLineWidth: (i) => i === 0 ? 0 : .4, vLineWidth: () => 0, hLineColor: () => '#e2dfd8', paddingLeft: () => 0, paddingRight: () => 4 },
-          margin: [0, 0, 0, 8] },
-        { image: bild, fit: [inhaltB, inhaltH], alignment: 'center' },
+          layout: { hLineWidth: (i) => i === 0 ? 0 : .4, vLineWidth: () => 0, hLineColor: () => '#e2dfd8', paddingLeft: () => 0, paddingRight: () => 4 } },
       ],
     };
     const dateiname = 'PNW_Organigramm_' + new Date().toISOString().slice(0, 10) + '.pdf';
