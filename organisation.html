@@ -518,6 +518,7 @@ async function loadOrg() {
       if (!u.mail.toLowerCase().endsWith('@praxisneuewege.de')) return false;
       const lc = u.displayName.toLowerCase();
       if (SERVICE_NAMES.some(s => lc.startsWith(s))) return false;
+      if (AUSGEBLENDETE_MITARBEITER.some(rx => rx.test(u.displayName))) return false;
       return true;
     });
     // Markus Peltz als Root behandeln: Manager-Referenz entfernen damit er auf Root-Ebene landet
@@ -840,6 +841,10 @@ function toggleAll() {
 // Kommende Fachkräfte (Vertrag unterschrieben, Start in der Zukunft) — noch ohne
 // Entra-Konto, daher hier gepflegt. team = Muster auf den Namen der Teamleitung.
 // Nach dem ersten Arbeitstag (Entra-Konto vorhanden) Eintrag hier entfernen!
+// Ausgeschiedene, deren Entra-Konto noch aktiv ist — hier ausblenden.
+// Eintrag entfernen, sobald das Konto in Entra deaktiviert ist.
+const AUSGEBLENDETE_MITARBEITER = [ /kosikowski/i ];
+
 const KOMMENDE_MITARBEITER = [
   // regulaer: true = bereits an Bord, erscheint als normale Karte (Stopgap,
   // solange das Entra-Konto nicht durch den Graph-Filter kommt — Mail fehlt/extern?)
