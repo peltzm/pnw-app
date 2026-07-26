@@ -198,7 +198,9 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .row-card.card-kommend{border:1.5px dashed var(--accent-mid,#c47848);opacity:.85;background:#fdfbf8}
 .row-card.card-kommend::before{background:repeating-linear-gradient(45deg,#c47848,#c47848 6px,#e8c9b5 6px,#e8c9b5 12px)}
 .row-card.card-kommend .row-title{display:block;font-size:10px;color:#b45309}
-.kommend-avatar{display:flex;align-items:center;justify-content:center;font-weight:600;color:#fff;background:#c47848}
+.kommend-avatar{display:flex;align-items:center;justify-content:center;font-weight:600;color:#fff;background:#c47848;overflow:hidden}
+.kommend-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.tl-col.kommend-col{justify-content:flex-start}
 .row-card.card-manager .row-title{font-size:12px;margin-top:2px}
 
 /* ── PROFILE SECTION ── */
@@ -639,6 +641,14 @@ function buildTree(users) {
     tlRowWrap.appendChild(tlCol);
   });
 
+  // Kommende direkt unter Sonja (Stabsstellen, z. B. Psychologin): eigene Spalte
+  KOMMENDE_MITARBEITER.filter(k => k.team.test(primaryRoot?.displayName || '')).forEach(k => {
+    const tlCol = document.createElement('div');
+    tlCol.className = 'tl-col kommend-col';
+    tlCol.appendChild(makeKommendCard(k));
+    tlRowWrap.appendChild(tlCol);
+  });
+
   container.appendChild(tlRowWrap);
 
   // Draw horizontal bar across TL columns after layout
@@ -674,7 +684,15 @@ function makeKommendCard(k) {
 
   const av = document.createElement('div');
   av.className = 'row-avatar kommend-avatar';
-  av.textContent = initials(k.name);
+  if (k.foto) {
+    const img = document.createElement('img');
+    img.src = k.foto;
+    img.alt = k.name;
+    img.onerror = () => { img.remove(); av.textContent = initials(k.name); };
+    av.appendChild(img);
+  } else {
+    av.textContent = initials(k.name);
+  }
   card.appendChild(av);
 
   const nm = document.createElement('div');
@@ -814,7 +832,12 @@ function toggleAll() {
 // Entra-Konto, daher hier gepflegt. team = Muster auf den Namen der Teamleitung.
 // Nach dem ersten Arbeitstag (Entra-Konto vorhanden) Eintrag hier entfernen!
 const KOMMENDE_MITARBEITER = [
-  { name: 'Franziska Steibl', rolle: 'Erzieherin', team: /meier/i, start: '2026-09-01' },
+  { name: 'Sharon Ogiemwonyi',  rolle: '',            team: /grund/i,     start: '2026-08-01', foto: 'assets/kommend/sharon-ogiemwonyi.png' },
+  { name: 'Marie Reuter',       rolle: '',            team: /schneider/i, start: '2026-08-01', foto: 'assets/kommend/marie-reuter.png' },
+  { name: 'Franziska Steibl',   rolle: 'Erzieherin',  team: /meier/i,     start: '2026-09-01' },
+  { name: 'Marie Leurpendeur',  rolle: 'Psychologin', team: /sonja/i,     start: '2026-09-01', foto: 'assets/kommend/marie-leurpendeur.png' },
+  { name: 'Peter Notz',         rolle: '',            team: /grund/i,     start: '2026-09-01', foto: 'assets/kommend/peter-notz.png' },
+  { name: 'Katrin Lankl',       rolle: '',            team: /schneider/i, start: '2026-10-01', foto: 'assets/kommend/katrin-lankl.png' },
 ];
 
 const TL_JUGENDAEMTER = [
