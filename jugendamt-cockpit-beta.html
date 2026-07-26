@@ -139,6 +139,7 @@ tr.grouphead td span{font-weight:400;color:var(--text-muted);font-size:11.5px}
       <button class="btn-ghost" onclick="reload()">Neu laden</button>
       <button class="btn-ghost" onclick="csvExport()">CSV exportieren</button>
       <button class="btn-ghost" onclick="pdfSummary()" id="btnPdf">PDF-Summary</button>
+      <button class="btn-ghost" onclick="pdfKlienten()" id="btnPdfKl">PDF-Klientenliste</button>
     </div>
   </div>
 
@@ -696,6 +697,86 @@ async function pdfSummary() {
       ],
     };
     const dateiname = 'PNW_Summary_' + jaSel.replace(/[^\wäöüÄÖÜß-]+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
+    try { pdfMake.createPdf(dd).open(); } catch (e) { pdfMake.createPdf(dd).download(dateiname); }
+  } catch (e) {
+    alert('PDF-Erzeugung fehlgeschlagen: ' + e.message);
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+
+/* ── PDF-Klientenliste (Querformat): laufende zuerst, dann beendete ── */
+async function pdfKlienten() {
+  const btn = document.getElementById('btnPdfKl');
+  const orig = btn.textContent;
+  try {
+    btn.disabled = true; btn.textContent = 'PDF wird erstellt…';
+    if (typeof pdfMake === 'undefined') throw new Error('pdfmake nicht geladen (CDN blockiert?)');
+    const assets = await _ladePdfAssets();
+    pdfMake.vfs = assets.vfs; pdfMake.fonts = assets.fonts;
+
+    const C = { wood:'#3D2B1F', terra:'#B56B4A', creme:'#F5F0EA', meta:'#8a8378', ink:'#2b241d', line:'#e2dfd8', gruen:'#2e7d32' };
+    const rows = gefiltert();
+    if (!rows.length) { alert('Keine Hilfen in der aktuellen Auswahl.'); return; }
+    const jaSel = document.getElementById('jaFilter').value;
+    const titel = jaSel || 'Alle Jugendämter';
+    const von = vonAuswahl();
+    const heute = new Date().toLocaleDateString('de-DE');
+
+    // Sortierung: laufende zuerst (nach Klient), dann beendete (jüngstes Ende zuerst)
+    const laufend = rows.filter(r => r.laufend).sort((a,b) => (a.klient||'').localeCompare(b.klient||'','de'));
+    const beendet = rows.filter(r => !r.laufend).sort((a,b) => (b.ende||'').localeCompare(a.ende||'') || (a.klient||'').localeCompare(b.klient||'','de'));
+
+    const kopfZelle = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 7, characterSpacing: .4, color: C.meta, fillColor: C.creme, margin: [0,2,0,2] });
+    const tabLayout = { hLineWidth: (i) => i <= 1 ? .8 : .4, vLineWidth: () => 0, hLineColor: () => C.line, paddingTop: () => 1.8, paddingBottom: () => 1.8 };
+    const abschnitt = t => ({ text: t.toUpperCase(), font: 'KodchasanSemi', fontSize: 8.5, characterSpacing: .7, color: C.terra, margin: [0, 8, 0, 3] });
+    const zelle = (t, extra) => Object.assign({ text: t ?? '—', fontSize: 8 }, extra || {});
+    const zeile = r => [
+      zelle(r.klient, { font: 'KodchasanMedium' }),
+      zelle(r.jugendamt),
+      zelle(artKurz(r.rechtsgrundlage) || '—'),
+      zelle(r.sachbearbeitung || '—'),
+      zelle(r.hb || '—'),
+      zelle(fmtDate(r.beginn), { alignment: 'right' }),
+      r.laufend ? zelle('läuft', { alignment: 'right', color: C.gruen, font: 'KodchasanMedium' })
+                : zelle(fmtDate(r.ende), { alignment: 'right' }),
+      zelle(fmtNum(r.dauerMonate, 1), { alignment: 'right' }),
+    ];
+    const liste = l => ({
+      table: {
+        headerRows: 1, widths: ['*', 60, 120, 90, 90, 46, 46, 40],
+        body: [ ['Klient:in','Jugendamt','Hilfeart','Sachbearbeitung','Betreuung PNW','Beginn','Ende','Mon.'].map(kopfZelle), ...l.map(zeile) ],
+      },
+      layout: tabLayout, margin: [0, 1, 0, 4],
+    });
+
+    const dd = {
+      pageSize: 'A4', pageOrientation: 'landscape', pageMargins: [36, 38, 36, 40],
+      defaultStyle: { font: 'Kodchasan', fontSize: 8.5, color: C.ink, lineHeight: 1.2 },
+      footer: (cur, tot) => ({
+        columns: [
+          { text: 'Praxis NeueWege · praxisneuewege.de · Erstellt am ' + heute + ' · Nur für den internen Gebrauch', fontSize: 7, color: C.meta },
+          { text: cur + ' / ' + tot, alignment: 'right', fontSize: 7, color: C.meta },
+        ], margin: [36, 14, 36, 0],
+      }),
+      content: [
+        {
+          columns: [
+            { stack: [
+              { text: 'PRAXIS NEUEWEGE · KLIENTENÜBERSICHT', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: 1.2, color: C.meta },
+              { text: titel, font: 'KodchasanSemi', fontSize: 16, color: C.wood, margin: [0, 2, 0, 0] },
+              { text: 'Zeitraum ab ' + fmtDate(von) + ' · Stand ' + heute + ' · ' + laufend.length + ' laufend, ' + beendet.length + ' beendet', fontSize: 8.5, color: C.meta, margin: [0, 3, 0, 0] },
+            ]},
+            ...(assets.logo ? [{ image: assets.logo, width: 150, alignment: 'right', margin: [0, 4, 0, 0] }] : []),
+          ],
+          margin: [0, 0, 0, 6],
+        },
+        ...(laufend.length ? [abschnitt('Laufende Hilfen (' + laufend.length + ')'), liste(laufend)] : []),
+        ...(beendet.length ? [abschnitt('Beendete Hilfen seit ' + fmtDate(von) + ' (' + beendet.length + ')'), liste(beendet)] : []),
+      ],
+    };
+    const dateiname = 'PNW_Klientenliste_' + titel.replace(/[^\wäöüÄÖÜß-]+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
     try { pdfMake.createPdf(dd).open(); } catch (e) { pdfMake.createPdf(dd).download(dateiname); }
   } catch (e) {
     alert('PDF-Erzeugung fehlgeschlagen: ' + e.message);
