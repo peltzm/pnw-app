@@ -821,30 +821,15 @@ async function pdfExport() {
 
     const C = { wood:'#3D2B1F', meta:'#8a8378', ink:'#2b241d' };
     const heute = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const quer = canvas.width >= canvas.height;
-    const seite = quer ? { w: 841.89, h: 595.28 } : { w: 595.28, h: 841.89 };
+    // Hochformat, eine Seite: Organigramm in den Inhaltsbereich unter dem Kopf einpassen
     const rand = 36, kopfH = 74;
-    const inhaltB = seite.w - 2 * rand;
-    const inhaltH = seite.h - 2 * rand - 14; // Fußzeile
-    const skala = inhaltB / canvas.width;   // pt je Pixel
-
-    // Seitenweise schneiden: Seite 1 mit Kopf, Folgeseiten volle Höhe
-    const ersteH = Math.floor((inhaltH - kopfH) / skala);
-    const weitereH = Math.floor(inhaltH / skala);
-    const bilder = [];
-    let y = 0;
-    while (y < canvas.height) {
-      const hoehe = Math.min(y === 0 ? ersteH : weitereH, canvas.height - y);
-      const s = document.createElement('canvas');
-      s.width = canvas.width; s.height = hoehe;
-      s.getContext('2d').drawImage(canvas, 0, y, canvas.width, hoehe, 0, 0, canvas.width, hoehe);
-      bilder.push({ data: s.toDataURL('image/png'), hPt: hoehe * skala });
-      y += hoehe;
-    }
+    const inhaltB = 595.28 - 2 * rand;                 // A4 hoch, Breite
+    const inhaltH = 841.89 - 2 * rand - 14 - kopfH;    // abzügl. Fußzeile + Kopf
+    const bild = canvas.toDataURL('image/png');
 
     const anzahl = (typeof orgData !== 'undefined' && Array.isArray(orgData)) ? orgData.length : null;
     const dd = {
-      pageSize: 'A4', pageOrientation: quer ? 'landscape' : 'portrait',
+      pageSize: 'A4', pageOrientation: 'portrait',
       pageMargins: [rand, rand, rand, rand + 14],
       defaultStyle: { font: 'Kodchasan', fontSize: 9, color: C.ink },
       footer: (cur, tot) => ({
@@ -865,7 +850,7 @@ async function pdfExport() {
           ],
           margin: [0, 0, 0, 10],
         },
-        ...bilder.map((b, i) => ({ image: b.data, width: inhaltB, pageBreak: i > 0 ? 'before' : undefined })),
+        { image: bild, fit: [inhaltB, inhaltH], alignment: 'center' },
       ],
     };
     const dateiname = 'PNW_Organigramm_' + new Date().toISOString().slice(0, 10) + '.pdf';
