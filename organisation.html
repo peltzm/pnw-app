@@ -195,6 +195,10 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .row-name{font-size:var(--name-font,12px);font-weight:700;color:var(--text);line-height:1.3;word-break:break-word}
 .row-title{font-size:var(--title-font,10px);color:var(--text-muted);line-height:1.3}
 .row-card.card-staff .row-title{display:none}
+.row-card.card-kommend{border:1.5px dashed var(--accent-mid,#c47848);opacity:.85;background:#fdfbf8}
+.row-card.card-kommend::before{background:repeating-linear-gradient(45deg,#c47848,#c47848 6px,#e8c9b5 6px,#e8c9b5 12px)}
+.row-card.card-kommend .row-title{display:block;font-size:10px;color:#b45309}
+.kommend-avatar{display:flex;align-items:center;justify-content:center;font-weight:600;color:#fff;background:#c47848}
 .row-card.card-manager .row-title{font-size:12px;margin-top:2px}
 
 /* ── PROFILE SECTION ── */
@@ -621,6 +625,14 @@ function buildTree(users) {
         fkList.appendChild(item);
       });
 
+      // Kommende Fachkräfte dieses Teams (gestrichelt, mit Startdatum)
+      KOMMENDE_MITARBEITER.filter(k => k.team.test(tl.displayName || '')).forEach(k => {
+        const item = document.createElement('div');
+        item.className = 'fk-item';
+        item.appendChild(makeKommendCard(k));
+        fkList.appendChild(item);
+      });
+
       tlCol.appendChild(fkList);
     }
 
@@ -650,6 +662,33 @@ function buildTree(users) {
   });
 
   loadPhotosAsync(users);
+}
+
+/* ── KOMMEND-KARTE (zukünftige Fachkraft, noch ohne Entra-Konto) ── */
+function makeKommendCard(k) {
+  const card = document.createElement('div');
+  card.className = 'row-card card-staff card-kommend';
+  card.dataset.name = k.name.toLowerCase();
+  card.dataset.email = '';
+  card.dataset.job = (k.rolle || '').toLowerCase();
+
+  const av = document.createElement('div');
+  av.className = 'row-avatar kommend-avatar';
+  av.textContent = initials(k.name);
+  card.appendChild(av);
+
+  const nm = document.createElement('div');
+  nm.className = 'row-name';
+  nm.textContent = k.name;
+  card.appendChild(nm);
+
+  const jt = document.createElement('div');
+  jt.className = 'row-title';
+  const startTxt = new Date(k.start + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  jt.textContent = (k.rolle ? k.rolle + ' · ' : '') + 'ab ' + startTxt;
+  card.appendChild(jt);
+
+  return card;
 }
 
 /* ── MAKE ROW CARD ── */
@@ -771,6 +810,13 @@ function toggleAll() {
 // Zuständigkeiten Teamleitung → Jugendämter. Quelle: Paten-Jugendämter
 // gemäß AMT_TEAMS im Manager-Cockpit (Stand 24.07.2026) — hier bei
 // Änderungen mitpflegen!
+// Kommende Fachkräfte (Vertrag unterschrieben, Start in der Zukunft) — noch ohne
+// Entra-Konto, daher hier gepflegt. team = Muster auf den Namen der Teamleitung.
+// Nach dem ersten Arbeitstag (Entra-Konto vorhanden) Eintrag hier entfernen!
+const KOMMENDE_MITARBEITER = [
+  { name: 'Franziska Steibl', rolle: 'Erzieherin', team: /meier/i, start: '2026-09-01' },
+];
+
 const TL_JUGENDAEMTER = [
   { tl: 'Schneider, Jörg', aemter: 'Stadt Ingolstadt · LA Eichstätt · Regensburg (Stadt + Landkreis) · LA Neuburg-Schrobenhausen' },
   { tl: 'Meier, Laura',    aemter: 'LA Kelheim · LA Freising · Landshut (Stadt + Landkreis)' },
@@ -837,6 +883,7 @@ async function pdfExport() {
     const bild = canvas.toDataURL('image/png');
 
     const anzahl = (typeof orgData !== 'undefined' && Array.isArray(orgData)) ? orgData.length : null;
+    const kommend = KOMMENDE_MITARBEITER.length;
     const dd = {
       pageSize: 'A4', pageOrientation: 'portrait',
       pageMargins: [rand, rand, rand, rand + 14],
@@ -853,7 +900,7 @@ async function pdfExport() {
             { stack: [
               { text: 'PRAXIS NEUEWEGE', font: 'KodchasanSemi', fontSize: 7.5, characterSpacing: 1.2, color: C.meta },
               { text: 'Organigramm', font: 'KodchasanSemi', fontSize: 17, color: C.wood, margin: [0, 2, 0, 0] },
-              { text: 'Stand ' + heute + (anzahl ? ' · ' + anzahl + ' Mitarbeitende' : ''), fontSize: 8.5, color: C.meta, margin: [0, 3, 0, 0] },
+              { text: 'Stand ' + heute + (anzahl ? ' · ' + anzahl + ' Mitarbeitende' : '') + (kommend ? ' · ' + kommend + ' kommend' : ''), fontSize: 8.5, color: C.meta, margin: [0, 3, 0, 0] },
             ]},
             ...(assets.logo ? [{ image: assets.logo, width: 150, alignment: 'right', margin: [0, 2, 0, 0] }] : []),
           ],
