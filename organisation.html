@@ -676,13 +676,14 @@ function buildTree(users) {
 /* ── KOMMEND-KARTE (zukünftige Fachkraft, noch ohne Entra-Konto) ── */
 function makeKommendCard(k) {
   const card = document.createElement('div');
-  card.className = 'row-card card-staff card-kommend';
+  card.className = 'row-card card-staff' + (k.regulaer ? '' : ' card-kommend');
   card.dataset.name = k.name.toLowerCase();
   card.dataset.email = '';
   card.dataset.job = (k.rolle || '').toLowerCase();
 
   const av = document.createElement('div');
   av.className = 'row-avatar kommend-avatar';
+  if (k.regulaer) av.style.background = '#2e7d32';
   if (k.foto) {
     const img = document.createElement('img');
     img.src = k.foto;
@@ -699,6 +700,7 @@ function makeKommendCard(k) {
   nm.textContent = k.name;
   card.appendChild(nm);
 
+  if (!k.start) return card; // reguläre manuelle Karte: nur Name
   const jt = document.createElement('div');
   jt.className = 'row-title';
   const startTxt = new Date(k.start + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -839,6 +841,9 @@ function toggleAll() {
 // Entra-Konto, daher hier gepflegt. team = Muster auf den Namen der Teamleitung.
 // Nach dem ersten Arbeitstag (Entra-Konto vorhanden) Eintrag hier entfernen!
 const KOMMENDE_MITARBEITER = [
+  // regulaer: true = bereits an Bord, erscheint als normale Karte (Stopgap,
+  // solange das Entra-Konto nicht durch den Graph-Filter kommt — Mail fehlt/extern?)
+  { name: 'Franziska Steibl',   rolle: '',            team: /meier/i,     regulaer: true },
   { name: 'Sharon Ogiemwonyi',  rolle: '',            team: /grund/i,     start: '2026-08-01', foto: 'assets/kommend/sharon-ogiemwonyi.png' },
   { name: 'Marie Reuter',       rolle: '',            team: /schneider/i, start: '2026-08-01', foto: 'assets/kommend/marie-reuter.png' },
   { name: 'Marie Leurpendeur',  rolle: 'Psychologin', team: /sonja/i,     start: '2026-09-01', foto: 'assets/kommend/marie-leurpendeur.png' },
@@ -912,7 +917,7 @@ async function pdfExport() {
     const bild = canvas.toDataURL('image/png');
 
     const anzahl = (typeof orgData !== 'undefined' && Array.isArray(orgData)) ? orgData.length : null;
-    const kommend = KOMMENDE_MITARBEITER.length;
+    const kommend = KOMMENDE_MITARBEITER.filter(k => !k.regulaer).length;
     const dd = {
       pageSize: 'A4', pageOrientation: 'portrait',
       pageMargins: [rand, rand, rand, rand + 14],
