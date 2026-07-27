@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Unterschriften (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --text:#1a1916;
+  --text-muted:#6b6860; --text-hint:#a09e99; --accent:#7b3f1e;
+  --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2; --radius:8px; --radius-lg:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Kodchasan','Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-brand img{height:32px}
+.header-brand span{font-size:13px;font-weight:600}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.header-right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){background:#69351a}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover:not(:disabled){background:var(--accent-light)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;border-radius:4px;cursor:pointer;font-family:inherit}
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - 56px);padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:400px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:56px;max-width:100%;object-fit:contain;margin-bottom:1rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.4rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem;display:none}
+.wrap{max-width:1080px;margin:0 auto;padding:22px 16px 60px}
+h2{font-size:19px;font-weight:600;margin-bottom:4px}
+.sub{font-size:12.5px;color:var(--text-muted);margin-bottom:18px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:18px}
+.panel h3{font-size:14.5px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.dropzone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:26px;text-align:center;color:var(--text-muted);font-size:13px;cursor:pointer;transition:all .15s}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent-mid);background:var(--accent-light);color:var(--accent)}
+.dropzone strong{color:var(--accent)}
+.file-info{margin-top:10px;font-size:12.5px;color:var(--text-muted)}
+.summary-row{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}
+.kpi{background:var(--accent-light);border-radius:var(--radius);padding:10px 16px;min-width:120px}
+.kpi .v{font-size:20px;font-weight:700;color:var(--accent)}
+.kpi .l{font-size:11px;color:var(--text-muted)}
+.ma-card{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;transition:opacity .15s}
+.ma-card.off{opacity:.45}
+.ma-head{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);cursor:pointer;flex-wrap:wrap}
+.ma-head input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent);cursor:pointer}
+.ma-name{font-weight:600;font-size:13.5px;flex:1;min-width:140px}
+.ma-count{background:var(--warn-bg);color:var(--warn);font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 10px}
+.ma-mails{display:flex;gap:8px;flex-wrap:wrap;font-size:11.5px;color:var(--text-muted);align-items:center}
+.ma-mails input{font-family:inherit;font-size:11.5px;border:1px solid var(--border);border-radius:4px;padding:3px 7px;width:230px;color:var(--text)}
+.ma-mails input.cc-missing{border-color:var(--warn);background:var(--warn-bg)}
+.ma-body{display:none;border-top:1px solid var(--border);padding:10px 14px;overflow-x:auto}
+.ma-card.open .ma-body{display:block}
+table.det{border-collapse:collapse;width:100%;font-size:12px}
+table.det th{background:var(--accent-light);color:var(--accent);text-align:left;padding:5px 9px;border:1px solid var(--border);white-space:nowrap}
+table.det td{padding:5px 9px;border:1px solid var(--border);vertical-align:top}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px}
+.status-line{font-size:12.5px;margin-top:10px}
+.status-line .ok{color:var(--ok)} .status-line .err{color:var(--error)}
+.log-list{font-size:12px;color:var(--text-muted);max-height:180px;overflow-y:auto;margin-top:8px}
+.log-list div{padding:2px 0;border-bottom:1px dashed var(--border)}
+.chart-box{position:relative;height:340px}
+.hint{font-size:11.5px;color:var(--text-hint);margin-top:8px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+#appScreen{display:none}
+select{font-family:inherit;font-size:12.5px;border:1px solid var(--border);border-radius:var(--radius);padding:5px 9px;background:var(--surface);color:var(--text)}
+@media (max-width:640px){.wrap{padding:14px 10px 50px}.ma-mails input{width:100%}}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="header-brand">
+    <img src="assets/logo-pnw-neu.png" alt="PNW">
+    <span>Unterschriften</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <span id="userName"></span>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="assets/logo-pnw-neu.png" alt="PNW">
+    <div class="login-title">Unterschriften-Manager</div>
+    <div class="login-desc">Kilanka-Export hochladen, fehlende Unterschriften prüfen und Erinnerungsmails an Mitarbeiter versenden. Zugang für die Verwaltung.</div>
+    <button class="btn btn-outline" id="loginBtn" onclick="login()">Mit Microsoft anmelden</button>
+    <div class="alert-error" id="loginError"></div>
+  </div>
+</div>
+
+<div id="appScreen">
+<div class="wrap">
+  <h2>Fehlende Unterschriften</h2>
+  <p class="sub">Kilanka-Leistungsexport (XLSX) hochladen &rarr; Mitarbeiter pr&uuml;fen &amp; abw&auml;hlen &rarr; Mails erzeugen. Jeder Lauf wird in SharePoint protokolliert.</p>
+
+  <!-- ===================== UPLOAD ===================== -->
+  <div class="panel">
+    <h3>1. Export hochladen</h3>
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <strong>XLSX-Datei ausw&auml;hlen</strong> oder hierher ziehen<br>
+      <span style="font-size:11.5px">Kilanka-Leistungsexport des Monats (Spalten: Beginn, Bis, Stunden, Klient, Leistung, T&auml;tigkeit, Kommentar, Mitarbeiter, Unterschrift)</span>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this.files[0])">
+    <div class="file-info" id="fileInfo"></div>
+  </div>
+
+  <!-- ===================== AUSWAHL ===================== -->
+  <div class="panel" id="selectPanel" style="display:none">
+    <h3>2. Mitarbeiter pr&uuml;fen <span style="font-weight:400;color:var(--text-hint);font-size:11.5px">(Klick auf Karte = Details, Haken = wird angeschrieben)</span></h3>
+    <div class="summary-row" id="summaryRow"></div>
+    <div id="maList"></div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btnDraft" onclick="sendAll(false)">Als Entw&uuml;rfe erstellen</button>
+      <button class="btn btn-outline" id="btnSend" onclick="sendAll(true)">Direkt senden</button>
+      <span id="sendSpinner" style="display:none"><span class="spinner"></span></span>
+    </div>
+    <div class="status-line" id="sendStatus"></div>
+    <div class="log-list" id="sendLog"></div>
+    <p class="hint">Entw&uuml;rfe landen im Ordner &bdquo;Entw&uuml;rfe&ldquo; deines Postfachs (Outlook Web). CC wird automatisch mit der Teamleitung (Manager-Attribut aus Entra ID) bef&uuml;llt und ist editierbar.</p>
+  </div>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <div class="panel">
+    <h3>Dashboard: Vergessene Unterschriften
+      <select id="yearSelect" onchange="loadDashboard()"></select>
+      <span id="dashSpinner" style="display:none"><span class="spinner"></span></span>
+    </h3>
+    <div class="chart-box"><canvas id="dashChart"></canvas></div>
+    <p class="hint" id="dashHint">Datenbasis: SharePoint-Liste &bdquo;Unterschriften_Log&ldquo;. Bei mehreren L&auml;ufen im selben Monat z&auml;hlt je Mitarbeiter der h&ouml;chste Stand des Monats (keine Doppelz&auml;hlung).</p>
+  </div>
+</div>
+</div>
+
+<script>
+/* ============================================================ KONFIG */
+const CFG = {
+  clientId:    'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId:    '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/unterschriften-beta.html',
+  siteUrl:     'https://praxisneuewegesonjapeltz978.sharepoint.com',
+};
+const SCOPES = ['User.Read', 'User.ReadBasic.All', 'User.Read.All', 'Sites.ReadWrite.All', 'Mail.ReadWrite', 'Mail.Send'];
+const APP_VERSION = 'BETA-0000000'; // auto-updated on deploy
+const MAIL_DOMAIN = 'praxisneuewege.de';
+const LOG_LIST = 'Unterschriften_Log';
+const STATUS_FEHLT = 'Klient fehlt';
+// Kein CC für Leitung:
+const CC_AUSNAHMEN = { 'sonja.peltz@praxisneuewege.de': '', 'markus.peltz@praxisneuewege.de': '' };
+
+/* ============================================================ AUTH */
+let msalInstance, currentAccount = null;
+async function initApp() {
+  document.getElementById('versionBadge').textContent = APP_VERSION;
+  msalInstance = new msal.PublicClientApplication({
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  });
+  await msalInstance.initialize();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; showApp(); return; }
+  } catch(e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; showApp(); }
+}
+async function login() {
+  const errEl = document.getElementById('loginError');
+  document.getElementById('loginBtn').disabled = true; errEl.style.display = 'none';
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(e) { document.getElementById('loginBtn').disabled = false; errEl.style.display = 'block'; errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message); }
+}
+async function logout() { await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri }); }
+async function getToken() {
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    return r.accessToken;
+  } catch(e) {
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account: currentAccount });
+  }
+}
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('userName').textContent = currentAccount?.name || '';
+  document.getElementById('logoutBtn').style.display = '';
+  initYearSelect();
+  loadDashboard();
+}
+
+/* ============================================================ GRAPH-HELFER */
+async function graph(path, opts = {}) {
+  const t = await getToken();
+  const r = await fetch('https://graph.microsoft.com/v1.0' + path, {
+    ...opts,
+    headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  });
+  if (r.status === 204) return null;
+  const data = await r.json().catch(() => null);
+  if (!r.ok) { const msg = data?.error?.message || r.status; const err = new Error(msg); err.status = r.status; throw err; }
+  return data;
+}
+let _siteId = null;
+async function siteId() {
+  if (_siteId) return _siteId;
+  const host = CFG.siteUrl.replace('https://','').split('/')[0];
+  const s = await graph(`/sites/${host}`);
+  _siteId = s.id;
+  return _siteId;
+}
+let _listId = null;
+async function ensureLogList() {
+  if (_listId) return _listId;
+  const sid = await siteId();
+  try {
+    const l = await graph(`/sites/${sid}/lists/${LOG_LIST}`);
+    _listId = l.id;
+  } catch(e) {
+    if (e.status !== 404) throw e;
+    const l = await graph(`/sites/${sid}/lists`, { method: 'POST', body: JSON.stringify({
+      displayName: LOG_LIST,
+      list: { template: 'genericList' },
+      columns: [
+        { name: 'Anzahl',    number: {} },
+        { name: 'Monat',     text: {} },
+        { name: 'Jahr',      number: {} },
+        { name: 'Versandart',text: {} },
+        { name: 'MailAn',    text: {} },
+        { name: 'CcAn',      text: {} },
+      ]
+    })});
+    _listId = l.id;
+  }
+  return _listId;
+}
+
+/* ============================================================ NAMEN / MAILS */
+function toMail(name) {
+  // "Nachname, Vorname [Zweitname]" -> vorname.nachname@domain
+  const teile = name.split(',').map(s => s.trim());
+  if (teile.length < 2) return '';
+  const vorname = teile[1].split(/\s+/)[0];
+  let adr = (vorname + '.' + teile[0]).toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss');
+  adr = adr.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9.\-]/g,'');
+  return adr + '@' + MAIL_DOMAIN;
+}
+function vornameVon(name) {
+  const teile = name.split(',').map(s => s.trim());
+  return teile.length > 1 ? teile[1].split(/\s+/)[0] : name;
+}
+const _mgrCache = {};
+async function managerMail(upn) {
+  if (upn in CC_AUSNAHMEN) return CC_AUSNAHMEN[upn];
+  if (upn in _mgrCache) return _mgrCache[upn];
+  let cc = null;
+  try {
+    const m = await graph(`/users/${encodeURIComponent(upn)}/manager`);
+    cc = m?.mail || m?.userPrincipalName || null;
+  } catch(e) { cc = null; }
+  _mgrCache[upn] = cc;
+  return cc;
+}
+
+/* ============================================================ XLSX PARSEN */
+let gruppen = [];   // [{name, mail, cc, count, rows:[{datum,von,bis,std,klient,leistung,taetigkeit,kommentar,sort}], selected}]
+let exportMonat = ''; // "2026-07"
+
+function excelDate(v) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date) return v;
+  if (typeof v === 'number') return new Date(Math.round((v - 25569) * 86400 * 1000));
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+function fmtD(d){ return d ? `${String(d.getUTCDate()).padStart(2,'0')}.${String(d.getUTCMonth()+1).padStart(2,'0')}.${d.getUTCFullYear()}` : ''; }
+function fmtT(d){ return d ? `${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}` : ''; }
+
+function handleFile(file) {
+  if (!file) return;
+  document.getElementById('fileInfo').innerHTML = '<span class="spinner"></span> Lese ' + escHtml(file.name) + ' …';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try { parseWorkbook(new Uint8Array(e.target.result), file.name); }
+    catch(err) { document.getElementById('fileInfo').innerHTML = '<span style="color:var(--error)">Fehler beim Lesen: ' + escHtml(err.message) + '</span>'; }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function parseWorkbook(buf, fname) {
+  const wb = XLSX.read(buf, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  if (!rows.length) throw new Error('Keine Datenzeilen gefunden');
+  const muss = ['Beginn','Mitarbeiter','Klient','Leistung','Stunden','Unterschrift'];
+  for (const m of muss) if (!(m in rows[0])) throw new Error(`Spalte "${m}" fehlt im Export`);
+
+  const offen = rows.filter(r => String(r['Unterschrift']).trim() === STATUS_FEHLT);
+  const gesamt = rows.length;
+
+  const map = {};
+  let minD = null;
+  for (const r of offen) {
+    const beg = excelDate(r['Beginn']);
+    const bis = excelDate(r['Bis']);
+    if (beg && (!minD || beg < minD)) minD = beg;
+    const name = String(r['Mitarbeiter']).trim();
+    if (!map[name]) map[name] = [];
+    map[name].push({
+      datum: fmtD(beg), von: fmtT(beg), bis: fmtT(bis),
+      std: r['Stunden'] !== '' ? Math.round(Number(r['Stunden']) * 100) / 100 : '',
+      klient: String(r['Klient'] || ''), leistung: String(r['Leistung'] || ''),
+      taetigkeit: String(r['Tätigkeit'] || r['Taetigkeit'] || ''),
+      kommentar: String(r['Kommentar'] || ''),
+      sort: beg ? beg.getTime() : 0
+    });
+  }
+  exportMonat = minD ? `${minD.getUTCFullYear()}-${String(minD.getUTCMonth()+1).padStart(2,'0')}` : new Date().toISOString().slice(0,7);
+
+  gruppen = Object.keys(map).map(name => ({
+    name, mail: toMail(name), cc: null, ccLoaded: false,
+    rows: map[name].sort((a,b) => a.sort - b.sort),
+    count: map[name].length, selected: true
+  })).sort((a,b) => b.count - a.count);
+
+  document.getElementById('fileInfo').innerHTML =
+    `✓ <strong>${escHtml(fname)}</strong> — ${gesamt} Leistungen, davon <strong>${offen.length}</strong> mit Status „${STATUS_FEHLT}“ bei <strong>${gruppen.length}</strong> Mitarbeitern (Monat ${exportMonat})`;
+  renderAuswahl();
+  ladeManager();
+}
+
+/* ============================================================ AUSWAHL-UI */
+function escHtml(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function renderAuswahl() {
+  const panel = document.getElementById('selectPanel');
+  panel.style.display = gruppen.length ? 'block' : 'none';
+  if (!gruppen.length) return;
+  const sel = gruppen.filter(g => g.selected);
+  document.getElementById('summaryRow').innerHTML = `
+    <div class="kpi"><div class="v">${gruppen.reduce((s,g)=>s+g.count,0)}</div><div class="l">Fehlende Unterschriften</div></div>
+    <div class="kpi"><div class="v">${gruppen.length}</div><div class="l">Mitarbeiter betroffen</div></div>
+    <div class="kpi"><div class="v">${sel.length}</div><div class="l">Ausgew&auml;hlt f&uuml;r Mail</div></div>`;
+  document.getElementById('maList').innerHTML = gruppen.map((g,i) => `
+    <div class="ma-card ${g.selected ? '' : 'off'}" id="card${i}">
+      <div class="ma-head" onclick="toggleOpen(${i}, event)">
+        <input type="checkbox" ${g.selected ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleSel(${i}, this.checked)">
+        <span class="ma-name">${escHtml(g.name)}</span>
+        <span class="ma-count">${g.count} offen</span>
+        <span class="ma-mails" onclick="event.stopPropagation()">
+          An: <input type="text" value="${escHtml(g.mail)}" onchange="gruppen[${i}].mail=this.value.trim()">
+          CC: <input type="text" id="cc${i}" class="${g.ccLoaded && !g.cc ? 'cc-missing' : ''}" value="${escHtml(g.cc ?? '')}" placeholder="${g.ccLoaded ? 'kein Manager in Entra!' : 'lade…'}" onchange="gruppen[${i}].cc=this.value.trim()">
+        </span>
+      </div>
+      <div class="ma-body">
+        <table class="det">
+          <tr><th>Datum</th><th>Von</th><th>Bis</th><th>Std.</th><th>Klient</th><th>Leistung</th><th>T&auml;tigkeit</th><th>Kommentar</th></tr>
+          ${g.rows.map(r => `<tr><td>${r.datum}</td><td>${r.von}</td><td>${r.bis}</td><td>${r.std}</td><td>${escHtml(r.klient)}</td><td>${escHtml(r.leistung)}</td><td>${escHtml(r.taetigkeit)}</td><td>${escHtml(r.kommentar).replace(/\n/g,'<br>')}</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>`).join('');
+}
+function toggleSel(i, on) {
+  gruppen[i].selected = on;
+  document.getElementById('card'+i).classList.toggle('off', !on);
+  const sel = gruppen.filter(g => g.selected).length;
+  document.querySelectorAll('#summaryRow .kpi .v')[2].textContent = sel;
+}
+function toggleOpen(i, ev) {
+  if (ev.target.tagName === 'INPUT') return;
+  document.getElementById('card'+i).classList.toggle('open');
+}
+async function ladeManager() {
+  for (let i = 0; i < gruppen.length; i++) {
+    const g = gruppen[i];
+    g.cc = await managerMail(g.mail);
+    g.ccLoaded = true;
+    const el = document.getElementById('cc'+i);
+    if (el) {
+      el.value = g.cc ?? '';
+      el.placeholder = g.cc === null ? 'kein Manager in Entra!' : '';
+      el.classList.toggle('cc-missing', g.cc === null);
+    }
+  }
+}
+
+/* ============================================================ MAIL */
+function mailHtml(g) {
+  const th = "border:1px solid #B56B4A;background:#F5F0EA;color:#3D2B1F;padding:4px 10px;text-align:left;";
+  const td = "border:1px solid #D8CFC4;padding:4px 10px;color:#3D2B1F;";
+  const rows = g.rows.map(r =>
+    `<tr><td style='${td}'>${r.datum}</td><td style='${td}'>${r.von}</td><td style='${td}'>${r.bis}</td><td style='${td}'>${r.std}</td><td style='${td}'>${escHtml(r.klient)}</td><td style='${td}'>${escHtml(r.leistung)}</td><td style='${td}'>${escHtml(r.taetigkeit)}</td><td style='${td}'>${escHtml(r.kommentar).replace(/\n/g,'<br>')}</td></tr>`).join('\n');
+  const satz = g.count === 1 ? 'bei Dir fehlt folgende Unterschrift:' : `bei Dir fehlen folgende ${g.count} Unterschriften:`;
+  return `<div style="font-family:Calibri,sans-serif;font-size:11pt;">
+<p>Hi ${escHtml(vornameVon(g.name))},</p>
+<p>${satz}</p>
+<table style="border-collapse:collapse;font-family:Calibri,sans-serif;font-size:10.5pt;">
+<tr><th style="${th}">Datum</th><th style="${th}">Von</th><th style="${th}">Bis</th><th style="${th}">Std.</th><th style="${th}">Klient</th><th style="${th}">Leistung</th><th style="${th}">T&auml;tigkeit</th><th style="${th}">Kommentar</th></tr>
+${rows}
+</table>
+<p>Bitte stelle sicher, dass sie bis Ende des Monats erledigt sind.</p>
+<p>Gru&szlig;<br>Markus</p>
+</div>`;
+}
+async function sendAll(direkt) {
+  const sel = gruppen.filter(g => g.selected);
+  if (!sel.length) { alert('Kein Mitarbeiter ausgewählt.'); return; }
+  if (direkt && !confirm(`${sel.length} Mails DIREKT versenden?`)) return;
+  if (!direkt && !confirm(`${sel.length} Mails als Entwürfe in dein Postfach legen?`)) return;
+  document.getElementById('btnDraft').disabled = true;
+  document.getElementById('btnSend').disabled = true;
+  document.getElementById('sendSpinner').style.display = '';
+  const logEl = document.getElementById('sendLog'); logEl.innerHTML = '';
+  let ok = 0, fail = 0;
+  for (const g of sel) {
+    const msg = {
+      subject: 'Fehlende Unterschriften',
+      body: { contentType: 'HTML', content: mailHtml(g) },
+      toRecipients: [{ emailAddress: { address: g.mail } }],
+      ...(g.cc ? { ccRecipients: [{ emailAddress: { address: g.cc } }] } : {})
+    };
+    try {
+      if (direkt) await graph('/me/sendMail', { method: 'POST', body: JSON.stringify({ message: msg, saveToSentItems: true }) });
+      else await graph('/me/messages', { method: 'POST', body: JSON.stringify(msg) });
+      ok++;
+      logEl.innerHTML += `<div style="color:var(--ok)">${direkt ? 'GESENDET' : 'ENTWURF'}: ${escHtml(g.name)} → ${escHtml(g.mail)}${g.cc ? ' (CC: ' + escHtml(g.cc) + ')' : ''}</div>`;
+    } catch(e) {
+      fail++;
+      logEl.innerHTML += `<div style="color:var(--error)">FEHLER: ${escHtml(g.name)} — ${escHtml(e.message)}</div>`;
+    }
+  }
+  // Protokoll nach SharePoint
+  let logStatus = '';
+  try {
+    await logRun(sel, direkt);
+    logStatus = ' · Lauf in SharePoint protokolliert';
+    loadDashboard();
+  } catch(e) { logStatus = ` · <span class="err">SharePoint-Log fehlgeschlagen: ${escHtml(e.message)}</span>`; }
+  document.getElementById('sendStatus').innerHTML =
+    `<span class="ok">${ok} erfolgreich</span>${fail ? ` · <span class="err">${fail} fehlgeschlagen</span>` : ''}${logStatus}`;
+  document.getElementById('btnDraft').disabled = false;
+  document.getElementById('btnSend').disabled = false;
+  document.getElementById('sendSpinner').style.display = 'none';
+}
+
+/* ============================================================ SHAREPOINT-LOG */
+async function logRun(sel, direkt) {
+  const sid = await siteId();
+  const lid = await ensureLogList();
+  const jahr = Number(exportMonat.slice(0,4));
+  for (const g of sel) {
+    await graph(`/sites/${sid}/lists/${lid}/items`, { method: 'POST', body: JSON.stringify({ fields: {
+      Title: g.name, Anzahl: g.count, Monat: exportMonat, Jahr: jahr,
+      Versandart: direkt ? 'Gesendet' : 'Entwurf', MailAn: g.mail, CcAn: g.cc || ''
+    }})});
+  }
+}
+
+/* ============================================================ DASHBOARD */
+let _chart = null;
+function initYearSelect() {
+  const selEl = document.getElementById('yearSelect');
+  const y = new Date().getFullYear();
+  selEl.innerHTML = [y, y-1].map(j => `<option value="${j}">${j}</option>`).join('');
+}
+async function loadDashboard() {
+  const jahr = Number(document.getElementById('yearSelect').value || new Date().getFullYear());
+  document.getElementById('dashSpinner').style.display = '';
+  try {
+    const sid = await siteId();
+    const lid = await ensureLogList();
+    let items = [], url = `/sites/${sid}/lists/${lid}/items?expand=fields&$top=500`;
+    while (url) {
+      const d = await graph(url);
+      items = items.concat(d.value || []);
+      url = d['@odata.nextLink'] ? d['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
+    }
+    // je (Mitarbeiter, Monat) den höchsten Stand nehmen, dann pro Mitarbeiter summieren
+    const maxProMonat = {};
+    for (const it of items) {
+      const f = it.fields || {};
+      if (Number(f.Jahr) !== jahr && String(f.Monat || '').slice(0,4) !== String(jahr)) continue;
+      const key = f.Title + '|' + f.Monat;
+      maxProMonat[key] = Math.max(maxProMonat[key] || 0, Number(f.Anzahl) || 0);
+    }
+    const summe = {};
+    for (const key of Object.keys(maxProMonat)) {
+      const name = key.split('|')[0];
+      summe[name] = (summe[name] || 0) + maxProMonat[key];
+    }
+    const sorted = Object.entries(summe).sort((a,b) => b[1] - a[1]).slice(0, 20);
+    renderChart(sorted, jahr);
+    document.getElementById('dashHint').innerHTML = sorted.length
+      ? 'Datenbasis: SharePoint-Liste &bdquo;Unterschriften_Log&ldquo;. Bei mehreren L&auml;ufen im selben Monat z&auml;hlt je Mitarbeiter der h&ouml;chste Stand des Monats (keine Doppelz&auml;hlung).'
+      : `Noch keine protokollierten L&auml;ufe f&uuml;r ${jahr}. Nach dem ersten Mailversand erscheinen hier die Auswertungen.`;
+  } catch(e) {
+    document.getElementById('dashHint').innerHTML = `<span style="color:var(--error)">Dashboard konnte nicht geladen werden: ${escHtml(e.message)}</span>`;
+  }
+  document.getElementById('dashSpinner').style.display = 'none';
+}
+function renderChart(sorted, jahr) {
+  const ctx = document.getElementById('dashChart').getContext('2d');
+  if (_chart) _chart.destroy();
+  _chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: sorted.map(e => e[0]),
+      datasets: [{ label: `Vergessene Unterschriften ${jahr}`, data: sorted.map(e => e[1]),
+        backgroundColor: '#c47848', borderColor: '#7b3f1e', borderWidth: 1, borderRadius: 4 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: {} } },
+      scales: {
+        x: { ticks: { precision: 0, font: { family: 'Kodchasan' } }, grid: { color: '#e2dfd8' } },
+        y: { ticks: { font: { family: 'Kodchasan', size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+/* ============================================================ DRAG & DROP */
+const dz = document.getElementById('dropzone');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+
+initApp();
+</script>
+</body>
+</html>
