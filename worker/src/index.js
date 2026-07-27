@@ -22,6 +22,71 @@ const CLIENT_ID = "f7e00950-2421-43b5-b48a-447bf8e7d4b3";
 const KILANKA_BASE = "https://neue-wege.kilanka.de/be/api/public/v2";
 const MAIL_DOMAIN = "praxisneuewege.de";
 
+// ── Relution (MDM) — Org PraxisNeueWege1 auf live.relution.io ────
+// Auth: statischer Access Token (Portal: Profil → Access Token) als
+// Worker-Secret RELUTION_TOKEN im Header X-User-Access-Token.
+const RELUTION_BASE = "https://live.relution.io";
+const RELUTION_CACHE_TTL_MIN = 10;
+let relutionCache = { fetchedAt: 0, geraete: null };
+
+// Nur diese Felder verlassen den Worker — kein Durchreichen unbekannter
+// Relution-Strukturen an den Client.
+function relutionNormalisieren(d) {
+  const info = d.deviceInfo || d.info || {};
+  return {
+    uuid: d.uuid || d.id || null,
+    name: d.name || info.deviceName || null,
+    serialNumber: d.serialNumber || info.serialNumber || null,
+    imei: d.imei || info.imei || null,
+    platform: d.platform || null,
+    status: d.status || d.complianceStatus || null,
+    model: d.model || d.deviceModel || info.model || null,
+    manufacturer: d.manufacturer || info.manufacturer || null,
+    osVersion: d.osVersion || d.operatingSystemVersion || info.osVersion || null,
+    phoneNumber: d.phoneNumber || info.phoneNumber || null,
+    username: d.username || d.userName || (d.user && (d.user.name || d.user.userName)) || null,
+    ownership: d.ownership || null,
+    enrollmentDate: d.enrollmentDate || d.creationDate || null,
+    lastConnectionDate: d.lastConnectionDate || null,
+  };
+}
+
+async function fetchRelutionGeraete(env) {
+  const jetzt = Date.now();
+  if (relutionCache.geraete && jetzt - relutionCache.fetchedAt < RELUTION_CACHE_TTL_MIN * 60000) {
+    return relutionCache.geraete;
+  }
+  const body = JSON.stringify({
+    limit: 500,
+    offset: 0,
+    getNonpagedCount: true,
+    sortOrder: { sortFields: [{ name: "lastConnectionDate", ascending: false }] },
+  });
+  const headers = {
+    "X-User-Access-Token": env.RELUTION_TOKEN,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "Accept-Charset": "UTF-8",
+  };
+  // Bevorzugt: v2-Query-Endpunkt (laut Relution-Doku). Fallback auf die
+  // einfache v1-Liste, falls der Endpunkt der Instanz abweicht.
+  let r = await fetch(`${RELUTION_BASE}/api/management/v2/devices/baseInfo/query`, {
+    method: "POST", headers, body,
+  });
+  if (r.status === 404 || r.status === 405) {
+    r = await fetch(`${RELUTION_BASE}/api/v1/devices?limit=500`, { headers });
+  }
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`Relution ${r.status}: ${t.slice(0, 300)}`);
+  }
+  const d = await r.json();
+  const roh = d.results || d.items || d.value || (Array.isArray(d) ? d : []);
+  const geraete = roh.map(relutionNormalisieren);
+  relutionCache = { fetchedAt: jetzt, geraete };
+  return geraete;
+}
+
 const ALLOWED_ORIGINS = [
   "https://apps.praxisneuewege.de",
   "http://localhost:8000", // lokale Entwicklung
@@ -1583,7 +1648,7 @@ export default {
     }
 
     if (url.pathname === "/api/health") {
-      return json({ ok: true, version: "v3.1-git", ts: new Date().toISOString() }, 200, origin);
+      return json({ ok: true, version: "v3.2-git", ts: new Date().toISOString() }, 200, origin);
     }
 
     if (url.pathname === "/api/meine-klienten" && request.method === "GET") {
@@ -1790,6 +1855,25 @@ export default {
         return json(data, 200, origin);
       } catch (e) {
         return json({ error: `Cockpit-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    if (url.pathname === "/api/relution/geraete" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      // Mobilfunk-Daten (Zuordnung Gerät ↔ Person) sind GF-exklusiv
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Relution-Daten sind der Geschäftsführung vorbehalten" }, 403, origin);
+      }
+      if (!env.RELUTION_TOKEN) {
+        return json({ error: "RELUTION_TOKEN ist nicht konfiguriert (Cloudflare → Settings → Variables and Secrets, Typ Secret)" }, 503, origin);
+      }
+      try {
+        const geraete = await fetchRelutionGeraete(env);
+        return json({ stand: new Date(relutionCache.fetchedAt).toISOString(), anzahl: geraete.length, geraete }, 200, origin);
+      } catch (e) {
+        return json({ error: `Relution-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
       }
     }
 
