@@ -479,10 +479,25 @@ async function seedImport(file){
 /* ═══════════════════════════════════════════════════════════
  * RELUTION — Live-Gerätestatus über den Worker
  * ═══════════════════════════════════════════════════════════ */
+/* Der Worker validiert das Entra-ID-Token (aud = CLIENT_ID) — also das
+ * idToken senden, nicht das Graph-Access-Token (aud = graph.microsoft.com).
+ * MSAL erneuert das idToken nicht automatisch, daher Ablauf-Check + forceRefresh. */
+function tokenAblauf(jwt){
+  try{ return JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000; }
+  catch(e){ return 0; }
+}
+async function idToken(){
+  const req = {scopes:SCOPES, account:currentAccount};
+  let r = await msalInstance.acquireTokenSilent(req).catch(async ()=>msalInstance.acquireTokenPopup(req));
+  if(tokenAblauf(r.idToken) < Date.now()+60000){
+    r = await msalInstance.acquireTokenSilent({...req, forceRefresh:true});
+  }
+  return r.idToken;
+}
 async function ladeRelution(){
   relutionGeraete = null; relutionFehler = null;
   try{
-    const t = await token();
+    const t = await idToken();
     const r = await fetch(CFG.workerUrl+'/api/relution/geraete', {headers:{Authorization:'Bearer '+t}});
     const d = await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
