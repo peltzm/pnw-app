@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Mobilfunk (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb; --auto:#546e7a;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-solid{background:var(--accent);color:#fff}
+.btn-solid:hover{background:#68351a}
+.btn-sm{padding:5px 12px;font-size:12px;min-height:30px}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;min-height:28px;border-radius:4px;cursor:pointer;font-family:inherit}
+.btn-ghost:hover{border-color:var(--accent-mid);color:var(--accent)}
+.btn-text{background:none;border:none;color:var(--text-muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-top:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:400px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:64px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+/* ── APP ── */
+#appScreen{display:none;flex-direction:column;min-height:calc(100dvh - var(--hdr-h))}
+.page-header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header-left h2{font-size:17px;font-weight:600;color:var(--text)}
+.page-header-left p{font-size:12px;color:var(--text-muted);margin-top:1px}
+.page-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+.demo-bar{display:none;align-items:center;gap:8px;background:var(--warn-bg);border-bottom:1px solid #f3dcb8;color:var(--warn);font-size:12px;padding:7px 20px;flex-wrap:wrap}
+.demo-bar strong{font-weight:700}
+.setup-bar{display:none;align-items:center;gap:10px;background:var(--blue-bg);border-bottom:1px solid #cfe0f5;color:var(--blue);font-size:12px;padding:8px 20px;flex-wrap:wrap}
+
+.viewbar{padding:10px 20px;display:flex;align-items:center;gap:10px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.pill-group{display:flex;gap:6px;flex-wrap:wrap}
+.pill{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:4px 13px;font-size:12px;font-family:inherit;cursor:pointer;color:var(--text-muted);transition:all .12s}
+.pill:hover{border-color:var(--accent-mid);color:var(--accent)}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;max-width:1240px;margin:0 auto;width:100%;padding:16px 20px 0}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 15px}
+.kpi .big{font-size:26px;font-weight:700;line-height:1.15}
+.kpi .sl{color:var(--text-hint);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+
+.tablewrap{max-width:1240px;margin:0 auto;width:100%;padding:18px 20px 40px;overflow-x:auto}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:12px;padding:2px 10px;white-space:nowrap}
+.chip-ok{background:var(--ok-bg);color:var(--ok)}
+.chip-warn{background:var(--warn-bg);color:var(--warn)}
+.chip-err{background:var(--error-bg);color:var(--error)}
+.chip-mut{background:var(--bg);color:var(--text-hint);border:1px solid var(--border)}
+.chip-blue{background:var(--blue-bg);color:var(--blue)}
+
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;font-size:12.5px}
+th{background:var(--bg);color:var(--text-muted);text-align:left;padding:8px 12px;font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--accent)}
+th .sortpfeil{font-size:8px;margin-left:4px;color:var(--accent-mid)}
+td{padding:8px 12px;border-top:1px solid var(--border);vertical-align:middle}
+tr.klick{cursor:pointer} tr.klick:hover td{background:var(--accent-light)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.mono{font-variant-numeric:tabular-nums;letter-spacing:.3px}
+
+.geheim{cursor:pointer;background:var(--bg);border:1px dashed var(--border-strong);border-radius:4px;padding:0 8px;color:var(--text-hint);font-size:11px;user-select:none}
+.geheim.offen{background:var(--surface);border-style:solid;color:var(--text);font-variant-numeric:tabular-nums}
+
+/* ── Dialog ── */
+.overlay{position:fixed;inset:0;background:rgba(26,25,22,.45);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:200}
+.overlay.open{display:flex}
+.dialog{background:var(--surface);border-radius:var(--radius-lg);max-width:820px;width:100%;padding:22px 24px;border:1px solid var(--border)}
+.dialog h2{font-size:16px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dialog .dsub{font-size:12px;color:var(--text-muted);margin-bottom:14px}
+.felder{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px}
+.fgruppe{grid-column:1/-1;font-size:10.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-top:8px;border-bottom:1px solid var(--border);padding-bottom:3px}
+.fgruppe:first-child{margin-top:0}
+.feld label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-hint);margin-bottom:3px;font-weight:600}
+.feld input,.feld select,.feld textarea{width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);outline:none}
+.feld input:focus,.feld select:focus,.feld textarea:focus{border-color:var(--accent-mid)}
+.feld-voll{grid-column:1/-1}
+.dialog-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+
+.footer-note{max-width:1240px;margin:0 auto;padding:0 20px 40px;font-size:11px;color:var(--text-hint);line-height:1.7}
+.footer-note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:60px 20px;font-size:13px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.view{display:none}.view.active{display:block}
+.hinweis-box{max-width:1240px;margin:14px auto 0;width:calc(100% - 40px);background:var(--warn-bg);border:1px solid #f3dcb8;color:var(--warn);border-radius:var(--radius);padding:10px 14px;font-size:12.5px}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:1.6s}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand" onclick="location.href='apps.html'">
+    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <span>Mobilfunk</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge">
+      <div class="user-dot"></div>
+      <span id="userName"></span>
+    </div>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <div class="login-title">Mobilfunk <span class="beta-badge">BETA</span></div>
+    <div class="login-desc">Rufnummern, SIM-Karten, Verträge und Geräte zentral verwalten — mit Live-Status aus Relution. Zugriff nur für die Geschäftsführung.</div>
+    <button class="btn btn-solid" style="width:100%" onclick="login()">Mit Microsoft anmelden</button>
+    <button class="btn-text" onclick="startDemo()">Demo ansehen (Beispieldaten)</button>
+    <div class="alert alert-error" id="loginError" style="display:none"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="demo-bar" id="demoBar">
+    <strong>Demo-Modus</strong> — fiktive Beispieldaten, nichts wird gespeichert.
+  </div>
+  <div class="setup-bar" id="setupBar">
+    <strong>Ersteinrichtung:</strong> Die Liste <code>PNW-Mobilfunk</code> existiert noch nicht.
+    <button class="btn btn-sm btn-solid" onclick="setupListe()">Liste jetzt anlegen</button>
+    <span id="setupStatus"></span>
+  </div>
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2>Mobilfunk &amp; Geräte</h2>
+      <p id="pageSub"></p>
+    </div>
+    <div class="page-header-actions">
+      <input type="file" id="seedFile" accept=".json" style="display:none" onchange="seedImport(this.files[0])">
+      <button class="btn btn-sm btn-ghost" id="importBtn" onclick="document.getElementById('seedFile').click()">Daten importieren (JSON)</button>
+      <button class="btn btn-sm btn-outline" onclick="csvExport()">CSV-Export</button>
+      <button class="btn btn-sm btn-solid" onclick="neuerEintrag()">+ Neu</button>
+    </div>
+  </div>
+
+  <div class="viewbar">
+    <div class="pill-group">
+      <button class="pill active" data-view="nummern" onclick="zeige('nummern')">Rufnummern</button>
+      <button class="pill" data-view="sim" onclick="zeige('sim')">SIM &amp; PIN</button>
+      <button class="pill" data-view="geraete" onclick="zeige('geraete')">Geräte / Relution</button>
+      <button class="pill" data-view="auslaufend" onclick="zeige('auslaufend')">Auslaufend</button>
+    </div>
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="view active" id="view-nummern">
+    <div class="tablewrap" id="nummernTabelle"><div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div></div>
+  </div>
+  <div class="view" id="view-sim">
+    <div class="tablewrap" id="simTabelle"></div>
+  </div>
+  <div class="view" id="view-geraete">
+    <div class="hinweis-box" id="relutionHinweis" style="display:none"></div>
+    <div class="tablewrap" id="geraeteTabelle"></div>
+  </div>
+  <div class="view" id="view-auslaufend">
+    <div class="tablewrap" id="auslaufendTabelle"></div>
+  </div>
+
+  <div class="footer-note">
+    Datenbasis: SharePoint-Liste <code>PNW-Mobilfunk</code> (Zugriff bitte auf die Verwaltung beschränken) ·
+    Gerätestatus live aus Relution über <code>pnw-kilanka-proxy</code> ·
+    PIN/PUK werden erst nach Klick angezeigt.
+  </div>
+</div>
+
+<!-- DIALOG -->
+<div class="overlay" id="dialogOverlay">
+  <div class="dialog">
+    <h2 id="dialogTitel"></h2>
+    <div class="dsub" id="dialogSub"></div>
+    <div class="felder" id="dialogFelder"></div>
+    <div class="dialog-actions">
+      <button class="btn btn-solid" onclick="dialogSpeichern()">Speichern</button>
+      <button class="btn btn-outline" onclick="dialogSchliessen()">Abbrechen</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm btn-ghost" id="loeschBtn" onclick="dialogLoeschen()" style="color:var(--error);border-color:var(--error)">Eintrag löschen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zu Fuhrpark / Mitarbeiter-Cockpit
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/mobilfunk-beta.html',
+  spHost: 'praxisneuewegesonjapeltz978.sharepoint.com',
+  listName: 'PNW-Mobilfunk',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
+/* Zugriff nur GF — clientseitige Sperre; die eigentliche Absicherung sind die
+ * Listenberechtigungen in SharePoint (bitte dort auf Verwaltung beschränken)
+ * und die GF-Prüfung im Worker für die Relution-Daten. */
+const ERLAUBT = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+const APP_VERSION = 'BETA'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+
+/* ═══════════════════════════════════════════════════════════
+ * FELD-SCHEMA — SharePoint-Spalten (Title = Rufnummer bzw. Geräte-Kennung)
+ * ═══════════════════════════════════════════════════════════ */
+const SCHEMA = [
+  {sp:'Title',          key:'titel',          typ:'text',  label:'Rufnummer / Kennung'},
+  {sp:'Mitarbeiter',    key:'mitarbeiter',    typ:'text',  label:'Mitarbeiter:in'},
+  {sp:'MitarbeiterUPN', key:'upn',            typ:'text',  label:'UPN (E-Mail)'},
+  {sp:'MfStatus',       key:'status',         typ:'wahl',  label:'Status', optionen:['aktiv','auslaufend','frei']},
+  {sp:'Provider',       key:'provider',       typ:'text',  label:'Provider'},
+  {sp:'Tarif',          key:'tarif',          typ:'text',  label:'Tarif'},
+  {sp:'KostenMonat',    key:'kostenMonat',    typ:'zahl',  label:'Kosten € / Monat'},
+  {sp:'Auftragsnummer', key:'auftragsnummer', typ:'text',  label:'Auftragsnummer'},
+  {sp:'Bestellnummer',  key:'bestellnummer',  typ:'text',  label:'Bestellnummer'},
+  {sp:'Bestelldatum',   key:'bestelldatum',   typ:'datum', label:'Bestelldatum'},
+  {sp:'Auslieferung',   key:'auslieferung',   typ:'datum', label:'Auslieferung'},
+  {sp:'PortierungZum',  key:'portierungZum',  typ:'datum', label:'Portierung bestätigt zum'},
+  {sp:'KuendigungZum',  key:'kuendigungZum',  typ:'datum', label:'Vertrag läuft aus am'},
+  {sp:'SIM1ICCID',      key:'sim1Iccid',      typ:'text',  label:'SIM 1 · Kartennummer'},
+  {sp:'SIM1PIN1',       key:'sim1Pin1',       typ:'geheim',label:'SIM 1 · PIN 1'},
+  {sp:'SIM1PUK1',       key:'sim1Puk1',       typ:'geheim',label:'SIM 1 · PUK 1'},
+  {sp:'SIM1PIN2',       key:'sim1Pin2',       typ:'geheim',label:'SIM 1 · PIN 2'},
+  {sp:'SIM1PUK2',       key:'sim1Puk2',       typ:'geheim',label:'SIM 1 · PUK 2'},
+  {sp:'SIM2ICCID',      key:'sim2Iccid',      typ:'text',  label:'SIM 2 · Kartennummer'},
+  {sp:'SIM2PIN1',       key:'sim2Pin1',       typ:'geheim',label:'SIM 2 · PIN 1'},
+  {sp:'SIM2PUK1',       key:'sim2Puk1',       typ:'geheim',label:'SIM 2 · PUK 1'},
+  {sp:'SIM2PIN2',       key:'sim2Pin2',       typ:'geheim',label:'SIM 2 · PIN 2'},
+  {sp:'SIM2PUK2',       key:'sim2Puk2',       typ:'geheim',label:'SIM 2 · PUK 2'},
+  {sp:'GeraetIMEI',     key:'geraetIMEI',     typ:'text',  label:'Gerät · IMEI'},
+  {sp:'GeraetSN',       key:'geraetSN',       typ:'text',  label:'Gerät · Seriennummer'},
+  {sp:'GeraetModell',   key:'geraetModell',   typ:'text',  label:'Gerät · Modell'},
+  {sp:'GeraetGekauft',  key:'geraetGekauft',  typ:'datum', label:'Gerät · gekauft am'},
+  {sp:'AltProvider',    key:'altProvider',    typ:'text',  label:'Alt-Vertrag · Provider'},
+  {sp:'AltTarif',       key:'altTarif',       typ:'text',  label:'Alt-Vertrag · Tarif'},
+  {sp:'AltKostenMonat', key:'altKostenMonat', typ:'zahl',  label:'Alt-Vertrag · Kosten € / Monat'},
+  {sp:'AltKarteRef',    key:'altKarteRef',    typ:'text',  label:'Alt-Vertrag · Karten-Referenz'},
+  {sp:'Notizen',        key:'notizen',        typ:'lang',  label:'Notizen'}
+];
+
+/* Demo-Daten: vollständig fiktiv (die echten Daten kommen per Import in SharePoint,
+ * damit im öffentlich ausgelieferten HTML keine PINs/Rufnummern stehen). */
+const DEMO = [
+  {titel:'+49172000001',mitarbeiter:'Maxi Muster',upn:'maxi.muster@praxisneuewege.de',status:'aktiv',provider:'O2',tarif:'Allnet Flat 30 GB',kostenMonat:9.99,portierungZum:'2026-06-15',sim1Iccid:'894921000000000001',sim1Pin1:'0000',sim1Puk1:'12345678',sim2Iccid:'894921000000000002',sim2Pin1:'1111',sim2Puk1:'87654321',geraetIMEI:'350000000000001',geraetSN:'DEMO0001',geraetModell:'Galaxy Tab A9 SM-X115'},
+  {titel:'+49172000002',mitarbeiter:'Erika Beispiel',upn:'erika.beispiel@praxisneuewege.de',status:'aktiv',provider:'O2',tarif:'Allnet Flat 30 GB',kostenMonat:9.99,notizen:'SIM-Daten fehlen — Forms-Erfassung ausstehend'},
+  {titel:'+49172000003',mitarbeiter:'Erika Beispiel',status:'auslaufend',provider:'Altanbieter',altTarif:'Green LTE 5GB',altKostenMonat:9.99,kuendigungZum:'2026-11-30',notizen:'Ersatznummer des Altanbieters, Vertrag gekündigt'},
+  {titel:'Gerät · DEMO0002',status:'frei',geraetSN:'DEMO0002',geraetModell:'Galaxy Tab A11 SM-X135F',notizen:'Ersatzgerät im Lager'}
+];
+
+/* ═══════════════════════════════════════════════════════════
+ * ZUSTAND & MSAL
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance, currentAccount;
+let demoMode = false, online = false;
+let eintraege = [];
+let relutionGeraete = null, relutionFehler = null;
+let listenBasis = `/sites/${CFG.spHost}/lists/${CFG.listName}`;
+
+function initMsal(){
+  msalInstance = msalInstance || new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'sessionStorage' }
+  });
+}
+async function login(){
+  try{
+    initMsal();
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account;
+    msalInstance.setActiveAccount(currentAccount);
+    const upn = (currentAccount.username||'').toLowerCase();
+    if(!ERLAUBT.includes(upn)){
+      const err = document.getElementById('loginError');
+      err.textContent = 'Diese App ist der Geschäftsführung vorbehalten.';
+      err.style.display = 'block';
+      return;
+    }
+    demoMode = false;
+    zeigeApp();
+    document.getElementById('userName').textContent = currentAccount.name || currentAccount.username;
+    document.getElementById('userBadge').style.display = 'flex';
+    document.getElementById('logoutBtn').style.display = '';
+    await ladeDaten();
+  }catch(e){
+    const err = document.getElementById('loginError');
+    err.textContent = 'Anmeldung fehlgeschlagen: '+e.message;
+    err.style.display = 'block';
+  }
+}
+function logout(){ if(msalInstance) msalInstance.logoutPopup({account:currentAccount}).catch(()=>{}); location.reload(); }
+function startDemo(){
+  demoMode = true; online = false;
+  eintraege = DEMO.map(x=>({...x,_spId:null}));
+  zeigeApp();
+  document.getElementById('demoBar').style.display = 'flex';
+  document.getElementById('importBtn').style.display = 'none';
+  renderAll();
+}
+function zeigeApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'flex';
+  document.getElementById('pageSub').textContent = 'Stand: '+new Date().toLocaleDateString('de-DE');
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * GRAPH API
+ * ═══════════════════════════════════════════════════════════ */
+async function token(scopes){
+  const req = {scopes:scopes||SCOPES, account:currentAccount};
+  try{ return (await msalInstance.acquireTokenSilent(req)).accessToken; }
+  catch(e){ return (await msalInstance.acquireTokenPopup(req)).accessToken; }
+}
+async function graph(pfad, opt={}){
+  const t = await token();
+  const r = await fetch('https://graph.microsoft.com/v1.0'+pfad, {
+    ...opt, headers:{Authorization:'Bearer '+t,'Content-Type':'application/json',...(opt.headers||{})}
+  });
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error('Graph '+r.status+': '+await r.text());
+  return r.status===204 ? true : r.json();
+}
+/* Sammlungen IMMER hierueber laden — Graph paginiert (max. 200 Items/Seite),
+ * ohne die @odata.nextLink-Schleife fehlen Eintraege stillschweigend. */
+async function graphAlle(pfad){
+  const alle=[];
+  let url='https://graph.microsoft.com/v1.0'+pfad;
+  for(let seite=0; url && seite<50; seite++){
+    const t=await token();
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}});
+    if(r.status===404) return alle;
+    if(!r.ok) throw new Error('Graph '+r.status+': '+await r.text());
+    const d=await r.json();
+    alle.push(...(d.value||[]));
+    url=d['@odata.nextLink']||null;
+  }
+  return alle;
+}
+function zuFeldern(f){
+  const felder={};
+  for(const s of SCHEMA){
+    const v=f[s.key];
+    if(v===undefined||v===null||v==='') continue;
+    felder[s.sp]=(s.typ==='datum')?(v+'T00:00:00Z'):v;
+  }
+  return felder;
+}
+function ausFeldern(item){
+  const f={_spId:item.id};
+  for(const s of SCHEMA){
+    let v=item.fields[s.sp];
+    if(v===undefined||v===null) continue;
+    if(s.typ==='datum'&&typeof v==='string') v=v.slice(0,10);
+    f[s.key]=v;
+  }
+  return f;
+}
+
+async function ladeDaten(){
+  const liste = await graph(listenBasis+'?$select=id');
+  if(!liste){
+    document.getElementById('setupBar').style.display = 'flex';
+    document.getElementById('nummernTabelle').innerHTML =
+      '<div class="loading-state">Die Liste "'+CFG.listName+'" existiert noch nicht — bitte oben die Ersteinrichtung starten.</div>';
+    return;
+  }
+  const items = await graphAlle(listenBasis+'/items?expand=fields&$top=200');
+  eintraege = items.map(ausFeldern);
+  online = true;
+  renderAll();
+  ladeRelution(); // parallel, blockiert die Anzeige nicht
+}
+async function speichern(f){
+  if(!online){ renderAll(); return; }
+  if(f._spId){
+    await graph(listenBasis+'/items/'+f._spId+'/fields', {method:'PATCH', body:JSON.stringify(zuFeldern(f))});
+  }else{
+    const res = await graph(listenBasis+'/items', {method:'POST', body:JSON.stringify({fields:zuFeldern(f)})});
+    f._spId = res.id;
+  }
+  renderAll();
+}
+async function loeschen(f){
+  if(online && f._spId){
+    await graph(listenBasis+'/items/'+f._spId, {method:'DELETE'});
+  }
+  eintraege = eintraege.filter(x=>x!==f);
+  renderAll();
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * ERSTEINRICHTUNG — Liste + Spalten anlegen (Sites.Manage.All nur hier)
+ * ═══════════════════════════════════════════════════════════ */
+async function setupListe(){
+  const status = document.getElementById('setupStatus');
+  try{
+    status.textContent = 'Berechtigung anfordern …';
+    const t = await token(['Sites.Manage.All']);
+    status.textContent = 'Liste wird angelegt …';
+    const columns = SCHEMA.filter(s=>s.sp!=='Title').map(s=>{
+      if(s.typ==='zahl')  return {name:s.sp, number:{decimalPlaces:'automatic'}};
+      if(s.typ==='datum') return {name:s.sp, dateTime:{format:'dateOnly'}};
+      if(s.typ==='lang')  return {name:s.sp, text:{allowMultipleLines:true}};
+      return {name:s.sp, text:{}};
+    });
+    const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/lists', {
+      method:'POST', headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+      body:JSON.stringify({displayName:CFG.listName, columns, list:{template:'genericList'}})
+    });
+    if(!r.ok) throw new Error('Liste konnte nicht angelegt werden ('+r.status+'): '+await r.text());
+    document.getElementById('setupBar').style.display = 'none';
+    status.textContent = '';
+    online = true; eintraege = [];
+    renderAll();
+    alert('Liste "'+CFG.listName+'" wurde angelegt.\n\nJetzt bitte:\n1. Über "Daten importieren (JSON)" die Seed-Datei hochladen.\n2. In SharePoint die Listenberechtigungen auf die Verwaltung beschränken (Liste → Einstellungen → Berechtigungen → Vererbung aufheben).');
+  }catch(e){
+    status.textContent = 'Fehler: '+e.message;
+  }
+}
+
+/* Seed-/Daten-Import aus JSON-Datei (Format: Array von Objekten mit Schema-Keys) */
+async function seedImport(file){
+  if(!file) return;
+  try{
+    const data = JSON.parse(await file.text());
+    const liste = Array.isArray(data) ? data : (data.eintraege||[]);
+    if(!liste.length){ alert('Keine Einträge in der Datei gefunden.'); return; }
+    if(!confirm(liste.length+' Einträge in die SharePoint-Liste schreiben?')) return;
+    let ok=0, fehler=0;
+    for(const e of liste){
+      try{ const f={...e,_spId:null}; await speichern(f); eintraege.push(f); ok++; }
+      catch(err){ console.warn('Import-Fehler:', e.titel, err.message); fehler++; }
+    }
+    renderAll();
+    alert('Import abgeschlossen: '+ok+' übernommen'+(fehler?(', '+fehler+' fehlgeschlagen (Konsole)'):'')+'.');
+  }catch(e){ alert('Datei konnte nicht gelesen werden: '+e.message); }
+  document.getElementById('seedFile').value = '';
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * RELUTION — Live-Gerätestatus über den Worker
+ * ═══════════════════════════════════════════════════════════ */
+async function ladeRelution(){
+  relutionGeraete = null; relutionFehler = null;
+  try{
+    const t = await token();
+    const r = await fetch(CFG.workerUrl+'/api/relution/geraete', {headers:{Authorization:'Bearer '+t}});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
+    relutionGeraete = d.geraete || [];
+  }catch(e){
+    relutionFehler = e.message;
+  }
+  if(document.querySelector('.pill.active')?.dataset.view === 'geraete') renderGeraete();
+}
+function normId(x){ return (x==null?'':String(x)).replace(/[^0-9a-z]/gi,'').toLowerCase(); }
+function relutionMatch(e){
+  if(!relutionGeraete) return null;
+  const imei = normId(e.geraetIMEI), sn = normId(e.geraetSN);
+  return relutionGeraete.find(g=>{
+    const gi = normId(g.imei), gs = normId(g.serialNumber);
+    return (imei && gi && gi===imei) || (sn && gs && gs===sn);
+  }) || null;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * RENDERING
+ * ═══════════════════════════════════════════════════════════ */
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fdat = s => s ? new Date(s+'T00:00:00').toLocaleDateString('de-DE') : '—';
+const feur = n => (n==null||n==='') ? '—' : Number(n).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
+let sortKey='mitarbeiter', sortAsc=true;
+
+function zeige(view){
+  document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('active', p.dataset.view===view));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='view-'+view));
+  renderAll();
+}
+function renderAll(){
+  renderKpi(); renderNummern(); renderSim(); renderGeraete(); renderAuslaufend();
+}
+function renderKpi(){
+  const aktiv = eintraege.filter(e=>e.status==='aktiv' && (e.titel||'').startsWith('+'));
+  const simOk = aktiv.filter(e=>e.sim1Iccid).length;
+  const geraete = eintraege.filter(e=>e.geraetIMEI||e.geraetSN).length;
+  const managed = relutionGeraete ? eintraege.filter(e=>relutionMatch(e)).length : null;
+  const kosten = aktiv.reduce((s,e)=>s+(Number(e.kostenMonat)||0),0);
+  const auslaufend = eintraege.filter(e=>e.status==='auslaufend').length;
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi"><div class="big">${aktiv.length}</div><div class="sl">Aktive Rufnummern</div></div>
+    <div class="kpi"><div class="big">${simOk} / ${aktiv.length}</div><div class="sl">SIM-Daten erfasst</div></div>
+    <div class="kpi"><div class="big">${geraete}</div><div class="sl">Geräte</div></div>
+    <div class="kpi"><div class="big">${managed==null?'…':managed}</div><div class="sl">In Relution gefunden</div></div>
+    <div class="kpi"><div class="big">${kosten?kosten.toLocaleString('de-DE',{minimumFractionDigits:2}):'—'}</div><div class="sl">Bekannte Kosten € / Monat</div></div>
+    <div class="kpi"><div class="big">${auslaufend}</div><div class="sl">Auslaufende Verträge</div></div>`;
+}
+function sortiere(liste){
+  return [...liste].sort((a,b)=>{
+    const av=a[sortKey]??'', bv=b[sortKey]??'';
+    const r = (typeof av==='number'&&typeof bv==='number') ? av-bv : String(av).localeCompare(String(bv),'de');
+    return sortAsc ? r : -r;
+  });
+}
+function sortKlick(key){
+  if(sortKey===key) sortAsc=!sortAsc; else { sortKey=key; sortAsc=true; }
+  renderAll();
+}
+const pfeil = key => sortKey===key ? '<span class="sortpfeil">'+(sortAsc?'▲':'▼')+'</span>' : '';
+
+function statusChip(e){
+  if(e.status==='auslaufend') return '<span class="chip chip-warn">auslaufend</span>';
+  if(e.status==='frei') return '<span class="chip chip-mut">frei / Lager</span>';
+  return '<span class="chip chip-ok">aktiv</span>';
+}
+function renderNummern(){
+  const liste = sortiere(eintraege.filter(e=>(e.titel||'').startsWith('+')||e.status!=='frei'));
+  if(!liste.length){ document.getElementById('nummernTabelle').innerHTML = '<div class="loading-state">Noch keine Einträge — über "Daten importieren" oder "+ Neu" starten.</div>'; return; }
+  let h = '<table><thead><tr>'
+    + '<th onclick="sortKlick(\'mitarbeiter\')">Mitarbeiter:in'+pfeil('mitarbeiter')+'</th>'
+    + '<th onclick="sortKlick(\'titel\')">Rufnummer'+pfeil('titel')+'</th>'
+    + '<th onclick="sortKlick(\'status\')">Status'+pfeil('status')+'</th>'
+    + '<th onclick="sortKlick(\'tarif\')">Tarif'+pfeil('tarif')+'</th>'
+    + '<th class="num" onclick="sortKlick(\'kostenMonat\')">€ / Monat'+pfeil('kostenMonat')+'</th>'
+    + '<th>SIMs</th><th onclick="sortKlick(\'geraetModell\')">Gerät'+pfeil('geraetModell')+'</th><th>Hinweis</th>'
+    + '</tr></thead><tbody>';
+  for(const e of liste){
+    const sims = (e.sim1Iccid?1:0)+(e.sim2Iccid?1:0);
+    const simChip = sims ? '<span class="chip chip-ok">'+sims+'</span>' : '<span class="chip chip-err">fehlen</span>';
+    h += '<tr class="klick" onclick="oeffneDialog('+eintraege.indexOf(e)+')">'
+      + '<td>'+esc(e.mitarbeiter||'—')+'</td>'
+      + '<td class="mono">'+esc(e.titel||'—')+'</td>'
+      + '<td>'+statusChip(e)+'</td>'
+      + '<td>'+esc(e.tarif||e.altTarif||'—')+'</td>'
+      + '<td class="num">'+feur(e.kostenMonat ?? e.altKostenMonat)+'</td>'
+      + '<td>'+simChip+'</td>'
+      + '<td>'+esc(e.geraetModell||(e.geraetIMEI?'IMEI '+e.geraetIMEI:'—'))+'</td>'
+      + '<td style="max-width:260px;font-size:11.5px;color:var(--text-muted)">'+esc(e.notizen||'')+'</td>'
+      + '</tr>';
+  }
+  document.getElementById('nummernTabelle').innerHTML = h+'</tbody></table>';
+}
+function geheimZelle(wert){
+  if(!wert) return '—';
+  return '<span class="geheim" onclick="event.stopPropagation();this.classList.toggle(\'offen\');this.textContent=this.classList.contains(\'offen\')?this.dataset.w:\'•••\'" data-w="'+esc(wert)+'">•••</span>';
+}
+function renderSim(){
+  const liste = sortiere(eintraege.filter(e=>e.sim1Iccid||e.sim2Iccid||(e.titel||'').startsWith('+')));
+  let h = '<table><thead><tr><th onclick="sortKlick(\'mitarbeiter\')">Mitarbeiter:in'+pfeil('mitarbeiter')+'</th><th>Rufnummer</th>'
+    + '<th>SIM 1 · ICCID</th><th>PIN 1</th><th>PUK 1</th><th>PIN 2</th><th>PUK 2</th>'
+    + '<th>SIM 2 · ICCID</th><th>PIN 1</th><th>PUK 1</th><th>PIN 2</th><th>PUK 2</th></tr></thead><tbody>';
+  for(const e of liste){
+    h += '<tr class="klick" onclick="oeffneDialog('+eintraege.indexOf(e)+')">'
+      + '<td>'+esc(e.mitarbeiter||'—')+'</td><td class="mono">'+esc(e.titel||'—')+'</td>'
+      + '<td class="mono" style="font-size:11px">'+esc(e.sim1Iccid||'—')+'</td>'
+      + '<td>'+geheimZelle(e.sim1Pin1)+'</td><td>'+geheimZelle(e.sim1Puk1)+'</td>'
+      + '<td>'+geheimZelle(e.sim1Pin2)+'</td><td>'+geheimZelle(e.sim1Puk2)+'</td>'
+      + '<td class="mono" style="font-size:11px">'+esc(e.sim2Iccid||'—')+'</td>'
+      + '<td>'+geheimZelle(e.sim2Pin1)+'</td><td>'+geheimZelle(e.sim2Puk1)+'</td>'
+      + '<td>'+geheimZelle(e.sim2Pin2)+'</td><td>'+geheimZelle(e.sim2Puk2)+'</td>'
+      + '</tr>';
+  }
+  document.getElementById('simTabelle').innerHTML = h+'</tbody></table>';
+}
+function renderGeraete(){
+  const hin = document.getElementById('relutionHinweis');
+  if(relutionFehler){
+    hin.style.display = 'block';
+    hin.textContent = 'Relution-Abruf nicht möglich: '+relutionFehler;
+  }else if(relutionGeraete===null && online){
+    hin.style.display = 'block';
+    hin.textContent = 'Relution-Daten werden geladen …';
+  }else{ hin.style.display = 'none'; }
+
+  const mitGeraet = eintraege.filter(e=>e.geraetIMEI||e.geraetSN);
+  let h = '<table><thead><tr><th>Zuordnung</th><th>Modell (Liste)</th><th>IMEI</th><th>Seriennummer</th>'
+    + '<th>Relution</th><th>Gerätename</th><th>Plattform / OS</th><th>Letzter Kontakt</th></tr></thead><tbody>';
+  const gematcht = new Set();
+  for(const e of sortiere(mitGeraet)){
+    const g = relutionMatch(e);
+    if(g) gematcht.add(g);
+    const rel = relutionGeraete===null ? '<span class="chip chip-mut">…</span>'
+      : g ? '<span class="chip chip-ok">'+esc(g.status||'managed')+'</span>'
+      : '<span class="chip chip-err">nicht in Relution</span>';
+    h += '<tr class="klick" onclick="oeffneDialog('+eintraege.indexOf(e)+')">'
+      + '<td>'+esc(e.mitarbeiter||e.titel||'—')+'</td>'
+      + '<td>'+esc(e.geraetModell||'—')+'</td>'
+      + '<td class="mono" style="font-size:11px">'+esc(e.geraetIMEI||'—')+'</td>'
+      + '<td class="mono" style="font-size:11px">'+esc(e.geraetSN||'—')+'</td>'
+      + '<td>'+rel+'</td>'
+      + '<td>'+esc(g?.name||'—')+'</td>'
+      + '<td>'+esc(g?[g.platform, g.osVersion].filter(Boolean).join(' '):'—')+'</td>'
+      + '<td>'+esc(g?.lastConnectionDate ? new Date(g.lastConnectionDate).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}) : '—')+'</td>'
+      + '</tr>';
+  }
+  // Geräte, die in Relution existieren, aber in der Liste fehlen
+  if(relutionGeraete){
+    for(const g of relutionGeraete){
+      if(gematcht.has(g)) continue;
+      h += '<tr><td><span class="chip chip-blue">nur in Relution</span></td>'
+        + '<td>'+esc(g.model||g.deviceModel||'—')+'</td>'
+        + '<td class="mono" style="font-size:11px">'+esc(g.imei||'—')+'</td>'
+        + '<td class="mono" style="font-size:11px">'+esc(g.serialNumber||'—')+'</td>'
+        + '<td><span class="chip chip-ok">'+esc(g.status||'managed')+'</span></td>'
+        + '<td>'+esc(g.name||'—')+'</td>'
+        + '<td>'+esc([g.platform, g.osVersion].filter(Boolean).join(' ')||'—')+'</td>'
+        + '<td>'+esc(g.lastConnectionDate ? new Date(g.lastConnectionDate).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}) : '—')+'</td>'
+        + '</tr>';
+    }
+  }
+  document.getElementById('geraeteTabelle').innerHTML = h+'</tbody></table>';
+}
+function renderAuslaufend(){
+  const liste = sortiere(eintraege.filter(e=>e.status==='auslaufend'));
+  if(!liste.length){
+    document.getElementById('auslaufendTabelle').innerHTML =
+      '<div class="loading-state">Keine auslaufenden Verträge erfasst. Hier gehören die gekündigten Alt-Verträge mit ihren Ersatz-Rufnummern hin — anlegen über "+ Neu" mit Status "auslaufend".</div>';
+    return;
+  }
+  let h = '<table><thead><tr><th>Rufnummer</th><th>Ursprünglich für</th><th>Provider</th><th>Tarif</th>'
+    + '<th class="num">€ / Monat</th><th onclick="sortKlick(\'kuendigungZum\')">Läuft aus am'+pfeil('kuendigungZum')+'</th><th>Notiz</th></tr></thead><tbody>';
+  for(const e of liste){
+    h += '<tr class="klick" onclick="oeffneDialog('+eintraege.indexOf(e)+')">'
+      + '<td class="mono">'+esc(e.titel||'—')+'</td>'
+      + '<td>'+esc(e.mitarbeiter||'—')+'</td>'
+      + '<td>'+esc(e.provider||e.altProvider||'—')+'</td>'
+      + '<td>'+esc(e.tarif||e.altTarif||'—')+'</td>'
+      + '<td class="num">'+feur(e.kostenMonat ?? e.altKostenMonat)+'</td>'
+      + '<td>'+fdat(e.kuendigungZum)+'</td>'
+      + '<td style="font-size:11.5px;color:var(--text-muted)">'+esc(e.notizen||'')+'</td>'
+      + '</tr>';
+  }
+  document.getElementById('auslaufendTabelle').innerHTML = h+'</tbody></table>';
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * DIALOG — Anzeigen / Bearbeiten / Neuanlage
+ * ═══════════════════════════════════════════════════════════ */
+let dialogEintrag = null;
+function oeffneDialog(idx){
+  dialogEintrag = eintraege[idx];
+  if(!dialogEintrag) return;
+  fuelleDialog((dialogEintrag.titel||'Eintrag')+(dialogEintrag.mitarbeiter?' · '+dialogEintrag.mitarbeiter:''),
+    online?'Änderungen werden in der SharePoint-Liste gespeichert.':'Demo-Modus — Änderungen nur lokal.');
+  document.getElementById('loeschBtn').style.display = '';
+}
+function neuerEintrag(){
+  dialogEintrag = {status:'aktiv', provider:'O2', _spId:null, _neu:true};
+  fuelleDialog('Neuer Eintrag','Rufnummer im Format +49… — oder für Lagergeräte "Gerät · Seriennummer" als Kennung.');
+  document.getElementById('loeschBtn').style.display = 'none';
+}
+const GRUPPEN = [
+  {titel:'Zuordnung & Vertrag', keys:['titel','mitarbeiter','upn','status','provider','tarif','kostenMonat','auftragsnummer','bestellnummer','bestelldatum','auslieferung','portierungZum','kuendigungZum']},
+  {titel:'SIM 1', keys:['sim1Iccid','sim1Pin1','sim1Puk1','sim1Pin2','sim1Puk2']},
+  {titel:'SIM 2', keys:['sim2Iccid','sim2Pin1','sim2Puk1','sim2Pin2','sim2Puk2']},
+  {titel:'Gerät', keys:['geraetIMEI','geraetSN','geraetModell','geraetGekauft']},
+  {titel:'Alt-Vertrag (vor O2-Migration)', keys:['altProvider','altTarif','altKostenMonat','altKarteRef']},
+  {titel:'Notizen', keys:['notizen']}
+];
+function fuelleDialog(titel, sub){
+  document.getElementById('dialogTitel').textContent = titel;
+  document.getElementById('dialogSub').textContent = sub;
+  const wrap = document.getElementById('dialogFelder');
+  let h = '';
+  for(const g of GRUPPEN){
+    h += '<div class="fgruppe">'+esc(g.titel)+'</div>';
+    for(const key of g.keys){
+      const s = SCHEMA.find(x=>x.key===key);
+      const v = dialogEintrag[key] ?? '';
+      if(s.typ==='wahl'){
+        h += '<div class="feld"><label>'+esc(s.label)+'</label><select data-key="'+key+'">'
+          + s.optionen.map(o=>'<option'+(o===v?' selected':'')+'>'+esc(o)+'</option>').join('')
+          + '</select></div>';
+      }else if(s.typ==='lang'){
+        h += '<div class="feld feld-voll"><label>'+esc(s.label)+'</label><textarea rows="2" data-key="'+key+'">'+esc(v)+'</textarea></div>';
+      }else{
+        const t = s.typ==='datum'?'date':(s.typ==='zahl'?'number':'text');
+        const extra = s.typ==='zahl'?' step="0.01"':'';
+        h += '<div class="feld"><label>'+esc(s.label)+'</label><input type="'+t+'"'+extra+' data-key="'+key+'" value="'+esc(v)+'"></div>';
+      }
+    }
+  }
+  wrap.innerHTML = h;
+  document.getElementById('dialogOverlay').classList.add('open');
+}
+function dialogSchliessen(){
+  document.getElementById('dialogOverlay').classList.remove('open');
+  dialogEintrag = null;
+}
+async function dialogSpeichern(){
+  if(!dialogEintrag) return;
+  document.querySelectorAll('#dialogFelder [data-key]').forEach(el=>{
+    const s = SCHEMA.find(x=>x.key===el.dataset.key);
+    let v = el.value.trim();
+    if(s.typ==='zahl') v = v==='' ? null : Number(v.replace(',','.'));
+    dialogEintrag[el.dataset.key] = (v===''||v===null) ? null : v;
+  });
+  if(!dialogEintrag.titel){ alert('Rufnummer / Kennung ist Pflicht (SharePoint-Title).'); return; }
+  try{
+    if(dialogEintrag._neu){ delete dialogEintrag._neu; eintraege.push(dialogEintrag); }
+    await speichern(dialogEintrag);
+    dialogSchliessen();
+  }catch(e){ alert('Speichern fehlgeschlagen: '+e.message); }
+}
+async function dialogLoeschen(){
+  if(!dialogEintrag) return;
+  if(!confirm('Eintrag "'+(dialogEintrag.titel||'')+'" wirklich löschen?')) return;
+  try{ await loeschen(dialogEintrag); dialogSchliessen(); }
+  catch(e){ alert('Löschen fehlgeschlagen: '+e.message); }
+}
+document.getElementById('dialogOverlay').addEventListener('click', e=>{ if(e.target.id==='dialogOverlay') dialogSchliessen(); });
+
+/* ═══════════════════════════════════════════════════════════
+ * CSV-EXPORT — aktuelle Ansicht, OHNE PIN/PUK (bewusst)
+ * ═══════════════════════════════════════════════════════════ */
+function csvExport(){
+  const spalten = SCHEMA.filter(s=>s.typ!=='geheim');
+  const zeilen = [spalten.map(s=>s.label).join(';')];
+  for(const e of eintraege){
+    zeilen.push(spalten.map(s=>{
+      let v = e[s.key];
+      if(v==null) return '';
+      if(s.typ==='zahl') return String(v).replace('.',',');
+      return '"'+String(v).replace(/"/g,'""')+'"';
+    }).join(';'));
+  }
+  const blob = new Blob(['\ufeff'+zeilen.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pnw-mobilfunk-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
