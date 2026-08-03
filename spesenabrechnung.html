@@ -2088,11 +2088,11 @@ async function ladeTLAbrechnungen() {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
     const items = await fetchAlleListItems(token, siteId, listId);
-    const alleRoh = items.map(i=>({id:i.id,...i.fields})).filter(b=>b.Status==='Eingereicht');
+    const roh = items.map(i=>({id:i.id,...i.fields}));
     // Fahrtenbuch-Duplikate je Fachkraft+Monat ausblenden — nur das neueste zaehlt
     const seenFahrt = {};
     const alle = [];
-    alleRoh.sort((a,b)=>parseInt(b.id)-parseInt(a.id)).forEach(b => {
+    roh.sort((a,b)=>parseInt(b.id)-parseInt(a.id)).forEach(b => {
       if (b.Kategorie === 'fahrtenbuch') {
         const fk = `${(b.Fachkraft_Mail||b.Fachkraft||'').toLowerCase()}::${b.Monat}`;
         if (seenFahrt[fk]) return;
@@ -2100,28 +2100,33 @@ async function ladeTLAbrechnungen() {
       }
       alle.push(b);
     });
-    // Group by fachkraft+monat
+    // Gruppieren: Fachkraft + Monat — über ALLE Status
     const gruppen = {};
     alle.forEach(b => {
-      const key = `${b.Fachkraft_Mail||b.Fachkraft}::${b.Monat}`;
+      const key = `${(b.Fachkraft_Mail||b.Fachkraft||'').toLowerCase()}::${b.Monat}`;
       if (!gruppen[key]) gruppen[key] = { fachkraft: b.Fachkraft||'—', mail: b.Fachkraft_Mail||'', monat: b.Monat||'', belege: [], total: 0 };
       gruppen[key].belege.push(b);
       gruppen[key].total += parseFloat(b.Betrag||0);
     });
-    const keys = Object.keys(gruppen);
+    const statusVon = g => g.belege.find(b=>b.Status==='Genehmigt') ? 'Genehmigt'
+                         : g.belege.find(b=>b.Status==='Eingereicht') ? 'Eingereicht'
+                         : g.belege.find(b=>b.Status==='Abgelehnt') ? 'Abgelehnt' : 'Entwurf';
+    const alleGruppen = Object.values(gruppen)
+      .sort((a,b) => (b.monat||'').localeCompare(a.monat||'') || a.fachkraft.localeCompare(b.fachkraft,'de'));
+    const pending = alleGruppen.filter(g => statusVon(g) === 'Eingereicht');
+
     // Badge
-    document.getElementById('tlBadge').textContent = keys.length;
-    document.getElementById('tlBadge').style.display = keys.length ? 'flex' : 'none';
-    if (keys.length === 0) {
-      document.getElementById('tlPending').innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Keine ausstehenden Abrechnungen 🎉</div>';
-      document.getElementById('teamTable').innerHTML = '';
-      return;
-    }
-    // Initials helper
+    document.getElementById('tlBadge').textContent = pending.length;
+    document.getElementById('tlBadge').style.display = pending.length ? 'flex' : 'none';
+
     const initials = n => n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    document.getElementById('tlPending').innerHTML = keys.map(k => {
-      const g = gruppen[k];
-      return `<div class="tl-card">
+    _tlPend = pending;
+
+    // ── Ausstehende Prüfungen ──
+    if (!pending.length) {
+      document.getElementById('tlPending').innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--text-hint);font-size:13px">Keine ausstehenden Abrechnungen 🎉</div>';
+    } else {
+      document.getElementById('tlPending').innerHTML = pending.map((g, i) => `<div class="tl-card">
         <div class="tl-head">
           <div class="tl-avatar">${initials(g.fachkraft)}</div>
           <div class="tl-info"><strong>${esc(g.fachkraft)}</strong><span>${fmtMonat(g.monat)} · ${g.belege.length} Positionen</span></div>
@@ -2129,20 +2134,63 @@ async function ladeTLAbrechnungen() {
         </div>
         <div class="tl-meta">Eingereicht · Wartet auf Prüfung</div>
         <div class="tl-foot">
-          <button class="btn btn-secondary" style="flex:1;font-size:13px" onclick='openReviewSheet(${JSON.stringify(g)})'>📋 Details</button>
-          <button class="btn btn-primary" style="flex:1;font-size:13px;background:#c9a227" onclick='oeffneReviewModus(${JSON.stringify(g)})'>🔍 Prüfen</button>
-          <button class="btn btn-success" style="flex:1;font-size:13px" onclick='genehmigen(${JSON.stringify(g)})'>✓ OK</button>
+          <button class="btn btn-secondary" style="flex:1;font-size:13px" onclick="openReviewSheet(_tlPend[${i}])">📋 Details</button>
+          <button class="btn btn-primary" style="flex:1;font-size:13px;background:#c9a227" onclick="oeffneReviewModus(_tlPend[${i}])">🔍 Prüfen</button>
+          <button class="btn btn-success" style="flex:1;font-size:13px" onclick="genehmigen(_tlPend[${i}])">✓ OK</button>
         </div>
+      </div>`).join('');
+    }
+
+    // ── Team-Übersicht: GF/Verwaltung sehen ALLE Abrechnungen mit Status ──
+    const meMail = (currentAccount?.username || '').toLowerCase();
+    const vollzugriff = ['sonja.peltz@praxisneuewege.de','markus.peltz@praxisneuewege.de'].includes(meMail);
+    _tlAlle = vollzugriff ? alleGruppen : pending;
+    const badgeFor = s => s==='Genehmigt' ? ['badge-approved','Genehmigt']
+                        : s==='Eingereicht' ? ['badge-pending','Eingereicht']
+                        : s==='Abgelehnt' ? ['badge-rejected','Abgelehnt'] : ['badge-draft','Entwurf'];
+    let thtml = ''; let curM = '';
+    _tlAlle.forEach((g, i) => {
+      if (g.monat !== curM) {
+        curM = g.monat;
+        thtml += `<div style="padding:12px 2px 5px;font-weight:700;font-size:13px;color:var(--accent)">${fmtMonat(curM)}</div>`;
+      }
+      const st = statusVon(g);
+      const [cls, label] = badgeFor(st);
+      thtml += `<div class="sum-row" style="align-items:center">
+        <span style="min-width:0"><strong>${esc(g.fachkraft)}</strong><br><span style="font-size:11px;color:var(--text-hint)">${g.belege.length} Positionen · ${fmt(g.total)}</span></span>
+        <span style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+          <span class="badge ${cls}"><span class="bdot"></span>${label}</span>
+          <button class="btn btn-secondary" style="padding:6px 10px;font-size:12px" title="Im Prüfmodus öffnen" onclick="oeffneReviewModus(_tlAlle[${i}])">🔍</button>
+          ${st === 'Genehmigt' ? `<button class="btn btn-secondary" style="padding:6px 10px;font-size:12px" title="Finales PDF herunterladen" onclick="downloadTLPdf(_tlAlle[${i}])">⬇ PDF</button>` : ''}
+        </span>
       </div>`;
-    }).join('');
-    // Team table
-    document.getElementById('teamTable').innerHTML = keys.map(k => {
-      const g = gruppen[k];
-      return `<div class="sum-row"><span>${esc(g.fachkraft)} · ${fmtMonat(g.monat)}</span><span class="badge badge-pending"><span class="bdot"></span>Ausstehend</span></div>`;
-    }).join('') + `<div class="sum-row"><span style="color:var(--accent)">Gesamt</span><span style="color:var(--accent);font-weight:700">${fmt(keys.reduce((s,k)=>s+gruppen[k].total,0))}</span></div>`;
+    });
+    document.getElementById('teamTable').innerHTML = thtml ||
+      '<div style="text-align:center;padding:20px;color:var(--text-hint);font-size:13px">Keine Abrechnungen vorhanden</div>';
   } catch(e) {
     document.getElementById('tlPending').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
   }
+}
+
+let _tlPend = [];
+let _tlAlle = [];
+
+// Finales Genehmigungs-PDF aus SharePoint (/Spesenbelege/Genehmigt/) herunterladen
+async function downloadTLPdf(g) {
+  try {
+    showToast('📄 PDF wird geladen…', true);
+    const { token, driveId } = await getSiteAndDrive();
+    const pdfName = `Spesen_${g.fachkraft.replace(/\s+/g,'_')}_${g.monat}.pdf`;
+    const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CFG.spFolder}/Genehmigt/${encodeURIComponent(pdfName)}:/content`;
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error(`PDF nicht gefunden (HTTP ${r.status}) — ${pdfName}`);
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = pdfName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch(e) { showToast('Fehler: ' + e.message); }
 }
 
 function oeffneReviewModus(g) {
