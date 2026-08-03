@@ -789,6 +789,11 @@ async function initMsal() {
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
   await msalInstance.initialize();
+  // Deeplink (?review=… / ?edit=…) sichern — geht sonst beim MSAL-Login-Redirect verloren
+  try {
+    const _qs = new URLSearchParams(window.location.search);
+    if (_qs.get('review') || _qs.get('edit')) sessionStorage.setItem('pnw_spesen_deeplink', window.location.search);
+  } catch(e) {}
   applyVersionBadge();
   try {
     const r = await msalInstance.handleRedirectPromise();
@@ -3097,16 +3102,27 @@ async function showApp() {
   _groupLoadPromise = loadGroupMembers();
   _groupLoadPromise.catch(e => console.warn('Group load failed:', e));
   initMonatSelect();   // Monate dynamisch befüllen + _currentMonat setzen
-  // URL-Parameter prüfen: ?review=MONAT:MAIL oder ?edit=MONAT:MAIL
-  setTimeout(() => handleReviewLink(), 600);
-  ladeMonatsdaten();
+  // URL-Parameter prüfen: ?review=MONAT:MAIL oder ?edit=MONAT:MAIL (inkl. Deeplink-Fallback nach Login)
+  handleReviewLink();
+  // Im Review-Modus lädt aktiviereReviewModus() selbst — sonst normale Monatsdaten
+  if (!_isReviewMode) ladeMonatsdaten();
 }
 
 // ── URL-Handler ──────────────────────────────────────────────────
 function handleReviewLink() {
-  const params = new URLSearchParams(window.location.search);
-  const reviewParam = params.get('review'); // YYYY-MM:fachkraft@mail
-  const editParam   = params.get('edit');   // zurückgewiesen — Fachkraft bearbeitet
+  let params = new URLSearchParams(window.location.search);
+  let reviewParam = params.get('review'); // YYYY-MM:fachkraft@mail
+  let editParam   = params.get('edit');   // zurückgewiesen — Fachkraft bearbeitet
+  // Fallback: Deeplink wurde vor dem MSAL-Login-Redirect gesichert (Query-Param geht dabei verloren)
+  if (!reviewParam && !editParam) {
+    const saved = sessionStorage.getItem('pnw_spesen_deeplink');
+    if (saved) {
+      params = new URLSearchParams(saved);
+      reviewParam = params.get('review');
+      editParam   = params.get('edit');
+    }
+  }
+  sessionStorage.removeItem('pnw_spesen_deeplink');
   if (!reviewParam && !editParam) return;
   const val = reviewParam || editParam;
   const [monat, ...mailParts] = val.split(':');
