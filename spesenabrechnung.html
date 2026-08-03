@@ -2221,6 +2221,9 @@ function openReviewSheet(g) {
 }
 
 async function genehmigen(g) {
+  // Defensiv: Fahrtenbuch-Duplikate rein rechnerisch ausblenden und Total neu berechnen
+  const _dd = dedupeFahrtenbuch(g.belege || []);
+  g = { ...g, belege: _dd.belege, total: _dd.belege.reduce((s,b)=>s+parseFloat(b.Betrag||0),0) };
   if (!g) return;
   const btn = document.querySelector(`button[onclick*='genehmigen']`);
   setStatus('tlStatus', 'uploading', 'Freigabe wird verarbeitet…');
@@ -2364,6 +2367,7 @@ function reencodeToJpeg(dataUrl) {
 
 
 async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
+  belege = dedupeFahrtenbuch(belege).belege; // Duplikate nie doppelt rechnen
   const fahrt   = belege.find(b => b.Kategorie === 'fahrtenbuch');
   const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
   const total   = belege.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
@@ -3496,6 +3500,21 @@ async function speichereKommentare() {
   }
 }
 
+// Fahrtenbuch-Duplikate je Fachkraft+Monat ausblenden — nur das neueste (hoechste ID) bleibt.
+// Rein rechnerisch/nicht-destruktiv; Rueckgabe: { belege, duplikate }
+function dedupeFahrtenbuch(belege) {
+  const seen = {}; const out = []; const dup = [];
+  belege.slice().sort((a,b)=>parseInt(b.id)-parseInt(a.id)).forEach(b => {
+    if (b.Kategorie === 'fahrtenbuch') {
+      const k = `${(b.Fachkraft_Mail||b.Fachkraft||'').toLowerCase()}::${b.Monat}`;
+      if (seen[k]) { dup.push(b); return; }
+      seen[k] = true;
+    }
+    out.push(b);
+  });
+  return { belege: out, duplikate: dup };
+}
+
 async function freigebenUndPDF() {
   setHomeStatus('uploading', '⏳ Freigabe wird verarbeitet…');
   // Kurz warten damit der Status sichtbar wird
@@ -3508,8 +3527,16 @@ async function freigebenUndPDF() {
     setHomeStatus('uploading', '⏳ Belege werden genehmigt…');
     // Status aller Belege auf Genehmigt setzen
     const items = await fetchAlleListItems(token, siteId, listId);
-    const belege = items.map(i=>({id:i.id,...i.fields}))
+    const roh = items.map(i=>({id:i.id,...i.fields}))
       .filter(b => (b.Monat||'').startsWith(_reviewMonat) && (b.Fachkraft_Mail||'').toLowerCase()===_reviewFkMail.toLowerCase());
+    // Fahrtenbuch-Duplikate (z.B. nach Papierkorb-Wiederherstellung) erkennen:
+    // nur das neueste bleibt, aeltere werden geloescht — eng begrenzt auf DIESE Fachkraft + DIESEN Monat
+    const { belege, duplikate } = dedupeFahrtenbuch(roh);
+    for (const d of duplikate) {
+      await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${d.id}`,
+        { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }).catch(()=>{});
+      console.warn('Fahrtenbuch-Duplikat bei Freigabe entfernt: ' + d.id);
+    }
     await Promise.all(belege.map(b =>
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
         method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
