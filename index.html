@@ -554,6 +554,11 @@ async function initMsal() {
     system: { allowNativeBroker: false }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
+  // Deeplink (?review/?sonja/?edit/?typ) sichern — geht beim MSAL-Login-Redirect verloren
+  try {
+    const _q = new URLSearchParams(window.location.search);
+    if (_q.get('review') || _q.get('sonja') || _q.get('edit')) sessionStorage.setItem('pnw_bg_deeplink', window.location.search);
+  } catch(e) {}
   applyVersionBadge();
   await msalInstance.initialize();
   try {
@@ -666,6 +671,17 @@ function handleReviewLink() {
 }
 
 function showApp() {
+  // Deeplink nach Login-Redirect wiederherstellen (URL-Query ging beim Redirect verloren)
+  try {
+    const _saved = sessionStorage.getItem('pnw_bg_deeplink');
+    if (_saved) {
+      sessionStorage.removeItem('pnw_bg_deeplink');
+      const _cur = new URLSearchParams(window.location.search);
+      if (!_cur.get('review') && !_cur.get('sonja') && !_cur.get('edit')) {
+        history.replaceState(null, '', window.location.pathname + _saved);
+      }
+    }
+  } catch(e) {}
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userBadge').style.display = 'flex';
