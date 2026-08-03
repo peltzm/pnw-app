@@ -2339,9 +2339,6 @@ async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
       }
     }
   }
-  // Fahrtenbuch-Datei
-  let fahrtB64 = null;
-  if (fd?.dateiUrl) fahrtB64 = await bildZuBase64(fd.dateiUrl).catch(() => null);
 
   const styles = `
     @page { size: A4; margin: 0; }
@@ -2389,6 +2386,63 @@ async function buildAbrechnungHTMLMitFotos(belege, fachkraft, monat, status) {
     .foot { margin-top: 20px; padding-top: 9px; border-top: 1px solid #f0ebe4; font-size: 7.5pt; color: #b5a99c; display: flex; justify-content: space-between; }
     /* Beleg-Anhang Seiten (unverändert, von jsPDF gezeichnet) */
     @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`;
+
+  // ── Anlage: Fahrtenbuch-Aufschlüsselung (eine oder mehrere A4-Seiten) ──
+  const statusLabelA = (status || 'Genehmigt').toUpperCase();
+  const fahrtPages = [];
+  if (fahrt && fd) {
+    const rows = [];
+    (fd.klienten || []).forEach(k =>
+      rows.push({ name: k.name, km: k.km, betrag: k.betrag }));
+    if ((fd.sonstigeFahrten || 0) > 0 || (fd.sonstigeKm || 0) > 0) {
+      rows.push({ name: `Sonstige Fahrten ohne Klient (${fd.sonstigeFahrten || 0} Fahrten)`,
+                  km: fd.sonstigeKm || 0,
+                  betrag: Math.round((fd.sonstigeKm || 0) * 0.30 * 100) / 100, sonstige: true });
+    }
+    const PRO_SEITE = 22;
+    const chunks = [];
+    for (let i = 0; i < rows.length; i += PRO_SEITE) chunks.push(rows.slice(i, i + PRO_SEITE));
+    if (!chunks.length) chunks.push([]);
+    const anlageStyles = styles + `
+      .atable { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      .atable th { text-align: left; font-size: 8pt; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #a8845f; padding: 6px 10px; border-bottom: 1.5px solid #e8cdb5; }
+      .atable th.r, .atable td.r { text-align: right; }
+      .atable td { font-size: 9.5pt; padding: 6px 10px; border-bottom: 1px solid #f0ebe4; color: #2a2118; }
+      .atable td.amt { font-weight: 600; color: #7b3f1e; white-space: nowrap; }
+      .atable tr.sonst td { color: #8a8178; font-style: italic; }
+      .atable tr.sum td { font-weight: 800; font-size: 10pt; border-top: 2px solid #7b3f1e; border-bottom: none; padding-top: 9px; }`;
+    chunks.forEach((chunk, ci) => {
+      const letzte = ci === chunks.length - 1;
+      fahrtPages.push(`<!DOCTYPE html><html lang="de"><head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;600;700&display=swap" rel="stylesheet"><meta charset="UTF-8">
+<style>${anlageStyles}</style></head><body>
+<div class="page">
+<div class="head">
+  <div class="t"><h1>Anlage — Fahrtenbuch</h1><p>Klienten-Aufschlüsselung · ${fmtMonat(monat)}${chunks.length > 1 ? ` · Teil ${ci+1}/${chunks.length}` : ''}</p></div>
+  <div class="badge">${esc(statusLabelA)}</div>
+</div>
+${ci === 0 ? `<div class="meta">
+  <div class="row"><span class="lbl">Mitarbeiter/in</span><span class="val">${esc(fachkraft)}</span></div>
+  <div class="row"><span class="lbl">Datei</span><span class="val" style="font-size:8pt">${esc(fd.dateiname || 'Fahrtenbuch.xlsx')}</span></div>
+  ${fd.kennzeichen ? `<div class="row"><span class="lbl">Kennzeichen</span><span class="val">${esc(fd.kennzeichen)}</span></div>` : ''}
+  <div class="row"><span class="lbl">Pauschale</span><span class="val">0,30 €/km</span></div>
+  <div class="row"><span class="lbl">Fahrten gesamt</span><span class="val">${fd.gesamtFahrten || fd.anzahlFahrten || 0}</span></div>
+  <div class="row"><span class="lbl">Gesamt km</span><span class="val">${fd.gesamtKm || 0} km</span></div>
+</div>` : ''}
+<table class="atable">
+  <tr><th>Klient / Fahrtzweck</th><th class="r">km</th><th class="r">Betrag</th></tr>
+  ${chunk.map(r => `<tr${r.sonstige ? ' class="sonst"' : ''}><td>${esc(r.name)}</td><td class="r">${String(r.km).replace('.', ',')} km</td><td class="r amt">${fmt(r.betrag)}</td></tr>`).join('')}
+  ${letzte ? `<tr class="sum"><td>Summe Fahrtkosten</td><td class="r">${String(fd.gesamtKm || 0).replace('.', ',')} km</td><td class="r amt">${fmt(fahrt.Betrag)}</td></tr>` : ''}
+</table>
+<div class="foot">
+  <span>Praxis NeueWege · ${esc(fachkraft)} · Spesenabrechnung ${fmtMonat(monat)}</span>
+  <span>Anlage Fahrtenbuch${chunks.length > 1 ? ` ${ci+1}/${chunks.length}` : ''}</span>
+</div>
+</div></body></html>`);
+    });
+  }
 
   // ── Seite 1: Übersicht (Karten-Design) ──
   const statusLabel = (status||'Genehmigt').toUpperCase();
@@ -2448,14 +2502,14 @@ ${regular.map((b, i) => {
 
 <div class="foot">
   <span>Praxis NeueWege · ${esc(fachkraft)} · Spesenabrechnung ${fmtMonat(monat)}</span>
-  <span>Seite 1 von ${regular.filter(b=>fotoMap[b.id]?.length).length + 1}</span>
+  <span>Seite 1 von ${regular.filter(b=>fotoMap[b.id]?.length).length + 1 + fahrtPages.length}</span>
 </div>
 
 </div>`;
 
   // Belegseiten werden in htmlToPdfBuffer via jsPDF gezeichnet (nicht hier als HTML)
   html += `</body></html>`;
-  return { html, fotoMap, regularBelege: regular, fachkraft, monat };
+  return { html, fotoMap, regularBelege: regular, fachkraft, monat, fahrtPages };
 }
 
 async function pdfVorschau() {
@@ -2482,14 +2536,8 @@ async function pdfVorschau() {
 // { html, fotoMap, regularBelege } → ArrayBuffer (A4-PDF)
 // Seite 1 (Übersicht): iframe + html2canvas
 // Folgeseiten (Belegfotos): direkt aus Base64 via jsPDF.addImage
-async function htmlToPdfBuffer(result, progressCb) {
-  const { html: htmlStr, fotoMap, regularBelege } = result;
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const PW = 210, PH = 297; // mm
-
-  // ── Seite 1: Übersichts-HTML in iframe rendern ──
-  if (progressCb) progressCb('📄 Übersichtsseite wird gerendert…');
+// Ein A4-HTML-Dokument via iframe + html2canvas auf die aktuelle PDF-Seite rendern
+async function _renderA4HtmlAufPdf(pdf, srcHtml, PW, PH) {
   await new Promise((resolve, reject) => {
     const iframe = document.createElement('iframe');
     iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:794px;height:1123px;border:none;visibility:hidden;';
@@ -2500,7 +2548,6 @@ async function htmlToPdfBuffer(result, progressCb) {
       try {
         await new Promise(r => setTimeout(r, 800)); // Fonts + Layout abwarten
         const iDoc = iframe.contentDocument || iframe.contentWindow.document;
-        // Nur die erste A4-Seite rendern (794×1123px)
         const canvas = await html2canvas(iDoc.body, {
           scale: 2,
           useCORS: true,
@@ -2519,15 +2566,31 @@ async function htmlToPdfBuffer(result, progressCb) {
       } catch(e) { cleanup(); reject(e); }
     };
     iframe.onerror = () => { cleanup(); reject(new Error('iframe Fehler')); };
-    // Nur Seite-1-HTML einspeisen (ohne page-break Elemente)
-    // Dazu: alles vor dem ersten page-break abschneiden
-    const page1Html = htmlStr.replace(/<div class="page-break[\s\S]*$/i, '</body></html>');
-    iframe.srcdoc = page1Html;
+    iframe.srcdoc = srcHtml;
   });
+}
+
+async function htmlToPdfBuffer(result, progressCb) {
+  const { html: htmlStr, fotoMap, regularBelege, fahrtPages } = result;
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW = 210, PH = 297; // mm
+
+  // ── Seite 1: Übersichts-HTML rendern ──
+  if (progressCb) progressCb('📄 Übersichtsseite wird gerendert…');
+  const page1Html = htmlStr.replace(/<div class="page-break[\s\S]*$/i, '</body></html>');
+  await _renderA4HtmlAufPdf(pdf, page1Html, PW, PH);
+
+  // ── Anlage: Fahrtenbuch-Aufschlüsselung ──
+  for (let fp = 0; fp < (fahrtPages || []).length; fp++) {
+    if (progressCb) progressCb(`🚐 Fahrtenbuch-Anlage ${fp+1} von ${fahrtPages.length} wird gerendert…`);
+    pdf.addPage();
+    await _renderA4HtmlAufPdf(pdf, fahrtPages[fp], PW, PH);
+  }
 
   // ── Folgeseiten: je Beleg eine oder mehrere Bild-Seiten ──
   const belageMitFotos = (regularBelege || []).filter(b => fotoMap[b.id]?.length);
-  let seitenNr = 2; // Seite 1 ist die Übersicht
+  let seitenNr = 2 + (fahrtPages || []).length; // Seite 1 = Übersicht, danach Fahrtenbuch-Anlage
 
   for (let i = 0; i < belageMitFotos.length; i++) {
     const b = belageMitFotos[i];
