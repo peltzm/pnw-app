@@ -1042,8 +1042,11 @@ async function ladeBelege(monat) {
   try { items = await fetchAlleListItems(token, siteId, listId); }
   catch(e) { throw new Error('Belege konnten nicht geladen werden: ' + e.message); }
   const alle = items.map(i => ({ id: i.id, ...i.fields }));
-  // Client-seitig filtern
-  const gefiltert = (_isTL && !_isReviewMode) ? alle : alle.filter(b =>
+  // Client-seitig filtern — IMMER nur eigene Belege (bzw. FK-Belege im Review).
+  // WICHTIG: Kein TL-Sonderpfad mehr! Der frühere `_isTL ? alle` Zweig führte dazu,
+  // dass renderHome/einreichen fremde Fahrtenbücher als "Duplikate" LÖSCHTEN.
+  // TL-Übersichten haben eigene Loader (ladeTLAbrechnungen, ladeReviewBelege).
+  const gefiltert = alle.filter(b =>
     (b.Fachkraft_Mail || '').toLowerCase() === myMail ||
     (b.Fachkraft || '').toLowerCase() === (currentAccount?.name || '').toLowerCase()
   );
@@ -1072,9 +1075,12 @@ function renderHome(belege) {
   const fahrtBelege = belege.filter(b => b.Kategorie === 'fahrtenbuch')
     .sort((a, b) => parseInt(b.id) - parseInt(a.id)); // neuestes zuerst (höchste SharePoint-ID)
   const fahrt = fahrtBelege[0] || null;
-  // Duplikate still im Hintergrund löschen
-  if (fahrtBelege.length > 1) {
-    fahrtBelege.slice(1).forEach(dup => {
+  // Duplikate still im Hintergrund löschen — SICHERHEIT: niemals fremde Items löschen!
+  const _ownMail = (currentAccount?.username || '').toLowerCase();
+  const _delBar = fahrtBelege.slice(1).filter(dup =>
+    (dup.Fachkraft_Mail || '').toLowerCase() === _ownMail);
+  if (_delBar.length > 0) {
+    _delBar.forEach(dup => {
       getToken().then(token => getGraphListIds().then(({siteId, listId}) =>
         fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${dup.id}`,
           { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } })
@@ -2014,8 +2020,12 @@ async function einreichen() {
     if (belege.length === 0) { showToast('Keine Belege vorhanden'); return; }
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    // Sicherheitsnetz: Fahrtenbuch-Duplikate vor Einreichung loeschen — nur das neueste bleibt
-    const fahrtAll = belege.filter(b => b.Kategorie === 'fahrtenbuch').sort((a,b)=>parseInt(b.id)-parseInt(a.id));
+    // Sicherheitsnetz: Fahrtenbuch-Duplikate vor Einreichung loeschen — nur das neueste bleibt.
+    // SICHERHEIT: ausschliesslich eigene Items (Fachkraft_Mail) — niemals fremde loeschen!
+    const _einreichMail = (currentAccount?.username || '').toLowerCase();
+    const fahrtAll = belege.filter(b => b.Kategorie === 'fahrtenbuch'
+      && (b.Fachkraft_Mail || '').toLowerCase() === _einreichMail)
+      .sort((a,b)=>parseInt(b.id)-parseInt(a.id));
     if (fahrtAll.length > 1) {
       const dupIds = fahrtAll.slice(1).map(b => String(b.id));
       for (const dupId of dupIds) {
@@ -3150,6 +3160,17 @@ let _isReviewMode  = false;
 async function aktiviereReviewModus(fkMail) {
   _isReviewMode = true;
   _reviewFkMail = fkMail;
+
+  // Monats-Dropdown auf den geprüften Monat stellen (sonst zeigt es irreführend den aktuellen Monat)
+  const _mSel = document.getElementById('monatSelect');
+  if (_mSel && _reviewMonat) {
+    if (![..._mSel.options].some(o => o.value === _reviewMonat)) {
+      const o = document.createElement('option'); o.value = _reviewMonat; o.textContent = fmtMonat(_reviewMonat);
+      _mSel.insertBefore(o, _mSel.firstChild);
+    }
+    _mSel.value = _reviewMonat;
+    _mSel.disabled = true; // im Prüfmodus nicht umschaltbar
+  }
 
   // Screen direkt umschalten ohne ladeMonatsdaten
   ['home','erfassen','abschluss','teamleiter'].forEach(s => {
