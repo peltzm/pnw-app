@@ -1651,6 +1651,63 @@ export default {
       return json({ ok: true, version: "v3.2-git", ts: new Date().toISOString() }, 200, origin);
     }
 
+    // ── TEMPORÄR: OP-/Ausfallzeiten-Analyse (Kelheim) ────────────────
+    // Schlüsselgeschützter Lese-Endpunkt für einmalige Auswertung.
+    // WIRD NACH NUTZUNG WIEDER ENTFERNT (Commit-Historie beachten).
+    if (url.pathname === "/api/temp-op-analyse" && request.method === "GET") {
+      if (url.searchParams.get("key") !== "C5u9hDvDBhD-3Ec8R7Tfv97o81HxRFt0") {
+        return json({ error: "unauthorized" }, 401, origin);
+      }
+      const seit = url.searchParams.get("seit") || "2026-05-01";
+      const empf = (url.searchParams.get("empf") || "kelheim").toLowerCase();
+      const unwrap = (v) => (v && typeof v === "object" ? (v.$date ?? v.$datetime ?? v.$decimal ?? null) : v);
+      try {
+        const graph = {
+          id: 1, number: 1, date: 1, deliveryFrom: 1, deliveryUntil: 1, deletedAt: 1,
+          stateType: { name: 1 },
+          client: { recName: 1 },
+          recipient: { recName: 1 },
+          lines: {
+            approval: { id: 1 }, description: 1, quantity: 1,
+            unitPrice: 1, service: { name: 1 }, costCenter: 1,
+          },
+          $limit: 500,
+        };
+        const alle = [];
+        for (let offset = 0; offset < 20000; offset += 500) {
+          const batch = await kilankaPost(env, "accounting/invoices", { ...graph, $offset: offset });
+          const arr = Array.isArray(batch) ? batch : [];
+          alle.push(...arr);
+          if (arr.length < 500) break;
+        }
+        const treffer = [];
+        for (const inv of alle) {
+          if (unwrap(inv.deletedAt)) continue;
+          const rec = String(inv.recipient?.recName || "").toLowerCase();
+          if (!rec.includes(empf)) continue;
+          const von = String(unwrap(inv.deliveryFrom) || "").slice(0, 10);
+          if (!von || von < seit) continue;
+          treffer.push({
+            nummer: inv.number, datum: unwrap(inv.date),
+            von, bis: String(unwrap(inv.deliveryUntil) || "").slice(0, 10),
+            status: inv.stateType?.name || null,
+            klient: inv.client?.recName || null,
+            positionen: (inv.lines || []).map((l) => ({
+              menge: Number(unwrap(l.quantity)) || 0,
+              preis: Number(unwrap(l.unitPrice)) || 0,
+              leistung: l.service?.name || null,
+              kst: l.costCenter ?? null,
+              approval: l.approval?.id ?? null,
+              text: String(l.description || "").slice(0, 300),
+            })),
+          });
+        }
+        return json({ ok: true, gesamt: alle.length, gefiltert: treffer.length, seit, empf, rechnungen: treffer }, 200, origin);
+      } catch (e) {
+        return json({ ok: false, error: String(e && e.message || e) }, 502, origin);
+      }
+    }
+
     if (url.pathname === "/api/meine-klienten" && request.method === "GET") {
       const auth = await validateEntraToken(request.headers.get("Authorization"));
       if (!auth.ok) return json({ error: auth.error }, 401, origin);
