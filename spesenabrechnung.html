@@ -325,7 +325,7 @@ input[type=checkbox]{-webkit-appearance:checkbox!important;appearance:checkbox!i
     <div class="login-card">
       <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" style="height:52px;width:auto;margin-bottom:1.25rem" alt="Praxis NeueWege">
       <div class="login-title">Spesenabrechnung</div>
-      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v150d1a1</div>
+      <div id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text-hint);font-family:monospace;letter-spacing:.3px;margin-top:4px">v2ac707a</div>
       <div class="login-desc">Melden Sie sich mit Ihrem Microsoft 365-Konto an, um Belege zu erfassen und Spesenabrechnungen einzureichen.</div>
       <button class="btn btn-primary btn-full" onclick="login()">
         <svg width="16" height="16" viewBox="0 0 23 23" fill="none"><path d="M1 1h10v10H1z" fill="#f25022"/><path d="M12 1h10v10H12z" fill="#7fba00"/><path d="M1 12h10v10H1z" fill="#00a4ef"/><path d="M12 12h10v10H12z" fill="#ffb900"/></svg>
@@ -760,7 +760,7 @@ const SCOPES = ['Files.ReadWrite.All','Sites.ReadWrite.All','Sites.Read.All','Us
 // ══════════════════════════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════════════════════════
-const APP_VERSION = 'v150d1a1'; // auto-updated on deploy
+const APP_VERSION = 'v2ac707a'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -956,13 +956,28 @@ async function ladeKlientVorschlaegeInto(elId, isSelect) {
         '<option value="__neu__">✏️ Anderen Namen eingeben…</option>';
       el.onchange = function() {
         if (this.value === '__neu__') {
-          const neu = prompt('Klientenname eingeben (Nachname, Vorname):');
-          if (neu && neu.trim()) {
-            const opt = document.createElement('option');
-            opt.value = neu.trim(); opt.textContent = neu.trim(); opt.selected = true;
-            this.insertBefore(opt, this.lastElementChild);
-            this.value = neu.trim();
-          } else { this.value = ''; }
+          // Inline-Eingabe statt prompt() — prompt wird auf Mobilgeräten/PWAs oft blockiert
+          const sel = this;
+          sel.style.display = 'none';
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:flex;gap:6px;margin-top:2px';
+          wrap.innerHTML = `<input type="text" placeholder="Nachname, Vorname" autocapitalize="words"
+              style="flex:1;padding:10px 12px;border:1.5px solid var(--accent);border-radius:8px;font-family:inherit;font-size:14px">
+            <button type="button" class="btn btn-primary" style="padding:0 16px;flex-shrink:0">✓</button>`;
+          sel.parentNode.insertBefore(wrap, sel.nextSibling);
+          const inp = wrap.querySelector('input');
+          const fertig = (val) => {
+            wrap.remove(); sel.style.display = '';
+            if (val && val.trim()) {
+              const opt = document.createElement('option');
+              opt.value = val.trim(); opt.textContent = val.trim(); opt.selected = true;
+              sel.insertBefore(opt, sel.lastElementChild);
+              sel.value = val.trim();
+            } else { sel.value = ''; }
+          };
+          wrap.querySelector('button').onclick = () => fertig(inp.value);
+          inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); fertig(inp.value); } };
+          setTimeout(() => inp.focus(), 50);
         }
       };
     } else {
@@ -3163,19 +3178,6 @@ function isoDate(iso){ if (!iso) return ''; try { return iso.slice(0,10); } catc
 function fmtMonat(ym){ if (!ym) return '—'; const [y,m] = ym.split('-'); const mn=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']; return (mn[parseInt(m)-1]||m)+' '+y; }
 function shortName() { const n=currentAccount?.name||''; return n.split(' ').map(w=>w[0]).join('').toUpperCase()||'MA'; }
 function klientLabel(v) { if (!v) return '—'; if (v.startsWith('intern:')) return v.replace('intern:',''); if (v.startsWith('fall:')) { const p=v.split(':'); return `${p[2]||''} (${p[1]||''})`.trim(); } return v; }
-function buildKlientOptions(selected) {
-  const opts = [
-    {v:'',l:'— bitte wählen —'},
-    {v:'fall:2024-0187:Familie Hoffmann',l:'Familie Hoffmann (Az. 2024-0187)'},
-    {v:'fall:2025-0043:Familie Bauer',l:'Familie Bauer (Az. 2025-0043)'},
-    {v:'fall:2025-0089:Familie Gruber',l:'Familie Gruber (Az. 2025-0089)'},
-    {v:'intern:Nordstern',l:'Nordstern WG allgemein'},
-    {v:'intern:Dienstbesprechung',l:'Dienstbesprechung / Team'},
-    {v:'intern:Fortbildung',l:'Fortbildung'},
-    {v:'intern:Buero',l:'Bürobedarf / intern'},
-  ];
-  return opts.map(o=>`<option value="${o.v}" ${o.v===selected?'selected':''}>${esc(o.l)}</option>`).join('');
-}
 
 // ── Bildkomprimierung + optionaler Crop ──────────────────────────
 async function komprimiereUndCropBild(file, maxWidth = 1600, quality = 0.82) {
