@@ -1324,7 +1324,8 @@ async function schnellLoeschen(id) {
 }
 
 // Belegfoto/PDF aus der Liste ansehen — öffnet in neuem Tab
-async function belegFotoAnsehen(id) {
+async function belegFotoAnsehen(id, fotoIdx) {
+  fotoIdx = fotoIdx || 0;
   // Tab sofort öffnen (sonst blockiert mobiler Popup-Blocker nach await)
   const w = window.open('', '_blank');
   if (w) w.document.write('<p style="font-family:sans-serif;padding:20px;color:#666">Beleg wird geladen…</p>');
@@ -1335,15 +1336,16 @@ async function belegFotoAnsehen(id) {
     const res = await r.json();
     const fotos = JSON.parse(res.fields?.FotoUrls || '[]');
     if (!fotos.length) { if (w) w.close(); showToast('Kein Beleg vorhanden'); return; }
+    if (fotoIdx >= fotos.length) fotoIdx = 0;
     // Datei als Blob laden → Blob-URL (funktioniert für Bild UND PDF als Tab-Navigation;
     // data:-URLs werden von Browsern als Top-Level-Navigation blockiert)
-    const blob = await belegDateiAlsBlob(fotos[0]);
+    const blob = await belegDateiAlsBlob(fotos[fotoIdx]);
     if (blob && w) {
       const blobUrl = URL.createObjectURL(blob);
       w.location.href = blobUrl;
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } else if (w) {
-      w.location.href = fotos[0]; // Fallback: Original-URL
+      w.location.href = fotos[fotoIdx]; // Fallback: Original-URL
     }
   } catch(e) {
     if (w) w.close();
@@ -3421,19 +3423,24 @@ function renderHomeReview(belege) {
     return `
     <div class="beleg-card" style="flex-direction:column;cursor:default;display:block;padding:0">
       <div style="display:flex;align-items:stretch">
-        <div class="beleg-side ${fotos.length ? '' : 'fw'}" onclick="${fotos.length ? `window.open('${fotos[0]}','_blank')` : ''}">
+        <div class="beleg-side ${fotos.length ? '' : 'fw'}" style="${fotos.length ? 'cursor:pointer' : ''}" onclick="${fotos.length ? `belegFotoAnsehen('${b.id}')` : ''}">
           ${fotos.length ? '🧾' : '⚠️'}
         </div>
         <div class="beleg-body">
           <div class="beleg-top">
             <div class="beleg-desc">${esc(b.Beschreibung||b.Haendler||'—')}</div>
-            <div class="beleg-amt">${fmt(b.Betrag)}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="beleg-amt">${fmt(b.Betrag)}</div>
+              ${fotos.length ? `<button onclick="belegFotoAnsehen('${b.id}')" title="Beleg ansehen"
+                style="font-size:14px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:none;border:1px solid var(--accent-mid);color:var(--accent);border-radius:4px;cursor:pointer;flex-shrink:0">👁</button>` : ''}
+            </div>
           </div>
           <div class="beleg-meta">
             <span class="beleg-date">${fmtDate(b.Datum)}</span>
             <span class="cpill" style="background:var(--accent-light);color:var(--accent)">${esc(katShort)}</span>
             ${b.Klient && b.Klient !== 'kein Klient' ? `<span class="ktag">${esc(b.Klient)}</span>` : ''}
             ${!fotos.length ? '<span class="wtag">⚠ Kein Foto</span>' : ''}
+            ${fotos.length > 1 ? fotos.map((u,fi) => `<span class="cpill" style="background:var(--accent-light);color:var(--accent);cursor:pointer" onclick="belegFotoAnsehen('${b.id}',${fi})">🧾 ${fi+1}/${fotos.length}</span>`).join('') : ''}
           </div>
         </div>
       </div>
