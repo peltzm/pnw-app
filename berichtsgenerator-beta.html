@@ -1437,6 +1437,34 @@ function startNew() {
 let currentListId = null; // tracks current list item ID
 let currentItemStatus = null;   // Status des geladenen Berichts (bleibt bei Zwischenspeichern erhalten)
 let currentEingereichtVon = ''; // ursprüngliche/r Einreicher/in (darf durch TL-Speichern nicht überschrieben werden)
+let currentOwnerOid = '';       // Entra-Objekt-ID der/des Einreichenden — analog geschützt
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * IDENTITAET: Objekt-ID statt Name oder UPN
+ *
+ * Namen UND UPNs aendern sich (Heirat, Umbenennung, Mailwechsel) — genau daran
+ * gingen Berichte nach einer Namensaenderung verloren. Die Entra-Objekt-ID
+ * bleibt ueber den gesamten Lebenszyklus eines Kontos stabil.
+ *
+ * Bewusst NICHT als Ersatz fuer die Namensfelder: "Fachkraft" ist Inhalt und
+ * erscheint in der Unterschrift des Word-Dokuments. Die IDs laufen zusaetzlich
+ * in FormularDaten mit — dadurch ist keine neue SharePoint-Spalte noetig.
+ *
+ * Altbestand ohne IDs bleibt ueber Adressen und Namensvarianten auffindbar;
+ * beim naechsten Speichern werden die IDs automatisch nachgetragen.
+ * ═══════════════════════════════════════════════════════════════════════ */
+function meineOid() {
+  return (currentAccount?.idTokenClaims?.oid || currentAccount?.localAccountId || '').toLowerCase();
+}
+
+// Anzeigename → Objekt-ID über die bereits geladenen Gruppenmitglieder
+function oidZuName(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return null;
+  const alle = [...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])];
+  const t = alle.find(m => (m.displayName || '').trim().toLowerCase() === n);
+  return t?.id ? String(t.id).toLowerCase() : null;
+}
 let currentVersion = 0;         // Versionsnummer der hochgeladenen Dokumente (steigt bei jeder Freigabeanfrage)
 let currentAssignedReviewer = ''; // TL der den Bericht angenommen hat (displayName)
 let currentAssignedReviewerMail = ''; // Mail des annehmenden TL
@@ -1700,6 +1728,7 @@ async function copyStammdaten(id) {
     }
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
+    currentOwnerOid = data._ownerOid || '';   // darf beim Speichern durch TL nicht wechseln
     currentListId = null; // new report
     // Berichtstyp setzen BEVOR resetForm, damit buildDynamicSections die richtigen Felder erzeugt
     if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
@@ -1823,6 +1852,7 @@ async function loadDraft(id) {
     }
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
+    currentOwnerOid = data._ownerOid || '';   // darf beim Speichern durch TL nicht wechseln
     currentListId = id; // Graph item ID (string)
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
@@ -2066,6 +2096,7 @@ function resetForm() {
   _isViewOnly = false;
   currentItemStatus = null;
   currentEingereichtVon = '';
+  currentOwnerOid = '';
   currentVersion = 0;
   currentAssignedReviewer = '';
   currentAssignedReviewerMail = '';
@@ -2249,6 +2280,14 @@ async function saveToList(data, existingId = null) {
   data._ziele = ziele;
   data._berichtstyp = currentBerichtstyp || 'verlauf';
 
+  // Stabile Identitaeten mitschreiben. Bei Altbestand wird hier automatisch
+  // nachgetragen; ein bereits gesetzter Eigentuemer bleibt unveraendert,
+  // damit ein TL-Speichern die Zuordnung nicht an sich zieht.
+  data._ownerOid = data._ownerOid || currentOwnerOid || meineOid() || '';
+  const fkNamen = [data.Fachkraft_NeueWege, data.Fachkraft_2, data.Fachkraft_3, data.Fachkraft_4];
+  const fkOids = fkNamen.map(oidZuName).filter(Boolean);
+  if (fkOids.length) data._fachkraftOids = [...new Set(fkOids)];
+
   const fields = {
     Title: (() => {
       const _d = data.Datum_Unterschrift || '';
@@ -2372,6 +2411,15 @@ function _myNameVariants() {
 // (Einreicher/in, als Fachkraft 1–4 hinterlegt, oder Altbestand ohne Besitzer)
 function isUserInvolvedInItem(item) {
   if (!item) return false;
+  let d = {};
+  try { d = JSON.parse(item.FormularDaten || '{}'); } catch(e) {}
+  // 1. Stabile Objekt-ID — unabhaengig von Namen, UPN und Mailadresse
+  const oid = meineOid();
+  if (oid) {
+    if (String(d._ownerOid || '').toLowerCase() === oid) return true;
+    if ((d._fachkraftOids || []).some(x => String(x).toLowerCase() === oid)) return true;
+  }
+  // 2./3. Altbestand ohne IDs: Adressen und Namensvarianten
   if (!item.Eingereicht_Von) return true; // Altbestand ohne Besitzer (backwards compat)
   const eingereichtVon = (item.Eingereicht_Von || '').trim().toLowerCase();
   const myEmail = (currentAccount?.username || '').toLowerCase();
@@ -2381,8 +2429,6 @@ function isUserInvolvedInItem(item) {
   if (_myAliases && _myAliases.has(eingereichtVon)) return true;
   const variants = _myNameVariants();
   if (variants.size === 0) return false;
-  let d = {};
-  try { d = JSON.parse(item.FormularDaten || '{}'); } catch(e) {}
   const namen = [d.Fachkraft_NeueWege, d.Fachkraft_2, d.Fachkraft_3, d.Fachkraft_4, item.Fachkraft]
     .filter(Boolean).map(s => String(s).trim().toLowerCase());
   return namen.some(n => variants.has(n));
@@ -2444,7 +2490,8 @@ function diagZeile() {
     Geladen: ${d.gesamt} Bericht(e) in der Liste, davon ${d.sichtbar} dir zugeordnet.<br>
     Angemeldet als ${escHtml(d.konto)} (${escHtml(d.anzeigename)})${d.istTL ? ' · TL-Sicht: alle Berichte' : ''}<br>
     Erkannte Adressen: ${d.aliase.length ? escHtml(d.aliase.join(', ')) : '—'}<br>
-    Erkannte Namensformen: ${d.varianten.length ? escHtml(d.varianten.join(' · ')) : '—'}
+    Erkannte Namensformen: ${d.varianten.length ? escHtml(d.varianten.join(' · ')) : '—'}<br>
+    Objekt-ID: ${escHtml(d.oid || '— (nicht verfügbar)')} · Berichte mit hinterlegter ID: ${d.mitOid}
   </div>`;
 }
 
@@ -2482,6 +2529,8 @@ async function loadMyDrafts() {
     anzeigename: (currentAccount?.name || '—'),
     aliase: [...(_myAliases || [])],
     varianten: [..._myNameVariants()],
+    oid: meineOid(),
+    mitOid: allItems.filter(i => { try { return !!JSON.parse(i.FormularDaten || '{}')._ownerOid; } catch(e) { return false; } }).length,
     istTL,
   };
   return sichtbar;
