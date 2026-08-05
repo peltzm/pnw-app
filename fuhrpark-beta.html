@@ -204,6 +204,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
         CSV
       </button>
+      <button class="btn btn-outline btn-sm" onclick="zuordnungenNachtragen()" title="Entra-Objekt-ID für alle eindeutig zuordenbaren Fahrzeuge nachtragen">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-2-2"/></svg>
+        Zuordnung
+      </button>
+      <span id="zuordnungStand" style="display:none; font-size:11px; color:var(--text-muted); align-self:center; margin-left:2px;"></span>
       <button class="btn btn-outline btn-sm" onclick="reload()" id="refreshBtn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
         Aktualisieren
@@ -386,18 +391,70 @@ let fahrerNachName = new Map(); // Anzeigename (klein) → {id, upn}
 let listenBasis = `/sites/${CFG.spHost}/lists/${CFG.listName}`;
 
 function fahrerAusBestand(){
+  // Fallback nur sinnvoll, wenn die Fahrzeuge bereits geladen sind.
   fahrerListe = [...new Set(fahrzeuge.map(f=>f.fahrer).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
 }
+/* WICHTIG: 'accountEnabled' darf hier NICHT angefragt werden. Die App hat nur
+   User.ReadBasic.All; dieses Feld setzt User.Read.All voraus, und Graph lehnt
+   die gesamte Abfrage mit 403 ab. Das liess die Fahrerauswahl leer bleiben —
+   und weil ladeFahrerListe() VOR ladeFahrzeuge() laeuft, lief auch der
+   Bestands-Fallback ins Leere. Fehler werden jetzt protokolliert. */
 async function ladeFahrerListe(){
   try{
-    const nutzer = await graphAlle('/users?$select=id,displayName,mail,accountEnabled&$top=999');
-    const aktiv = nutzer.filter(u=>u.accountEnabled!==false && u.mail
+    const nutzer = await graphAlle('/users?$select=id,displayName,mail&$top=999');
+    const aktiv = nutzer.filter(u=>u.mail
       && u.mail.toLowerCase().endsWith('@praxisneuewege.de') && u.displayName);
-    fahrerNachName = new Map();
-    for(const u of aktiv) fahrerNachName.set(u.displayName.trim().toLowerCase(), {id:String(u.id), upn:u.mail.toLowerCase()});
+    if(!aktiv.length) throw new Error('keine Nutzer mit @praxisneuewege.de erhalten');
+    baueFahrerIndex(aktiv);
     fahrerListe = [...new Set(aktiv.map(u=>u.displayName))].sort((a,b)=>a.localeCompare(b,'de'));
-    if(!fahrerListe.length) fahrerAusBestand();
-  }catch(e){ fahrerAusBestand(); }
+  }catch(e){
+    console.warn('Fahrerliste aus Entra nicht ladbar — Rueckfall auf den Bestand:', e.message);
+    fahrerAusBestand();
+  }
+}
+
+/* Die Fahrer-Felder enthalten historisch nur Nachnamen ("Graf") oder
+   "Nachname, Vorname" ("Peltz, Sonja"), waehrend Entra "Vorname Nachname"
+   fuehrt. Der Index deckt deshalb mehrere Schreibweisen ab. Nachnamen, die
+   mehrfach vorkommen, werden bewusst als mehrdeutig verworfen — lieber keine
+   Zuordnung als die falsche. */
+function baueFahrerIndex(nutzer){
+  fahrerNachName = new Map();
+  const setze = (schluessel, eintrag) => {
+    const k = String(schluessel||'').trim().toLowerCase();
+    if(!k) return;
+    if(fahrerNachName.has(k)){
+      const vorhanden = fahrerNachName.get(k);
+      if(vorhanden && vorhanden.id !== eintrag.id) fahrerNachName.set(k, null); // mehrdeutig
+      return;
+    }
+    fahrerNachName.set(k, eintrag);
+  };
+  for(const u of nutzer){
+    const e = {id:String(u.id), upn:(u.mail||'').toLowerCase(), name:u.displayName};
+    const dn = String(u.displayName).trim();
+    setze(dn, e);
+    const teile = dn.split(/\s+/).filter(Boolean);
+    if(teile.length > 1){
+      const nach = teile[teile.length-1], vor = teile.slice(0,-1).join(' ');
+      setze(`${nach}, ${vor}`, e);
+      setze(`${nach} ${vor}`, e);
+      setze(nach, e);                    // reiner Nachname — nur wenn eindeutig
+    }
+  }
+}
+
+/* Anzeigename, "Nachname, Vorname" oder blosser Nachname → Objekt-ID. */
+function oidFuerFahrer(name){
+  const roh = String(name||'').trim().toLowerCase();
+  if(!roh) return null;
+  const direkt = fahrerNachName.get(roh);
+  if(direkt) return direkt.id;
+  if(fahrerNachName.has(roh)) return null;            // bekannt, aber mehrdeutig
+  const teile = roh.replace(',',' ').split(/\s+/).filter(Boolean);
+  if(teile.length === 1) return null;
+  const e = fahrerNachName.get(teile.join(' ')) || fahrerNachName.get([...teile].reverse().join(' '));
+  return e ? e.id : null;
 }
 
 function initMsal(){
@@ -417,13 +474,16 @@ async function login(){
     document.getElementById('userName').textContent = currentAccount.name || currentAccount.username;
     document.getElementById('userBadge').style.display = 'flex';
     document.getElementById('logoutBtn').style.display = '';
-    await ladeFahrerListe();
     try{
       await ladeFahrzeuge();
     }catch(e){
       document.getElementById('flotteGrid').innerHTML =
         '<div class="loading-state">Liste "'+CFG.listName+'" konnte nicht geladen werden ('+esc(e.message)+'). Bitte Berechtigungen auf der SharePoint-Liste prüfen.</div>';
     }
+    // NACH den Fahrzeugen: scheitert der Entra-Abruf, kann der Bestands-Fallback
+    // wenigstens die vorhandenen Fahrernamen anbieten.
+    await ladeFahrerListe();
+    zeigeZuordnungsStand();
   }catch(e){
     const err = document.getElementById('loginError');
     err.textContent = 'Anmeldung fehlgeschlagen: '+e.message;
@@ -508,6 +568,7 @@ async function ladeFahrzeuge(){
 }
 async function reload(){
   if(online){ await ladeFahrzeuge(); } else { renderAll(); }
+  zeigeZuordnungsStand();
 }
 async function speichern(f){
   if(!online){ renderAll(); return; }
@@ -1002,6 +1063,45 @@ async function ensureFbSpalten(){
   fbSpaltenOk=true;
 }
 
+/* Zeigt im Kopf, wie viele Fahrzeuge eine stabile Zuordnung haben. */
+function zeigeZuordnungsStand(){
+  const el = document.getElementById('zuordnungStand');
+  if(!el) return;
+  const mit = fahrzeuge.filter(f=>f.fahrerId).length;
+  const zuordenbar = fahrzeuge.filter(f=>!f.fahrerId && oidFuerFahrer(f.fahrer)).length;
+  el.textContent = mit + '/' + fahrzeuge.length + ' zugeordnet'
+    + (zuordenbar ? ' · ' + zuordenbar + ' nachtragbar' : '');
+  el.style.display = '';
+}
+
+/* Traegt die Entra-Objekt-ID fuer alle Fahrzeuge nach, bei denen sich der
+   Fahrername eindeutig aufloesen laesst. Gedacht als einmalige Migration —
+   danach schreibt der Dialog die ID bei jedem Speichern selbst mit. */
+async function zuordnungenNachtragen(){
+  if(!online){ alert('Nur im angemeldeten Modus möglich.'); return; }
+  const offen = fahrzeuge.filter(f=>!f.fahrerId && oidFuerFahrer(f.fahrer));
+  const ohne  = fahrzeuge.filter(f=>!f.fahrerId && !oidFuerFahrer(f.fahrer) && (f.fahrer||'').trim());
+  if(!offen.length){
+    alert('Nichts nachzutragen.' + (ohne.length
+      ? '\n\nNicht eindeutig zuordenbar:\n' + ohne.map(f=>'· '+f.kennzeichen+' — '+f.fahrer).join('\n')
+        + '\n\nBitte im Dialog den Namen aus der Vorschlagsliste wählen.'
+      : ''));
+    return;
+  }
+  if(!confirm('Für ' + offen.length + ' Fahrzeug(e) die stabile Zuordnung nachtragen?')) return;
+  try{ await ensureFbSpalten(); }
+  catch(e){ alert('Spalte FahrerId konnte nicht angelegt werden: '+e.message); return; }
+  let ok=0, fehler=[];
+  for(const f of offen){
+    try{ f.fahrerId = oidFuerFahrer(f.fahrer); await speichern(f); ok++; }
+    catch(e){ f.fahrerId = null; fehler.push(f.kennzeichen+': '+e.message); }
+  }
+  renderAll(); zeigeZuordnungsStand();
+  alert(ok + ' Fahrzeug(e) nachgetragen.'
+    + (fehler.length ? '\n\nFehler:\n'+fehler.join('\n') : '')
+    + (ohne.length ? '\n\nNicht eindeutig zuordenbar:\n'+ohne.map(f=>'· '+f.kennzeichen+' — '+f.fahrer).join('\n') : ''));
+}
+
 /* ═══════════════════════════════════════════════════════════
  * DIALOG — Anzeigen / Bearbeiten / Neuanlage / km erfassen
  * ═══════════════════════════════════════════════════════════ */
@@ -1102,9 +1202,7 @@ async function dialogSpeichern(){
   // Objekt-ID zum gewaehlten Namen mitschreiben. Wird der Name geleert oder auf
   // eine Person ausserhalb der Liste gesetzt, faellt auch die ID weg — sonst
   // zeigte sie weiter auf die vorige Person.
-  const fName = (dialogFahrzeug.fahrer||'').trim().toLowerCase();
-  const treffer = fName ? fahrerNachName.get(fName) : null;
-  dialogFahrzeug.fahrerId = treffer ? treffer.id : null;
+  dialogFahrzeug.fahrerId = oidFuerFahrer(dialogFahrzeug.fahrer);
   if(!dialogFahrzeug.fin||!dialogFahrzeug.kennzeichen){ alert('FIN und Kennzeichen sind Pflichtfelder.'); return; }
   // Die Spalte muss existieren, bevor sie beschrieben wird — ein unbekanntes Feld
   // laesst Graph den gesamten PATCH ablehnen. Scheitert das Anlegen, wird die ID
