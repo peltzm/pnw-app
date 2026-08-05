@@ -836,6 +836,65 @@ function applyVersionBadge() {
 }
 
 let msalInstance, currentAccount, accessToken;
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * IDENTITAET — stabil ueber Namensaenderungen (Heirat, Umbenennung)
+ *
+ * Die Archivsicht ordnete Protokolle bisher ueber Erstellt_Von zu und pruefte
+ * dabei auf Teiltreffer des UPN-Praefix oder aller Namensbestandteile. Beides
+ * aendert sich bei einer Umbenennung — eigene aeltere Protokolle verschwanden
+ * dann aus dem Archiv.
+ *
+ * Stabil ist die Entra-Objekt-ID. Sie laeuft in ProtokollDaten mit (_ownerOid),
+ * deshalb ist keine neue SharePoint-Spalte noetig. Zusaetzlich zaehlen frueher
+ * genutzte Adressen (Entra proxyAddresses).
+ * ═══════════════════════════════════════════════════════════════════════ */
+let _meineAliase = null, _aliasPromise = null;
+function meineOid() {
+  return (currentAccount?.idTokenClaims?.oid || currentAccount?.localAccountId || '').toLowerCase();
+}
+async function ladeMeineAliase() {
+  if (_meineAliase) return _meineAliase;
+  if (_aliasPromise) return _aliasPromise;
+  _aliasPromise = (async () => {
+    const menge = new Set();
+    const eigen = (currentAccount?.username || '').trim().toLowerCase();
+    if (eigen) menge.add(eigen);
+    try {
+      const t = await getToken();
+      const r = await fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName,proxyAddresses',
+        { headers: { Authorization: 'Bearer ' + t } });
+      if (r.ok) {
+        const d = await r.json();
+        for (const a of [d.mail, d.userPrincipalName, ...(d.proxyAddresses || [])]) {
+          if (!a) continue;
+          const adr = String(a).replace(/^smtp:/i, '').trim().toLowerCase();
+          if (adr.includes('@')) menge.add(adr);
+        }
+      }
+    } catch (e) { console.warn('Mail-Aliase nicht ladbar:', e.message); }
+    _meineAliase = menge;
+    return menge;
+  })();
+  return _aliasPromise;
+}
+/* Gehoert das Protokoll mir? f = SharePoint-Felder, data = geparste ProtokollDaten. */
+function istMeinProtokoll(f, data) {
+  const oid = meineOid();
+  if (oid && String((data && data._ownerOid) || '').toLowerCase() === oid) return true;
+  const erstellt = String((f && f.Erstellt_Von) || (data && data.savedBy) || '').trim().toLowerCase();
+  if (!erstellt) return false;
+  const eigen = (currentAccount?.username || '').toLowerCase();
+  if (erstellt === eigen) return true;
+  if (_meineAliase && _meineAliase.has(erstellt)) return true;
+  // Altbestand: Erstellt_Von enthielt teils nur den Namen oder das UPN-Praefix.
+  for (const adr of (_meineAliase || [eigen])) {
+    const praefix = String(adr).split('@')[0];
+    if (praefix && erstellt.includes(praefix)) return true;
+  }
+  const dn = (currentAccount?.name || '').toLowerCase();
+  return !!dn && erstellt === dn;
+}
 let _graphSiteId = null, _graphDriveId = null;
 
 /* ──────────────────────────────────────
@@ -3059,7 +3118,7 @@ async function autoSaveDraft(dataOverride, draftIdOverride) {
     const currentStatus = (_draftStatus && _draftStatus !== 'Entwurf') ? _draftStatus : 'Entwurf';
     const fields = {
       Title:        data.label || 'Protokoll Entwurf',
-      ProtokollDaten: JSON.stringify(data),
+      ProtokollDaten: JSON.stringify({ ...data, _ownerOid: data._ownerOid || meineOid() || '' }),
       Status:       currentStatus,
       Erstellt_Von: data.savedBy,
     };
@@ -3130,8 +3189,7 @@ async function loadArchiv(forceReload) {
       throw new Error('SP ' + r.status + ': ' + errText.slice(0, 200));
     }
     const d = await r.json();
-    const me = (currentAccount?.username || '').toLowerCase();
-    const meShort = me.split('@')[0];
+    await ladeMeineAliase();   // frueher genutzte Adressen fuer die Zuordnung
     const isAdmin = _isAdminUser();
 
     _archivData = (d.value || []).map(it => {
@@ -3151,12 +3209,9 @@ async function loadArchiv(forceReload) {
       const approverShort = approver ? approver.split(' ').map((w,i,a) => i===a.length-1 ? w : w[0]+'.').join(' ') : '—';
       const status    = f.Status || 'Entwurf';
       const spUrl     = data.spUrl || f.SpUrl || null;
-      const erstelltVon = (f.Erstellt_Von || data.savedBy || '').toLowerCase();
-      // Match against email prefix, full email, or display name parts
-      const myNameParts = (currentAccount?.name || '').toLowerCase().split(' ');
-      const isMine = erstelltVon.includes(meShort) ||
-                     erstelltVon.includes(me) ||
-                     (myNameParts.length > 0 && myNameParts.every(p => p && erstelltVon.includes(p)));
+      // Zuordnung ueber Objekt-ID, frueher genutzte Adressen und erst zuletzt
+      // ueber Namensbestandteile (siehe istMeinProtokoll).
+      const isMine = istMeinProtokoll(f, data);
       return { id: it.id, datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, isMine, isAdmin };
     }).filter(r => r.isAdmin || r.isMine); // Admins sehen alles, andere nur eigene
     // Debug: log count
@@ -3329,7 +3384,7 @@ async function showDraftPanel() {
     const { siteId } = await getSiteAndDrive();
     const listId = await getDraftListId();
     const token  = await getToken();
-    const me = (currentAccount?.username || '').toLowerCase();
+    await ladeMeineAliase();
     const r = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=50&$orderby=fields/Modified desc`,
       { headers: { Authorization: 'Bearer ' + token } }
@@ -3337,7 +3392,7 @@ async function showDraftPanel() {
     const d = await r.json();
     const items = (d.value || []).filter(i =>
       i.fields?.Status === 'Entwurf' &&
-      (i.fields?.Erstellt_Von || '').toLowerCase().includes(me.split('@')[0])
+      istMeinProtokoll(i.fields, (() => { try { return JSON.parse(i.fields?.ProtokollDaten || '{}'); } catch(e) { return {}; } })())
     );
     if (!items.length) {
       content.innerHTML = '<div style="color:var(--text-muted);padding:.5rem 0;">Keine Entwürfe gefunden.</div>';
