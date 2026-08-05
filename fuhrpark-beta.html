@@ -342,7 +342,12 @@ const SCHEMA = [
   {sp:'FbKmZeitraum',       key:'fbKmZeitraum',       typ:'zahl',  label:'km im Zeitraum (Fahrer)'},
   {sp:'FbKmGeschaeft',      key:'fbKmGeschaeft',      typ:'zahl',  label:'davon geschäftlich km'},
   {sp:'FbPrivatProzent',    key:'fbPrivatProzent',    typ:'zahl',  label:'Privatanteil %'},
-  {sp:'KilankaLink',        key:'kilankaLink',        typ:'text',  label:'Kilanka-Dokumente (Link/ID)'}
+  {sp:'KilankaLink',        key:'kilankaLink',        typ:'text',  label:'Kilanka-Dokumente (Link/ID)'},
+  /* Entra-Objekt-ID der/des Fahrer:in. Namen aendern sich (Heirat, Umbenennung),
+     die Objekt-ID nicht — sie ist der stabile Schluessel fuer die Zuordnung im
+     Mitarbeiter-Cockpit. Bewusst in keiner Dialoggruppe: wird automatisch aus
+     der Fahrerauswahl gesetzt, nicht von Hand gepflegt. */
+  {sp:'FahrerId',           key:'fahrerId',           typ:'text',  label:'Fahrer:in Objekt-ID'}
 ];
 
 /* ═══════════════════════════════════════════════════════════
@@ -376,7 +381,8 @@ const SEED = [
 let msalInstance, currentAccount;
 let demoMode = false, online = false;
 let fahrzeuge = [];
-let fahrerListe = [];
+let fahrerListe = [];        // Anzeigenamen fuer die Auswahlliste
+let fahrerNachName = new Map(); // Anzeigename (klein) → {id, upn}
 let listenBasis = `/sites/${CFG.spHost}/lists/${CFG.listName}`;
 
 function fahrerAusBestand(){
@@ -384,11 +390,12 @@ function fahrerAusBestand(){
 }
 async function ladeFahrerListe(){
   try{
-    const nutzer = await graphAlle('/users?$select=displayName,mail,accountEnabled&$top=999');
-    const namen = nutzer
-      .filter(u=>u.accountEnabled!==false && u.mail && u.mail.toLowerCase().endsWith('@praxisneuewege.de'))
-      .map(u=>u.displayName).filter(Boolean);
-    fahrerListe = [...new Set(namen)].sort((a,b)=>a.localeCompare(b,'de'));
+    const nutzer = await graphAlle('/users?$select=id,displayName,mail,accountEnabled&$top=999');
+    const aktiv = nutzer.filter(u=>u.accountEnabled!==false && u.mail
+      && u.mail.toLowerCase().endsWith('@praxisneuewege.de') && u.displayName);
+    fahrerNachName = new Map();
+    for(const u of aktiv) fahrerNachName.set(u.displayName.trim().toLowerCase(), {id:String(u.id), upn:u.mail.toLowerCase()});
+    fahrerListe = [...new Set(aktiv.map(u=>u.displayName))].sort((a,b)=>a.localeCompare(b,'de'));
     if(!fahrerListe.length) fahrerAusBestand();
   }catch(e){ fahrerAusBestand(); }
 }
@@ -979,7 +986,9 @@ async function ensureFbSpalten(){
   if(fbSpaltenOk) return;
   const res=await graph(listenBasis+'/columns?$select=name&$top=200');
   const vorhanden=new Set((res&&res.value||[]).map(c=>c.name));
-  const noetig=SCHEMA.filter(s=>s.sp.startsWith('Fb')&&!vorhanden.has(s.sp));
+  // Frueher nur 'Fb*'-Spalten; FahrerId muss ebenfalls angelegt werden koennen.
+  const anzulegen=new Set(['FahrerId']);
+  const noetig=SCHEMA.filter(s=>(s.sp.startsWith('Fb')||anzulegen.has(s.sp))&&!vorhanden.has(s.sp));
   if(noetig.length){
     const req={scopes:['Sites.Manage.All'],account:currentAccount};
     let t; try{ t=(await msalInstance.acquireTokenSilent(req)).accessToken; }
@@ -1090,7 +1099,20 @@ async function dialogSpeichern(){
     const v=el.value;
     dialogFahrzeug[s.key]=v===''?null:(s.typ==='zahl'?parseFloat(v):v);
   });
+  // Objekt-ID zum gewaehlten Namen mitschreiben. Wird der Name geleert oder auf
+  // eine Person ausserhalb der Liste gesetzt, faellt auch die ID weg — sonst
+  // zeigte sie weiter auf die vorige Person.
+  const fName = (dialogFahrzeug.fahrer||'').trim().toLowerCase();
+  const treffer = fName ? fahrerNachName.get(fName) : null;
+  dialogFahrzeug.fahrerId = treffer ? treffer.id : null;
   if(!dialogFahrzeug.fin||!dialogFahrzeug.kennzeichen){ alert('FIN und Kennzeichen sind Pflichtfelder.'); return; }
+  // Die Spalte muss existieren, bevor sie beschrieben wird — ein unbekanntes Feld
+  // laesst Graph den gesamten PATCH ablehnen. Scheitert das Anlegen, wird die ID
+  // verworfen und regulaer weitergespeichert.
+  if(dialogFahrzeug.fahrerId && online){
+    try{ await ensureFbSpalten(); }
+    catch(e){ console.warn('Spalte FahrerId nicht verfuegbar — Zuordnung bleibt namensbasiert:', e.message); dialogFahrzeug.fahrerId=null; }
+  }
   try{ await speichern(dialogFahrzeug); }catch(e){ alert('Speichern fehlgeschlagen: '+e.message); return; }
   dialogFahrzeug=null;
   document.getElementById('overlay').classList.remove('open');
