@@ -1780,7 +1780,12 @@ async function showDraftList() {
     // Nur Berichte in Arbeit (Entwurf/Eingereicht/Abgelehnt) — freigegebene sind abgeschlossen
     const items = (await loadMyDrafts()).filter(item => item.Status !== 'Genehmigt');
     if (items.length === 0) {
-      document.getElementById('draftListContent').innerHTML = '<div style="color:var(--text-muted); padding:1rem 0;">Keine Entwürfe gefunden.</div>';
+      const d = window._draftDiag;
+      const hinweis = (d && d.gesamt > 0)
+        ? '<div style="color:var(--text-muted); padding:1rem 0 0;">Keine Entwürfe gefunden — in der Liste liegen aber '
+          + d.gesamt + ' Bericht(e), die dir aktuell nicht zugeordnet sind. Bitte die Angaben unten an die Verwaltung weitergeben.</div>'
+        : '<div style="color:var(--text-muted); padding:1rem 0 0;">Keine Entwürfe gefunden.</div>';
+      document.getElementById('draftListContent').innerHTML = hinweis + diagZeile();
       return;
     }
     const rows = items.map(item => {
@@ -1802,7 +1807,8 @@ async function showDraftList() {
     }).join('');
     document.getElementById('draftListContent').innerHTML = rows;
   } catch(e) {
-    document.getElementById('draftListContent').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    document.getElementById('draftListContent').innerHTML =
+      `<div class="alert alert-error">${escHtml(alsKlartext(e))}</div>` + diagZeile();
   }
 }
 
@@ -2418,6 +2424,30 @@ document.addEventListener('focusin', e => {
   if (e.target && e.target.tagName === 'SELECT') sortSelectOptions(e.target);
 });
 
+// "Failed to fetch" ist ein TypeError des Browsers: die Anfrage hat den Server
+// nie erreicht (Netzwerk, VPN, Proxy, Virenscanner). Das passiert VOR jeder
+// Zuordnungspruefung und hat mit Namen oder Berechtigungen nichts zu tun.
+function alsKlartext(e) {
+  const m = String(e?.message || e);
+  if (/failed to fetch|networkerror|load failed/i.test(m)) {
+    return 'Keine Verbindung zu Microsoft 365. Die Anfrage wurde blockiert oder das Netz ist getrennt — '
+         + 'bitte VPN, Firewall/Virenscanner (z. B. McAfee WebAdvisor) und Internetverbindung prüfen. '
+         + 'Die Berichte selbst sind davon nicht betroffen.';
+  }
+  return m;
+}
+
+function diagZeile() {
+  const d = window._draftDiag;
+  if (!d) return '';
+  return `<div style="font-size:11px; color:var(--text-muted); margin-top:8px; line-height:1.5;">
+    Geladen: ${d.gesamt} Bericht(e) in der Liste, davon ${d.sichtbar} dir zugeordnet.<br>
+    Angemeldet als ${escHtml(d.konto)} (${escHtml(d.anzeigename)})${d.istTL ? ' · TL-Sicht: alle Berichte' : ''}<br>
+    Erkannte Adressen: ${d.aliase.length ? escHtml(d.aliase.join(', ')) : '—'}<br>
+    Erkannte Namensformen: ${d.varianten.length ? escHtml(d.varianten.join(' · ')) : '—'}
+  </div>`;
+}
+
 async function loadMyDrafts() {
   const token = await getToken();
   // Aliase VOR dem Filtern bereitstellen (Namensaenderung, s. _myNameVariants)
@@ -2443,8 +2473,18 @@ async function loadMyDrafts() {
   const allItems = rawItems.map(item => ({ ...item.fields, ID: item.id, _itemId: item.id }));
   // Client-side filter: TL sieht alles, andere sehen Berichte, an denen sie beteiligt sind
   // (selbst eingereicht ODER als Fachkraft 1–4 hinterlegt)
-  if (isTL) return allItems;
-  return allItems.filter(item => isUserInvolvedInItem(item));
+  const sichtbar = isTL ? allItems : allItems.filter(item => isUserInvolvedInItem(item));
+  // Diagnose: unterscheidet "Liste ist leer" von "alles wegen Zuordnung ausgeblendet"
+  window._draftDiag = {
+    gesamt: allItems.length,
+    sichtbar: sichtbar.length,
+    konto: (currentAccount?.username || '—'),
+    anzeigename: (currentAccount?.name || '—'),
+    aliase: [...(_myAliases || [])],
+    varianten: [..._myNameVariants()],
+    istTL,
+  };
+  return sichtbar;
 }
 
 async function loadItemById(id) {
