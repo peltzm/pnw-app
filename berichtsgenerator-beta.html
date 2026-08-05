@@ -2570,7 +2570,7 @@ async function loadMyDrafts() {
     varianten: [..._myNameVariants()],
     oid: meineOid(),
     mitOid: allItems.filter(i => { try { return !!JSON.parse(i.FormularDaten || '{}')._ownerOid; } catch(e) { return false; } }).length,
-    istTL,
+    istTL: isTL,
   };
   return sichtbar;
 }
