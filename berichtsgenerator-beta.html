@@ -550,11 +550,6 @@ async function initMsal() {
     system: { allowNativeBroker: false }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
-  // Deeplink (?review/?sonja/?edit/?typ) sichern — geht beim MSAL-Login-Redirect verloren
-  try {
-    const _q = new URLSearchParams(window.location.search);
-    if (_q.get('review') || _q.get('sonja') || _q.get('edit')) sessionStorage.setItem('pnw_bg_deeplink', window.location.search);
-  } catch(e) {}
   applyVersionBadge();
   await msalInstance.initialize();
   try {
@@ -845,17 +840,6 @@ function handleReviewLink() {
 }
 
 function showApp() {
-  // Deeplink nach Login-Redirect wiederherstellen (URL-Query ging beim Redirect verloren)
-  try {
-    const _saved = sessionStorage.getItem('pnw_bg_deeplink');
-    if (_saved) {
-      sessionStorage.removeItem('pnw_bg_deeplink');
-      const _cur = new URLSearchParams(window.location.search);
-      if (!_cur.get('review') && !_cur.get('sonja') && !_cur.get('edit')) {
-        history.replaceState(null, '', window.location.pathname + _saved);
-      }
-    }
-  } catch(e) {}
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userBadge').style.display = 'flex';
@@ -2309,13 +2293,71 @@ async function saveToList(data, existingId = null) {
 }
 
 // Namensvarianten der angemeldeten Person ("Vorname Nachname" und "Nachname, Vorname")
+/* ═══════════════════════════════════════════════════════════════════════
+ * NAMENSAENDERUNG (z. B. Heirat) — warum das hier ueberhaupt eine Rolle spielt
+ *
+ * Die Zuordnung "gehoert mir" lief ausschliesslich ueber den AKTUELLEN
+ * Anmeldenamen und den AKTUELLEN Anzeigenamen. Aendert sich der Nachname,
+ * passt beides nicht mehr zu Berichten, die vorher gespeichert wurden:
+ *   Eingereicht_Von: "martina.graf@..."   vs. angemeldet als "martina.kraus@..."
+ *   Fachkraft:       "Martina Graf"       vs. Anzeigename "Martina Kraus"
+ * Der Bericht liegt weiterhin in SharePoint, wird aber herausgefiltert und
+ * ist damit fuer die Betroffene unsichtbar.
+ *
+ * Loesung: Entra behaelt die frueheren Adressen als proxyAddresses. Daraus
+ * bilden wir sowohl die Alias-Menge (fuer Eingereicht_Von) als auch
+ * zusaetzliche Namensvarianten (aus dem lokalen Teil, z. B.
+ * "martina.graf" → "martina graf" / "graf, martina").
+ * ═══════════════════════════════════════════════════════════════════════ */
+let _myAliases = null;          // Set aller eigenen Mailadressen, klein geschrieben
+let _myAliasPromise = null;
+
+async function ladeMeineAliase() {
+  if (_myAliases) return _myAliases;
+  if (_myAliasPromise) return _myAliasPromise;
+  _myAliasPromise = (async () => {
+    const menge = new Set();
+    const eigen = (currentAccount?.username || '').trim().toLowerCase();
+    if (eigen) menge.add(eigen);
+    try {
+      const token = await getToken();
+      const r = await fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName,proxyAddresses',
+        { headers: { Authorization: 'Bearer ' + token } });
+      if (r.ok) {
+        const d = await r.json();
+        for (const a of [d.mail, d.userPrincipalName, ...(d.proxyAddresses || [])]) {
+          if (!a) continue;
+          // proxyAddresses kommen als "SMTP:adresse" (primaer) bzw. "smtp:adresse" (Alias)
+          const adr = String(a).replace(/^smtp:/i, '').trim().toLowerCase();
+          if (adr.includes('@')) menge.add(adr);
+        }
+      }
+    } catch (e) {
+      console.warn('Mail-Aliase konnten nicht geladen werden — Zuordnung nur ueber die aktuelle Adresse:', e.message);
+    }
+    _myAliases = menge;
+    return menge;
+  })();
+  return _myAliasPromise;
+}
+
 function _myNameVariants() {
-  const dn = (currentAccount?.name || '').trim();
   const variants = new Set();
-  if (dn) {
-    variants.add(dn.toLowerCase());
-    const parts = dn.split(/\s+/);
+  const ausName = (dn) => {
+    const n = (dn || '').trim();
+    if (!n) return;
+    variants.add(n.toLowerCase());
+    const parts = n.split(/\s+/);
     if (parts.length > 1) variants.add(`${parts[parts.length - 1]}, ${parts.slice(0, -1).join(' ')}`.toLowerCase());
+  };
+  ausName(currentAccount?.name);
+  // Frueherer Name aus den Alias-Adressen ableiten: "martina.graf@..." → "Martina Graf"
+  for (const adr of (_myAliases || [])) {
+    const lokal = adr.split('@')[0];
+    if (!lokal.includes('.')) continue;                   // nur klare Vorname.Nachname-Aliase
+    const teile = lokal.split('.').filter(Boolean);
+    if (teile.length < 2 || teile.some(t => t.length < 2)) continue;
+    ausName(teile.join(' '));
   }
   return variants;
 }
@@ -2325,8 +2367,12 @@ function _myNameVariants() {
 function isUserInvolvedInItem(item) {
   if (!item) return false;
   if (!item.Eingereicht_Von) return true; // Altbestand ohne Besitzer (backwards compat)
+  const eingereichtVon = (item.Eingereicht_Von || '').trim().toLowerCase();
   const myEmail = (currentAccount?.username || '').toLowerCase();
-  if ((item.Eingereicht_Von || '').toLowerCase() === myEmail) return true;
+  if (eingereichtVon === myEmail) return true;
+  // Auch frueher genutzte Adressen zaehlen — sonst verliert man nach einer
+  // Namensaenderung den Zugriff auf die eigenen aelteren Berichte.
+  if (_myAliases && _myAliases.has(eingereichtVon)) return true;
   const variants = _myNameVariants();
   if (variants.size === 0) return false;
   let d = {};
@@ -2374,6 +2420,8 @@ document.addEventListener('focusin', e => {
 
 async function loadMyDrafts() {
   const token = await getToken();
+  // Aliase VOR dem Filtern bereitstellen (Namensaenderung, s. _myNameVariants)
+  await ladeMeineAliase();
   const { siteId, listId } = await getGraphListIds();
   // Check if user is TL member (safe even if not loaded yet)
   const isTL = _tlMembers.length > 0 && _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
