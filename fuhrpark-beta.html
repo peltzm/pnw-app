@@ -400,29 +400,41 @@ function fahrerAusBestand(){
    und weil ladeFahrerListe() VOR ladeFahrzeuge() laeuft, lief auch der
    Bestands-Fallback ins Leere. Fehler werden jetzt protokolliert. */
 let fahrerQuelle = '';   // fuer die Diagnose im Dialog
+const TEAM_GRUPPE = 'Team';   // Microsoft-365-Gruppe, die die Fahrerauswahl speist
+
+/* "Vorname Nachname" → "Nachname, Vorname".
+   Bevorzugt die Entra-Felder givenName/surname, weil ein Anzeigename bei
+   mehrteiligen Nachnamen ("von Berg") nicht zuverlaessig zerlegbar ist. */
+function sortierName(u){
+  const nach = (u.surname || '').trim();
+  const vor  = (u.givenName || '').trim();
+  if(nach && vor) return nach + ', ' + vor;
+  const dn = String(u.displayName || '').trim();
+  if(dn.includes(',')) return dn;
+  const teile = dn.split(/\s+/).filter(Boolean);
+  return teile.length > 1 ? teile[teile.length-1] + ', ' + teile.slice(0,-1).join(' ') : dn;
+}
+
 async function ladeFahrerListe(){
   try{
-    // mail UND userPrincipalName anfragen: 'mail' ist nur bei Konten mit
-    // Postfach gefuellt. Wurde vorher allein darauf gefiltert, blieb die
-    // Auswahlliste fuer einen Teil der Belegschaft leer.
-    const nutzer = await graphAlle('/users?$select=id,displayName,mail,userPrincipalName&$top=999');
+    // Quelle ist die Gruppe "Team" — nicht mehr das gesamte Verzeichnis.
+    const gr = await graph(`/groups?$filter=displayName eq '${encodeURIComponent(TEAM_GRUPPE).replace(/'/g,"''")}'&$select=id`);
+    const gid = gr && gr.value && gr.value[0] && gr.value[0].id;
+    if(!gid) throw new Error(`Gruppe "${TEAM_GRUPPE}" nicht gefunden`);
+    const roh = await graphAlle('/groups/' + gid + '/members?$select=id,displayName,givenName,surname,mail,userPrincipalName&$top=999');
     const adr = u => (u.mail || u.userPrincipalName || '').toLowerCase();
-    const mitNamen = nutzer.filter(u => u.displayName && adr(u));
-    // Bevorzugt die eigene Domain; liefert das nichts, alle Konten des Tenants
-    // (Gastkonten sind an '#EXT#' erkennbar und bleiben aussen vor).
-    let aktiv = mitNamen.filter(u => adr(u).endsWith('@praxisneuewege.de'));
-    fahrerQuelle = 'Entra (' + aktiv.length + ')';
-    if(!aktiv.length){
-      aktiv = mitNamen.filter(u => !adr(u).includes('#ext#'));
-      fahrerQuelle = 'Entra, alle Konten (' + aktiv.length + ')';
-    }
-    if(!aktiv.length) throw new Error('Graph lieferte keine Nutzer mit Anzeigenamen');
-    baueFahrerIndex(aktiv.map(u => ({...u, mail: adr(u)})));
-    fahrerListe = [...new Set(aktiv.map(u=>u.displayName))].sort((a,b)=>a.localeCompare(b,'de'));
-    console.info('Fahrerliste geladen:', fahrerListe.length, 'Personen');
+    const mitglieder = roh.filter(u =>
+      u.displayName && (u['@odata.type'] ? u['@odata.type'].includes('user') : true));
+    if(!mitglieder.length) throw new Error(`Gruppe "${TEAM_GRUPPE}" enthält keine Personen`);
+    baueFahrerIndex(mitglieder.map(u => ({...u, mail: adr(u)})));
+    // Anzeige und gespeicherter Wert einheitlich als "Nachname, Vorname"
+    fahrerListe = [...new Set(mitglieder.map(sortierName))]
+      .filter(Boolean).sort((a,b)=>a.localeCompare(b,'de'));
+    fahrerQuelle = `Gruppe "${TEAM_GRUPPE}" (${fahrerListe.length})`;
+    console.info('Fahrerliste aus Gruppe', TEAM_GRUPPE + ':', fahrerListe.length, 'Personen');
   }catch(e){
-    console.warn('Fahrerliste aus Entra nicht ladbar — Rueckfall auf den Bestand:', e.message);
-    fahrerQuelle = 'Bestand (Entra-Abruf fehlgeschlagen: ' + e.message + ')';
+    console.warn('Fahrerliste nicht ladbar — Rueckfall auf den Bestand:', e.message);
+    fahrerQuelle = 'Bestand (' + e.message + ')';
     fahrerAusBestand();
   }
 }
@@ -456,6 +468,13 @@ function baueFahrerIndex(nutzer){
     const e = {id:String(u.id), upn:(u.mail||'').toLowerCase(), name:u.displayName};
     const dn = String(u.displayName).trim();
     setze(dn, e);
+    if(u.surname){
+      setze(u.surname, e);
+      if(u.givenName){
+        setze(u.surname + ', ' + u.givenName, e);
+        setze(u.givenName + ' ' + u.surname, e);
+      }
+    }
     const teile = dn.split(/\s+/).filter(Boolean);
     if(teile.length > 1){
       const nach = teile[teile.length-1], vor = teile.slice(0,-1).join(' ');
