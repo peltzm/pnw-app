@@ -397,6 +397,23 @@ fetch('data/fahrzeuge.json').then(r => r.ok ? r.json() : null).then(j => { FUHRP
    Liest mit dem Graph-Token des angemeldeten Nutzers; scheitert der Zugriff
    (fehlende Listen-Berechtigung), bleibt der JSON-Fallback aktiv. */
 let SP_FUHRPARK = null;
+const UPN_ZU_OID = new Map();   // UPN → Entra-Objekt-ID (stabil ueber Namensaenderungen)
+
+/* Namen aendern sich (Heirat, Umbenennung), die Entra-Objekt-ID nicht.
+   Sie ist deshalb der bevorzugte Schluessel fuer die Fahrzeugzuordnung. */
+async function entraOid(upn, graphToken) {
+  const k = (upn || '').toLowerCase();
+  if (!k) return null;
+  if (UPN_ZU_OID.has(k)) return UPN_ZU_OID.get(k);
+  let id = null;
+  try {
+    const r = await fetch('https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(k) + '?$select=id',
+      { headers: { Authorization: 'Bearer ' + graphToken } });
+    if (r.ok) id = String((await r.json()).id || '') || null;
+  } catch (e) { console.warn('Objekt-ID nicht ermittelbar für', k, '—', e.message); }
+  UPN_ZU_OID.set(k, id);
+  return id;
+}
 async function ladeFuhrparkLive(graphToken) {
   if (SP_FUHRPARK) return SP_FUHRPARK;
   const g = async (pfad) => {
@@ -421,19 +438,37 @@ async function ladeFuhrparkLive(graphToken) {
     return alle;
   };
   const site = await g('/sites/praxisneuewegesonjapeltz978.sharepoint.com:/');
-  const items = await gAlle('/sites/' + site.id + "/lists/PNW-Fahrzeuge/items?expand=fields($select=Title,Hersteller,Modell,FzStatus,Rueckgabe,Finanzierung,KmProJahr,KmStand,KmStandDatum,DGUVPruefung,Fahrer,Privatnutzung,EigenanteilMonat)&$top=200");
+  const items = await gAlle('/sites/' + site.id + "/lists/PNW-Fahrzeuge/items?expand=fields($select=Title,Hersteller,Modell,FzStatus,Rueckgabe,Finanzierung,KmProJahr,KmStand,KmStandDatum,DGUVPruefung,Fahrer,FahrerId,Privatnutzung,EigenanteilMonat)&$top=200");
   SP_FUHRPARK = items.map(i => i.fields || {});
   return SP_FUHRPARK;
 }
-function spFuhrparkMatch(personName) {
+function spFuhrparkMatch(personName, oid) {
   if (!SP_FUHRPARK) return null;
-  const nachname = (personName || '').split(',')[0].trim().toLowerCase();
-  if (!nachname) return null;
-  const treffer = SP_FUHRPARK.filter(f =>
-    (f.Fahrer || '').toLowerCase().startsWith(nachname));
-  if (!treffer.length) return null;
-  // aktives Fahrzeug bevorzugen
-  return treffer.find(f => (f.FzStatus || '').toLowerCase() === 'aktiv') || treffer[0];
+  const waehle = (liste) => liste.length
+    ? (liste.find(f => (f.FzStatus || '').toLowerCase() === 'aktiv') || liste[0])
+    : null;
+  // 1. Objekt-ID — greift auch nach einer Namensaenderung
+  if (oid) {
+    const perId = SP_FUHRPARK.filter(f => String(f.FahrerId || '').toLowerCase() === String(oid).toLowerCase());
+    const hit = waehle(perId);
+    if (hit) return hit;
+  }
+  // 2. Fallback fuer Fahrzeuge, bei denen noch keine ID hinterlegt ist.
+  //    Beide Schreibweisen abdecken: "Martina Graf" und "Graf, Martina".
+  const roh = (personName || '').trim().toLowerCase();
+  if (!roh) return null;
+  const teile = roh.includes(',')
+    ? roh.split(',').map(t => t.trim()).reverse()   // "Graf, Martina" → ["martina","graf"]
+    : roh.split(/\s+/);
+  const wortmenge = teile.filter(Boolean);
+  if (!wortmenge.length) return null;
+  const perName = SP_FUHRPARK.filter(f => {
+    const fahrer = (f.Fahrer || '').toLowerCase();
+    if (!fahrer) return false;
+    // alle Namensbestandteile muessen vorkommen — unabhaengig von der Reihenfolge
+    return wortmenge.every(w => fahrer.includes(w));
+  });
+  return waehle(perName);
 }
 function fuhrparkMatch(fw, personName) {
   if (!FUHRPARK) return null;
@@ -492,7 +527,7 @@ function renderCards(d, own) {
 
   const u = d.urlaub, k = d.krankheit, fw = d.firmenwagen || {vorhanden:false}, kl = d.klienten, fls = d.fls;
   // 1. Wahl: Live-Daten aus der SharePoint-Liste (Fahrzeugverwaltungs-App)
-  const sp = spFuhrparkMatch(d.person && d.person.name);
+  const sp = spFuhrparkMatch(d.person && d.person.name, UPN_ZU_OID.get((d.upn || '').toLowerCase()));
   if (sp) {
     Object.assign(fw, { vorhanden: true, live: true,
       modell: [sp.Hersteller, sp.Modell].filter(Boolean).join(' ') || fw.modell,
@@ -822,6 +857,9 @@ async function loadLive(upn) {
       throw new Error('HTTP ' + r.status + (detail ? ' — ' + detail : ''));
     }
     const data = await r.json();
+    // Objekt-ID erst hier aufloesen: bei der eigenen Sicht wird loadLive() ohne
+    // UPN aufgerufen, der stammt dann aus der Antwort.
+    await entraOid(data.upn, t.graph);
     liveCache[data.upn] = data;
     if (data.sicht) {
       console.log('Cockpit-Sicht:', data.sicht.debug || data.sicht);
