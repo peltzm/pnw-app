@@ -1153,9 +1153,7 @@ const GRUPPEN={
 function fuelleDialog(titel,sub){
   document.getElementById('dialogTitel').innerHTML=esc(titel);
   document.getElementById('dialogSub').textContent=sub;
-  // Ist die Auswahlliste leer, wird das im Dialog benannt statt nur ein
-  // scheinbar normales Textfeld zu zeigen, in dem sich nichts auswaehlen laesst.
-  let html=`<datalist id="fahrerDatalist">${fahrerListe.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+  let html='';
   for(const [gruppe,keys] of Object.entries(GRUPPEN)){
     html+=`<div class="fgruppe">${gruppe}</div>`;
     for(const key of keys){
@@ -1164,10 +1162,23 @@ function fuelleDialog(titel,sub){
       if(s.typ==='wahl'){ html+=`<div class="feld"><label>${s.label}</label><select data-key="${s.key}">${s.optionen.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></div>`; continue; }
       if(s.typ==='bool'){ html+=`<div class="feld feld-check"><label for="chk-${s.key}"><input type="checkbox" id="chk-${s.key}" data-key="${s.key}" ${dialogFahrzeug[s.key]?'checked':''}> ${s.label}</label></div>`; continue; }
       if(s.typ==='fahrer'){
+        /* Bewusst ein echtes <select> statt <input list="...">: Ein Datalist
+           blendet nur Vorschlaege ein, die zum bereits eingetragenen Text
+           passen — stand dort ein Altwert wie "Peltz", liess sich praktisch
+           nichts auswaehlen. Das Select zeigt immer alle Personen.
+           Ein Altwert, der nicht in Entra vorkommt, bleibt als eigener Eintrag
+           erhalten, damit er beim Speichern nicht stillschweigend verlorengeht. */
+        const aktuell = String(v||'').trim();
+        const bekannt = fahrerListe.some(n => n.toLowerCase() === aktuell.toLowerCase());
+        let opts = `<option value=""${aktuell?'':' selected'}>— kein:e Fahrer:in —</option>`;
+        if(aktuell && !bekannt)
+          opts += `<option value="${esc(aktuell)}" selected>${esc(aktuell)} — Altbestand, bitte ersetzen</option>`;
+        opts += fahrerListe.map(n =>
+          `<option value="${esc(n)}"${n.toLowerCase()===aktuell.toLowerCase()?' selected':''}>${esc(n)}</option>`).join('');
         const hinweis = fahrerListe.length
-          ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${fahrerListe.length} Personen zur Auswahl${oidFuerFahrer(v)?' · Zuordnung gesetzt':(String(v||'').trim()?' · <b>nicht eindeutig zuordenbar</b>':'')}</div>`
+          ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${fahrerListe.length} Personen zur Auswahl${oidFuerFahrer(v)?' · Zuordnung gesetzt':(aktuell?' · <b>nicht eindeutig zuordenbar</b>':'')}</div>`
           : `<div style="font-size:11px;color:var(--error);margin-top:3px;">Keine Auswahlliste verfügbar — Quelle: ${esc(fahrerQuelle||'unbekannt')}</div>`;
-        html+=`<div class="feld"><label>${s.label}</label><input type="text" list="fahrerDatalist" data-key="${s.key}" value="${esc(v)}" placeholder="auswählen oder eingeben">${hinweis}</div>`; continue; }
+        html+=`<div class="feld"><label>${s.label}</label><select data-key="${s.key}">${opts}</select>${hinweis}</div>`; continue; }
       const typ=s.typ==='zahl'?'number':s.typ==='datum'?'date':'text';
       html+=`<div class="feld"><label>${s.label}</label><input type="${typ}" ${s.typ==='zahl'?'step="any"':''} data-key="${s.key}" value="${esc(v)}"></div>`;
     }
