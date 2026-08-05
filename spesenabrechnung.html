@@ -767,6 +767,67 @@ function applyVersionBadge() {
 }
 
 let msalInstance = null, currentAccount = null, accessToken = null;
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * IDENTITAET — stabil ueber Namensaenderungen (Heirat, Umbenennung)
+ *
+ * Belege wurden bisher ueber Fachkraft_Mail (UPN) und den Anzeigenamen
+ * zugeordnet. Beides aendert sich bei einer Umbenennung: aeltere Belege
+ * verschwinden dann aus der eigenen Ansicht UND aus der TL-Zuordnung.
+ *
+ * Stabil ist allein die Entra-Objekt-ID. Sie laeuft in FormularDaten mit
+ * (Feld _ownerOid) — dadurch ist keine neue SharePoint-Spalte noetig.
+ * Zusaetzlich zaehlen frueher genutzte Adressen (Entra proxyAddresses),
+ * damit auch Belege ohne hinterlegte ID auffindbar bleiben.
+ * ═══════════════════════════════════════════════════════════════════════ */
+let _meineAliase = null, _aliasPromise = null;
+function meineOid() {
+  return (currentAccount?.idTokenClaims?.oid || currentAccount?.localAccountId || '').toLowerCase();
+}
+async function ladeMeineAliase() {
+  if (_meineAliase) return _meineAliase;
+  if (_aliasPromise) return _aliasPromise;
+  _aliasPromise = (async () => {
+    const menge = new Set();
+    const eigen = (currentAccount?.username || '').trim().toLowerCase();
+    if (eigen) menge.add(eigen);
+    try {
+      const t = await getToken();
+      const r = await fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName,proxyAddresses',
+        { headers: { Authorization: 'Bearer ' + t } });
+      if (r.ok) {
+        const d = await r.json();
+        for (const a of [d.mail, d.userPrincipalName, ...(d.proxyAddresses || [])]) {
+          if (!a) continue;
+          const adr = String(a).replace(/^smtp:/i, '').trim().toLowerCase();
+          if (adr.includes('@')) menge.add(adr);
+        }
+      }
+    } catch (e) { console.warn('Mail-Aliase nicht ladbar:', e.message); }
+    _meineAliase = menge;
+    return menge;
+  })();
+  return _aliasPromise;
+}
+function belegOid(b) {
+  if (!b) return '';
+  try { return String(JSON.parse(b.FormularDaten || '{}')._ownerOid || '').toLowerCase(); }
+  catch (e) { return ''; }
+}
+// Gehoert der Beleg mir? Reihenfolge: Objekt-ID, dann eigene Adressen, dann Name.
+function istMeinBeleg(b, mailStattEigen) {
+  if (!b) return false;
+  const ziel = (mailStattEigen || '').toLowerCase();
+  const mail = (b.Fachkraft_Mail || '').toLowerCase();
+  if (ziel) return mail === ziel;                       // Review-Modus: fremde Fachkraft, exakt
+  const oid = meineOid();
+  if (oid && belegOid(b) === oid) return true;
+  if (mail) {
+    if (mail === (currentAccount?.username || '').toLowerCase()) return true;
+    if (_meineAliase && _meineAliase.has(mail)) return true;
+  }
+  return (b.Fachkraft || '').toLowerCase() === (currentAccount?.name || '').toLowerCase();
+}
 let _graphSiteId = null, _graphListId = null, _graphDriveId = null;
 let _tlMembers = [], _teamMembers = [];
 let _groupLoadPromise = Promise.resolve();
@@ -1011,7 +1072,7 @@ async function saveBelegToList(data, existingId = null) {
     TLKommentar: '',
     FotoUrls: JSON.stringify(data.fotoUrls || []),
     FahrtDaten: data.fahrtDaten ? JSON.stringify(data.fahrtDaten) : '',
-    FormularDaten: JSON.stringify(data)
+    FormularDaten: JSON.stringify({ ...data, _ownerOid: data._ownerOid || meineOid() || '' })
   };
   let url, method;
   if (existingId) {
@@ -1049,10 +1110,10 @@ async function fetchAlleListItems(token, siteId, listId, fieldsParam = 'expand=f
 async function ladeBelege(monat) {
   const token = await getToken();
   const { siteId, listId } = await getGraphListIds();
-  // Im Review-Modus nach FK-Mail filtern, sonst eigene Mail
-  const myMail = _isReviewMode
-    ? (_reviewFkMail || '').toLowerCase()
-    : (currentAccount?.username || '').toLowerCase();
+  // Im Review-Modus gezielt nach FK-Mail, sonst ueber die eigene Identitaet
+  // (Objekt-ID, frueher genutzte Adressen, Anzeigename).
+  await ladeMeineAliase();
+  const reviewMail = _isReviewMode ? (_reviewFkMail || '').toLowerCase() : '';
   let items;
   try { items = await fetchAlleListItems(token, siteId, listId); }
   catch(e) { throw new Error('Belege konnten nicht geladen werden: ' + e.message); }
@@ -1061,10 +1122,7 @@ async function ladeBelege(monat) {
   // WICHTIG: Kein TL-Sonderpfad mehr! Der frühere `_isTL ? alle` Zweig führte dazu,
   // dass renderHome/einreichen fremde Fahrtenbücher als "Duplikate" LÖSCHTEN.
   // TL-Übersichten haben eigene Loader (ladeTLAbrechnungen, ladeReviewBelege).
-  const gefiltert = alle.filter(b =>
-    (b.Fachkraft_Mail || '').toLowerCase() === myMail ||
-    (b.Fachkraft || '').toLowerCase() === (currentAccount?.name || '').toLowerCase()
-  );
+  const gefiltert = alle.filter(b => istMeinBeleg(b, reviewMail));
   return gefiltert.filter(b => (b.Monat || '').startsWith(monat));
 }
 
@@ -1091,9 +1149,17 @@ function renderHome(belege) {
     .sort((a, b) => parseInt(b.id) - parseInt(a.id)); // neuestes zuerst (höchste SharePoint-ID)
   const fahrt = fahrtBelege[0] || null;
   // Duplikate still im Hintergrund löschen — SICHERHEIT: niemals fremde Items löschen!
+  // SICHERHEIT: Loeschen nur bei eindeutiger Zuordnung — Objekt-ID oder eine
+  // nachweislich eigene Adresse. Der Anzeigename ist hier bewusst NICHT
+  // zugelassen: Namensgleichheit darf niemals zum Loeschen fuehren.
   const _ownMail = (currentAccount?.username || '').toLowerCase();
-  const _delBar = fahrtBelege.slice(1).filter(dup =>
-    (dup.Fachkraft_Mail || '').toLowerCase() === _ownMail);
+  const _meins = (b) => {
+    const oid = meineOid();
+    if (oid && belegOid(b) === oid) return true;
+    const m = (b.Fachkraft_Mail || '').toLowerCase();
+    return !!m && (m === _ownMail || (_meineAliase ? _meineAliase.has(m) : false));
+  };
+  const _delBar = fahrtBelege.slice(1).filter(_meins);
   if (_delBar.length > 0) {
     _delBar.forEach(dup => {
       getToken().then(token => getGraphListIds().then(({siteId, listId}) =>
@@ -1615,14 +1681,13 @@ async function ladeFahrtenbuchScreen() {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
     const items = await fetchAlleListItems(token, siteId, listId);
-    const myMail = (currentAccount?.username||'').toLowerCase();
     const alle = items.map(i=>({id:i.id,...i.fields}));
     // Fix: absteigend nach ID sortieren — sonst gewinnt bei Duplikaten der
     // AELTESTE Eintrag die Anzeige (inkonsistent zu Upload/Einreichen-Dedup)
     const fahrt = alle.filter(b =>
       b.Kategorie === 'fahrtenbuch' &&
       (b.Monat||'').startsWith(_currentMonat) &&
-      (b.Fachkraft_Mail||'').toLowerCase() === myMail
+      istMeinBeleg(b)
     ).sort((a,b)=>parseInt(b.id)-parseInt(a.id))[0];
 
     const monatSel = document.getElementById('monatSelect');
@@ -1840,13 +1905,12 @@ async function handleFahrtUpload(input) {
     try {
       const token2 = await getToken();
       const { siteId: sid2, listId: lid2 } = await getGraphListIds();
-      const myMail = (currentAccount?.username || '').toLowerCase();
       const checkItems = await fetchAlleListItems(token2, sid2, lid2);
       const alleFahrt = checkItems
         .map(i => ({ id: i.id, ...i.fields }))
         .filter(b => b.Kategorie === 'fahrtenbuch'
           && (b.Monat || '').startsWith(_currentMonat)
-          && (b.Fachkraft_Mail || '').toLowerCase() === myMail)
+          && istMeinBeleg(b))
         .sort((a, b) => parseInt(b.id) - parseInt(a.id));
       if (alleFahrt.length > 0) {
         const st = alleFahrt[0].Status || '';
@@ -2006,9 +2070,8 @@ async function ladeArchiv() {
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const myMail = (currentAccount?.username||'').toLowerCase();
     const items = await fetchAlleListItems(token, siteId, listId);
-    const belege = items.map(i=>({id:i.id,...i.fields})).filter(b => (b.Fachkraft_Mail||'').toLowerCase()===myMail || _isTL);
+    const belege = items.map(i=>({id:i.id,...i.fields})).filter(b => istMeinBeleg(b) || _isTL);
     // Group by monat
     const monate = {};
     belege.forEach(b => { if (!b.Monat) return; monate[b.Monat] = monate[b.Monat] || []; monate[b.Monat].push(b); });
@@ -2039,9 +2102,16 @@ async function einreichen() {
     const { siteId, listId } = await getGraphListIds();
     // Sicherheitsnetz: Fahrtenbuch-Duplikate vor Einreichung loeschen — nur das neueste bleibt.
     // SICHERHEIT: ausschliesslich eigene Items (Fachkraft_Mail) — niemals fremde loeschen!
+    // Strenge Zuordnung wie oben: Objekt-ID oder nachweislich eigene Adresse.
+    // Namensgleichheit reicht zum Loeschen bewusst NICHT aus.
     const _einreichMail = (currentAccount?.username || '').toLowerCase();
-    const fahrtAll = belege.filter(b => b.Kategorie === 'fahrtenbuch'
-      && (b.Fachkraft_Mail || '').toLowerCase() === _einreichMail)
+    const _meinsStreng = (b) => {
+      const oid = meineOid();
+      if (oid && belegOid(b) === oid) return true;
+      const m = (b.Fachkraft_Mail || '').toLowerCase();
+      return !!m && (m === _einreichMail || (_meineAliase ? _meineAliase.has(m) : false));
+    };
+    const fahrtAll = belege.filter(b => b.Kategorie === 'fahrtenbuch' && _meinsStreng(b))
       .sort((a,b)=>parseInt(b.id)-parseInt(a.id));
     if (fahrtAll.length > 1) {
       const dupIds = fahrtAll.slice(1).map(b => String(b.id));
@@ -3230,6 +3300,9 @@ async function showApp() {
   document.getElementById('spMonat').textContent = _currentMonat;
   _groupLoadPromise = loadGroupMembers();
   _groupLoadPromise.catch(e => console.warn('Group load failed:', e));
+  // Frueher genutzte Adressen einmalig laden — sonst fehlen sie den Filtern,
+  // die direkt nach dem Start laufen (Archiv, Fahrtenbuch-Pruefung).
+  await ladeMeineAliase();
   initMonatSelect();   // Monate dynamisch befüllen + _currentMonat setzen
   // URL-Parameter prüfen: ?review=MONAT:MAIL oder ?edit=MONAT:MAIL (inkl. Deeplink-Fallback nach Login)
   handleReviewLink();
@@ -3638,10 +3711,8 @@ async function zeigeKorrekturHinweis() {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
     const items = await fetchAlleListItems(token, siteId, listId);
-    const myMail = (currentAccount?.username || '').toLowerCase();
     const belege = items.map(i => ({ id: i.id, ...i.fields }))
-      .filter(b => (b.Fachkraft_Mail||'').toLowerCase() === myMail &&
-                   (b.Monat||'').startsWith(_currentMonat));
+      .filter(b => istMeinBeleg(b) && (b.Monat||'').startsWith(_currentMonat));
     // Kommentare einlesen
     belege.forEach(b => {
       if (b.TLKommentar) {
