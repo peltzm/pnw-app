@@ -204,6 +204,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
         CSV
       </button>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-muted);cursor:pointer;white-space:nowrap;" title="Zurückgegebene und stillgelegte Fahrzeuge einblenden">
+        <input type="checkbox" id="archivZeigen" onchange="renderAll()"> Archiv
+        <span id="archivHinweis" style="font-size:11px;color:var(--text-hint)"></span>
+      </label>
       <button class="btn btn-outline btn-sm" onclick="zuordnungenNachtragen()" title="Entra-Objekt-ID für alle eindeutig zuordenbaren Fahrzeuge nachtragen">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-2-2"/></svg>
         Zuordnung
@@ -743,8 +747,21 @@ function renderFlotte(){
     <div class="kpi"><div class="big" style="color:${kritisch?'var(--error)':'var(--ok)'}">${kritisch}</div><div class="sl">km-Verträge kritisch</div></div>
     <div class="kpi"><div class="big">${fahrzeuge.length-akt.length}</div><div class="sl">Inaktiv / zurückgegeben</div></div>`;
 
+  /* Archiv: zurueckgegebene und stillgelegte Fahrzeuge bleiben als Historie in
+     der Liste, werden aber standardmaessig ausgeblendet. Kennzeichen werden
+     nach einer Rueckgabe wiederverwendet — eindeutig ist allein die FIN. */
+  const archivZeigen = !!document.getElementById('archivZeigen')?.checked;
+  const istArchiv = f => ['zurückgegeben','stillgelegt'].includes(String(f.status||'').toLowerCase());
+  const sichtbar = archivZeigen ? fahrzeuge : fahrzeuge.filter(f=>!istArchiv(f));
+  const archivAnzahl = fahrzeuge.filter(istArchiv).length;
+  const hinweisEl = document.getElementById('archivHinweis');
+  if(hinweisEl) hinweisEl.textContent = archivAnzahl ? archivAnzahl + ' im Archiv' : '';
+  // Mehrfach vergebene Kennzeichen kenntlich machen (Wiederverwendung nach Rueckgabe)
+  const kzZaehler = {};
+  for(const f of fahrzeuge){ const k=String(f.kennzeichen||'').trim(); if(k) kzZaehler[k]=(kzZaehler[k]||0)+1; }
+
   const rang={err:0,warn:1,ok:2,mut:3};
-  const reihen=fahrzeuge.map(f=>({f,k:kennzahlen(f)}))
+  const reihen=sichtbar.map(f=>({f,k:kennzahlen(f)}))
     .sort((a,b)=>(a.f.status==='aktiv'?0:1)-(b.f.status==='aktiv'?0:1)
       || rang[a.k.ampel]-rang[b.k.ampel]
       || String(a.f.kennzeichen).localeCompare(b.f.kennzeichen));
@@ -761,7 +778,10 @@ function renderFlotte(){
           ? `<div class="bar" title="${fKM(f.kmStand)} von ${fKM(f.kmVertragGesamt)}${k.toleranz?' (+'+fKM(k.toleranz)+' Toleranz)':''}">${tolPos?`<span class="tolmark" style="left:${tolPos}%"></span>`:''}<div class="bar-fill" style="width:${kmB}%;background:${barFarbe[k.ampel]}"></div></div>`
           : '<span style="color:var(--text-hint);font-size:11px">—</span>');
       return `<tr class="klick" data-fin="${esc(f.fin)}" ${inaktiv?'style="opacity:.55"':''}>
-        <td><span class="kennzeichen" style="font-size:13px">${esc(f.kennzeichen)}</span></td>
+        <td><span class="kennzeichen" style="font-size:13px">${esc(f.kennzeichen)}</span>${
+          kzZaehler[String(f.kennzeichen||'').trim()]>1
+            ? `<div style="font-size:10px;color:var(--text-hint);margin-top:2px" title="Kennzeichen mehrfach vergeben — eindeutig ist die FIN">FIN …${esc(String(f.fin||'').slice(-6))}</div>`
+            : ''}</td>
         <td>${esc(f.modell||'')}</td>
         <td>${esc(f.fahrer||'–')}${privatChip(f,k)}</td>
         <td class="num">${privatProzentZelle(f)}</td>
