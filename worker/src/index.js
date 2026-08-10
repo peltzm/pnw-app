@@ -492,6 +492,33 @@ function pickApproval(approvals, now) {
   return { ...list[0], status: "unbekannt" };
 }
 
+// Bewilligte Wochenstunden (FLS) einer Massnahme aus dem aktuell gültigen
+// Kontingent ableiten — gleiche Umrechnung wie sollWochenstunden im
+// Mitarbeiter-Cockpit (week 1:1, month_current ×12/52, pool ÷ Bewilligungswochen).
+// Mengen-Kontingente (timeBase quantity, z. B. Fahrten) und nicht (mehr)
+// gültige Bewilligungen liefern null.
+function bewilligteWochenstunden(action, now) {
+  for (const q of action.quotas || []) {
+    if (kDate(q.deletedAt)) continue;
+    if (q.timeBase === "quantity") continue;
+    const appr = pickApproval(q.approvals, now);
+    if (!appr || appr.stunden == null || appr.status !== "aktuell") continue;
+    switch (q.timeBase) {
+      case "week":
+        return Math.round(appr.stunden * 100) / 100;
+      case "month_current":
+        return Math.round(((appr.stunden * 12) / 52) * 100) / 100;
+      case "pool": {
+        const wochen = appr.von && appr.bis ? Math.max(1, (appr.bis - appr.von) / 6048e5) : null;
+        return wochen ? Math.round((appr.stunden / wochen) * 100) / 100 : null;
+      }
+      default:
+        return null;
+    }
+  }
+  return null;
+}
+
 function buildClientProfile(client, action, role, now, qualiMap) {
   // Kontingent: mit timeBase gültige Bewilligung suchen; Mengen-Kontingente
   // (timeBase quantity) für Fachleistungsstunden ignorieren
@@ -1180,6 +1207,7 @@ function jugendamtFaelle(clients, now, amtKurz) {
         dauerMonate,
         hb,
         betreuer: betreuer.map(({ name, rolle, aktuell }) => ({ name, rolle, aktuell })),
+        wochenstunden: bewilligteWochenstunden(a, now),
       });
     }
   }
