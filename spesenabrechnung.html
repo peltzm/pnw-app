@@ -3350,6 +3350,18 @@ let _belegKommentare = {}; // { belegId: { text, von, datum, status:'offen'|'erl
 let _isReviewMode  = false;
 
 async function aktiviereReviewModus(fkMail) {
+  // Sicherheitssperre: niemand darf die eigenen Spesen prüfen/freigeben —
+  // auch nicht über den Review-Link aus der eigenen CC-Kopie der Einreichungs-Mail.
+  const _eigenMail = (currentAccount?.username || '').toLowerCase();
+  const _fkMailLower = (fkMail || '').toLowerCase();
+  const _istEigen = _eigenMail && (_eigenMail === _fkMailLower || (_meineAliase && _meineAliase.has(_fkMailLower)));
+  if (_istEigen) {
+    showToast('⛔ Eigene Spesen können nicht selbst geprüft werden', true);
+    alert('Eigene Spesen können nicht selbst geprüft werden.\n\nDiese Abrechnung wurde zur Prüfung an die Geschäftsführung gesendet. Sie haben diesen Link nur zur eigenen Information erhalten (CC-Kopie).');
+    // URL bereinigen, damit ein Reload nicht wieder in den Review-Versuch läuft
+    window.history.replaceState({}, document.title, CFG.redirectUri);
+    return;
+  }
   _isReviewMode = true;
   _reviewFkMail = fkMail;
 
