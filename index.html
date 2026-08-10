@@ -2338,9 +2338,10 @@ function resetWeitereKinder() {
 
 function fillWeitereKinder(value) {
   // Parse combined string back into individual fields
-  resetWeiterePersFound();
-  resetExtraKinder();
-  resetExtraSorg();
+  // NUR den eigenen Container zurücksetzen — NICHT resetExtraKinder()/resetExtraSorg()/
+  // resetWeiterePersFound(), sonst werden bereits wiederhergestellte 2. Sorgeberechtigte
+  // und 2. Kinder (aus loadDraft/copyStammdaten, die VOR dieser Funktion laufen) geloescht.
+  resetWeitereKinder();
   // Wert immer im Hidden-Feld sichern, damit er beim Speichern erhalten bleibt
   let hidden = document.getElementById('Weitere_Kinder');
   if (!hidden) {
