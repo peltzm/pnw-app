@@ -245,17 +245,18 @@
       </div>
       <div class="nav-section">Formular</div>
       <div class="nav-item" onclick="goToStart()" id="nav0" title="Startseite"><div class="nav-num" id="nn0" style="font-size:10px; font-weight:700;">S</div> <span>Startseite</span></div>
-      <div class="nav-item active" onclick="goTo(1)" id="nav1" title="Stammdaten"><div class="nav-num" id="nn1">1</div> <span>Stammdaten</span></div>
-      <div class="nav-item" onclick="goTo(2)" id="nav2"><div class="nav-num" id="nn2">2</div> <span>Kind & Familie</span></div>
-      <div class="nav-item" onclick="goTo(3)" id="nav3"><div class="nav-num" id="nn3">3</div> <span>Situation</span></div>
-      <div class="nav-item" onclick="goTo(4)" id="nav4"><div class="nav-num" id="nn4">4</div> <span>Ziele</span></div>
-      <div class="nav-item" onclick="goTo(5)" id="nav5"><div class="nav-num" id="nn5">5</div> <span>Perspektive</span></div>
-      <div class="nav-item" onclick="goTo(6)" id="nav6"><div class="nav-num" id="nn6">6</div> <span>Absenden</span></div>
+      <div class="nav-item active" onclick="navGoTo(1)" id="nav1" title="Stammdaten"><div class="nav-num" id="nn1">1</div> <span>Stammdaten</span></div>
+      <div class="nav-item" onclick="navGoTo(2)" id="nav2"><div class="nav-num" id="nn2">2</div> <span>Kind & Familie</span></div>
+      <div class="nav-item" onclick="navGoTo(3)" id="nav3"><div class="nav-num" id="nn3">3</div> <span>Situation</span></div>
+      <div class="nav-item" onclick="navGoTo(4)" id="nav4"><div class="nav-num" id="nn4">4</div> <span>Ziele</span></div>
+      <div class="nav-item" onclick="navGoTo(5)" id="nav5"><div class="nav-num" id="nn5">5</div> <span>Perspektive</span></div>
+      <div class="nav-item" onclick="navGoTo(6)" id="nav6"><div class="nav-num" id="nn6">6</div> <span>Absenden</span></div>
       <div class="nav-item" onclick="goToStatusBerichte()" id="nav7" style="display:none;"><div class="nav-num" id="nn7" style="background:var(--accent-mid); color:white;">📋</div> <span>Status Berichte</span></div>
     </div>
 
     <div class="main">
       <div class="progress-bar"><div class="progress-fill" id="progress" style="width:16%"></div></div>
+      <div id="autosaveStatus" style="font-size:11px; color:var(--text-muted); text-align:right; padding:4px 0 0; min-height:14px;"></div>
 
       <!-- S0: Übersicht -->
       <div class="section" id="s0">
@@ -377,7 +378,7 @@
           </div>
 
         </div>
-        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(1)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(3)">Weiter →</button></div>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="navGoTo(1)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(3)">Weiter →</button></div>
       </div>
 
       <!-- S3 dynamic per Berichtstyp -->
@@ -385,7 +386,7 @@
         <div class="section-title" id="s3_title">Verlauf der Hilfe</div>
         <div class="section-sub" id="s3_sub">Fachliche Beschreibung gemäß Berichtsstruktur</div>
         <div id="s3_content"></div>
-        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(2)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(4)">Weiter →</button></div>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="navGoTo(2)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(4)">Weiter →</button></div>
       </div>
 
       <!-- S4 dynamic -->
@@ -393,7 +394,7 @@
         <div class="section-title" id="s4_title">Hilfeplanziele</div>
         <div class="section-sub" id="s4_sub">Ziele mit Methoden und Zielerreichung dokumentieren</div>
         <div id="s4_content"></div>
-        <div class="btn-row" style="margin-top:1rem;"><button class="btn btn-secondary" onclick="goTo(3)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(5)">Weiter →</button></div>
+        <div class="btn-row" style="margin-top:1rem;"><button class="btn btn-secondary" onclick="navGoTo(3)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(5)">Weiter →</button></div>
       </div>
 
       <!-- S5 -->
@@ -418,7 +419,7 @@
           <div id="unterschriftFachkraefte"></div>
         </div>
         </div>
-        <div class="btn-row"><button class="btn btn-secondary" onclick="goTo(currentBerichtstyp==='stationaer'?3:4)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(6)">Zur Übersicht →</button></div>
+        <div class="btn-row"><button class="btn btn-secondary" onclick="navGoTo(currentBerichtstyp==='stationaer'?3:4)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(6)">Zur Übersicht →</button></div>
       </div>
 
       <!-- S6 -->
@@ -470,7 +471,7 @@
         <div id="normalActions">
         </div>
         <div class="btn-row">
-          <button class="btn btn-secondary" onclick="goTo(5)">← Zurück</button>
+          <button class="btn btn-secondary" onclick="navGoTo(5)">← Zurück</button>
           <div style="display:flex; gap:8px;">
             <button class="btn btn-secondary" onclick="saveEntwurf()" id="btnSaveEntwurf">💾 Entwurf speichern</button>
             <button class="btn btn-secondary" onclick="document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
@@ -529,7 +530,7 @@ const CONFIG = {
   siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com'
 };
 
-const APP_VERSION = 'v1ded980'; // auto-updated on deploy
+const APP_VERSION = 've7615c1'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -713,14 +714,52 @@ function goToNext(n) {
   // Bei stationaer S4 (Hilfeplanziele) überspringen
   const skip = (currentBerichtstyp === 'stationaer' && n === 4) ? 5 : n;
   goTo(skip);
+  clearTimeout(_autoSaveTimer);
+  autoSaveDraft();
+}
+
+// Wrapper NUR für echte Nutzer-Klicks (Sidebar, "← Zurück", "Startseite") — speichert
+// zusätzlich zum reinen Seitenwechsel. Bewusst getrennt von goTo(): interne/programmatische
+// goTo()-Aufrufe (Deeplink-Handling für Prüf-/Freigabe-Links in loadDraft(), Validierungs-
+// Sprünge etc.) laufen teils VOR activateReviewMode()/activateViewOnlyMode() — ein Autosave
+// an der Stelle würde am Status-Guard vorbei unnötig/parallel schreiben. Der Debounce-Save
+// bei Texteingabe (siehe scheduleAutoSave) deckt diese Fälle ohnehin ab.
+function navGoTo(n) {
+  goTo(n);
+  clearTimeout(_autoSaveTimer);
   autoSaveDraft();
 }
 
 let _autoSaving = false;
+let _autoSaveTimer = null;
+let _lastAutoSaveOk = null;
+
+// Debounced Autosave: läuft 2.5s nach der letzten Eingabe — unabhängig davon, ob
+// "Weiter" geklickt wird. Deckt Fälle ab, in denen eine Fachkraft mitten in einem
+// Feld die Seite verlässt/schließt, ohne bis ans Ende des Formulars zu kommen.
+function scheduleAutoSave() {
+  if (_isViewOnly || _isReviewMode) return;
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(() => { autoSaveDraft(); }, 2500);
+}
+
+function updateAutoSaveIndicator(ok, msg) {
+  const el = document.getElementById('autosaveStatus');
+  if (!el) return;
+  const zeit = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  if (ok) {
+    el.style.color = 'var(--text-muted)';
+    el.textContent = `✓ Automatisch gespeichert um ${zeit}`;
+  } else {
+    el.style.color = 'var(--error)';
+    el.textContent = msg || '⚠ Automatisches Speichern fehlgeschlagen — bitte Internetverbindung prüfen';
+  }
+}
+
 async function autoSaveDraft() {
   if (_isViewOnly) return;               // Ansichtsmodus: niemals speichern
   if (_isReviewMode) return;             // TL nutzt den Zwischenspeichern-Button
-  if (_autoSaving) return;               // keine parallelen Speicherläufe
+  if (_autoSaving) { scheduleAutoSave(); return; } // Speicherlauf aktiv: nach Abschluss erneut versuchen
   const vn = document.getElementById('Kind_Vorname')?.value?.trim();
   const fn = document.getElementById('Kind_Familienname')?.value?.trim();
   // Auch Stammdaten von Seite 1 rechtfertigen einen Entwurf — sonst geht z.B. eine
@@ -735,14 +774,23 @@ async function autoSaveDraft() {
     data._status = currentItemStatus || 'Entwurf';  // Status nie verändern
     currentListId = await saveToList(data, currentListId);
     if (!currentItemStatus) currentItemStatus = 'Entwurf';
+    _lastAutoSaveOk = true;
+    updateAutoSaveIndicator(true);
   } catch(e) {
     console.warn('Automatisches Speichern fehlgeschlagen:', e.message);
+    _lastAutoSaveOk = false;
+    updateAutoSaveIndicator(false);
   } finally {
     _autoSaving = false;
   }
 }
 
 function goToStart() {
+  // Vor dem Verlassen sichern (Klick auf "Startseite" ohne vorheriges "Weiter").
+  // autoSaveDraft() hat eigene Guards (_isReviewMode/_isViewOnly/leeres Formular),
+  // daher hier ohne zusätzliche Bedingung sicher aufrufbar.
+  clearTimeout(_autoSaveTimer);
+  autoSaveDraft();
   // Restore normal layout before showing start screen
   const layout = document.querySelector('.layout');
   if (layout) layout.style.gridTemplateColumns = '';
@@ -4524,6 +4572,20 @@ async function deleteDraft(id) {
     alert('Fehler: ' + e.message);
   }
 }
+
+// ─── LIVE-AUTOSAVE (Eingabe-basiert) ───────────────────────────────────────────
+// Fängt Freitext-Eingaben ab, ohne auf Navigation zu warten: 2.5s nach der letzten
+// Eingabe wird automatisch gespeichert. Delegiert auf 'main', damit auch dynamisch
+// erzeugte Felder (Ziele, weitere Kinder/Sorgeberechtigte, Situation-Textareas) erfasst
+// werden, ohne pro Feld einen eigenen Listener registrieren zu müssen.
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!t || !t.closest) return;
+  if (!t.closest('#mainLayout')) return;
+  if (!['TEXTAREA','INPUT','SELECT'].includes(t.tagName)) return;
+  if (t.closest('#reviewBanner') || t.closest('#reviewFloatBar')) return; // TL-Prüfmodus: eigener Speicherpfad
+  scheduleAutoSave();
+});
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
