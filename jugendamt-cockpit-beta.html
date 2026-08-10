@@ -250,13 +250,16 @@ function renderKpis(rows) {
   const jas = new Set(rows.map(r => r.jugendamt));
   const dl = mittel(laufend.map(r => r.dauerMonate));
   const db = mittel(beendet.map(r => r.dauerMonate));
+  const flsWoche = laufend.reduce((s, r) => s + (r.wochenstunden || 0), 0);
+  const flsFehlend = laufend.filter(r => r.wochenstunden == null).length;
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><div class="v">${fmtNum(rows.length)}</div><div class="l">Hilfen ab ${vonAuswahl().slice(5,7)}/${vonAuswahl().slice(2,4)}</div><div class="s">${fmtNum(kl.size)} Klient:innen</div></div>
     <div class="kpi"><div class="v">${fmtNum(laufend.length)}</div><div class="l">Laufend</div><div class="s">heute aktiv</div></div>
     <div class="kpi"><div class="v">${fmtNum(beendet.length)}</div><div class="l">Beendet</div><div class="s">seit ${fmtDate(vonAuswahl())}</div></div>
     <div class="kpi"><div class="v">${fmtNum(dl,1)}</div><div class="l">Ø Dauer laufend</div><div class="s">Monate (bisher)</div></div>
     <div class="kpi"><div class="v">${fmtNum(db,1)}</div><div class="l">Ø Dauer beendet</div><div class="s">Monate (gesamt)</div></div>
-    <div class="kpi"><div class="v">${fmtNum(jas.size)}</div><div class="l">Jugendämter</div><div class="s">in der Auswahl</div></div>`;
+    <div class="kpi"><div class="v">${fmtNum(jas.size)}</div><div class="l">Jugendämter</div><div class="s">in der Auswahl</div></div>
+    <div class="kpi"><div class="v">${fmtNum(flsWoche,1)}</div><div class="l">FLS/Woche bewilligt</div><div class="s">${flsFehlend ? flsFehlend + ' ohne Kontingent' : 'laufende Hilfen'}</div></div>`;
 }
 
 /* ── BI-Grafiken (Chart.js) ── */
@@ -424,6 +427,7 @@ const SPALTEN = [
   { k:'beginn',          t:'Beginn', num:true },
   { k:'ende',            t:'Ende', num:true },
   { k:'dauerMonate',     t:'Dauer (Mon.)', num:true },
+  { k:'wochenstunden',   t:'FLS/Woche', num:true },
   { k:'laufend',         t:'Status' },
 ];
 
@@ -437,6 +441,7 @@ function sortWert(r, key) {
     case 'beginn': return r.beginn || '';
     case 'ende': return r.ende || '9999';
     case 'dauerMonate': return r.dauerMonate ?? -1;
+    case 'wochenstunden': return r.wochenstunden ?? -1;
     case 'laufend': return r.laufend ? 1 : 0;
     default: return 0;
   }
@@ -462,6 +467,7 @@ function zeileHtml(r) {
     <td class="num nw">${fmtDate(r.beginn)}</td>
     <td class="num nw">${r.laufend ? '—' : fmtDate(r.ende)}</td>
     <td class="num nw">${fmtNum(r.dauerMonate,1)}</td>
+    <td class="num nw">${fmtNum(r.wochenstunden,1)}</td>
     <td class="nw">${status}</td>
   </tr>`;
 }
@@ -499,11 +505,12 @@ function render() {
     for (const [k, g] of [...gruppen.entries()].sort((a,b) => b[1].length - a[1].length || a[0].localeCompare(b[0],'de'))) {
       const laufend = g.filter(r => r.laufend).length;
       const d = mittel(g.map(r => r.dauerMonate));
-      html += `<tr class="grouphead"><td colspan="9">${esc(k)} <span>— ${g.length} Hilfen · ${laufend} laufend · Ø ${fmtNum(d,1)} Mon.</span></td></tr>`;
+      const fls = g.filter(r => r.laufend).reduce((s, r) => s + (r.wochenstunden || 0), 0);
+      html += `<tr class="grouphead"><td colspan="10">${esc(k)} <span>— ${g.length} Hilfen · ${laufend} laufend · Ø ${fmtNum(d,1)} Mon. · ${fmtNum(fls,1)} FLS/Woche</span></td></tr>`;
       html += g.map(zeileHtml).join('');
     }
   }
-  document.getElementById('tbody').innerHTML = html || '<tr><td colspan="9" style="text-align:center;color:var(--text-hint);padding:30px">Keine Hilfen in der Auswahl.</td></tr>';
+  document.getElementById('tbody').innerHTML = html || '<tr><td colspan="10" style="text-align:center;color:var(--text-hint);padding:30px">Keine Hilfen in der Auswahl.</td></tr>';
   document.getElementById('loading').style.display = 'none';
   document.getElementById('tbl').style.display = '';
 }
@@ -512,7 +519,7 @@ function render() {
 function csvExport() {
   if (!daten) return;
   const rows = gefiltert();
-  const head = ['Klient','Jugendamt','Jugendamt (voll)','Aktenzeichen','Sachbearbeitung','Hilfeart','Bereich','Massnahme','Betreuung PNW','Weitere Betreuung','Beginn','Ende','Dauer Monate','Status','Archiv'];
+  const head = ['Klient','Jugendamt','Jugendamt (voll)','Aktenzeichen','Sachbearbeitung','Hilfeart','Bereich','Massnahme','Betreuung PNW','Weitere Betreuung','Beginn','Ende','Dauer Monate','FLS/Woche','Status','Archiv'];
   const csvVal = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
   const lines = [head.map(csvVal).join(';')];
   for (const r of rows) {
@@ -521,6 +528,7 @@ function csvExport() {
       r.bereich, r.hilfe || '', r.hb || '',
       r.betreuer.filter(b => b.name !== r.hb).map(b => `${b.name} (${b.rolle})`).join(', '),
       r.beginn || '', r.ende || '', r.dauerMonate != null ? String(r.dauerMonate).replace('.',',') : '',
+      r.wochenstunden != null ? String(r.wochenstunden).replace('.',',') : '',
       r.laufend ? 'laufend' : 'beendet', r.archiviert ? 'ja' : 'nein'
     ].map(csvVal).join(';'));
   }
