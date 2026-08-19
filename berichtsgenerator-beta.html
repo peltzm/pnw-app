@@ -4156,12 +4156,11 @@ const SECTION_TEMPLATES = {
       sub: 'Fachliche Beschreibung gemäß Berichtsstruktur',
       fields: [
         { id: 'Aktuelle_Lebenssituation', label: '1 | Aktuelle Situation', placeholder: 'Aktuelle Lebenssituation, Wohnsituation, Grundversorgung...' },
-        { id: 'VBS_Gesundheit', label: '2 | Gesundheitliche Versorgung', placeholder: 'Medizinische Versorgung, Arzttermine, Medikamente, Gesundheitszustand...' },
-        { id: 'VBS_Psychologie', label: '3 | Psychologische Begleitung', placeholder: 'Therapeutische Maßnahmen, psychische Stabilität, Begleitangebote...' },
-        { id: 'VBS_Soziale_Teilhabe', label: '4 | Soziale Teilhabe und Engagement', placeholder: 'Freizeitgestaltung, Peer-Kontakte, soziales Netzwerk, Gruppenangebote...' },
-        { id: 'VBS_Sprache_Integration', label: '5 | Deutsche Sprache und Integration', placeholder: 'Sprachkenntnisse, Sprachkurse, schulische/sprachliche Förderung...' },
-        { id: 'VBS_Haushalt', label: '6 | Haushalt und Selbstständigkeit', placeholder: 'Alltagskompetenzen, Ordnung, Körperhygiene, Eigenverantwortung...' },
-        { id: 'VBS_Berufliche_Perspektive', label: '7 | Berufliche Perspektive', placeholder: 'Schule, Ausbildung, Praktikum, berufliche Orientierung...' },
+        { id: 'VBS_Gesundheit', label: '2 | Gesundheitlicher Bereich', placeholder: 'Medizinische Versorgung, Arzttermine, Medikamente, Gesundheitszustand...' },
+        { id: 'VBS_Soziale_Teilhabe', label: '3 | Soziale Teilhabe und Engagement', placeholder: 'Freizeitgestaltung, Peer-Kontakte, soziales Netzwerk, Gruppenangebote...' },
+        { id: 'VBS_Sprache_Integration', label: '4 | Sprachentwicklung', placeholder: 'Sprachkenntnisse, Sprachkurse, schulische/sprachliche Förderung...' },
+        { id: 'VBS_Haushalt', label: '5 | Haushalt und Selbstständigkeit', placeholder: 'Alltagskompetenzen, Ordnung, Körperhygiene, Eigenverantwortung...' },
+        { id: 'VBS_Berufliche_Perspektive', label: '6 | Berufliche Perspektive', placeholder: 'Schule, Ausbildung, Praktikum, berufliche Orientierung...' },
       ]
     },
     s4: {
@@ -4259,19 +4258,8 @@ function buildDynamicSections(force = false) {
         <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
   });
-  // Ressourcen/Risiken als Teil von s3html (nicht per innerHTML += um DOM-Reset nach Befüllung zu vermeiden)
-  if (typ === 'stationaer') {
-    s3html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:4px;">
-      <div class="card"><div class="card-title">Ressourcen</div>
-        <div class="field-grid full"><div class="field">
-          <textarea id="Ressourcen" style="min-height:90px;" placeholder="Stärken, unterstützende Faktoren..."></textarea>
-        </div></div></div>
-      <div class="card"><div class="card-title">Risiken</div>
-        <div class="field-grid full"><div class="field">
-          <textarea id="Risiken" style="min-height:90px;" placeholder="Belastungen, Gefährdungsaspekte..."></textarea>
-        </div></div></div>
-    </div>`;
-  }
+  // Ressourcen/Risiken im stationaeren Bericht entfaellt (Stand 08/2026) —
+  // im Clearingbericht bleiben die Felder als subCols von "Ergebnisse des Clearings" bestehen.
   if(s3c) s3c.innerHTML = s3html;
   
   // Build S4
@@ -5127,13 +5115,11 @@ window.addEventListener('DOMContentLoaded', () => {
       push('Fachliche Einschätzung', data.Fachliche_Einschaetzung);
     } else { // stationaer
       push('Aktuelle Lebenssituation in der Wohngruppe', data.Aktuelle_Lebenssituation);
-      push('Gesundheitliche Versorgung', data.VBS_Gesundheit);
-      push('Psychologische Begleitung', data.VBS_Psychologie);
+      push('Gesundheitlicher Bereich', data.VBS_Gesundheit);
       push('Soziale Teilhabe & Engagement', data.VBS_Soziale_Teilhabe);
-      push('Deutsche Sprache & Integration', data.VBS_Sprache_Integration);
+      push('Sprachentwicklung', data.VBS_Sprache_Integration);
       push('Haushalt & Selbstständigkeit', data.VBS_Haushalt);
       push('Berufliche Perspektive', data.VBS_Berufliche_Perspektive);
-      if (has(data.Ressourcen) || has(data.Risiken)) S.push({ title: 'Ressourcen & Risiken', ressRisiken: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     }
     return S;
