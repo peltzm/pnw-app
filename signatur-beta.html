@@ -498,7 +498,9 @@ async function saveOverride() {
 
 /* ── SIGNATUR-VORLAGE ── */
 async function loadTemplate() {
-  const r = await fetch(TEMPLATE_URL);
+  // Cache-Busting: Vorlage kann sich unabhängig von der App ändern (Firmierung,
+  // Registerangaben). Ohne dies liefern Browser-/CDN-Cache tagelang die alte Fassung.
+  const r = await fetch(`${TEMPLATE_URL}?t=${Date.now()}`, { cache: 'no-store' });
   if (!r.ok) throw new Error('Signaturvorlage konnte nicht geladen werden (' + r.status + ')');
   rawTemplate = await r.text();
 }
