@@ -6,18 +6,20 @@
 <!--
   VORLAGE FÜR SIGNATUR-GENERATOR
   Platzhalter, die die App ersetzen muss:
-    {{NAME}}     z.B. Markus Peltz
-    {{POSITION}} z.B. Leitung Verwaltung & Technik
+    {{NAME}}          z.B. Markus Peltz
+    {{POSITION}}      z.B. Leitung Verwaltung & Technik
+    {{WEITERBILDUNG}} z.B. Systemischer Berater (DGSF) — optional, Block
+                      zwischen WB_START/WB_END entfällt wenn leer
     {{TELEFON}}  z.B. +49 173 2875 212
     {{EMAIL}}    z.B. markus.peltz@praxisneuewege.de
-  Das Logo ist als Base64 eingebettet und braucht keine externe Datei.
+  Das Logo wird extern von apps.praxisneuewege.de geladen (Outlook-Renderproblem).
   Feste Bestandteile (nicht ändern): Firmenblock + Pflichtangaben nach § 35a GmbHG.
 -->
 </head>
 <body style="margin:0;padding:20px;background:#fff">
 <p style="font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#1a1916;margin:0 0 20px">Viele Gr&uuml;&szlig;e</p>
 <table cellpadding="0" cellspacing="0" border="0" style="font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#1a1916;line-height:1.5">
-<tr><td style="padding-bottom:16px"><strong>{{NAME}}</strong><br>{{POSITION}}</td></tr>
+<tr><td style="padding-bottom:16px"><strong>{{NAME}}</strong><br>{{POSITION}}<!--WB_START--><br><span style="font-size:13px;color:#6b6459">{{WEITERBILDUNG}}</span><!--WB_END--></td></tr>
 <tr><td style="padding-bottom:16px"><img src="https://apps.praxisneuewege.de/assets/Logo-PraxisNeueWege.png" alt="Praxis NeueWege" width="320" style="width:320px;height:auto;display:block"></td></tr>
 <tr><td style="font-size:13px;line-height:1.6;padding-bottom:14px">
 Praxis NeueWege GmbH<br>
