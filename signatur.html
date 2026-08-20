@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>E-Mail-Signatur (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.version-badge{font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:4px;font-family:'Kodchasan',monospace}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#652f16}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;min-height:28px;border-radius:4px}
+.btn-ghost:hover{border-color:var(--accent-mid);color:var(--accent)}
+.btn-text{background:none;border:none;color:var(--text-muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-top:12px}
+.btn-sm{padding:6px 12px;font-size:12px;min-height:30px}
+
+/* ── LOGIN ── */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:380px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:64px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+.alert-ok{background:var(--ok-bg);color:var(--ok);border:1px solid #c8e6c9}
+
+/* ── APP ── */
+#appScreen{display:none;flex-direction:column;min-height:calc(100dvh - var(--hdr-h))}
+.page-header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header-left h2{font-size:17px;font-weight:600;color:var(--text)}
+.page-header-left p{font-size:12px;color:var(--text-muted);margin-top:1px}
+
+.viewbar{padding:10px 20px;display:flex;align-items:center;gap:10px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.viewbar label{font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.select{height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);outline:none;max-width:280px}
+.select:focus{border-color:var(--accent-mid)}
+
+.wrap{max-width:1100px;margin:0 auto;width:100%;padding:20px 20px 60px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media (max-width:860px){.wrap{grid-template-columns:1fr}}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px}
+.card-title{font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:7px;justify-content:space-between}
+.card-title svg{width:15px;height:15px;color:var(--text-muted);flex-shrink:0}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;color:var(--text-hint);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px}
+.field .hint{font-size:11px;color:var(--text-hint);font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px}
+.input{width:100%;height:38px;border:1px solid var(--border);border-radius:var(--radius);padding:0 12px;font-size:14px;font-family:inherit;background:var(--surface);color:var(--text);outline:none}
+.input:focus{border-color:var(--accent-mid)}
+.input[readonly]{background:var(--bg);color:var(--text-muted);cursor:not-allowed}
+.input.dirty{border-color:var(--accent-mid)}
+
+.save-row{display:flex;align-items:center;gap:10px;margin-top:16px}
+.save-status{font-size:12px;color:var(--text-hint);display:flex;align-items:center;gap:5px}
+.save-status.ok{color:var(--ok)}
+.save-status.pending{color:var(--warn)}
+
+.preview-outer{background:repeating-conic-gradient(#f0eee9 0% 25%, #f7f6f2 0% 50%) 50% / 16px 16px;border:1px solid var(--border);border-radius:var(--radius);padding:20px;overflow:auto;min-height:180px}
+.preview-box{background:#fff;display:inline-block;min-width:100%}
+
+.export-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:16px}
+.export-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-family:inherit;transition:all .12s}
+.export-btn:hover{border-color:var(--accent-mid);background:var(--accent-light)}
+.export-btn svg{width:18px;height:18px;color:var(--accent);flex-shrink:0}
+.export-btn .et-title{font-size:13px;font-weight:600;color:var(--text)}
+.export-btn .et-sub{font-size:11px;color:var(--text-muted)}
+
+.note{font-size:11px;color:var(--text-hint);margin-top:14px;line-height:1.6}
+.note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:#fff;padding:10px 18px;border-radius:var(--radius);font-size:13px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;display:flex;align-items:center;gap:8px}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--error)}
+
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:60px 20px;font-size:13px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media (max-width:640px){
+  .wrap{padding:14px 12px 50px}
+  .viewbar,.page-header{padding-left:12px;padding-right:12px}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand" onclick="location.href='apps.html'">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <span>E-Mail-Signatur</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge">
+      <div class="user-dot"></div>
+      <span id="userName"></span>
+    </div>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
+    <div class="login-title">E-Mail-Signatur <span class="beta-badge">BETA</span></div>
+    <div class="login-desc">Erstellt deine offizielle PNW-Signatur aus deinen Microsoft-365-Daten. Name und E-Mail werden übernommen, Position und Telefonnummer kannst du anpassen.</div>
+    <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
+      <svg width="16" height="16" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Mit Microsoft anmelden
+    </button>
+    <div class="alert alert-error" id="loginError" style="display:none"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2 id="pageTitle">Meine Signatur</h2>
+      <p id="pageSub">Name und E-Mail sind fest, Position und Telefon kannst du anpassen</p>
+    </div>
+  </div>
+
+  <div class="viewbar" id="managerBar" style="display:none">
+    <label>Signatur für</label>
+    <select class="select" id="employeeSelect" onchange="onEmployeeChange(this.value)"></select>
+  </div>
+
+  <div id="loadingState" class="loading-state"><div class="spinner"></div>Daten werden geladen …</div>
+
+  <div class="wrap" id="mainWrap" style="display:none">
+    <div class="card">
+      <div class="card-title">
+        <span>Angaben</span>
+      </div>
+
+      <div class="field">
+        <label>Name</label>
+        <input class="input" id="fName" readonly>
+      </div>
+      <div class="field">
+        <label>Position <span class="hint">änderbar</span></label>
+        <input class="input" id="fPosition" placeholder="z. B. Leitung Verwaltung" oninput="onFieldInput()">
+      </div>
+      <div class="field">
+        <label>Telefon <span class="hint">änderbar</span></label>
+        <input class="input" id="fPhone" placeholder="+49 173 2875 212" oninput="onFieldInput()">
+      </div>
+      <div class="field">
+        <label>E-Mail</label>
+        <input class="input" id="fEmail" readonly>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-primary btn-sm" onclick="saveOverride()" id="saveBtn">Speichern</button>
+        <span class="save-status" id="saveStatus"></span>
+      </div>
+
+      <div class="note">Name und E-Mail kommen direkt aus eurem Microsoft-365-Verzeichnis und können hier nicht geändert werden — Änderungen daran bitte über die Verwaltung. Position und Telefonnummer werden für dich gespeichert und beim nächsten Öffnen wieder vorausgefüllt.</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span>Vorschau</span></div>
+      <div class="preview-outer"><div class="preview-box" id="previewBox">Wird geladen …</div></div>
+
+      <div class="export-grid">
+        <button class="export-btn" onclick="copySignature()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span><span class="et-title">In Zwischenablage kopieren</span><br><span class="et-sub">Zum direkten Einfügen in Outlook-Signatureinstellungen (Strg+V)</span></span>
+        </button>
+        <button class="export-btn" onclick="exportWord()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span><span class="et-title">Als Word-Datei herunterladen</span><br><span class="et-sub">.doc — öffnet und formatiert sich in Microsoft Word</span></span>
+        </button>
+        <button class="export-btn" onclick="exportHtmlFile()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span><span class="et-title">Als HTML-Datei herunterladen</span><br><span class="et-sub">.htm — zum Hochladen in andere E-Mail-Programme</span></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   PNW Signatur-Generator (Beta)
+   Auth: MSAL/Entra. Datenquelle: Microsoft Graph (Name/E-Mail fest,
+   Position/Telefon änderbar & persistiert in SharePoint-Liste).
+   Teamleitungen (erkannt über eigene directReports, wie in den
+   anderen PNW-Cockpits) können die Signatur für jeden aktiven
+   Mitarbeitenden erzeugen.
+   ═══════════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/signatur.html'
+};
+const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All'];
+const SP_SITE_ID = '2d413d43-e9b6-41bd-8879-137937a86ba9'; // fest, ändert sich nie
+const SP_LIST = 'Signaturen_Profil';
+const TEMPLATE_URL = 'assets/signatur-vorlage.htm';
+const GF_UPNS = ['sonja.peltz@praxisneuewege.de', 'markus.peltz@praxisneuewege.de'];
+const APP_VERSION = 'vd75baea'; // auto-updated on deploy
+
+let msalInstance, currentAccount, accessToken;
+let _spListId = null;
+let _overrideCache = {}; // objectId -> {itemId, Titel, Telefon}
+let meId = null, meMail = null;
+let isManager = false;
+let employees = [];      // nur befüllt wenn isManager
+let selected = null;     // Graph-Objekt der aktuell bearbeiteten Person
+let rawTemplate = null;
+let currentFullHtml = '', currentBodyInner = '';
+let dirty = false;
+
+function applyVersionBadge() {
+  document.getElementById('versionBadge').textContent = APP_VERSION;
+}
+
+/* ── MSAL ── */
+async function initApp() {
+  const msalConfig = {
+    auth: { clientId: CFG.clientId, authority: `https://login.microsoftonline.com/${CFG.tenantId}`, redirectUri: CFG.redirectUri },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
+    system: { allowNativeBroker: false }
+  };
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  applyVersionBadge();
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r) { currentAccount = r.account; accessToken = r.accessToken; await showApp(); return; }
+  } catch (e) { console.warn(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length > 0) { currentAccount = accs[0]; await getToken(); await showApp(); }
+}
+
+async function login() {
+  const btn = document.getElementById('loginBtn');
+  const errEl = document.getElementById('loginError');
+  btn.disabled = true; errEl.style.display = 'none';
+  try { await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch (e) {
+    btn.disabled = false;
+    errEl.style.display = 'block';
+    errEl.textContent = 'Fehler: ' + (e.errorMessage || e.message);
+  }
+}
+
+async function logout() {
+  await msalInstance.logoutRedirect({ postLogoutRedirectUri: CFG.redirectUri });
+}
+
+async function getToken() {
+  if (!currentAccount) return null;
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount });
+    accessToken = r.accessToken; return accessToken;
+  } catch (e) {
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES });
+  }
+}
+
+async function graph(path, opts) {
+  const token = await getToken();
+  const r = await fetch(path.startsWith('http') ? path : `https://graph.microsoft.com/v1.0${path}`, {
+    ...opts,
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts && opts.headers) }
+  });
+  return r;
+}
+
+/* ── APP START ── */
+async function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  const app = document.getElementById('appScreen');
+  app.style.display = 'flex'; app.style.flexDirection = 'column';
+  document.getElementById('userBadge').style.display = 'flex';
+  document.getElementById('userName').textContent = currentAccount?.name || currentAccount?.username || '';
+  document.getElementById('logoutBtn').style.display = '';
+
+  try {
+    const meR = await graph('/me?$select=id,mail,userPrincipalName,displayName,jobTitle,mobilePhone,businessPhones');
+    const me = await meR.json();
+    meId = me.id;
+    meMail = (me.mail || me.userPrincipalName || '').toLowerCase();
+
+    const [drR] = await Promise.all([ graph('/me/directReports?$select=id') ]);
+    let hasReports = false;
+    try { const dr = await drR.json(); hasReports = (dr.value || []).length > 0; } catch (e) {}
+    isManager = hasReports || GF_UPNS.includes(meMail);
+
+    await Promise.all([ loadTemplate(), ensureSpList() ]);
+    await preloadOverrides();
+
+    if (isManager) {
+      await loadEmployees();
+      document.getElementById('managerBar').style.display = 'flex';
+      const sel = document.getElementById('employeeSelect');
+      sel.innerHTML = employees.map(u => `<option value="${u.id}"${u.id === meId ? ' selected' : ''}>${escapeHtml(u.displayName)}${u.id === meId ? ' (ich)' : ''}</option>`).join('');
+      await loadSelected(meId);
+    } else {
+      selected = me;
+      await applySelected();
+    }
+
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('mainWrap').style.display = 'grid';
+  } catch (e) {
+    console.error(e);
+    document.getElementById('loadingState').innerHTML =
+      `<div style="text-align:center"><strong>Fehler beim Laden</strong><br><span style="font-size:12px">${escapeHtml(e.message)}</span><br><button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="location.reload()">Neu laden</button></div>`;
+  }
+}
+
+/* ── MITARBEITERLISTE (nur Teamleitungen/GF) ── */
+async function loadEmployees() {
+  let url = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,jobTitle,mobilePhone,businessPhones,accountEnabled&$top=50&$filter=accountEnabled eq true';
+  let users = [];
+  while (url) {
+    const r = await graph(url);
+    if (!r.ok) throw new Error('Graph-Fehler beim Laden der Mitarbeiterliste: ' + r.status);
+    const d = await r.json();
+    users = users.concat(d.value || []);
+    url = d['@odata.nextLink'] || null;
+  }
+  const SERVICE_NAMES = ['canva', 'spesen', 'rechnung', 'krankmeldung', 'fax', 'nordstern'];
+  employees = users.filter(u => {
+    if (!u.mail || !u.displayName) return false;
+    if (u.displayName.startsWith('On-Premises')) return false;
+    if (!u.mail.toLowerCase().endsWith('@praxisneuewege.de')) return false;
+    const lc = u.displayName.toLowerCase();
+    if (SERVICE_NAMES.some(s => lc.startsWith(s))) return false;
+    return true;
+  }).sort((a, b) => a.displayName.localeCompare(b.displayName, 'de'));
+}
+
+async function onEmployeeChange(id) {
+  if (dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) {
+    document.getElementById('employeeSelect').value = selected.id;
+    return;
+  }
+  await loadSelected(id);
+}
+
+async function loadSelected(id) {
+  if (id === meId) {
+    const r = await graph('/me?$select=id,mail,displayName,jobTitle,mobilePhone,businessPhones');
+    selected = await r.json();
+  } else {
+    selected = employees.find(u => u.id === id) || null;
+    if (!selected) {
+      const r = await graph(`/users/${id}?$select=id,displayName,mail,jobTitle,mobilePhone,businessPhones`);
+      selected = await r.json();
+    }
+  }
+  await applySelected();
+}
+
+/* ── FORMULAR BEFÜLLEN ── */
+async function applySelected() {
+  const ov = _overrideCache[selected.id];
+  document.getElementById('fName').value = selected.displayName || '';
+  document.getElementById('fEmail').value = selected.mail || '';
+  document.getElementById('fPosition').value = (ov && ov.Titel) || selected.jobTitle || '';
+  document.getElementById('fPhone').value = (ov && ov.Telefon) || selected.mobilePhone || (selected.businessPhones && selected.businessPhones[0]) || '';
+  document.getElementById('pageTitle').textContent = selected.id === meId ? 'Meine Signatur' : 'Signatur für ' + selected.displayName;
+  dirty = false;
+  setSaveStatus(ov ? 'gespeichert' : 'noch nicht gespeichert');
+  renderPreview();
+}
+
+function onFieldInput() {
+  dirty = true;
+  setSaveStatus('ungespeicherte Änderungen', true);
+  renderPreview();
+}
+
+function setSaveStatus(text, pending) {
+  const el = document.getElementById('saveStatus');
+  el.textContent = text;
+  el.className = 'save-status' + (pending ? ' pending' : ' ok');
+}
+
+/* ── SHAREPOINT: LISTE SICHERSTELLEN (ggf. anlegen) ── */
+async function ensureSpList() {
+  if (_spListId) return;
+  const lr = await graph(`/sites/${SP_SITE_ID}/lists?$filter=displayName eq '${SP_LIST}'&$select=id,displayName`);
+  if (lr.ok) {
+    const ld = await lr.json();
+    if (ld.value && ld.value.length > 0) { _spListId = ld.value[0].id; return; }
+  }
+  // Liste existiert noch nicht -> automatisch anlegen
+  const cr = await graph(`/sites/${SP_SITE_ID}/lists`, {
+    method: 'POST',
+    body: JSON.stringify({
+      displayName: SP_LIST,
+      list: { template: 'genericList' },
+      columns: [
+        { name: 'ObjectId', text: {} },
+        { name: 'Email', text: {} },
+        { name: 'Titel', text: {} },
+        { name: 'Telefon', text: {} },
+        { name: 'GeaendertVon', text: {} }
+      ]
+    })
+  });
+  if (cr.ok) { const cd = await cr.json(); _spListId = cd.id; }
+  else console.warn('SharePoint-Liste konnte nicht automatisch angelegt werden:', cr.status);
+}
+
+async function preloadOverrides() {
+  if (!_spListId) return;
+  let url = `https://graph.microsoft.com/v1.0/sites/${SP_SITE_ID}/lists/${_spListId}/items?expand=fields&$top=200`;
+  while (url) {
+    const r = await graph(url);
+    if (!r.ok) break;
+    const d = await r.json();
+    (d.value || []).forEach(item => {
+      const oid = item.fields?.ObjectId;
+      if (oid) _overrideCache[oid] = { itemId: item.id, Titel: item.fields.Titel || '', Telefon: item.fields.Telefon || '' };
+    });
+    url = d['@odata.nextLink'] || null;
+  }
+}
+
+async function saveOverride() {
+  const btn = document.getElementById('saveBtn');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Speichere …';
+  try {
+    if (!_spListId) await ensureSpList();
+    if (!_spListId) throw new Error('SharePoint-Liste nicht erreichbar.');
+    const payload = {
+      ObjectId: selected.id,
+      Email: selected.mail || '',
+      Titel: document.getElementById('fPosition').value.trim(),
+      Telefon: document.getElementById('fPhone').value.trim(),
+      GeaendertVon: meMail
+    };
+    const existing = _overrideCache[selected.id];
+    let itemId;
+    if (existing && existing.itemId) {
+      const r = await graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/items/${existing.itemId}/fields`, { method: 'PATCH', body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error('Speichern fehlgeschlagen: ' + r.status);
+      itemId = existing.itemId;
+    } else {
+      const r = await graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/items`, { method: 'POST', body: JSON.stringify({ fields: payload }) });
+      if (!r.ok) throw new Error('Speichern fehlgeschlagen: ' + r.status);
+      const nd = await r.json();
+      itemId = nd.id;
+    }
+    _overrideCache[selected.id] = { itemId, Titel: payload.Titel, Telefon: payload.Telefon };
+    dirty = false;
+    setSaveStatus('gespeichert ✓');
+    showToast('Gespeichert.');
+  } catch (e) {
+    console.error(e);
+    showToast('Fehler beim Speichern: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+
+/* ── SIGNATUR-VORLAGE ── */
+async function loadTemplate() {
+  // Cache-Busting: Vorlage kann sich unabhängig von der App ändern (Firmierung,
+  // Registerangaben). Ohne dies liefern Browser-/CDN-Cache tagelang die alte Fassung.
+  const r = await fetch(`${TEMPLATE_URL}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('Signaturvorlage konnte nicht geladen werden (' + r.status + ')');
+  rawTemplate = await r.text();
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function substitute(tpl) {
+  const name = document.getElementById('fName').value;
+  const position = document.getElementById('fPosition').value;
+  const phone = document.getElementById('fPhone').value;
+  const email = document.getElementById('fEmail').value;
+  return tpl
+    .split('{{NAME}}').join(escapeHtml(name))
+    .split('{{POSITION}}').join(escapeHtml(position))
+    .split('{{TELEFON}}').join(escapeHtml(phone))
+    .split('{{EMAIL}}').join(escapeHtml(email));
+}
+
+function renderPreview() {
+  if (!rawTemplate) return;
+  currentFullHtml = substitute(rawTemplate);
+  const m = currentFullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  currentBodyInner = m ? m[1] : currentFullHtml;
+  document.getElementById('previewBox').innerHTML = currentBodyInner;
+}
+
+function slug(name) {
+  return (name || 'signatur').toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'signatur';
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/* ── EXPORT: ZWISCHENABLAGE ── */
+async function copySignature() {
+  renderPreview();
+  try {
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      const htmlBlob = new Blob([currentBodyInner], { type: 'text/html' });
+      const textBlob = new Blob([document.getElementById('previewBox').innerText], { type: 'text/plain' });
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })]);
+      showToast('Signatur kopiert — jetzt in Outlook einfügen (Strg+V).');
+      return;
+    }
+    throw new Error('Clipboard API nicht verfügbar');
+  } catch (e) {
+    // Fallback: Auswahl + execCommand
+    try {
+      const box = document.getElementById('previewBox');
+      const range = document.createRange();
+      range.selectNodeContents(box);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(range);
+      const ok = document.execCommand('copy');
+      sel.removeAllRanges();
+      if (ok) { showToast('Signatur kopiert — jetzt in Outlook einfügen (Strg+V).'); return; }
+    } catch (e2) {}
+    showToast('Kopieren nicht möglich — bitte Vorschau markieren und manuell mit Strg+C kopieren.', true);
+  }
+}
+
+/* ── EXPORT: WORD ── */
+function exportWord() {
+  renderPreview();
+  const doc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>Signatur</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+</head><body>${currentBodyInner}</body></html>`;
+  const blob = new Blob(['\ufeff', doc], { type: 'application/msword;charset=utf-8' });
+  downloadBlob(blob, `Signatur-${slug(document.getElementById('fName').value)}.doc`);
+  showToast('Word-Datei heruntergeladen.');
+}
+
+/* ── EXPORT: HTML ── */
+function exportHtmlFile() {
+  renderPreview();
+  const blob = new Blob([currentFullHtml], { type: 'text/html;charset=utf-8' });
+  downloadBlob(blob, `Signatur-${slug(document.getElementById('fName').value)}.htm`);
+  showToast('HTML-Datei heruntergeladen.');
+}
+
+/* ── TOAST ── */
+let _toastTimer = null;
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+initApp();
+</script>
+</body>
+</html>
