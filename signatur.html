@@ -65,7 +65,8 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .select{height:32px;border:1px solid var(--border);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);outline:none;max-width:280px}
 .select:focus{border-color:var(--accent-mid)}
 
-.wrap{max-width:1100px;margin:0 auto;width:100%;padding:20px 20px 60px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.wrap{max-width:1100px;margin:0 auto;width:100%;padding:20px 20px 60px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;min-width:0}
+.card,.wrap>*{min-width:0}
 @media (max-width:860px){.wrap{grid-template-columns:1fr}}
 
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px}
@@ -109,6 +110,17 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 @media (max-width:640px){
   .wrap{padding:14px 12px 50px}
   .viewbar,.page-header{padding-left:12px;padding-right:12px}
+  /* Der Header lief auf Handys aus dem Bild: Logo, Titel, Version, Name und
+     Abmelden passen nicht nebeneinander. Name entfaellt, Rest wird kompakter. */
+  .header{padding:0 12px;gap:8px}
+  .header-brand{gap:7px;min-width:0}
+  .header-brand img{height:22px}
+  .header-brand>span:not(.beta-badge){font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .beta-badge{font-size:9px;padding:1px 5px;letter-spacing:.2px;flex-shrink:0}
+  .user-badge{display:none!important}
+  .header-right .btn-ghost{font-size:11px;padding:3px 9px;white-space:nowrap}
+  .preview-outer{padding:12px}
+  .card{padding:16px 14px}
 }
 </style>
 </head>
