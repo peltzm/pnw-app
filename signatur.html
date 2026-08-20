@@ -135,7 +135,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   <div class="login-card">
     <img src="https://static.wixstatic.com/media/d7fd63_313f7dd84a36440fbc102732bf9c8d50~mv2.png/v1/fill/w_240,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Sonja%20Peltz%20(500%20%C3%97%20250%20px)%20(1).png" alt="Praxis NeueWege">
     <div class="login-title">E-Mail-Signatur <span class="beta-badge">BETA</span></div>
-    <div class="login-desc">Erstellt deine offizielle PNW-Signatur aus deinen Microsoft-365-Daten. Name und E-Mail werden übernommen, Position und Telefonnummer kannst du anpassen.</div>
+    <div class="login-desc">Erstellt deine offizielle PNW-Signatur aus deinen Microsoft-365-Daten. Name und E-Mail werden übernommen, Position, Weiterbildungsabschluss und Telefonnummer kannst du anpassen.</div>
     <button class="btn btn-outline" onclick="login()" id="loginBtn" style="width:100%">
       <svg width="16" height="16" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
       Mit Microsoft anmelden
@@ -149,7 +149,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   <div class="page-header">
     <div class="page-header-left">
       <h2 id="pageTitle">Meine Signatur</h2>
-      <p id="pageSub">Name und E-Mail sind fest, Position und Telefon kannst du anpassen</p>
+      <p id="pageSub">Name und E-Mail sind fest, Position, Weiterbildungsabschluss und Telefon kannst du anpassen</p>
     </div>
   </div>
 
@@ -175,6 +175,10 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
         <input class="input" id="fPosition" placeholder="z. B. Leitung Verwaltung" oninput="onFieldInput()">
       </div>
       <div class="field">
+        <label>Weiterbildungsabschluss <span class="hint">änderbar</span></label>
+        <input class="input" id="fWeiterbildung" placeholder="z. B. Systemischer Berater (DGSF)" oninput="onFieldInput()">
+      </div>
+      <div class="field">
         <label>Telefon <span class="hint">änderbar</span></label>
         <input class="input" id="fPhone" placeholder="+49 173 2875 212" oninput="onFieldInput()">
       </div>
@@ -188,7 +192,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
         <span class="save-status" id="saveStatus"></span>
       </div>
 
-      <div class="note">Name und E-Mail kommen direkt aus eurem Microsoft-365-Verzeichnis und können hier nicht geändert werden — Änderungen daran bitte über die Verwaltung. Position und Telefonnummer werden für dich gespeichert und beim nächsten Öffnen wieder vorausgefüllt.</div>
+      <div class="note">Name und E-Mail kommen direkt aus eurem Microsoft-365-Verzeichnis und können hier nicht geändert werden — Änderungen daran bitte über die Verwaltung. Position, Weiterbildungsabschluss und Telefonnummer werden für dich gespeichert und beim nächsten Öffnen wieder vorausgefüllt. Der Weiterbildungsabschluss ist optional — bleibt das Feld leer, entfällt die Zeile in der Signatur.</div>
     </div>
 
     <div class="card">
@@ -401,6 +405,7 @@ async function applySelected() {
   document.getElementById('fName').value = selected.displayName || '';
   document.getElementById('fEmail').value = selected.mail || '';
   document.getElementById('fPosition').value = (ov && ov.Titel) || selected.jobTitle || '';
+  document.getElementById('fWeiterbildung').value = (ov && ov.Weiterbildung) || '';
   document.getElementById('fPhone').value = (ov && ov.Telefon) || selected.mobilePhone || (selected.businessPhones && selected.businessPhones[0]) || '';
   document.getElementById('pageTitle').textContent = selected.id === meId ? 'Meine Signatur' : 'Signatur für ' + selected.displayName;
   dirty = false;
@@ -426,7 +431,7 @@ async function ensureSpList() {
   const lr = await graph(`/sites/${SP_SITE_ID}/lists?$filter=displayName eq '${SP_LIST}'&$select=id,displayName`);
   if (lr.ok) {
     const ld = await lr.json();
-    if (ld.value && ld.value.length > 0) { _spListId = ld.value[0].id; return; }
+    if (ld.value && ld.value.length > 0) { _spListId = ld.value[0].id; await ensureWeiterbildungColumn(); return; }
   }
   // Liste existiert noch nicht -> automatisch anlegen
   const cr = await graph(`/sites/${SP_SITE_ID}/lists`, {
@@ -438,6 +443,7 @@ async function ensureSpList() {
         { name: 'ObjectId', text: {} },
         { name: 'Email', text: {} },
         { name: 'Titel', text: {} },
+        { name: 'Weiterbildung', text: {} },
         { name: 'Telefon', text: {} },
         { name: 'GeaendertVon', text: {} }
       ]
@@ -445,6 +451,23 @@ async function ensureSpList() {
   });
   if (cr.ok) { const cd = await cr.json(); _spListId = cd.id; }
   else console.warn('SharePoint-Liste konnte nicht automatisch angelegt werden:', cr.status);
+}
+
+/* Die Liste wurde urspruenglich ohne Spalte "Weiterbildung" angelegt. Sie wird
+   hier bei Bedarf nachtraeglich ergaenzt. Schlaegt das fehl (Nutzer ohne Rechte
+   zum Aendern der Listenstruktur), laeuft die App normal weiter. */
+async function ensureWeiterbildungColumn() {
+  if (!_spListId) return;
+  try {
+    const r = await graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/columns?$select=name`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if ((d.value || []).some(col => col.name === 'Weiterbildung')) return;
+    const cr = await graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/columns`, {
+      method: 'POST', body: JSON.stringify({ name: 'Weiterbildung', text: {} })
+    });
+    if (!cr.ok) console.warn('Spalte "Weiterbildung" nicht angelegt (' + cr.status + ') — einmalig durch die Verwaltung anzulegen.');
+  } catch (e) { console.warn('ensureWeiterbildungColumn:', e); }
 }
 
 async function preloadOverrides() {
@@ -456,7 +479,7 @@ async function preloadOverrides() {
     const d = await r.json();
     (d.value || []).forEach(item => {
       const oid = item.fields?.ObjectId;
-      if (oid) _overrideCache[oid] = { itemId: item.id, Titel: item.fields.Titel || '', Telefon: item.fields.Telefon || '' };
+      if (oid) _overrideCache[oid] = { itemId: item.id, Titel: item.fields.Titel || '', Weiterbildung: item.fields.Weiterbildung || '', Telefon: item.fields.Telefon || '' };
     });
     url = d['@odata.nextLink'] || null;
   }
@@ -473,25 +496,33 @@ async function saveOverride() {
       ObjectId: selected.id,
       Email: selected.mail || '',
       Titel: document.getElementById('fPosition').value.trim(),
+      Weiterbildung: document.getElementById('fWeiterbildung').value.trim(),
       Telefon: document.getElementById('fPhone').value.trim(),
       GeaendertVon: meMail
     };
     const existing = _overrideCache[selected.id];
-    let itemId;
-    if (existing && existing.itemId) {
-      const r = await graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/items/${existing.itemId}/fields`, { method: 'PATCH', body: JSON.stringify(payload) });
-      if (!r.ok) throw new Error('Speichern fehlgeschlagen: ' + r.status);
-      itemId = existing.itemId;
-    } else {
-      const r = await graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/items`, { method: 'POST', body: JSON.stringify({ fields: payload }) });
-      if (!r.ok) throw new Error('Speichern fehlgeschlagen: ' + r.status);
-      const nd = await r.json();
-      itemId = nd.id;
+    const send = (p) => existing && existing.itemId
+      ? graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/items/${existing.itemId}/fields`, { method: 'PATCH', body: JSON.stringify(p) })
+      : graph(`/sites/${SP_SITE_ID}/lists/${_spListId}/items`, { method: 'POST', body: JSON.stringify({ fields: p }) });
+
+    let r = await send(payload);
+    let wbLost = false;
+    if (!r.ok && payload.Weiterbildung) {
+      // Fehlt die Spalte in SharePoint, soll wenigstens der Rest gespeichert werden.
+      const { Weiterbildung, ...ohneWb } = payload;
+      r = await send(ohneWb);
+      if (r.ok) { wbLost = true; payload.Weiterbildung = ''; }
     }
-    _overrideCache[selected.id] = { itemId, Titel: payload.Titel, Telefon: payload.Telefon };
+    if (!r.ok) throw new Error('Speichern fehlgeschlagen: ' + r.status);
+    let itemId;
+    if (existing && existing.itemId) { itemId = existing.itemId; }
+    else { const nd = await r.json(); itemId = nd.id; }
+    _overrideCache[selected.id] = { itemId, Titel: payload.Titel, Weiterbildung: payload.Weiterbildung, Telefon: payload.Telefon };
     dirty = false;
     setSaveStatus('gespeichert ✓');
-    showToast('Gespeichert.');
+    showToast(wbLost
+      ? 'Gespeichert — der Weiterbildungsabschluss konnte nicht gespeichert werden (Spalte fehlt in SharePoint).'
+      : 'Gespeichert.', wbLost);
   } catch (e) {
     console.error(e);
     showToast('Fehler beim Speichern: ' + e.message, true);
@@ -516,9 +547,16 @@ function escapeHtml(s) {
 function substitute(tpl) {
   const name = document.getElementById('fName').value;
   const position = document.getElementById('fPosition').value;
+  const weiterbildung = document.getElementById('fWeiterbildung').value.trim();
   const phone = document.getElementById('fPhone').value;
   const email = document.getElementById('fEmail').value;
+  // Optionaler Weiterbildungs-Block: ist das Feld leer, faellt der komplette
+  // Abschnitt zwischen den Markern weg (sonst bliebe eine leere Zeile stehen).
+  tpl = weiterbildung
+    ? tpl.split('<!--WB_START-->').join('').split('<!--WB_END-->').join('')
+    : tpl.replace(/<!--WB_START-->[\s\S]*?<!--WB_END-->/g, '');
   return tpl
+    .split('{{WEITERBILDUNG}}').join(escapeHtml(weiterbildung))
     .split('{{NAME}}').join(escapeHtml(name))
     .split('{{POSITION}}').join(escapeHtml(position))
     .split('{{TELEFON}}').join(escapeHtml(phone))
