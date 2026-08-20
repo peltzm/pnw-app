@@ -208,6 +208,10 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
           <span><span class="et-title">Als HTML-Datei herunterladen</span><br><span class="et-sub">.htm — zum Hochladen in andere E-Mail-Programme</span></span>
         </button>
+        <button class="export-btn" onclick="copyTextSignature()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          <span><span class="et-title">Textversion fürs Handy kopieren</span><br><span class="et-sub">Für Outlook auf Android — dort sind nur Textsignaturen möglich</span></span>
+        </button>
       </div>
     </div>
   </div>
@@ -589,6 +593,46 @@ function exportHtmlFile() {
   const blob = new Blob([currentFullHtml], { type: 'text/html;charset=utf-8' });
   downloadBlob(blob, `Signatur-${slug(document.getElementById('fName').value)}.htm`);
   showToast('HTML-Datei heruntergeladen.');
+}
+
+/* ── EXPORT: TEXTVERSION (Outlook Android) ──
+   Outlook für Android unterstützt keine HTML-Signaturen — eingefügte Logos gehen
+   verloren. Deshalb hier eine reine Textfassung, die aus derselben Vorlage
+   abgeleitet wird. Damit bleiben die Pflichtangaben nach § 35a GmbHG erhalten,
+   die auch für mobil versendete E-Mails gelten. */
+function buildTextSignature() {
+  renderPreview();
+  const raw = document.getElementById('previewBox').innerText || '';
+  // Leerzeilen konsequent entfernen — auf dem Handy soll die Signatur kompakt
+  // bleiben. Einzige Ausnahme: eine Leerzeile nach der Grußformel.
+  const lines = raw
+    .split('\n')
+    .map(l => l.replace(/\u00a0/g, ' ').trim())
+    .filter(l => l !== '');
+  if (lines.length && /^(viele gr|mit freundlichen gr)/i.test(lines[0])) {
+    lines.splice(1, 0, '');
+  }
+  return lines.join('\n').trim();
+}
+
+async function copyTextSignature() {
+  const text = buildTextSignature();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (!ok) throw new Error('execCommand fehlgeschlagen');
+    }
+    showToast('Textversion kopiert — in Outlook: Einstellungen → Signatur → einfügen.');
+  } catch (e) {
+    showToast('Kopieren nicht möglich — bitte den Text unten markieren und manuell kopieren.', true);
+  }
 }
 
 /* ── TOAST ── */
