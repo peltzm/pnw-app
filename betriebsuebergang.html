@@ -130,7 +130,36 @@ th{color:var(--text-muted);font-weight:600}
       <button class="btn btn-sec" onclick="document.getElementById('pdfFile').click()">Schreiben hochladen / ersetzen</button>
       <input type="file" id="pdfFile" accept="application/pdf" style="display:none" onchange="uploadPdf(this.files[0])">
     </div>
+    <div id="setupHinweis" class="err hidden" style="margin-top:10px"></div>
     <div id="adminError" class="err hidden" style="margin-top:10px"></div>
+  </div>
+
+  <!-- Versand über Graph (nur GF) -->
+  <div class="card hidden" id="cardVersand">
+    <h2>Briefe versenden <span class="muted small">(nur Geschäftsführung)</span></h2>
+    <p class="small muted" id="versandInfo">Noch keine Empfängerliste geladen.</p>
+
+    <div class="note small">
+      Erwartet werden in SharePoint: die Datei <strong>Betriebsuebergang/empfaenger.json</strong>
+      sowie die Einzelbriefe unter <strong>Betriebsuebergang/Briefe/</strong>.
+      Beides lässt sich hier direkt hochladen.
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-sec" onclick="document.getElementById('empfFile').click()">Empfängerliste hochladen</button>
+      <input type="file" id="empfFile" accept=".json,application/json" style="display:none" onchange="uploadEmpf(this.files[0])">
+      <button class="btn btn-sec" onclick="document.getElementById('briefFiles').click()">Einzelbriefe hochladen</button>
+      <input type="file" id="briefFiles" accept="application/pdf" multiple style="display:none" onchange="uploadBriefe(this.files)">
+      <button class="btn btn-sec" onclick="ladeEmpfaenger()">Liste neu laden</button>
+    </div>
+
+    <div id="empfTable"></div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn btn-sec" id="btnDraft" onclick="versenden(false)">Als Entwürfe anlegen</button>
+      <button class="btn" id="btnSend" onclick="versenden(true)">Direkt versenden</button>
+    </div>
+    <div id="sendLog" class="small" style="margin-top:12px;max-height:240px;overflow:auto"></div>
   </div>
 
 </div>
@@ -146,12 +175,14 @@ const CFG = {
   spHost:      'praxisneuewegesonjapeltz978.sharepoint.com',
   listName:    'PNW-Betriebsuebergang',
   pdfSpPfad:   'Betriebsuebergang/613a-unterrichtung.pdf',
+  briefOrdner: 'Betriebsuebergang/Briefe',
+  empfListe:   'Betriebsuebergang/empfaenger.json',
   docVersion:  '1.0 vom 28.08.2026'
 };
-const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
+const SCOPES = ['User.Read', 'Sites.ReadWrite.All', 'Mail.ReadWrite', 'Mail.Send'];
 const GF = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
 
-const APP_VERSION = 'vd7f6f03'; // auto-updated on deploy
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
 document.getElementById('versionBadge').textContent = APP_VERSION;
 
 const listenBasis = `/sites/${CFG.spHost}/lists/${CFG.listName}`;
@@ -226,7 +257,9 @@ async function start(){
 
   if(GF.includes((currentAccount.username||'').toLowerCase())){
     document.getElementById('cardAdmin').classList.remove('hidden');
-    ladeAlle();
+    document.getElementById('cardVersand').classList.remove('hidden');
+    await ladeAlle();
+    ladeEmpfaenger();
   }
   await ladeMeine();
 }
@@ -354,6 +387,7 @@ async function ladeAlle(){
     err.classList.remove('hidden');
     document.getElementById('btnSetup').classList.remove('hidden');
   }
+  pruefeListe();
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -369,6 +403,21 @@ function csvExport(){
   a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
   a.download = 'Empfangsbestaetigungen_613a.csv';
   a.click();
+}
+
+/* Existiert die Liste? graphAlle() schluckt 404 still — deshalb hier explizit. */
+async function pruefeListe(){
+  const btn = document.getElementById('btnSetup');
+  const hin = document.getElementById('setupHinweis');
+  try{
+    const l = await graph(listenBasis);
+    if(l){ btn.classList.add('hidden'); hin.classList.add('hidden'); return; }
+    throw new Error('fehlt');
+  }catch(e){
+    btn.classList.remove('hidden');
+    hin.textContent = 'Die SharePoint-Liste "' + CFG.listName + '" existiert noch nicht. Ohne sie können keine Bestätigungen gespeichert werden.';
+    hin.classList.remove('hidden');
+  }
 }
 
 /* Einmaliges Setup der SharePoint-Liste */
@@ -394,6 +443,136 @@ async function listeAnlegen(){
     err.textContent = 'Liste konnte nicht angelegt werden: ' + e.message;
     err.classList.remove('hidden');
   }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * VERSAND ÜBER GRAPH — gleiches Muster wie die Unterschriften-App:
+ * /me/messages legt Entwürfe an, /me/sendMail verschickt direkt.
+ * Der Brief haengt als PDF an; Graph erwartet Base64 ohne Data-URL-Prefix.
+ * ═══════════════════════════════════════════════════════════ */
+let empfaenger = [];
+
+function spPfad(p){ return p.split('/').map(encodeURIComponent).join('/'); }
+
+async function ladeEmpfaenger(){
+  const info = document.getElementById('versandInfo');
+  try{
+    const t = await token();
+    const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/drive/root:/'+spPfad(CFG.empfListe)+':/content',
+                          {headers:{Authorization:'Bearer '+t}});
+    if(!r.ok) throw new Error(r.status===404 ? 'empfaenger.json noch nicht hochgeladen' : 'Graph '+r.status);
+    empfaenger = (await r.json()).map(e => ({...e, selected:true}));
+    info.textContent = empfaenger.length + ' Empfänger geladen.';
+    renderEmpf();
+  }catch(e){
+    empfaenger = [];
+    info.textContent = 'Empfängerliste nicht verfügbar: ' + e.message;
+    document.getElementById('empfTable').innerHTML = '';
+  }
+}
+
+function renderEmpf(){
+  const best = new Set(alleEintraege.map(i => ((i.fields||{}).Title||'').toLowerCase()));
+  document.getElementById('empfTable').innerHTML =
+    '<table><tr><th></th><th>Empfänger</th><th>E-Mail</th><th>Status</th></tr>' +
+    empfaenger.map((e,i)=>
+      '<tr><td><input type="checkbox" ' + (e.selected?'checked':'') +
+      ' onchange="empfaenger['+i+'].selected=this.checked"></td>' +
+      '<td>'+esc(e.anredeZeile)+'</td><td>'+esc(e.email||'—')+'</td>' +
+      '<td>'+(best.has((e.email||'').toLowerCase()) ? 'bestätigt' : '')+'</td></tr>'
+    ).join('') + '</table>';
+}
+
+function mailHtml(e){
+  return '<div style="font-family:Calibri,sans-serif;font-size:11pt">' +
+    '<p>' + esc(e.anrede) + ',</p>' +
+    '<p>im Anhang findest Du die Unterrichtung über den Betriebsübergang gemäß § 613a Abs. 5 BGB. ' +
+    'Bitte lies sie in Ruhe durch und hebe sie auf.</p>' +
+    '<p>Bitte bestätige uns kurz den Erhalt &ndash; online unter ' +
+    '<a href="https://apps.praxisneuewege.de/betriebsuebergang.html">apps.praxisneuewege.de/betriebsuebergang.html</a> ' +
+    'oder mit dem unterschriebenen Abschnitt auf der letzten Seite.</p>' +
+    '<p>Bei Fragen sprich uns jederzeit direkt an.</p>' +
+    '<p>Herzliche Grüße<br>Sonja und Markus</p></div>';
+}
+
+async function pdfBase64(datei){
+  const t = await token();
+  const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/drive/root:/'+
+                        spPfad(CFG.briefOrdner+'/'+datei+'.pdf')+':/content', {headers:{Authorization:'Bearer '+t}});
+  if(!r.ok) throw new Error('Brief nicht gefunden ('+r.status+')');
+  const buf = new Uint8Array(await r.arrayBuffer());
+  let bin = '';
+  for(let i=0;i<buf.length;i+=8192) bin += String.fromCharCode.apply(null, buf.subarray(i,i+8192));
+  return btoa(bin);
+}
+
+async function versenden(direkt){
+  const sel = empfaenger.filter(e => e.selected && e.email);
+  if(!sel.length){ alert('Keine Empfänger mit E-Mail-Adresse ausgewählt.'); return; }
+  if(!confirm(sel.length + (direkt ? ' Mails DIREKT versenden?' : ' Mails als Entwürfe anlegen?'))) return;
+
+  const log = document.getElementById('sendLog'); log.innerHTML = '';
+  document.getElementById('btnDraft').disabled = true;
+  document.getElementById('btnSend').disabled = true;
+  let ok=0, fehler=0;
+
+  for(const e of sel){
+    try{
+      const anhang = await pdfBase64(e.datei);
+      const msg = {
+        subject: 'Unterrichtung über den Betriebsübergang (§ 613a BGB)',
+        body: { contentType:'HTML', content: mailHtml(e) },
+        toRecipients: [{emailAddress:{address:e.email}}],
+        attachments: [{
+          '@odata.type':'#microsoft.graph.fileAttachment',
+          name: '613a-Unterrichtung.pdf',
+          contentType: 'application/pdf',
+          contentBytes: anhang
+        }]
+      };
+      if(direkt) await graph('/me/sendMail', {method:'POST', body:JSON.stringify({message:msg, saveToSentItems:true})});
+      else       await graph('/me/messages', {method:'POST', body:JSON.stringify(msg)});
+      ok++;
+      log.innerHTML += '<div style="color:var(--ok)">' + (direkt?'GESENDET':'ENTWURF') + ': ' + esc(e.anredeZeile) + ' \u2192 ' + esc(e.email) + '</div>';
+    }catch(err){
+      fehler++;
+      log.innerHTML += '<div style="color:var(--error)">FEHLER: ' + esc(e.anredeZeile) + ' \u2014 ' + esc(err.message) + '</div>';
+    }
+    log.scrollTop = log.scrollHeight;
+  }
+  log.innerHTML += '<div style="margin-top:8px"><strong>' + ok + ' erfolgreich' + (fehler ? ', ' + fehler + ' fehlgeschlagen' : '') + '</strong></div>';
+  document.getElementById('btnDraft').disabled = false;
+  document.getElementById('btnSend').disabled = false;
+}
+
+async function uploadEmpf(file){
+  if(!file) return;
+  try{
+    const t = await token();
+    const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/drive/root:/'+spPfad(CFG.empfListe)+':/content',
+      {method:'PUT', headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}, body:file});
+    if(!r.ok) throw new Error('('+r.status+') '+await r.text());
+    ladeEmpfaenger();
+  }catch(e){ alert('Upload fehlgeschlagen: '+e.message); }
+  document.getElementById('empfFile').value='';
+}
+
+async function uploadBriefe(files){
+  if(!files || !files.length) return;
+  const log = document.getElementById('sendLog'); log.innerHTML='';
+  const t = await token();
+  let ok=0, fehler=0;
+  for(const f of files){
+    try{
+      const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/drive/root:/'+
+                            spPfad(CFG.briefOrdner+'/'+f.name)+':/content',
+        {method:'PUT', headers:{Authorization:'Bearer '+t,'Content-Type':'application/pdf'}, body:f});
+      if(!r.ok) throw new Error('('+r.status+')');
+      ok++;
+    }catch(e){ fehler++; log.innerHTML += '<div style="color:var(--error)">'+esc(f.name)+' \u2014 '+esc(e.message)+'</div>'; }
+  }
+  log.innerHTML += '<div><strong>'+ok+' Brief(e) hochgeladen'+(fehler?', '+fehler+' fehlgeschlagen':'')+'</strong></div>';
+  document.getElementById('briefFiles').value='';
 }
 
 /* Bestehende Session wiederherstellen */
