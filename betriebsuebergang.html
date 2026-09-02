@@ -97,18 +97,18 @@ th{color:var(--text-muted);font-weight:600}
   <div class="card hidden" id="cardDone">
     <div class="ok">
       <strong>Erhalt bestätigt.</strong>
-      <div class="small" style="margin-top:4px">Bestätigt am <span id="doneAt"></span>. Sie müssen nichts weiter tun.</div>
+      <div class="small" style="margin-top:4px">Bestätigt am <span id="doneAt"></span>. Du musst nichts weiter tun.</div>
     </div>
-    <p class="small muted" style="margin-top:12px;margin-bottom:0">Ihr Widerspruchsrecht nach § 613a Abs. 6 BGB bleibt davon unberührt. Die Frist beträgt einen Monat ab Zugang des Schreibens.</p>
+    <p class="small muted" style="margin-top:12px;margin-bottom:0">Dein Widerspruchsrecht nach § 613a Abs. 6 BGB bleibt davon unberührt. Die Frist beträgt einen Monat ab Zugang des Schreibens.</p>
   </div>
 
   <!-- Bestätigen -->
   <div class="card" id="cardConfirm">
     <h2>Erhalt bestätigen</h2>
     <div class="note">
-      Diese Bestätigung dokumentiert ausschließlich, dass Sie das Schreiben erhalten haben.
+      Diese Bestätigung dokumentiert ausschließlich, dass Du das Schreiben erhalten hast.
       Sie ist <strong>keine Zustimmung</strong> zum Betriebsübergang und <strong>kein Verzicht</strong>
-      auf Ihr Widerspruchsrecht nach § 613a Abs. 6 BGB.
+      auf Dein Widerspruchsrecht nach § 613a Abs. 6 BGB.
     </div>
     <label class="check">
       <input type="checkbox" id="chk" onchange="document.getElementById('btnConfirm').disabled = !this.checked">
@@ -151,6 +151,7 @@ th{color:var(--text-muted);font-weight:600}
       <button class="btn btn-sec" onclick="document.getElementById('briefFiles').click()">Einzelbriefe hochladen</button>
       <input type="file" id="briefFiles" accept="application/pdf" multiple style="display:none" onchange="uploadBriefe(this.files)">
       <button class="btn btn-sec" onclick="ladeEmpfaenger()">Liste neu laden</button>
+      <button class="btn btn-sec" onclick="nurOffene()">Nur Unbestätigte auswählen</button>
     </div>
 
     <div id="empfTable"></div>
@@ -182,7 +183,7 @@ const CFG = {
 const SCOPES = ['User.Read', 'Sites.ReadWrite.All', 'Mail.ReadWrite', 'Mail.Send'];
 const GF = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
 
-const APP_VERSION = 'v2c22508'; // auto-updated on deploy
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
 document.getElementById('versionBadge').textContent = APP_VERSION;
 
 const listenBasis = `/sites/${CFG.spHost}/lists/${CFG.listName}`;
@@ -473,16 +474,36 @@ async function ladeEmpfaenger(){
   }
 }
 
+function nachname(s){ return (s||'').trim().split(/\s+/).pop().toLowerCase(); }
+
 function renderEmpf(){
-  const best = new Set(alleEintraege.map(i => ((i.fields||{}).Title||'').toLowerCase()));
+  const best      = new Set(alleEintraege.map(i => ((i.fields||{}).Title||'').toLowerCase()));
+  const bestNamen = new Set(alleEintraege.map(i => nachname((i.fields||{}).MaName)));
   document.getElementById('empfTable').innerHTML =
     '<table><tr><th></th><th>Empfänger</th><th>E-Mail</th><th>Status</th></tr>' +
     empfaenger.map((e,i)=>
       '<tr><td><input type="checkbox" ' + (e.selected?'checked':'') +
       ' onchange="empfaenger['+i+'].selected=this.checked"></td>' +
       '<td>'+esc(e.anredeZeile)+'</td><td>'+esc(e.email||'—')+'</td>' +
-      '<td>'+(best.has((e.email||'').toLowerCase()) ? 'bestätigt' : '')+'</td></tr>'
+      '<td>'+(istBestaetigt(e) ? 'bestätigt' : '')+'</td></tr>'
     ).join('') + '</table>';
+
+  function istBestaetigt(e){
+    if(best.has((e.email||'').toLowerCase())) return true;
+    // Fallback fuer Namensaenderungen (Heirat): Abgleich ueber den Nachnamen
+    return bestNamen.has(nachname(e.anredeZeile));
+  }
+  window.istBestaetigt = istBestaetigt;
+}
+
+/* Auswahl auf die Personen ohne Bestaetigung reduzieren */
+function nurOffene(){
+  if(!empfaenger.length){ alert('Erst die Empfängerliste laden.'); return; }
+  empfaenger.forEach(e => e.selected = !window.istBestaetigt(e));
+  renderEmpf();
+  const n = empfaenger.filter(e => e.selected).length;
+  document.getElementById('versandInfo').textContent =
+    n + ' von ' + empfaenger.length + ' Empfängern haben noch nicht bestätigt.';
 }
 
 function mailHtml(e){
