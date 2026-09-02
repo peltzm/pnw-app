@@ -2350,24 +2350,10 @@ async function genehmigen(g) {
   }
 }
 
-async function ablehnen() {
-  const g = _currentReviewId; if (!g) return;
-  const grund = document.getElementById('rejectGrund').value;
-  try {
-    const token = await getToken();
-    const { siteId, listId } = await getGraphListIds();
-    await Promise.all(g.belege.map(b =>
-      fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
-        method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Status: 'Abgelehnt' })
-      })
-    ));
-    const html = `<p>Ihre Spesenabrechnung für <strong>${fmtMonat(g.monat)}</strong> wurde abgelehnt.</p>${grund ? `<p><strong>Grund:</strong> ${esc(grund)}</p>` : ''}<p>Bitte korrigieren Sie die Abrechnung und reichen Sie sie erneut ein.</p>`;
-    await sendMail(g.mail||'', [], `[Abgelehnt] Spesenabr. ${fmtMonat(g.monat)}`, html);
-    showToast('Abgelehnt — E-Mail gesendet');
-    ladeTLAbrechnungen();
-  } catch(e) { showToast('Fehler: ' + e.message); }
-}
+// ablehnen() wurde vereinheitlicht — eine Funktion fuer TL-Karte UND Pruefmodus,
+// siehe Definition weiter unten. (Vorher existierten zwei gleichnamige Funktionen;
+// die zweite ueberschrieb diese hier, wodurch Zurueckweisungen aus der TL-Karte
+// keinen einzigen Beleg trafen — Status blieb auf Genehmigt/Eingereicht.)
 
 // Bild-URL → Base64 (via fetch mit Auth-Token für SharePoint)
 // Holt eine Beleg-Datei (Foto/PDF) als Blob — behandelt alle URL-Formate
@@ -3657,16 +3643,33 @@ async function freigebenUndPDF() {
   }
 }
 
-// Zurückweisen — nutzt bestehenden rejectModal, überschreibt ablehnen()
+// Zurückweisen — vereinheitlicht fuer beide Wege:
+// Pruefmodus (_reviewFkMail/_reviewMonat gesetzt) UND TL-Karte (_currentReviewId gesetzt).
 async function ablehnen() {
   const grund = document.getElementById('rejectGrund').value;
   await speichereKommentare();
   try {
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
-    const items = await fetchAlleListItems(token, siteId, listId);
-    const belege = items.map(i=>({id:i.id,...i.fields}))
-      .filter(b => (b.Monat||'').startsWith(_reviewMonat||_currentMonat) && (b.Fachkraft_Mail||'').toLowerCase()===(_reviewFkMail||'').toLowerCase());
+
+    // Ziel-Belege + Empfaengerin bestimmen
+    let belege = [], fkMail = '', monat = '';
+    if (_isReviewMode || _reviewFkMail) {
+      fkMail = _reviewFkMail || '';
+      monat  = _reviewMonat || _currentMonat;
+      const items = await fetchAlleListItems(token, siteId, listId);
+      belege = items.map(i=>({id:i.id,...i.fields}))
+        .filter(b => (b.Monat||'').startsWith(monat) && (b.Fachkraft_Mail||'').toLowerCase()===fkMail.toLowerCase());
+    } else if (_currentReviewId) {
+      fkMail = _currentReviewId.mail  || '';
+      monat  = _currentReviewId.monat || _currentMonat;
+      belege = _currentReviewId.belege || [];
+    }
+    if (!belege.length || !fkMail) {
+      showToast('⚠️ Keine Belege zum Zurückweisen gefunden — Status unverändert');
+      return;
+    }
+
     await Promise.all(belege.map(b =>
       fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${b.id}/fields`, {
         method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -3679,14 +3682,15 @@ async function ablehnen() {
       .map(([,k]) => `<li>${esc(k.text)} <span style="color:#999">(${esc(k.datum||'')})</span></li>`)
       .join('');
     // Korrektur-Link für Fachkraft
-    const editUrl = `${CFG.redirectUri}?edit=${_reviewMonat}:${_reviewFkMail}`;
-    const html = `<p>Ihre Spesenabrechnung für <strong>${fmtMonat(_reviewMonat||_currentMonat)}</strong> wurde zurückgewiesen.</p>
+    const editUrl = `${CFG.redirectUri}?edit=${monat}:${fkMail}`;
+    const html = `<p>Ihre Spesenabrechnung für <strong>${fmtMonat(monat)}</strong> wurde zurückgewiesen.</p>
       ${grund ? `<p><strong>Grund:</strong> ${esc(grund)}</p>` : ''}
       ${offeneKomm ? `<p><strong>Kommentare zur Abrechnung:</strong></p><ul>${offeneKomm}</ul>` : ''}
       <p><a href="${editUrl}" style="background:#7b3f1e;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold">Abrechnung überarbeiten →</a></p>
       <p style="font-size:12px;color:#888">Nach der Überarbeitung bitte erneut einreichen — die Teamleitung erhält automatisch eine neue Benachrichtigung.</p>`;
-    await sendMail(_reviewFkMail, [], `[Zurückgewiesen] Spesenabr. ${fmtMonat(_reviewMonat||_currentMonat)}`, html);
+    await sendMail(fkMail, [], `[Zurückgewiesen] Spesenabr. ${fmtMonat(monat)}`, html);
     showToast('Zurückgewiesen — E-Mail gesendet');
+    _currentReviewId = null;
     if (_isReviewMode) {
       document.getElementById('reviewBanner')?.remove();
       document.getElementById('reviewFrame')?.remove();
