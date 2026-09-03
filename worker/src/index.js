@@ -1896,6 +1896,33 @@ export default {
       }
     }
 
+    // Diagnose: welche Kilanka-Modelle darf das hinterlegte Token lesen?
+    // Nur GF — die Antwort verraet die Freigabestruktur des Zugangs.
+    if (url.pathname === "/api/kilanka-check" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Nur für die Geschäftsführung" }, 403, origin);
+      }
+      const modelle = [
+        "users", "clients", "rosters", "contacts", "users/absences",
+        "clients/reports", "clients/absences", "clients/timeSheets",
+        "rosters/timeSheets", "rosters/accounts",
+        "accounting/invoices", "accounting/services", "accounting/invoiceSets",
+      ];
+      const ergebnis = [];
+      for (const m of modelle) {
+        try {
+          const r = await kilankaPost(env, m, { id: 1, $limit: 1 });
+          ergebnis.push({ modell: m, status: "ok", datensaetze: Array.isArray(r) ? r.length : 0 });
+        } catch (e) {
+          ergebnis.push({ modell: m, status: "fehler", meldung: e.message });
+        }
+      }
+      return json({ stand: new Date().toISOString(), ergebnis }, 200, origin);
+    }
+
     if (url.pathname === "/api/health") {
       return json({ ok: true, version: "v3.2-git", ts: new Date().toISOString() }, 200, origin);
     }
