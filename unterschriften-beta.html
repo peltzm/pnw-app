@@ -172,7 +172,7 @@ const CFG = {
   workerUrl:   'https://pnw-kilanka-proxy.markus-3c8.workers.dev',
 };
 const SCOPES = ['User.Read', 'User.ReadBasic.All', 'User.Read.All', 'Sites.ReadWrite.All', 'Mail.ReadWrite', 'Mail.Send'];
-const APP_VERSION = 'BETA-47bb5f3'; // auto-updated on deploy
+const APP_VERSION = 'BETA-ce3536f'; // auto-updated on deploy
 const MAIL_DOMAIN = 'praxisneuewege.de';
 const LOG_LIST = 'Unterschriften_Log';
 // Kein CC für die Leitung selbst:
@@ -300,8 +300,30 @@ async function ladeDaten() {
   } catch(e) {
     document.getElementById('warnBox').innerHTML =
       `<div class="alert-warn">Daten konnten nicht geladen werden: ${escHtml(e.message)}</div>`;
+    // Bei Kilanka-Fehlern gleich zeigen, welche Modelle das Worker-Token lesen
+    // darf — spart die Suche im Cloudflare-Log. Nur die GF bekommt eine Antwort.
+    if (/Kilanka/i.test(e.message)) diagnose();
   }
   document.getElementById('ladeSpinner').style.display = 'none';
+}
+
+async function diagnose() {
+  try {
+    const t = await tokens();
+    const r = await fetch(`${CFG.workerUrl}/api/kilanka-check`, {
+      headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
+    });
+    if (!r.ok) return;                       // 403 = keine GF, still lassen
+    const d = await r.json();
+    const zeilen = d.ergebnis.map(x =>
+      `<tr><td>${escHtml(x.modell)}</td><td>${x.status === 'ok'
+        ? '<span style="color:var(--ok)">ok</span>'
+        : '<span style="color:var(--error)">' + escHtml(x.meldung || 'Fehler') + '</span>'}</td></tr>`).join('');
+    document.getElementById('warnBox').innerHTML +=
+      `<div class="panel"><h3>Freigabe des Worker-Tokens</h3><div class="tbl-scroll">
+       <table class="det"><tr><th>Modell</th><th>Status</th></tr>${zeilen}</table></div>
+       <p class="hint">Steht hier 403, fehlt dem Token in Kilanka die Freigabe f&uuml;r dieses Modell.</p></div>`;
+  } catch(_) { /* Diagnose ist Beiwerk — Fehler hier nicht weiter melden */ }
 }
 
 function verteileDaten() {
