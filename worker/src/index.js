@@ -1772,7 +1772,10 @@ async function offeneNachweise(env, von) {
 }
 
 // Offene Nachweise, gruppiert je Mitarbeiter (mit UPN fuer die Rechtepruefung).
-async function unterschriftenGruppen(env, von) {
+// bis = optionale obere Grenze (YYYY-MM-DD, einschliesslich). Kilanka wird
+// weiterhin nur mit $gte angefragt und der Rest hier beschnitten: so bleibt
+// der Monatsschnitt vom Cache des groesseren Zeitraums bedient.
+async function unterschriftenGruppen(env, von, bis) {
   const [offen, clients, users, svc] = await Promise.all([
     offeneNachweise(env, von),
     fetchKilankaClients(env),
@@ -1795,6 +1798,7 @@ async function unterschriftenGruppen(env, von) {
 
   const gruppen = new Map();
   for (const t of offen) {
+    if (bis && (t.date?.$date || "") > bis) continue;
     const uid = String(t.user?.id ?? "");
     const info = uMap.get(uid) || { name: "Unbekannt", upn: "", archiviert: false };
     if (!gruppen.has(uid)) {
@@ -1870,7 +1874,10 @@ export default {
           von = d.toISOString().slice(0, 10);
         }
 
-        const alle = await unterschriftenGruppen(env, von);
+        const bisParam = (url.searchParams.get("bis") || "").trim();
+        const bis = /^\d{4}-\d{2}-\d{2}$/.test(bisParam) ? bisParam : null;
+
+        const alle = await unterschriftenGruppen(env, von, bis);
         const erlaubt = istGf
           ? null
           : new Set([caller, ...dr.reports.map((r) => r.upn)].filter(Boolean));
@@ -1885,6 +1892,7 @@ export default {
             // unvollstaendige Teamsicht als vollstaendig auszugeben.
             rolleUnsicher: !!dr.fehler,
             von,
+            bis,
             stand: new Date().toISOString(),
             gesamt: gruppen.reduce((s, g) => s + g.count, 0),
             gruppen,
