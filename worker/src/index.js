@@ -1659,6 +1659,176 @@ function corsHeaders(origin) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Unterschriften — offene Leistungsnachweise (clients/timeSheets)
+//
+// Loest den bisherigen XLSX-Upload der Unterschriften-App ab: die
+// Nachweise kommen direkt aus Kilanka. Sichtbarkeit wie im
+// Manager-Cockpit: GF alle, Teamleitung ihr Team (Entra-directReports),
+// alle anderen nur sich selbst.
+// ═══════════════════════════════════════════════════════════════
+
+// Status, die KEINE offene Unterschrift bedeuten (Kilanka liefert Klartext).
+const SIG_ERLEDIGT = new Set(["unterschrieben", "nicht erforderlich"]);
+
+// Bewusst schmal: keine Adressen, keine GPS-Koordinaten. Der Kommentar
+// bleibt drin, weil er im Erinnerungsmail die Zuordnung erst moeglich macht.
+const TIMESHEET_GRAPH = {
+  id: 1, date: 1, start: 1, end: 1, total: 1, state: 1, comment: 1,
+  signatureStatus: 1,
+  client: { id: 1 },
+  user: { id: 1 },
+  service: { id: 1 },
+  activity: { recName: 1 },
+  invoice: { id: 1 },
+  $limit: 1000,
+};
+
+let timeSheetCache = new Map();          // "YYYY-MM-DD" → { data, fetchedAt }
+let serviceNameCache = { map: null, fetchedAt: 0 };
+let kilankaUserCache = { list: null, fetchedAt: 0 };
+
+// "HH:MM" aus $datetime/$time/String. Format der Felder start/end ist nicht
+// dokumentiert — deshalb wird jede Variante akzeptiert statt zu raten.
+function kZeit(w) {
+  if (!w) return "";
+  const s = typeof w === "string" ? w : (w.$datetime || w.$time || w.$date || "");
+  const m = /(\d{2}):(\d{2})/.exec(String(s));
+  return m ? `${m[1]}:${m[2]}` : "";
+}
+
+// ISO-8601-Dauer ($interval, z. B. "PT1H30M") → Stunden.
+function kStunden(w) {
+  if (!w) return 0;
+  const s = typeof w === "string" ? w : w.$interval || "";
+  const m = /^P(?:(-?[\d.]+)D)?(?:T(?:(-?[\d.]+)H)?(?:(-?[\d.]+)M)?(?:(-?[\d.]+)S)?)?$/.exec(String(s));
+  if (!m) return 0;
+  const [, d, h, min, sec] = m.map((x) => (x == null ? 0 : Number(x)));
+  return (d || 0) * 24 + (h || 0) + (min || 0) / 60 + (sec || 0) / 3600;
+}
+
+async function kilankaSeiten(env, model, graph, maxSeiten = 40) {
+  const alle = [];
+  const limit = graph.$limit || 1000;
+  for (let seite = 0; seite < maxSeiten; seite++) {
+    const page = await kilankaPost(env, model, { ...graph, $offset: seite * limit });
+    if (!Array.isArray(page)) break;
+    alle.push(...page);
+    if (page.length < limit) break;
+  }
+  return alle;
+}
+
+async function serviceNamen(env) {
+  if (serviceNameCache.map && Date.now() - serviceNameCache.fetchedAt < 60 * 60 * 1000) {
+    return serviceNameCache.map;
+  }
+  const map = new Map();
+  try {
+    const data = await kilankaSeiten(env, "accounting/services", { id: 1, recName: 1, $limit: 1000 }, 5);
+    for (const s of data) map.set(String(s.id), s.recName || "");
+  } catch (e) {
+    console.warn("Leistungsnamen nicht ladbar:", e.message); // Fallback: leere Spalte
+  }
+  serviceNameCache = { map, fetchedAt: Date.now() };
+  return map;
+}
+
+async function kilankaUser(env) {
+  if (kilankaUserCache.list && Date.now() - kilankaUserCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
+    return kilankaUserCache.list;
+  }
+  const list = await kilankaSeiten(env, "users", { id: 1, name: 1, firstName: 1, deletedAt: 1, $limit: 1000 }, 5);
+  kilankaUserCache = { list, fetchedAt: Date.now() };
+  return list;
+}
+
+// Offene Nachweise ab Stichtag. Serverseitiges Vorfiltern halbiert die
+// Seitenzahl; ob signatureStatus filterbar ist, ist nicht dokumentiert —
+// deshalb mit Fallback auf den reinen Datumsfilter.
+async function offeneNachweise(env, von) {
+  const cached = timeSheetCache.get(von);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MIN * 60 * 1000) return cached.data;
+
+  const datumsFilter = { date: { $gte: { $date: von } } };
+  const varianten = [
+    { ...TIMESHEET_GRAPH, $filter: { ...datumsFilter, signatureStatus: { $neq: "unterschrieben" } } },
+    { ...TIMESHEET_GRAPH, $filter: datumsFilter },
+  ];
+  let rows = null, fehler = null;
+  for (const graph of varianten) {
+    try { rows = await kilankaSeiten(env, "clients/timeSheets", graph); break; }
+    catch (e) { fehler = e; }
+  }
+  if (!rows) throw fehler || new Error("clients/timeSheets nicht abrufbar");
+
+  const offen = rows.filter((t) => {
+    const st = String(t.signatureStatus || "").trim().toLowerCase();
+    return st && !SIG_ERLEDIGT.has(st);
+  });
+  if (timeSheetCache.size > 8) timeSheetCache.clear();
+  timeSheetCache.set(von, { data: offen, fetchedAt: Date.now() });
+  return offen;
+}
+
+// Offene Nachweise, gruppiert je Mitarbeiter (mit UPN fuer die Rechtepruefung).
+async function unterschriftenGruppen(env, von) {
+  const [offen, clients, users, svc] = await Promise.all([
+    offeneNachweise(env, von),
+    fetchKilankaClients(env),
+    kilankaUser(env),
+    serviceNamen(env),
+  ]);
+
+  const kMap = new Map();
+  for (const c of clients || []) kMap.set(String(c.id), c.recName || c.name || "");
+
+  const uMap = new Map();
+  for (const u of users || []) {
+    const recName = userRecName(u);
+    uMap.set(String(u.id), {
+      name: recName || "",
+      upn: upnForAttendant({ id: u.id, recName }),
+      archiviert: !!kDate(u.deletedAt) || isArchived(recName),
+    });
+  }
+
+  const gruppen = new Map();
+  for (const t of offen) {
+    const uid = String(t.user?.id ?? "");
+    const info = uMap.get(uid) || { name: "Unbekannt", upn: "", archiviert: false };
+    if (!gruppen.has(uid)) {
+      gruppen.set(uid, {
+        kilankaId: uid, name: info.name, upn: info.upn,
+        archiviert: info.archiviert, count: 0, stunden: 0, rows: [],
+      });
+    }
+    const g = gruppen.get(uid);
+    const std = kStunden(t.total);
+    g.count++;
+    g.stunden += std;
+    g.rows.push({
+      datum: t.date?.$date || "",
+      von: kZeit(t.start),
+      bis: kZeit(t.end),
+      std: Math.round(std * 100) / 100,
+      klient: kMap.get(String(t.client?.id ?? "")) || "",
+      leistung: svc.get(String(t.service?.id ?? "")) || "",
+      taetigkeit: t.activity?.recName || "",
+      kommentar: t.comment || "",
+      status: t.signatureStatus || "",
+      abgerechnet: !!t.invoice,
+    });
+  }
+
+  const liste = [...gruppen.values()];
+  for (const g of liste) {
+    g.stunden = Math.round(g.stunden * 100) / 100;
+    g.rows.sort((a, b) => a.datum.localeCompare(b.datum));
+  }
+  return liste.sort((a, b) => b.count - a.count);
+}
+
 function json(data, status, origin) {
   return new Response(JSON.stringify(data), {
     status,
@@ -1673,6 +1843,57 @@ export default {
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+
+    // Offene Unterschriften — ersetzt den XLSX-Upload der Unterschriften-App.
+    // Sichtbarkeit: GF alle, Teamleitung ihr Team, Fachkraft nur sich selbst.
+    if (url.pathname === "/api/unterschriften" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
+        return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      }
+      try {
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        const dr = istGf
+          ? { reports: [], fehler: null }
+          : await fetchDirectReports(request.headers.get("X-Graph-Token"));
+        const rolle = istGf ? "gf" : dr.reports.length ? "tl" : "fk";
+
+        // Stichtag: Standard 3 volle Monate zurueck. Aeltere Zeitraeume kosten
+        // Seiten (>1000 Nachweise je Seite) und sind fachlich selten relevant.
+        let von = (url.searchParams.get("von") || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(von)) {
+          const d = new Date();
+          d.setMonth(d.getMonth() - 3, 1);
+          von = d.toISOString().slice(0, 10);
+        }
+
+        const alle = await unterschriftenGruppen(env, von);
+        const erlaubt = istGf
+          ? null
+          : new Set([caller, ...dr.reports.map((r) => r.upn)].filter(Boolean));
+        const gruppen = erlaubt ? alle.filter((g) => erlaubt.has(g.upn)) : alle;
+
+        return json(
+          {
+            nutzer: caller,
+            rolle,
+            // true = Rolle konnte wegen Graph-Ausfall nicht sicher bestimmt
+            // werden; das Frontend weist dann darauf hin, statt eine
+            // unvollstaendige Teamsicht als vollstaendig auszugeben.
+            rolleUnsicher: !!dr.fehler,
+            von,
+            stand: new Date().toISOString(),
+            gesamt: gruppen.reduce((s, g) => s + g.count, 0),
+            gruppen,
+          },
+          200, origin
+        );
+      } catch (e) {
+        return json({ error: `Kilanka-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
     }
 
     if (url.pathname === "/api/health") {
