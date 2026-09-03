@@ -108,7 +108,7 @@ select{font-family:inherit;font-size:12.5px;border:1px solid var(--border);borde
 <div id="appScreen">
 <div class="wrap">
   <h2>Fehlende Unterschriften</h2>
-  <p class="sub" id="subLine">Live aus Kilanka &mdash; kein Upload mehr n&ouml;tig.</p>
+  <p class="sub" id="subLine"></p>
 
   <div id="warnBox"></div>
 
@@ -116,9 +116,9 @@ select{font-family:inherit;font-size:12.5px;border:1px solid var(--border);borde
     <span class="rolle-badge" id="rolleBadge">&nbsp;</span>
     <label style="font-size:12.5px;color:var(--text-muted)">Zeitraum
       <select id="zeitraumSelect" onchange="ladeDaten()">
+        <option value="0">laufender Monat</option>
+        <option value="1">letzter Monat</option>
         <option value="3">letzte 3 Monate</option>
-        <option value="6">letzte 6 Monate</option>
-        <option value="12">letzte 12 Monate</option>
         <option value="jahr">laufendes Jahr</option>
       </select>
     </label>
@@ -172,7 +172,7 @@ const CFG = {
   workerUrl:   'https://pnw-kilanka-proxy.markus-3c8.workers.dev',
 };
 const SCOPES = ['User.Read', 'User.ReadBasic.All', 'User.Read.All', 'Sites.ReadWrite.All', 'Mail.ReadWrite', 'Mail.Send'];
-const APP_VERSION = 'BETA-9077dcf'; // auto-updated on deploy
+const APP_VERSION = 'BETA-ce3536f'; // auto-updated on deploy
 const MAIL_DOMAIN = 'praxisneuewege.de';
 const LOG_LIST = 'Unterschriften_Log';
 // Kein CC für die Leitung selbst:
@@ -277,12 +277,19 @@ async function ensureLogList() {
 /* ============================================================ DATEN LADEN */
 function escHtml(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function fmtDatum(iso){ if(!iso) return ''; const [j,m,t] = iso.split('-'); return `${t}.${m}.${j}`; }
-function vonDatum() {
+function iso(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+// Liefert { von, bis }. "bis" nur bei abgeschlossenen Monaten — beim laufenden
+// Monat und den Mehrmonatssichten bleibt das Ende offen.
+function zeitraum() {
   const w = document.getElementById('zeitraumSelect').value;
-  const d = new Date();
-  if (w === 'jahr') return `${d.getFullYear()}-01-01`;
-  d.setMonth(d.getMonth() - Number(w), 1);
-  return d.toISOString().slice(0,10);
+  const h = new Date();
+  if (w === 'jahr') return { von: `${h.getFullYear()}-01-01`, bis: null };
+  if (w === '0')    return { von: iso(new Date(h.getFullYear(), h.getMonth(), 1)), bis: null };
+  if (w === '1')    return {
+    von: iso(new Date(h.getFullYear(), h.getMonth() - 1, 1)),
+    bis: iso(new Date(h.getFullYear(), h.getMonth(), 0))   // letzter Tag des Vormonats
+  };
+  return { von: iso(new Date(h.getFullYear(), h.getMonth() - Number(w), 1)), bis: null };
 }
 
 async function ladeDaten() {
@@ -290,7 +297,8 @@ async function ladeDaten() {
   document.getElementById('warnBox').innerHTML = '';
   try {
     const t = await tokens();
-    const r = await fetch(`${CFG.workerUrl}/api/unterschriften?von=${vonDatum()}`, {
+    const z = zeitraum();
+    const r = await fetch(`${CFG.workerUrl}/api/unterschriften?von=${z.von}${z.bis ? '&bis=' + z.bis : ''}`, {
       headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph }
     });
     const d = await r.json().catch(() => null);
@@ -331,7 +339,7 @@ function verteileDaten() {
   const rolleText = { gf: 'Geschäftsführung — alle Mitarbeitenden', tl: 'Teamleitung — eigenes Team', fk: 'Eigene Ansicht' };
   document.getElementById('rolleBadge').textContent = rolleText[daten.rolle] || daten.rolle;
   document.getElementById('standInfo').textContent =
-    `Stand ${new Date(daten.stand).toLocaleString('de-DE')} · ab ${fmtDatum(daten.von)}`;
+    `Stand ${new Date(daten.stand).toLocaleString('de-DE')} · ${fmtDatum(daten.von)} bis ${daten.bis ? fmtDatum(daten.bis) : 'heute'}`;
 
   if (daten.rolleUnsicher) {
     document.getElementById('warnBox').innerHTML =
@@ -348,8 +356,7 @@ function verteileDaten() {
   document.getElementById('teamPanel').style.display = istLeitung ? 'block' : 'none';
   document.getElementById('dashPanel').style.display = istLeitung ? 'block' : 'none';
   document.getElementById('subLine').textContent = istLeitung
-    ? 'Live aus Kilanka — kein Upload mehr nötig. Mitarbeiter prüfen, abwählen, Erinnerung erzeugen.'
-    : 'Live aus Kilanka — hier siehst du, welche Unterschriften deiner Klienten noch fehlen.';
+    ? '' : 'Hier siehst du, welche Unterschriften deiner Klienten noch fehlen.';
 
   if (istLeitung) {
     gruppen = team.map(g => ({ ...g, mail: g.upn || '', cc: null, ccLoaded: false, selected: true }));
