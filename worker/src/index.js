@@ -412,7 +412,7 @@ async function kilankaPost(env, model, graph) {
       const json = await r.json();
       return json.data ?? json;
     }
-    lastErr = `Kilanka ${r.status}`;
+    lastErr = `Kilanka ${r.status} bei ${model}`; // Modell im Text: sonst ist bei 403 nicht erkennbar, welche Freigabe fehlt
     if (r.status === 502 || r.status === 429) {
       await new Promise((res) => setTimeout(res, 800 * attempt));
       continue;
