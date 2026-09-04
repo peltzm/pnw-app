@@ -533,14 +533,28 @@ const CONFIG = {
  * arbeiten Kolleginnen und Kollegen unbemerkt mit einer alten Fassung — genau
  * das hat die Fehlersuche beim verschwundenen Bericht unnoetig verlaengert.
  *
- * version.json wird bewusst mit no-store geladen und mit APP_VERSION dieser
- * Datei verglichen. Weichen sie ab, laeuft eine veraltete Fassung im Browser.
+ * Geprueft wird gegen die Datei selbst: sie wird mit no-store erneut abgerufen
+ * und die dort hinterlegte APP_VERSION mit der laufenden verglichen. Bewusst kein
+ * separates version.json — ein zweiter Pflegeort laeuft frueher oder spaeter
+ * auseinander und laesst den Hinweis dann dauerhaft stehen.
  * ═══════════════════════════════════════════════════════════════════════ */
+async function ladeEigenenQuelltext(nurAnfang) {
+  const opt = { cache: 'no-store' };
+  if (nurAnfang) opt.headers = { Range: 'bytes=0-131071' };
+  const r = await fetch(location.pathname + '?t=' + Date.now(), opt);
+  return r.ok ? await r.text() : '';
+}
+
+function leseVersionAusQuelltext(html) {
+  // Suchmuster bewusst zusammengesetzt, damit diese Zeile sich nicht selbst trifft
+  const m = html && html.match(new RegExp('APP_VER' + "SION\\s*=\\s*'([^']+)'"));
+  return m ? m[1] : null;
+}
+
 async function pruefeAufNeueVersion() {
   try {
-    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) return;
-    const v = (await r.json())?.berichtsgenerator;
+    let v = leseVersionAusQuelltext(await ladeEigenenQuelltext(true));
+    if (!v) v = leseVersionAusQuelltext(await ladeEigenenQuelltext(false));
     if (!v || v === APP_VERSION) return;
     const bar = document.createElement('div');
     bar.style.cssText = 'position:fixed; left:0; right:0; bottom:0; z-index:9999; background:#7b3f1e;'
@@ -574,8 +588,8 @@ let zielCount = 0;
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge, #versionBadgeStart').forEach(el => {
     if (el) el.textContent = APP_VERSION;
-  pruefeAufNeueVersion();
   });
+  pruefeAufNeueVersion();
 }
 
 async function initMsal() {
