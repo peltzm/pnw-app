@@ -525,8 +525,8 @@ const CONFIG = {
   })(),
   siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com',
   templatePath: '/Templates/Verlaufsbericht_Template.docx',
-  outputFolder: '/Verlaufsberichte',
-  listName: 'Verlaufsberichte_Entwuerfe'
+  outputFolder: '/Verlaufsberichte_Beta',
+  listName: 'Verlaufsberichte_Entwuerfe_Beta'
 };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -920,7 +920,7 @@ function showApp() {
     }
   }).catch(() => {});
   // Check if opened via review link
-  setTimeout(() => { if (!handleReviewLink()) { /* normal flow */ } }, 500);
+  setTimeout(() => { if (pruefeSetupAufruf()) return; if (!handleReviewLink()) { /* normal flow */ } }, 500);
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
@@ -1358,6 +1358,100 @@ async function getSiteAndDrive() {
   const drive = drives.value.find(d => d.name === 'Dokumente' || d.name === 'Documents' || d.name === 'Freigegebene Dokumente');
   if (!drive) throw new Error('Dokumentenbibliothek nicht gefunden.');
   return { token, siteId: site.id, driveId: drive.id };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * EIGENES BETA-BACKEND — Einrichtung
+ *
+ * Beta und Produktion schrieben urspruenglich in dieselbe SharePoint-Liste
+ * und denselben Ausgabeordner. Ein Vorgang konnte dadurch zwischen beiden
+ * Fassungen wandern; da die Produktion "Jugendamt" und "Hilfeart" als
+ * Auswahlliste fuehrt, die Beta aber als Freitext aus Kilanka, wurden diese
+ * Werte beim Speichern in der Produktion stillschweigend geleert.
+ *
+ * Einrichtung einmalig ueber ?setup=1 aufrufen. Die Spalten werden aus der
+ * Produktionsliste uebernommen, damit beide Fassungen dieselbe Struktur haben.
+ * ═══════════════════════════════════════════════════════════════════════ */
+const BETA_BACKEND = {
+  quellListe: 'Verlaufsberichte_Entwuerfe',
+  zielListe:  'Verlaufsberichte_Entwuerfe_Beta',
+  zielOrdner: 'Verlaufsberichte_Beta'
+};
+
+// Spalten, die SharePoint in jeder neuen Liste selbst anlegt
+const _SYSTEMSPALTEN = new Set(['ID','Title','ContentType','Attachments','Created','Modified',
+  'Author','Editor','Edit','LinkTitle','LinkTitleNoMenu','DocIcon','ItemChildCount','FolderChildCount',
+  '_UIVersionString','_ComplianceFlags','_ComplianceTag','_ComplianceTagWrittenTime',
+  '_ComplianceTagUserId','_IsRecord','AppAuthor','AppEditor']);
+
+// Spaltendefinition fuer die neue Liste aufbereiten: IDs und Metadaten der
+// Quelle entfernen, nur Name und Typfacette uebernehmen
+function _spalteUebernehmen(c) {
+  if (!c || !c.name) return null;
+  if (_SYSTEMSPALTEN.has(c.name) || c.readOnly || c.hidden) return null;
+  const def = { name: c.name, displayName: c.displayName || c.name };
+  if (c.description) def.description = c.description;
+  if (c.required) def.required = true;
+  if (c.enforceUniqueValues) def.enforceUniqueValues = true;
+  if (c.indexed) def.indexed = true;
+  for (const typ of ['text','note','number','boolean','dateTime','choice','currency','personOrGroup','hyperlinkOrPicture']) {
+    if (c[typ]) { def[typ] = c[typ]; return def; }
+  }
+  return null; // berechnete, Nachschlage- und Sonderspalten lassen sich nicht klonen
+}
+
+async function betaBackendEinrichten() {
+  const protokoll = [];
+  const { token, siteId, driveId } = await getSiteAndDrive();
+  const g = (pfad, opt) => fetch('https://graph.microsoft.com/v1.0' + pfad, Object.assign({
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
+  }, opt || {}));
+
+  // ── Liste ──
+  const vorhanden = await (await g(`/sites/${siteId}/lists?$filter=displayName eq '${BETA_BACKEND.zielListe}'`)).json();
+  if (vorhanden.value && vorhanden.value.length) {
+    protokoll.push(`Liste "${BETA_BACKEND.zielListe}" war bereits vorhanden.`);
+  } else {
+    const quelle = await (await g(`/sites/${siteId}/lists?$filter=displayName eq '${BETA_BACKEND.quellListe}'`)).json();
+    if (!quelle.value || !quelle.value.length) throw new Error(`Vorlage-Liste "${BETA_BACKEND.quellListe}" nicht gefunden.`);
+    const alle = (await (await g(`/sites/${siteId}/lists/${quelle.value[0].id}/columns`)).json()).value || [];
+    const uebernommen = alle.map(_spalteUebernehmen).filter(Boolean);
+    const ausgelassen = alle
+      .filter(c => c && c.name && !_SYSTEMSPALTEN.has(c.name) && !c.readOnly && !c.hidden)
+      .filter(c => !uebernommen.some(u => u.name === c.name))
+      .map(c => c.name);
+    const antwort = await g(`/sites/${siteId}/lists`, { method: 'POST', body: JSON.stringify({
+      displayName: BETA_BACKEND.zielListe,
+      list: { template: 'genericList' },
+      columns: uebernommen
+    })});
+    if (!antwort.ok) throw new Error('Liste konnte nicht angelegt werden: ' + (await antwort.text()).slice(0, 400));
+    protokoll.push(`Liste "${BETA_BACKEND.zielListe}" angelegt (${uebernommen.length} Spalten aus der Produktion uebernommen).`);
+    if (ausgelassen.length) protokoll.push('Nicht uebernommen, bitte manuell pruefen: ' + ausgelassen.join(', '));
+  }
+
+  // ── Ausgabeordner ──
+  if ((await g(`/drives/${driveId}/root:/${BETA_BACKEND.zielOrdner}`)).ok) {
+    protokoll.push(`Ordner "${BETA_BACKEND.zielOrdner}" war bereits vorhanden.`);
+  } else {
+    const neu = await g(`/drives/${driveId}/root/children`, { method: 'POST', body: JSON.stringify({
+      name: BETA_BACKEND.zielOrdner, folder: {}, '@microsoft.graph.conflictBehavior': 'fail'
+    })});
+    if (!neu.ok) throw new Error('Ordner konnte nicht angelegt werden: ' + (await neu.text()).slice(0, 400));
+    protokoll.push(`Ordner "${BETA_BACKEND.zielOrdner}" angelegt.`);
+  }
+
+  return protokoll;
+}
+
+// Einrichtung ueber ?setup=1 anstossen
+function pruefeSetupAufruf() {
+  if (new URLSearchParams(window.location.search).get('setup') !== '1') return false;
+  betaBackendEinrichten()
+    .then(z => alert('Einrichtung Beta-Backend abgeschlossen:\n\n\u2022 ' + z.join('\n\u2022 ')
+                     + '\n\nDie Seite kann jetzt ohne ?setup=1 normal verwendet werden.'))
+    .catch(e => alert('Einrichtung fehlgeschlagen:\n\n' + (e && e.message ? e.message : e)));
+  return true;
 }
 
 async function fetchTemplate() {
@@ -2293,7 +2387,7 @@ async function getGraphListIds() {
     headers: { Authorization: 'Bearer ' + token }
   });
   const lists = await listResp.json();
-  if (!lists.value || lists.value.length === 0) throw new Error(`Liste "${CONFIG.listName}" nicht gefunden`);
+  if (!lists.value || lists.value.length === 0) throw new Error(`Liste "${CONFIG.listName}" nicht gefunden. Das Beta-Backend ist noch nicht eingerichtet — die Seite einmalig mit ?setup=1 aufrufen.`);
   _graphListId = lists.value[0].id;
   return { siteId: _graphSiteId, listId: _graphListId };
 }
@@ -2925,7 +3019,7 @@ async function sendApprovalEmail(listItemId, data, filename) {
 
   const mail = {
     message: {
-      subject: `[Freigabe] ${berichtstyp}: ${kind} – ${jugendamt}`,
+      subject: `[BETA][Freigabe] ${berichtstyp}: ${kind} – ${jugendamt}`,
       body: { contentType: 'HTML', content: emailBody },
       toRecipients: (() => {
         // Bei stationaer: Jessica Hermann + Kilian Freundl; sonst alle TL Ambulant
@@ -2975,7 +3069,7 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
   } catch(e) { /* Link bleibt leer, Dateiname wird trotzdem genannt */ }
   const mail = {
     message: {
-      subject: `${berichtstyp} ${nachname} ist fertiggestellt`,
+      subject: `[BETA] ${berichtstyp} ${nachname} ist fertiggestellt`,
       body: { contentType: 'HTML', content: `
 <html><body style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
   <div style="border-left: 4px solid #2e7d32; padding-left: 16px; margin-bottom: 24px;">
@@ -3168,7 +3262,7 @@ async function rejectReport() {
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim();
     const mail = {
       message: {
-        subject: `[Zurückgewiesen] ${kind} – Bitte korrigieren`,
+        subject: `[BETA][Zurückgewiesen] ${kind} – Bitte korrigieren`,
         body: { contentType: 'HTML', content: `<p>Der Bericht zu <strong>${kind}</strong> wurde zurückgewiesen.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}${kommentarHtml}<p><a href="${APP_BASE_URL}?edit=${currentListId}&typ=${currentBerichtstyp}">Bericht öffnen und überarbeiten →</a></p><p style="font-size:13px; color:#666;">Nach der Überarbeitung bitte auf der Seite „Absenden“ erneut „Freigabe anfordern“ anklicken — die Teamleitung erhält dann automatisch eine neue Freigabeanfrage.</p>` },
         toRecipients: [{ emailAddress: { address: currentEingereichtVon || data._eingereichtVon || currentAccount?.username || 'info@praxisneuewege.de' } }]
       },
@@ -3520,7 +3614,7 @@ async function tlFreigebenAnSonja() {
 
     const mail = {
       message: {
-        subject: '[Finale Freigabe] ' + berichtstyp + ': ' + kind + ' – ' + jugendamt,
+        subject: '[BETA][Finale Freigabe] ' + berichtstyp + ': ' + kind + ' – ' + jugendamt,
         body: { contentType: 'HTML', content: mailBody },
         toRecipients: [{ emailAddress: { address: sonjaMail } }],
         ccRecipients: []
@@ -3575,7 +3669,7 @@ async function rejectBackToTL() {
     const tlMail = currentAssignedReviewerMail || getFalleitungMail() || 'markus.peltz@praxisneuewege.de';
     const mail = {
       message: {
-        subject: `[Rückgabe] Bericht ${kind} — Sonja bittet um Nachbesserung`,
+        subject: `[BETA][Rückgabe] Bericht ${kind} — Sonja bittet um Nachbesserung`,
         body: { contentType: 'HTML', content: `<p>Sonja hat den Bericht zu <strong>${escHtml(kind)}</strong> zurückgegeben.</p>${reason ? `<p><strong>Grund:</strong> ${escHtml(reason)}</p>` : ''}<p><a href="${reviewUrl}" style="background:#7b3f1e; color:white; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold;">Bericht öffnen →</a></p>` },
         toRecipients: [{ emailAddress: { address: tlMail } }]
       },
