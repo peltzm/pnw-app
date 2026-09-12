@@ -5096,17 +5096,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // ── Unterschriftenblock ──
   function signatureBlock(data, freigegebenVon) {
+    // Eintrag steht auf der Linie, die Bezeichnung darunter — wie bei einer
+    // handschriftlichen Unterschrift. Ort mit dem Datum der PDF-Erzeugung,
+    // Namen ohne Berufsbezeichnung.
     function sig(label, value) {
       return {
         stack: [
-          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: LINE.trenner, lineColor: C.ink }], margin: [0, 26, 0, 3] },
+          { text: dash(value), font: 'KodchasanMedium', fontSize: F.wert, color: C.ink, margin: [0, 22, 0, 2] },
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: LINE.trenner, lineColor: C.ink }], margin: [0, 0, 0, 3] },
           { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta },
-          { text: dash(value), font: 'KodchasanMedium', fontSize: F.wert, color: C.ink, margin: [0, 1.5, 0, 0] },
         ],
       };
     }
-    const ortDatum = [dash(data.Ort), fmtDate(data.Datum_Unterschrift)].filter(v => v !== '—').join(', ');
-    const fk = [data.Fachkraft1_Name || data.Fachkraft_NeueWege, data.Fachkraft1_Quali1].filter(has).join(' · ');
+    const ortDatum = [dash(data.Ort), fmtDateLong(new Date())].filter(v => v !== '—').join(', ');
+    const fk = data.Fachkraft1_Name || data.Fachkraft_NeueWege || '';
     return {
       unbreakable: true,
       columns: [sig('Ort, Datum', ortDatum), { width: 18, text: '' }, sig('Fachkraft', fk), { width: 18, text: '' }, sig('Freigabe Leitung', freigegebenVon || '')],
