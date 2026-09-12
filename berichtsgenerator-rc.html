@@ -1472,6 +1472,26 @@ function berichtsDateiname(data, version) {
 // Liefert die PDF-Bytes des Berichts.
 //   opts.freigegebenVon  Name der freigebenden Person (nur beim finalen PDF)
 //   opts.mitAnhang       Anhang-PDF an den Bericht anhaengen
+// Name der Fachkraft, die den Bericht erstellt hat — fuer den Unterschriftenblock.
+// Neuere Berichte tragen ihn als _ownerName; fuer den Altbestand wird er ueber
+// die Entra-Objekt-ID bzw. die Einreicher-Adresse aus den Gruppenmitgliedern ermittelt.
+function erstellerAnzeigename(data) {
+  if (data._ownerName) return data._ownerName;
+  const alle = [...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])];
+  const oid = String(data._ownerOid || currentOwnerOid || '').toLowerCase();
+  if (oid) {
+    const t = alle.find(m => String(m.id || '').toLowerCase() === oid);
+    if (t && t.displayName) return t.displayName;
+  }
+  const mail = String(data._eingereichtVon || currentEingereichtVon || '').toLowerCase();
+  if (mail) {
+    const t = alle.find(m => [m.mail, m.userPrincipalName].some(x => String(x || '').toLowerCase() === mail));
+    if (t && t.displayName) return t.displayName;
+  }
+  if ((!oid && !mail) || oid === meineOid()) return currentAccount?.name || '';   // eigener bzw. noch ungespeicherter Bericht
+  return '';
+}
+
 async function erzeugePdfBytes(data, opts) {
   opts = opts || {};
   if (typeof pdfMake === 'undefined') throw new Error('PDF-Bibliothek nicht geladen (CDN blockiert?)');
@@ -1481,6 +1501,7 @@ async function erzeugePdfBytes(data, opts) {
   const d = { ...data };
   if (d.Hilfeart) d.Hilfeart = formatHilfeart(d.Hilfeart);
   if (!Array.isArray(d._ziele)) d._ziele = collectZiele() || _zieleSnapshot || [];
+  d._erstellerName = erstellerAnzeigename(d);
   const typ = currentBerichtstyp || 'verlauf';
   const dd = buildBerichtDocDefinition(typ, d, {
     logoDataUrl: assets.logo,
@@ -1614,6 +1635,7 @@ let currentListId = null; // tracks current list item ID
 let currentItemStatus = null;   // Status des geladenen Berichts (bleibt bei Zwischenspeichern erhalten)
 let currentEingereichtVon = ''; // ursprüngliche/r Einreicher/in (darf durch TL-Speichern nicht überschrieben werden)
 let currentOwnerOid = '';       // Entra-Objekt-ID der/des Einreichenden — analog geschützt
+let currentOwnerName = '';      // Anzeigename der/des Einreichenden (fuer das PDF) — analog geschützt
 
 /* ═══════════════════════════════════════════════════════════════════════
  * IDENTITAET: Objekt-ID statt Name oder UPN
@@ -1898,6 +1920,7 @@ async function copyStammdaten(id) {
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
     currentOwnerOid = data._ownerOid || '';   // darf beim Speichern durch TL nicht wechseln
+    currentOwnerName = data._ownerName || '';
     currentListId = null; // new report
     // Berichtstyp setzen BEVOR resetForm, damit buildDynamicSections die richtigen Felder erzeugt
     if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
@@ -2023,6 +2046,7 @@ async function loadDraft(id) {
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
     currentOwnerOid = data._ownerOid || '';   // darf beim Speichern durch TL nicht wechseln
+    currentOwnerName = data._ownerName || '';
     currentListId = id; // Graph item ID (string)
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
@@ -2416,6 +2440,12 @@ async function saveToList(data, existingId = null) {
   // nachgetragen; ein bereits gesetzter Eigentuemer bleibt unveraendert,
   // damit ein TL-Speichern die Zuordnung nicht an sich zieht.
   data._ownerOid = data._ownerOid || currentOwnerOid || meineOid() || '';
+  // Anzeigename der erstellenden Fachkraft — wird nur beim ersten Setzen uebernommen,
+  // damit ein Speichern durch die TL den Namen nicht an sich zieht.
+  if (!data._ownerName) {
+    data._ownerName = currentOwnerName
+      || ((data._ownerOid && data._ownerOid === meineOid()) ? (currentAccount?.name || '') : '');
+  }
   const fkNamen = [data.Fachkraft_NeueWege, data.Fachkraft_2, data.Fachkraft_3, data.Fachkraft_4];
   const fkOids = fkNamen.map(oidZuName).filter(Boolean);
   if (fkOids.length) data._fachkraftOids = [...new Set(fkOids)];
@@ -5109,7 +5139,7 @@ window.addEventListener('DOMContentLoaded', () => {
       };
     }
     const ortDatum = [dash(data.Ort), fmtDateLong(new Date())].filter(v => v !== '—').join(', ');
-    const fk = data.Fachkraft1_Name || data.Fachkraft_NeueWege || '';
+    const fk = data._erstellerName || data.Fachkraft_NeueWege || data.Fachkraft1_Name || '';
     return {
       unbreakable: true,
       columns: [sig('Ort, Datum', ortDatum), { width: 18, text: '' }, sig('Fachkraft', fk), { width: 18, text: '' }, sig('Freigabe Leitung', freigegebenVon || '')],
