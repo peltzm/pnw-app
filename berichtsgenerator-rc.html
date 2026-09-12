@@ -292,6 +292,7 @@
           </div>
           <div class="field-grid">
             <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Name Sachbearbeiter*in"></div>
+            <div class="field"><label>Fachkraft 1 (Auswahlliste)</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div class="field-grid" id="einrichtungRow" style="display:none;">
             <div class="field"><label>Einrichtung</label>
@@ -299,6 +300,10 @@
                 <option value="Nordstern">Nordstern (Wolnzach)</option>
               </select>
             </div>
+          </div>
+          <div id="extraFachkraefteContainer" style="margin-bottom:4px;"></div>
+          <div style="margin-bottom:12px;">
+            <button class="btn-add" id="btnAddFachkraft" onclick="addFachkraft()">+ Fachkraft hinzufügen</button>
           </div>
           <div class="field-grid full" id="fallleitungRow" style="margin-bottom:4px;">
             <div class="field"><label>Teamleiter NeueWege (Auswahlliste)</label>
@@ -407,14 +412,14 @@
         <div class="section-title" id="s6_title">Bericht absenden</div>
         <div class="section-sub">Zusammenfassung prüfen und Dokument speichern</div>
         <div class="card" id="unterschriftCard">
-          <div class="card-title">Fachkräfte & Unterschrift</div>
+          <div class="card-title">Unterschrift</div>
           <div class="field-grid triple">
             <div class="field"><label>Ort</label><input type="text" id="Ort" value="Wolnzach"></div>
             <div class="field"><label>Datum</label><input type="date" id="Datum_Unterschrift"></div>
           </div>
           <div id="unterschriftFachkraefte"></div>
           <div style="margin-top:6px;">
-            <button class="btn-add" id="btnAddFachkraft" onclick="addFachkraft()">+ Fachkraft hinzufügen</button>
+            <button class="btn-add" id="btnAddUnterschrift" onclick="addUnterschriftFachkraft()">+ Fachkraft hinzufügen</button>
           </div>
         </div>
         <div class="card" id="summaryCard">
@@ -578,7 +583,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 'RC-8e4dad5'; // Release Candidate fuer index.html: Beta + Prod-Fixes + PDF-Workflow
+const APP_VERSION = 'RC-b534274'; // Release Candidate fuer index.html: Beta + Prod-Fixes + PDF-Workflow
 
 let msalInstance = null;
 let currentAccount = null;
@@ -706,8 +711,7 @@ function _restrictFachkraftSelect(id) {
   const cur = el.value;
   el.innerHTML = '<option value="">— bitte wählen —</option>' +
     _kilankaBetreuerListe.map(n => '<option value="' + n + '">' + n + '</option>').join('');
-  if (cur && !_kilankaBetreuerListe.includes(cur)) el.add(new Option(cur, cur));
-  if (cur) el.value = cur;
+  if (cur && _kilankaBetreuerListe.includes(cur)) el.value = cur;
 }
 
 async function getApiToken() {
@@ -838,19 +842,21 @@ function prefillFromKilanka(k, groupPromise) {
   if (Array.isArray(k.Betreuer) && k.Betreuer.length) {
     const anwenden = () => {
       // Auswahllisten auf die Betreuer der Maßnahme beschränken (inkl. Vertretungen)
-      // Auswahllisten auf die Betreuer der Maßnahme beschränken. Fachkraft 1 bleibt die
-      // angemeldete Person (Vorbelegung aus loadGroupMembers); ist sie keine Betreuerin,
-      // bleibt sie trotzdem wählbar. Weitere Fachkräfte werden nicht automatisch ergänzt.
       _kilankaBetreuerListe = k.Betreuer.map(b => b.name);
-      const fk1 = document.getElementById('Fachkraft_NeueWege');
-      if (fk1 && !fk1.value) {
-        const hb = k.Betreuer.find(b => b.rolle === 'Hauptbetreuer') || k.Betreuer[0];
-        _setSelect('Fachkraft_NeueWege', hb.name);
-      }
+      _restrictFachkraftSelect('Fachkraft_NeueWege');
+      const hb = k.Betreuer.find(b => b.rolle === 'Hauptbetreuer') || k.Betreuer[0];
+      _setSelect('Fachkraft_NeueWege', hb.name);
+      if (typeof updateFachkraftName === 'function') updateFachkraftName();
+      const mbs = k.Betreuer.filter(b => b !== hb && b.rolle === 'Mitbetreuer').slice(0, 3);
+      mbs.forEach(b => {
+        addFachkraft(); // Wrapper unten schränkt die neue Liste automatisch ein
+        _setSelect('Fachkraft_' + (_extraFachkraftCount + 1), b.name);
+      });
+      // Unterschrift-Blöcke neu aufbauen und Qualifikationen aus Kilanka vorwählen
       if (typeof renderUnterschriftFachkraefte === 'function') renderUnterschriftFachkraefte();
-      // Qualifikation aus Kilanka für die gewählte Fachkraft 1 vorwählen
-      const b1 = k.Betreuer.find(b => b.name === (document.getElementById('Fachkraft_NeueWege')?.value || ''));
-      if (b1 && b1.quali) _setSelect('FK1_Quali1', b1.quali);
+      if (typeof syncUnterschriftNamen === 'function') syncUnterschriftNamen();
+      if (hb.quali) _setSelect('FK1_Quali1', hb.quali);
+      mbs.forEach((b, i) => { if (b.quali) _setSelect('FK' + (i + 2) + '_Quali1', b.quali); });
     };
     const p = groupPromise || (typeof _groupLoadPromise !== 'undefined' ? _groupLoadPromise : null);
     if (p && typeof p.then === 'function') p.then(anwenden).catch(anwenden);
@@ -865,6 +871,12 @@ function prefillFromKilanka(k, groupPromise) {
   }
 }
 
+// addFachkraft umhüllen: neue Selects bei aktiver Kilanka-Auswahl einschränken
+const _origAddFachkraft = addFachkraft;
+addFachkraft = function() {
+  _origAddFachkraft();
+  if (_kilankaBetreuerListe) _restrictFachkraftSelect('Fachkraft_' + (_extraFachkraftCount + 1));
+};
 
 function handleReviewLink() {
   const params = new URLSearchParams(window.location.search);
@@ -1039,8 +1051,11 @@ function goTo(n) {
     if (main) main.style.maxWidth = '';
   }
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
-  // Seite 6 (Absenden): Fachkraft-Zeilen aktualisieren (Auswahllisten, Namen)
-  if (n === 6 && document.getElementById('unterschriftFachkraefte')) renderUnterschriftFachkraefte();
+  // Seite 6 (Absenden): Unterschriftenbereich aktualisieren (Auswahllisten) + Zeile 1 vorbelegen
+  if (n === 6 && document.getElementById('unterschriftFachkraefte')) {
+    renderUnterschriftFachkraefte();
+    syncUnterschriftNamen();
+  }
   enableSpellcheck();
   if (n === 6) {
     buildSummary();
@@ -1928,6 +1943,7 @@ async function copyStammdaten(id) {
         sel.value = name;
       }
     });
+    unterschriftAusDaten(data);
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
@@ -2073,6 +2089,7 @@ async function loadDraft(id) {
         sel.value = name;
       }
     });
+    unterschriftAusDaten(data);
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
@@ -2269,9 +2286,14 @@ function resetForm() {
   resetWeiterePersFound();
   resetExtraKinder();
   resetExtraSorg();
-  // Fachkräfte & Unterschrift auf eine Zeile zurücksetzen
+  // Reset extra Fachkräfte
+  const ekc = document.getElementById('extraFachkraefteContainer');
+  if (ekc) { ekc.innerHTML = ''; }
   _extraFachkraftCount = 0;
+  _unterschriftCount = 1;
   renderUnterschriftFachkraefte();
+  const btnFk = document.getElementById('btnAddFachkraft');
+  if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
   // Reset list ID for new bericht
   currentListId = null;
   // PDF-Anhang zurücksetzen
@@ -3857,125 +3879,6 @@ let _tlMembers = [];
 let _stationaerFreigeber = [];
 let _extraFachkraftCount = 0;
 
-// ─── FACHKRÄFTE & UNTERSCHRIFT (Seite „Absenden") ─────────────────────────────
-// Eine Zeile je Fachkraft: Auswahlliste + zwei Qualifikationen. Zeile 1 ist mit
-// der angemeldeten Person vorbelegt (loadGroupMembers), weitere Zeilen kommen
-// ueber „+ Fachkraft hinzufügen". Das Datenmodell ist unveraendert:
-//   Fachkraft_NeueWege, Fachkraft_2..4  (Namen, Auswahllisten)
-//   FK{i}_Name (verborgen, = Auswahl), FK{i}_Quali1, FK{i}_Quali2, FK{i}_Quali2Custom
-
-function _anzahlFachkraefte() { return 1 + _extraFachkraftCount; }
-
-// Optionen fuer die Fachkraft-Auswahl: bei aktiver Kilanka-Zuordnung deren
-// Betreuer, sonst das Team. Der aktuelle Wert bleibt immer waehlbar.
-function _fachkraftOptionenHtml(aktuell, vorlageHtml) {
-  let namen = null;
-  if (_kilankaBetreuerListe && _kilankaBetreuerListe.length) namen = _kilankaBetreuerListe.slice();
-  else if (_teamMembers && _teamMembers.length) namen = _teamMembers.map(m => m.displayName || '').filter(Boolean);
-  if (!namen) {
-    // Team noch nicht geladen: bestehende Liste weiterverwenden, sonst Platzhalter
-    if (vorlageHtml) return vorlageHtml;
-    return '<option value="">Wird geladen...</option>';
-  }
-  if (aktuell && !namen.includes(aktuell)) namen.push(aktuell);
-  const esc = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-  return '<option value="">— bitte wählen —</option>' + namen.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
-}
-
-function renderUnterschriftFachkraefte() {
-  const wrap = document.getElementById('unterschriftFachkraefte');
-  if (!wrap) return;
-  // Bestehende Werte (und die vorhandene Auswahlliste von Fachkraft 1) sichern
-  const prev = {};
-  wrap.querySelectorAll('input[id], select[id]').forEach(el => prev[el.id] = el.value);
-  const fk1 = document.getElementById('Fachkraft_NeueWege');
-  const vorlageHtml = fk1 && fk1.options.length > 1 ? fk1.innerHTML : '';
-
-  const anzahl = _anzahlFachkraefte();
-  const q1opts = (typeof _kilankaQualiListe !== 'undefined' && _kilankaQualiListe && _kilankaQualiListe.length) ? _kilankaQualiListe : QUALI1_OPTS;
-  const q1 = `<option value="">— bitte wählen —</option>` + q1opts.map(o => `<option>${o}</option>`).join('');
-  const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere</option>`;
-  let html = '';
-  for (let i = 1; i <= anzahl; i++) {
-    const selId = i === 1 ? 'Fachkraft_NeueWege' : 'Fachkraft_' + i;
-    const aktuell = prev[selId] || '';
-    const entfernen = i > 1
-      ? `<button type="button" class="btn-remove" onclick="removeFachkraft(${i})" title="Fachkraft entfernen" style="align-self:end; height:38px; padding:0 12px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">✕</button>`
-      : `<div></div>`;
-    html += `
-      <div class="fk-zeile" id="fk_zeile_${i}" style="display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:10px; align-items:end; margin-bottom:10px;">
-        <div class="field"><label>Fachkraft ${i}</label><select id="${selId}" onchange="updateFachkraftName()">${_fachkraftOptionenHtml(aktuell, i === 1 ? vorlageHtml : '')}</select></div>
-        <div class="field"><label>Qualifikation 1</label><select id="FK${i}_Quali1">${q1}</select></div>
-        <div class="field"><label>Qualifikation 2</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
-        ${entfernen}
-        <input type="hidden" id="FK${i}_Name">
-      </div>
-      <div class="field-grid sig-triple" id="FK${i}_Quali2CustomWrap" style="display:none; margin-bottom:10px;">
-        <div></div><div></div>
-        <div class="field"><label>Eigene Qualifikation 2</label><input type="text" id="FK${i}_Quali2Custom" placeholder="z.B. Traumafachberater:in"></div>
-      </div>`;
-  }
-  wrap.innerHTML = html;
-  // Werte zurückschreiben
-  Object.keys(prev).forEach(id => { const el = document.getElementById(id); if (el) el.value = prev[id]; });
-  for (let i = 1; i <= anzahl; i++) toggleQuali2Custom(i);
-  syncUnterschriftNamen();
-  const btn = document.getElementById('btnAddFachkraft');
-  if (btn) { btn.disabled = _extraFachkraftCount >= 3; btn.style.opacity = _extraFachkraftCount >= 3 ? '0.4' : '1'; }
-  enableSpellcheck();
-}
-
-// „Andere" bei Qualifikation 2 → Freitextfeld einblenden
-function toggleQuali2Custom(i) {
-  const sel = document.getElementById(`FK${i}_Quali2`);
-  const wrap = document.getElementById(`FK${i}_Quali2CustomWrap`);
-  if (!sel || !wrap) return;
-  wrap.style.display = (sel.value === '__custom__') ? '' : 'none';
-  if (sel.value !== '__custom__') { const c = document.getElementById(`FK${i}_Quali2Custom`); if (c) c.value = ''; }
-}
-
-// Verborgene Namensfelder (fuer PDF/Speichern) aus den Auswahllisten befuellen
-function syncUnterschriftNamen() {
-  for (let i = 1; i <= 4; i++) {
-    const sel = document.getElementById(i === 1 ? 'Fachkraft_NeueWege' : 'Fachkraft_' + i);
-    const el = document.getElementById(`FK${i}_Name`);
-    if (el) el.value = sel ? (sel.value || '') : '';
-  }
-}
-
-function updateFachkraftName() { syncUnterschriftNamen(); }
-
-function addFachkraft() {
-  if (_extraFachkraftCount >= 3) return;
-  _extraFachkraftCount++;
-  renderUnterschriftFachkraefte();
-}
-
-// Zeile n entfernen; nachfolgende Fachkraefte ruecken auf, damit Fachkraft_2..4 lueckenlos bleiben
-function removeFachkraft(n) {
-  const lesen = i => ({
-    name: document.getElementById('Fachkraft_' + i)?.value || '',
-    q1: document.getElementById('FK' + i + '_Quali1')?.value || '',
-    q2: document.getElementById('FK' + i + '_Quali2')?.value || '',
-    q2c: document.getElementById('FK' + i + '_Quali2Custom')?.value || '',
-  });
-  const rest = [];
-  for (let i = 2; i <= _anzahlFachkraefte(); i++) if (i !== n) rest.push(lesen(i));
-  _extraFachkraftCount = rest.length;
-  renderUnterschriftFachkraefte();
-  rest.forEach((r, idx) => {
-    const i = idx + 2;
-    const sel = document.getElementById('Fachkraft_' + i);
-    if (sel) { if (r.name && !Array.from(sel.options).some(o => o.value === r.name)) sel.add(new Option(r.name, r.name)); sel.value = r.name; }
-    const q1 = document.getElementById('FK' + i + '_Quali1'); if (q1) q1.value = r.q1;
-    const q2 = document.getElementById('FK' + i + '_Quali2'); if (q2) q2.value = r.q2;
-    const c = document.getElementById('FK' + i + '_Quali2Custom'); if (c) c.value = r.q2c;
-    toggleQuali2Custom(i);
-  });
-  syncUnterschriftNamen();
-}
-
-
 async function loadGroupMembers() {
   const token = await getToken();
   
@@ -4175,6 +4078,55 @@ function toggleBesprochenDatum() {
   const w = document.getElementById('besprochenDatumWrap');
   if (w) w.style.display = (v === 'Ja') ? '' : 'none';
   if (v !== 'Ja') { const d = document.getElementById('Bericht_Besprochen_Datum'); if (d) d.value = ''; }
+}
+
+function updateFachkraftName() {
+  // Unterschrift-Block neu aufbauen (Anzahl Fachkräfte kann sich geändert haben) und Namen übernehmen
+  if (document.getElementById('unterschriftFachkraefte')) {
+    renderUnterschriftFachkraefte();
+    syncUnterschriftNamen();
+  }
+}
+
+function addFachkraft() {
+  if (_extraFachkraftCount >= 3) return;
+  _extraFachkraftCount++;
+  const n = _extraFachkraftCount + 1; // 2,3,4
+  const div = document.createElement('div');
+  div.id = `extra_fachkraft_${n}`;
+  div.className = 'field-grid';
+  div.style.marginBottom = '12px';
+  const sortName = m => {
+    const parts = (m.displayName || '').split(' ');
+    return parts.length > 1 ? `${parts[parts.length-1]}, ${parts[0]}` : m.displayName;
+  };
+  const options = _teamMembers.length > 0 ? _teamMembers.map(m => {
+    const name = m.displayName || '';
+    return `<option value="${name}">${name}</option>`;
+  }).join('') : '<option value="">— bitte wählen —</option>';
+  div.innerHTML = `
+    <div class="field" style="grid-column:1/-1; display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end;">
+      <div class="field">
+        <label>Fachkraft ${n} (Auswahlliste)</label>
+        <select id="Fachkraft_${n}">
+          <option value="">— bitte wählen —</option>
+          ${options}
+        </select>
+      </div>
+      <button onclick="removeFachkraft(${n})" style="height:38px; padding:0 10px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; margin-bottom:0;">×</button>
+    </div>`;
+  document.getElementById('extraFachkraefteContainer').appendChild(div);
+  if (_extraFachkraftCount >= 3) {
+    document.getElementById('btnAddFachkraft').style.opacity = '0.4';
+    document.getElementById('btnAddFachkraft').disabled = true;
+  }
+}
+
+function removeFachkraft(n) {
+  document.getElementById(`extra_fachkraft_${n}`)?.remove();
+  _extraFachkraftCount = Math.max(0, _extraFachkraftCount - 1);
+  const btn = document.getElementById('btnAddFachkraft');
+  if (btn) { btn.style.opacity = '1'; btn.disabled = false; }
 }
 
 function getFachkraftMail(name) {
@@ -4490,6 +4442,131 @@ function buildDynamicSections(force = false) {
 
 const QUALI1_OPTS = ['Erzieher:in','Heilerziehungspfleger:in','Kindheitspädagoge:in','Pädagoge:in','Psycholog:in','Sozialpädagoge:in'];
 const QUALI2_OPTS = ['Systemische:r Berater:in','Systemische:r Therapeut:in','Fachcoach Gewaltprävention'];
+
+// Wie viele Fachkräfte auf Seite 1 gewählt sind (1 + befüllte Zusatzfelder)
+function _anzahlFachkraefte() {
+  let count = 1;
+  for (let i = 2; i <= 4; i++) {
+    if ((document.getElementById('Fachkraft_' + i)?.value || '').trim()) count = i;
+  }
+  return count;
+}
+
+// Unterschrift-Block je Fachkraft erzeugen: Name + Qualifikation 1 + Qualifikation 2 (+ Freitext bei „Andere…“)
+// Unterschriftenbereich (Seite „Absenden"): eine Zeile je unterschreibender Fachkraft —
+// Auswahlliste (Name) + zwei Qualifikationen. Zeile 1 ist mit der angemeldeten Person
+// vorbelegt, weitere Zeilen kommen über „+ Fachkraft hinzufügen". Die Fachkraft-Felder
+// auf Seite 1 bleiben davon unberührt. Datenmodell unverändert: FK{i}_Name/_Quali1/_Quali2.
+let _unterschriftCount = 1;
+
+function _unterschriftOptionenHtml(aktuell) {
+  let namen = [];
+  if (_kilankaBetreuerListe && _kilankaBetreuerListe.length) namen = _kilankaBetreuerListe.slice();
+  else if (_teamMembers && _teamMembers.length) namen = _teamMembers.map(m => m.displayName || '').filter(Boolean);
+  const me = currentAccount?.name || '';
+  if (me && !namen.includes(me)) namen.push(me);
+  if (aktuell && !namen.includes(aktuell)) namen.push(aktuell);
+  const esc = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return '<option value="">— bitte wählen —</option>' + namen.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+}
+
+function renderUnterschriftFachkraefte() {
+  const wrap = document.getElementById('unterschriftFachkraefte');
+  if (!wrap) return;
+  // Bestehende Werte sichern (bei Neuaufbau)
+  const prev = {};
+  wrap.querySelectorAll('input[id], select[id]').forEach(el => prev[el.id] = el.value);
+
+  const anzahl = Math.max(1, Math.min(4, _unterschriftCount));
+  const q1opts = (typeof _kilankaQualiListe !== 'undefined' && _kilankaQualiListe && _kilankaQualiListe.length) ? _kilankaQualiListe : QUALI1_OPTS;
+  const q1 = `<option value="">— bitte wählen —</option>` + q1opts.map(o => `<option>${o}</option>`).join('');
+  const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere</option>`;
+  let html = '';
+  for (let i = 1; i <= anzahl; i++) {
+    const entfernen = i > 1
+      ? `<button type="button" class="btn-remove" onclick="removeUnterschriftFachkraft(${i})" title="Fachkraft entfernen" style="height:38px; padding:0 12px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">✕</button>`
+      : `<div></div>`;
+    html += `
+      <div id="unterschrift_zeile_${i}" style="display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:10px; align-items:end; margin-bottom:10px;">
+        <div class="field"><label>Fachkraft ${i}</label><select id="FK${i}_Name">${_unterschriftOptionenHtml(prev['FK'+i+'_Name'] || '')}</select></div>
+        <div class="field"><label>Qualifikation 1</label><select id="FK${i}_Quali1">${q1}</select></div>
+        <div class="field"><label>Qualifikation 2</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
+        ${entfernen}
+      </div>
+      <div class="field-grid sig-triple" id="FK${i}_Quali2CustomWrap" style="display:none; margin-bottom:10px;">
+        <div></div><div></div>
+        <div class="field"><label>Eigene Qualifikation 2</label><input type="text" id="FK${i}_Quali2Custom" placeholder="z.B. Traumafachberater:in"></div>
+      </div>`;
+  }
+  wrap.innerHTML = html;
+  // Werte zurückschreiben
+  Object.keys(prev).forEach(id => { const el = document.getElementById(id); if (el) el.value = prev[id]; });
+  for (let i = 1; i <= anzahl; i++) toggleQuali2Custom(i);
+  const btn = document.getElementById('btnAddUnterschrift');
+  if (btn) { btn.disabled = anzahl >= 4; btn.style.opacity = anzahl >= 4 ? '0.4' : '1'; }
+  enableSpellcheck();
+}
+
+function addUnterschriftFachkraft() {
+  if (_unterschriftCount >= 4) return;
+  _unterschriftCount++;
+  renderUnterschriftFachkraefte();
+}
+
+// Zeile n entfernen; nachfolgende rücken auf, damit FK1..n lückenlos bleiben
+function removeUnterschriftFachkraft(n) {
+  const lesen = i => ({
+    name: document.getElementById('FK' + i + '_Name')?.value || '',
+    q1: document.getElementById('FK' + i + '_Quali1')?.value || '',
+    q2: document.getElementById('FK' + i + '_Quali2')?.value || '',
+    q2c: document.getElementById('FK' + i + '_Quali2Custom')?.value || '',
+  });
+  const rest = [];
+  for (let i = 2; i <= _unterschriftCount; i++) if (i !== n) rest.push(lesen(i));
+  _unterschriftCount = 1 + rest.length;
+  renderUnterschriftFachkraefte();
+  rest.forEach((r, idx) => {
+    const i = idx + 2;
+    const sel = document.getElementById('FK' + i + '_Name');
+    if (sel) { if (r.name && !Array.from(sel.options).some(o => o.value === r.name)) sel.add(new Option(r.name, r.name)); sel.value = r.name; }
+    const q1 = document.getElementById('FK' + i + '_Quali1'); if (q1) q1.value = r.q1;
+    const q2 = document.getElementById('FK' + i + '_Quali2'); if (q2) q2.value = r.q2;
+    const c = document.getElementById('FK' + i + '_Quali2Custom'); if (c) c.value = r.q2c;
+    toggleQuali2Custom(i);
+  });
+}
+
+// Zeilenanzahl aus gespeicherten Daten ableiten (Bestandsberichte) und aufbauen
+function unterschriftAusDaten(data) {
+  let n = 1;
+  for (let i = 2; i <= 4; i++) if ((data['FK' + i + '_Name'] || '').trim()) n = i;
+  _unterschriftCount = n;
+  renderUnterschriftFachkraefte();
+  // gespeicherte Namen wählbar machen (Bestand: Person evtl. nicht mehr im Team / nicht Betreuerin)
+  for (let i = 1; i <= n; i++) {
+    const nm = (data['FK' + i + '_Name'] || '').trim();
+    const sel = document.getElementById('FK' + i + '_Name');
+    if (sel && nm && !Array.from(sel.options).some(o => o.value === nm)) sel.add(new Option(nm, nm));
+  }
+}
+
+// "Andere…" bei Qualifikation 2 -> Freitextfeld einblenden
+function toggleQuali2Custom(i) {
+  const sel = document.getElementById(`FK${i}_Quali2`);
+  const wrap = document.getElementById(`FK${i}_Quali2CustomWrap`);
+  if (!sel || !wrap) return;
+  wrap.style.display = (sel.value === '__custom__') ? '' : 'none';
+  if (sel.value !== '__custom__') { const c = document.getElementById(`FK${i}_Quali2Custom`); if (c) c.value = ''; }
+}
+
+// Zeile 1 mit der angemeldeten Person vorbelegen, sofern noch leer
+function syncUnterschriftNamen() {
+  const el = document.getElementById('FK1_Name');
+  const me = currentAccount?.name || '';
+  if (!el || el.value || !me) return;
+  if (!Array.from(el.options).some(o => o.value === me)) el.add(new Option(me, me));
+  el.value = me;
+}
 
 // ─── ÜBERSICHT (S0) ───────────────────────────────────────────────────────────
 
@@ -4914,8 +4991,7 @@ window.addEventListener('DOMContentLoaded', () => {
   else { setTimeout(() => { if (window.msal) initMsal(); else { document.getElementById('loginError').style.display='block'; document.getElementById('loginError').textContent='MSAL konnte nicht geladen werden. Bitte Seite neu laden.'; }}, 2000); }
 });
 
-// Fachkraft-Zeilen einmalig aufbauen, damit die Auswahllisten existieren, bevor
-// loadGroupMembers (Vorbelegung) und loadDraft (Werte) darauf zugreifen.
+// Unterschriftenbereich einmalig aufbauen, damit die Felder existieren, bevor loadDraft Werte setzt
 renderUnterschriftFachkraefte();
 </script>
 <script>
