@@ -1592,6 +1592,7 @@ async function erzeugePdfBytes(data, opts) {
   const dd = buildBerichtDocDefinition(typ, d, {
     logoDataUrl: assets.logo,
     freigegebenVon: opts.freigegebenVon || '',
+    freigabeLeitung: opts.freigabeLeitung || '',   // Teamleitung, die inhaltlich freigegeben hat (Unterschriftenblock)
     anhang: _anhangPDF ? { titel: _anhangPDF.titel || '', name: _anhangPDF.name } : null,
   });
   let bytes = new Uint8Array(await new Promise(res => pdfMake.createPdf(dd).getBuffer(res)));
@@ -3229,6 +3230,9 @@ async function approveReport() {
     const pdfName = berichtsDateiname(data);                             // finales PDF ohne _vN
     setStatus('uploading', 'PDF wird erstellt...');
     const freigeber = (currentAccount && (currentAccount.name || currentAccount.username)) || '';
+    // Unterschrift "Freigabe Leitung": die Teamleitung, die den Bericht angenommen und inhaltlich
+    // freigegeben hat — nicht die Person der finalen Freigabe (GF)
+    const freigabeLeitung = currentAssignedReviewer || data._assignedReviewer || freigeber;
     // Der Anhang liegt seit dem Einreichen als <Basis>_Anhang.pdf im Ordner. Die freigebende
     // Person hat ihn nicht im Browser — fuer das finale PDF wird er nachgeladen und angehaengt.
     if (!_anhangPDF && data._anhangName) {
@@ -3244,7 +3248,7 @@ async function approveReport() {
         }
       } catch(e) { console.warn('Anhang konnte nicht nachgeladen werden:', e.message); }
     }
-    const finalBytes = await erzeugePdfBytes(data, { freigegebenVon: freigeber, mitAnhang: true });
+    const finalBytes = await erzeugePdfBytes(data, { freigegebenVon: freigeber, freigabeLeitung, mitAnhang: true });
     let pdfResult = { ok: false };
     try {
       await pdfHochladen(driveId, token, versionsName, finalBytes);
@@ -5503,7 +5507,7 @@ renderUnterschriftFachkraefte();
     }
 
     // Unterschriften
-    content.push(signatureBlock(data, freigegebenVon));
+    content.push(signatureBlock(data, opts.freigabeLeitung || freigegebenVon));
 
     return {
       pageSize: 'A4',
