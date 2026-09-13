@@ -4339,7 +4339,7 @@ const SECTION_TEMPLATES = {
         { id: 'Ausgangssituation', label: 'Clearingprozess – Ausgangssituation und Beteiligte Personen', placeholder: 'Gründe für das ambulante Clearing und zu klärende Fragestellungen, sowie die beteiligten Personen, Familiensysteme, ...' },
         { id: 'Zielsetzung_Clearing', label: 'Zielsetzung des Clearingprozesses', placeholder: '' },
         { id: 'Familienkonstellation', label: 'Familienkonstellation – aktuelle Lebenssituation', placeholder: '' },
-        { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen – Vorgehen - Methoden', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
+        { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen - Vorgehen - Methoden', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
         { id: 'Anhang_Methodik', label: 'Anhang - Methodik', placeholder: 'z.B. Bei Erstellung eines Genogramms, Soziogramms, etc. hier als Anhang/Bild einzufügen' },
       ]
     },
@@ -5470,7 +5470,7 @@ renderUnterschriftFachkraefte();
       push('Ausgangssituation & beteiligte Personen', data.Ausgangssituation);
       push('Zielsetzung des Clearingprozesses', data.Zielsetzung_Clearing);
       push('Familienkonstellation — aktuelle Lebenssituation', data.Familienkonstellation);
-      push('Rahmenbedingungen, Vorgehen & Methoden', data.Rahmenbedingungen);
+      push('Rahmenbedingungen - Vorgehen - Methoden', data.Rahmenbedingungen);
       push('Anhang — Methodik', data.Anhang_Methodik);
       if (has(data.Ergebnisse_Clearing) || has(data.Ressourcen) || has(data.Risiken)) {
         S.push({ title: 'Ergebnisse des Clearings', text: data.Ergebnisse_Clearing, ressRisiken: true });
