@@ -5230,6 +5230,8 @@ renderUnterschriftFachkraefte();
 
   function sectionHeading(n, title) {
     return {
+      unbreakable: true,      // Nummernkreis und Titel nie auf zwei Seiten verteilen
+      headlineLevel: 1,       // s. pageBreakBefore: keine Überschrift allein am Seitenende
       columns: [
         { width: 20, stack: [badge(n)] },
         { width: '*', text: title, font: 'Baskerville', bold: true, fontSize: F.h2, color: C.dunkelbraun, margin: [0, 1, 0, 0] },
@@ -5247,7 +5249,7 @@ renderUnterschriftFachkraefte();
   }
 
   function subLabel(t) {
-    return {
+    return { headlineLevel: 2,
       text: upper(t), font: 'KodchasanSemi', fontSize: F.label + 0.5,
       characterSpacing: 0.6, color: C.meta, margin: [20, 6, 0, 2],
     };
@@ -5324,7 +5326,7 @@ renderUnterschriftFachkraefte();
     function col(title, text) {
       return {
         table: {
-          widths: ['*'],
+          widths: ['*'], headerRows: 1, keepWithHeaderRows: 1,
           body: [
             [{ text: upper(title), font: 'KodchasanSemi', fontSize: F.label + 1, characterSpacing: 0.6, color: C.wood, fillColor: C.creme, margin: [6, 4, 6, 4] }],
             [{ text: dash(text), fontSize: 9.25, lineHeight: 1.4, color: C.ink, alignment: 'justify', margin: [6, 5, 6, 6] }],
@@ -5336,7 +5338,9 @@ renderUnterschriftFachkraefte();
         },
       };
     }
-    return { columns: [col('Ressourcen', ress), { width: 10, text: '' }, col('Risiken', risi)], margin: [20, 4, 0, 4] };
+    // Kopfzeilen nie allein am Seitenende: Tabelle haelt Kopf + Inhalt zusammen (keepWithHeaderRows),
+    // zusaetzlich greift pageBreakBefore ueber headlineLevel, wenn unter dem Block kein Platz mehr ist
+    return { headlineLevel: 2, columns: [col('Ressourcen', ress), { width: 10, text: '' }, col('Risiken', risi)], margin: [20, 4, 0, 4] };
   }
 
   // ── Unterschriftenblock ──
@@ -5533,6 +5537,16 @@ renderUnterschriftFachkraefte();
         ],
       },
 
+      // Überschriften (Abschnitt und Unterüberschrift) nie als letztes Element einer Seite
+      // Kriterium: bleibt unter der Überschrift nicht mehr Platz für Überschrift + mindestens
+      // eine Textzeile, wandert die Überschrift auf die nächste Seite. (followingNodesOnPage
+      // taugt hier nicht: ein Textblock "startet" auch dann noch auf der Seite, wenn keine
+      // seiner Zeilen mehr hineinpasst.)
+      pageBreakBefore: (node) => {
+        if (!node.headlineLevel || !node.startPosition) return false;
+        const rest = node.startPosition.pageInnerHeight - node.startPosition.top;
+        return rest < (node.headlineLevel === 1 ? 60 : 44);
+      },
       footer: (page, pages) => ({
         margin: [MARGIN_X, 8, MARGIN_X, 0],
         stack: [
