@@ -2420,8 +2420,10 @@ function loadFromJson(input) {
       Object.entries(data).forEach(([key, value]) => {
         const el = document.getElementById(key);
         if (!el || el.type === 'file') return;
+        if (el.tagName === 'SELECT' && value && !Array.from(el.options).some(o => o.value === value)) el.add(new Option(value, value));
         try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
       });
+      ergaenzeAusKilanka(data);
       // Restore ziele
       if (data._ziele && Array.isArray(data._ziele)) {
         _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
