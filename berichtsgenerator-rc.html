@@ -5289,7 +5289,7 @@ renderUnterschriftFachkraefte();
       ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
       : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
     return [
-      { text: _b, fontSize: 9.25, lineHeight: 1.4, color: C.ink, margin: [0, 6, 0, 0] },
+      { text: _b, fontSize: F.fliess, lineHeight: 1.45, color: C.ink, margin: [20, 4, 0, 4] },   // gleicher Einzug wie die Textbloecke
     ];
   }
 
