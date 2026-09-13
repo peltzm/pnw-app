@@ -5672,7 +5672,7 @@ renderUnterschriftFachkraefte();
 
     return {
       pageSize: 'A4',
-      pageMargins: [MARGIN_X, 46, MARGIN_X, 62],
+      pageMargins: [MARGIN_X, 46, MARGIN_X, 56],
       defaultStyle: { font: 'Kodchasan', fontSize: F.fliess, color: C.ink },
       info: { title: `${label} ${kindName}`.trim(), author: 'Praxis NeueWege' },
 
@@ -5700,7 +5700,7 @@ renderUnterschriftFachkraefte();
         return rest < (node.headlineLevel === 1 ? 66 : 48);
       },
       footer: (page, pages) => ({
-        margin: [MARGIN_X, 8, MARGIN_X, 0],
+        margin: [MARGIN_X, 16, MARGIN_X, 0],
         stack: [
           { canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.fussAkzent, lineColor: C.terra }] },
           {
