@@ -850,11 +850,24 @@ function sachbearbeitungGeaendert(el) {
 function jugendamtKurzname(wert) {
   const glatt = v => String(v || '').replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
   const w = glatt(wert);
-  if (!w) return '';
+  if (!w || !_kilankaAemter.length) return '';
+  // 1) exakter Treffer auf Lang- oder Kurzname
   for (const a of _kilankaAemter) {
     if (glatt(a.lang) === w || glatt(a.kurz) === w) return a.kurz;
   }
-  return '';
+  // 2) Altbestand: Bezeichnungen wie "Landratsamt Kelheim - Amt für Jugend und Familie" oder nur
+  //    "Kelheim" (frühere Auswahlliste). Der Kern des Kurznamens (ohne "LA"/"Stadt"/…) muss als
+  //    ganzes Wort im Wert vorkommen; bei mehreren Kandidaten entscheidet der passende Trägertyp
+  //    (LA ↔ Landratsamt, Stadt ↔ Stadt). Bleibt es mehrdeutig, wird nichts geändert.
+  const kern = k => glatt(k).replace(/^(la|lra|landratsamt|stadt|kreis|jobcenter)\s+/, '');
+  const wortIn = (kernwert, text) => kernwert && new RegExp('(^|[^a-zäöüß])' + kernwert.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-zäöüß])').test(text);
+  let kand = _kilankaAemter.filter(a => wortIn(kern(a.kurz), w));
+  if (kand.length > 1) {
+    const istLA = /^landratsamt\b|^lra\b|^la\b|^kreis/.test(w), istStadt = /^stadt\b/.test(w);
+    const gefiltert = kand.filter(a => istLA ? /^(la|lra|landratsamt)\b/i.test(a.kurz) : istStadt ? /^stadt\b/i.test(a.kurz) : true);
+    if (gefiltert.length) kand = gefiltert;
+  }
+  return kand.length === 1 ? kand[0].kurz : '';
 }
 
 // Feld "Zuständiges Jugendamt" eines geladenen Berichts auf den Kurznamen umstellen
