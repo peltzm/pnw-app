@@ -705,6 +705,7 @@ async function getToken() {
 
 // ─── KILANKA-INTEGRATION (BETA) ──────────────────────────────────────────────
 let _kilankaKlienten = [];
+let _kilankaAemter = [];          // [{lang, kurz}] aller Jugendämter aus Kilanka
 let _kilankaLadePromise = null;   // damit loadDraft auf die Klientenliste warten kann
 let _kilankaAktuell = null;       // { id, massnahme } des Klienten, aus dem der offene Bericht vorbefüllt wurde
 let _kilankaBetreuerListe = null; // Namen der Maßnahmen-Betreuer (HB/MB/V) — schränkt Fachkraft-Selects ein
@@ -758,6 +759,7 @@ async function _loadKilankaKlienten(refresh) {
     const d = await r.json();
     _kilankaKlienten = d.klienten || [];
     if (Array.isArray(d.qualifikationen) && d.qualifikationen.length) _kilankaQualiListe = d.qualifikationen;
+    if (Array.isArray(d.aemter)) _kilankaAemter = d.aemter;
     // Doppelte Anzeigenamen (mehrere Maßnahmen) erkennen -> Maßnahme im Label zeigen
     const nameCount = {};
     _kilankaKlienten.forEach(k => { nameCount[k.anzeigeName] = (nameCount[k.anzeigeName] || 0) + 1; });
@@ -842,9 +844,32 @@ function sachbearbeitungGeaendert(el) {
   if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
 
+// Jugendamt-Wert auf den Kilanka-Kurznamen abbilden. Vergleich unempfindlich gegen
+// Zeilenumbrüche, Mehrfach-Leerzeichen, Gedankenstrich-Varianten und Groß-/Kleinschreibung.
+function jugendamtKurzname(wert) {
+  const glatt = v => String(v || '').replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+  const w = glatt(wert);
+  if (!w) return '';
+  for (const a of _kilankaAemter) {
+    if (glatt(a.lang) === w || glatt(a.kurz) === w) return a.kurz;
+  }
+  return '';
+}
+
+// Feld "Zuständiges Jugendamt" eines geladenen Berichts auf den Kurznamen umstellen
+function jugendamtAufKurznameUmstellen() {
+  const ja = document.getElementById('Jugendamt');
+  if (!ja || !ja.value) return false;
+  const kurz = jugendamtKurzname(ja.value);
+  if (kurz && kurz !== ja.value) { ja.value = kurz; return true; }
+  return false;
+}
+
 async function ergaenzeAusKilanka(data) {
   try {
     if (_kilankaLadePromise) await _kilankaLadePromise;
+    // Kurzname unabhängig von der Klientenzuordnung (alle Berichtstypen, auch Altbestand)
+    if (jugendamtAufKurznameUmstellen() && typeof scheduleAutoSave === 'function') scheduleAutoSave();
     if (!_kilankaKlienten.length) return;
     const norm = v => String(v || '').trim().toLowerCase();
     let k = null;

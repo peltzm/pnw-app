@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-13.3 (kurzname, beendete-massnahmen, ansprechpartner)";
+const WORKER_VERSION = "2026-09-13.4 (aemterliste)";
 
 // Ausnahmen von der E-Mail-Namenskonvention:
 // Kilanka user.id (String!) → Entra-UPN (lowercase).
@@ -682,6 +682,23 @@ function stichtagFuer(action, now) {
 // Je Jugendamt (department.id) alle in Kilanka eingetragenen Ansprechpartner sammeln —
 // über sämtliche nicht gelöschten Maßnahmen aller nicht gelöschten Klienten.
 // Ergibt die Auswahlliste "Sachbearbeitung Jugendamt" ohne zusätzliche API-Freigabe.
+// Alle Jugendämter (Langname → Kurzname) aus den Maßnahmen — damit die App auch
+// Bestandsberichte ohne Klientenzuordnung auf den Kurznamen umstellen kann.
+function aemterListe(allClients, amtKurz) {
+  const map = new Map();
+  for (const client of allClients) {
+    if (kDate(client.deletedAt)) continue;
+    for (const action of client.actions || []) {
+      if (kDate(action.deletedAt)) continue;
+      const d = action.department;
+      if (!d || !d.name) continue;
+      const kurz = d.shortName || (amtKurz && amtKurz.get(String(d.id ?? ""))) || "";
+      if (kurz && !map.has(d.name)) map.set(d.name, kurz);
+    }
+  }
+  return [...map].map(([lang, kurz]) => ({ lang, kurz })).sort((a, b) => a.kurz.localeCompare(b.kurz, "de"));
+}
+
 function ansprechpartnerJeAmt(allClients) {
   const map = new Map();
   for (const client of allClients) {
@@ -2010,6 +2027,7 @@ export default {
             stand: new Date(clientCache.fetchedAt).toISOString(),
             anzahl: klienten.length,
             qualifikationen,
+            aemter: aemterListe(all, amtKurz),
             klienten,
           },
           200, origin
