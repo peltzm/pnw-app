@@ -5485,10 +5485,8 @@ renderUnterschriftFachkraefte();
               ]},
               { width: 'auto', alignment: 'center', margin: [12, 2, 12, 0],
                 text: `Seite ${page} von ${pages}`, fontSize: F.fuss, color: C.meta },
-              { width: '*', alignment: 'right', stack: [
-                { text: `Erstellt am ${erstelltAm}`, fontSize: F.fuss - 1, color: C.meta },
-                freigegebenVon ? { text: `Freigegeben von ${freigegebenVon}`, fontSize: F.fuss - 1, color: C.meta } : { text: '' },
-              ]},
+              { width: '*', alignment: 'right',
+                text: freigegebenVon ? `Freigegeben von ${freigegebenVon}` : '', fontSize: F.fuss - 1, color: C.meta, margin: [0, 2, 0, 0] },
             ],
             margin: [0, 5, 0, 0],
           },
