@@ -4298,10 +4298,11 @@ const SECTION_TEMPLATES = {
       hasZiele: true
     },
     s5: {
-      title: 'Fachliche Einschätzung & Empfehlung',
-      sub: 'Abschließende Bewertung und Empfehlung',
+      title: 'Perspektive & Empfehlung',
+      sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
       fields: [
-        { id: 'Fachliche_Einschaetzung', label: 'Fachliche Einschätzung und Empfehlung', placeholder: 'Abschließende fachliche Bewertung...' },
+        { id: 'Stellungnahme', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
+        { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
       ]
     }
   },
@@ -4329,10 +4330,11 @@ const SECTION_TEMPLATES = {
       ]
     },
     s5: {
-      title: 'Abschluss',
-      sub: 'Fachliche Einschätzung',
+      title: 'Perspektive & Empfehlung',
+      sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
       fields: [
-        { id: 'Fachliche_Einschaetzung', label: 'Fachliche Einschätzung', placeholder: 'Abschließende Bewertung...' },
+        { id: 'Stellungnahme', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
+        { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
       ]
     }
   },
@@ -4358,6 +4360,7 @@ const SECTION_TEMPLATES = {
       title: 'Perspektive & Empfehlung',
       sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
       fields: [
+        { id: 'Stellungnahme', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
         { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
       ]
     }
@@ -4503,10 +4506,8 @@ function buildDynamicSections(force = false) {
       <div class="field-grid full"><div class="field">
         <textarea id="${f.id}" style="min-height:${f.id === 'Fachliche_Einschaetzung' ? '140' : '80'}px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
-    // Besprochen-Abfrage: beim Verlaufsbericht unter der Stellungnahme-Box,
-    // beim Abschlussbericht unter "Fachliche Einschätzung und Empfehlung"
-    if ((typ === 'verlauf' && f.id === 'Stellungnahme') ||
-        (typ !== 'verlauf' && f.id === 'Fachliche_Einschaetzung')) { // abschluss, clearing, stationaer
+    // Besprochen-Abfrage: bei allen Berichtstypen unter der Stellungnahme-Box
+    if (f.id === 'Stellungnahme') {
       s5html += `<div class="card"><div class="card-title">Bericht wurde mit Hilfeempfänger besprochen</div>
       <div class="field-grid">
         <div class="field"><label>Besprochen? (Auswahlliste)</label>
@@ -5429,7 +5430,8 @@ renderUnterschriftFachkraefte();
       push('Aktuelle Situation', data.Aktuelle_Situation);
       push('Verlauf der Maßnahme', data.Verlauf_Massnahme);
       if (ziele.length) S.push({ title: 'Zielerreichung', ziele, mitMethoden: false });
-      push('Fachliche Einschätzung & Empfehlung', data.Fachliche_Einschaetzung);
+      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else if (typ === 'clearing') {
       push('Ausgangssituation & beteiligte Personen', data.Ausgangssituation);
       push('Zielsetzung des Clearingprozesses', data.Zielsetzung_Clearing);
@@ -5440,7 +5442,8 @@ renderUnterschriftFachkraefte();
         S.push({ title: 'Ergebnisse des Clearings', text: data.Ergebnisse_Clearing, ressRisiken: true });
       }
       push('Zusammenfassung & Ausblick', data.Zusammenfassung_Ausblick);
-      push('Fachliche Einschätzung', data.Fachliche_Einschaetzung);
+      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else { // stationaer
       push('Aktuelle Lebenssituation in der Wohngruppe', data.Aktuelle_Lebenssituation);
       push('Gesundheitlicher Bereich', data.VBS_Gesundheit);
@@ -5448,6 +5451,7 @@ renderUnterschriftFachkraefte();
       push('Sprachentwicklung', data.VBS_Sprache_Integration);
       push('Haushalt & Selbstständigkeit', data.VBS_Haushalt);
       push('Berufliche Perspektive', data.VBS_Berufliche_Perspektive);
+      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     }
     return S;
