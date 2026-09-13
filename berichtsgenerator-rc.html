@@ -5226,8 +5226,7 @@ renderUnterschriftFachkraefte();
   // ── Ziel-Karte (unbreakable) ──
   function zielCard(n, z, mitMethoden) {
     const inner = [
-      { text: `Ziel ${n}`, font: 'Baskerville', bold: true, fontSize: 9, color: C.dunkelbraun, margin: [0, 0, 0, 4] },
-      { text: 'BESCHREIBUNG', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 0, 0, 1] },
+      { text: `Ziel ${n}`, font: 'Baskerville', bold: true, fontSize: 9, color: C.dunkelbraun, margin: [0, 0, 0, 3] },
       { text: dash(z.beschreibung), fontSize: 9.25, lineHeight: 1.4, color: C.ink, alignment: 'justify' },
     ];
     if (mitMethoden) {
@@ -5334,7 +5333,7 @@ renderUnterschriftFachkraefte();
     } else {
       rows.push([['Hilfebeginn', fmtDate(data.Hilfebeginn)], ['Stundenumfang lt. Bescheid', stundenumfang(data)]]);
       rows.push([['Berichtszeitraum', bz], ['Letztes HPG', fmtDate(data.Letztes_HPG)]]);
-      rows.push([['Nächstes HPG', fmtDate(data.Naechstes_HPG)], ['Fallleitung', data.Fallleitung]]);
+      rows.push([['Nächstes HPG', fmtDate(data.Naechstes_HPG)], ['Teamleitung', data.Fallleitung]]);
     }
     const fk1 = data.Fachkraft1_Name || data.Fachkraft_NeueWege;
     const fk2 = data.Fachkraft2_Name || data.Fachkraft_2; // fuer alle Berichtstypen
@@ -5349,19 +5348,15 @@ renderUnterschriftFachkraefte();
     const ziele = (data._ziele || []).filter(z => has(z.beschreibung) || has(z.ergebnis));
 
     if (typ === 'verlauf') {
-      push('Ausgangslage & aktuelle Lebenssituation', data.Aktuelle_Lebenssituation);
+      push('Beschreibung der aktuellen Lebenssituation', data.Aktuelle_Lebenssituation);
       push('Familiensystem', data.Familiensystem);
-      push('Entwicklung der Kinder / Jugendlichen', data.Entwicklung_Kind);
+      push('Entwicklung der betroffenen Kinder / Jugendlichen', data.Entwicklung_Kind);
       push('Besondere Vorkommnisse im Berichtszeitraum', data.Besondere_Vorkommnisse);
       if (has(data.Arbeitsbeziehung) || ziele.length) {
         S.push({ title: 'Verlauf der Hilfe', textLabel: 'Arbeitsbeziehung & Mitwirkungsbereitschaft', text: data.Arbeitsbeziehung, ziele, zieleLabel: 'Hilfeplanziele & Zielerreichung', mitMethoden: true });
       }
-      if (has(data.Stellungnahme) || has(data.Fachliche_Einschaetzung)) {
-        S.push({ title: 'Perspektive & Empfehlung', sub: [
-          ['Stellungnahme & Sichtweise Hilfeempfänger', data.Stellungnahme],
-          ['Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung],
-        ]});
-      }
+      push('Stellungnahme & Sichtweise Hilfeempfänger', data.Stellungnahme);
+      push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else if (typ === 'abschluss') {
       push('Aktuelle Situation', data.Aktuelle_Situation);
       push('Verlauf der Maßnahme', data.Verlauf_Massnahme);
@@ -5482,18 +5477,15 @@ renderUnterschriftFachkraefte();
           {
             columns: [
               { width: '*', stack: [
-                { text: 'Praxis NeueWege · Hausmehring 19½, 85405 Nandlstadt', fontSize: F.fuss - 1, color: C.meta },
-                { text: 'info@praxisneuewege.de · 0152 3713 0321 · praxisneuewege.de', fontSize: F.fuss - 1, color: C.meta },
+                { text: 'Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach', fontSize: F.fuss - 1, color: C.meta },
+                { text: 'info@praxisneuewege.de', fontSize: F.fuss - 1, color: C.meta },
               ]},
-              { width: 'auto', alignment: 'center', stack: [
+              { width: 'auto', alignment: 'center', margin: [12, 2, 12, 0],
+                text: `Seite ${page} von ${pages}`, fontSize: F.fuss, color: C.meta },
+              { width: '*', alignment: 'right', stack: [
                 { text: `Erstellt am ${erstelltAm}`, fontSize: F.fuss - 1, color: C.meta },
                 freigegebenVon ? { text: `Freigegeben von ${freigegebenVon}`, fontSize: F.fuss - 1, color: C.meta } : { text: '' },
               ]},
-              { width: '*', alignment: 'right', margin: [0, 2, 0, 0],
-                text: [
-                  { text: `Seite ${page}`, fontSize: F.fuss, color: C.terra, font: 'KodchasanSemi' },
-                  { text: ` von ${pages}`, fontSize: F.fuss, color: C.meta },
-                ]},
             ],
             margin: [0, 5, 0, 0],
           },
