@@ -5224,6 +5224,18 @@ renderUnterschriftFachkraefte();
   }
 
   // ── Ziel-Karte (unbreakable) ──
+  // "Bericht besprochen" — Select liefert 'Ja'/'Nein' (Grossschreibung); leer → nichts
+  function besprochenBlock(data) {
+    if (!has(data.Bericht_Besprochen)) return [];
+    const _b = data.Bericht_Besprochen === 'Ja'
+      ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
+      : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
+    return [
+      { text: 'BERICHT BESPROCHEN', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 8, 0, 2] },
+      { text: _b, fontSize: 9.25, lineHeight: 1.4, color: C.ink },
+    ];
+  }
+
   function zielCard(n, z, mitMethoden) {
     const inner = [
       { text: `Ziel ${n}`, font: 'Baskerville', bold: true, fontSize: 9, color: C.dunkelbraun, margin: [0, 0, 0, 3] },
@@ -5355,7 +5367,7 @@ renderUnterschriftFachkraefte();
       if (has(data.Arbeitsbeziehung) || ziele.length) {
         S.push({ title: 'Verlauf der Hilfe', textLabel: 'Arbeitsbeziehung & Mitwirkungsbereitschaft', text: data.Arbeitsbeziehung, ziele, zieleLabel: 'Hilfeplanziele & Zielerreichung', mitMethoden: true });
       }
-      push('Stellungnahme & Sichtweise Hilfeempfänger', data.Stellungnahme);
+      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else if (typ === 'abschluss') {
       push('Aktuelle Situation', data.Aktuelle_Situation);
@@ -5428,18 +5440,12 @@ renderUnterschriftFachkraefte();
         s.ziele.forEach((z, zi) => content.push(zielCard(zi + 1, z, s.mitMethoden !== false)));
       }
       if (s.ressRisiken) content.push(ressRisiken(data.Ressourcen, data.Risiken));
+      if (s.besprochen) besprochenBlock(data).forEach(b => content.push(b));
     });
 
-    // Besprochen-Hinweis (alle Typen, sobald das Feld ausgefuellt ist) — am Ende
-    // des Berichts, dort wo es auch im Formular abgefragt wird.
-    // Achtung: Select liefert 'Ja'/'Nein' (Grossschreibung).
-    if (has(data.Bericht_Besprochen)) {
-      const _b = data.Bericht_Besprochen === 'Ja'
-        ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
-        : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
-      content.push({ text: 'BERICHT BESPROCHEN', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 14, 0, 2] });
-      content.push({ text: _b, fontSize: 9.25, lineHeight: 1.4, color: C.ink });
-    }
+    // Besprochen-Hinweis: im Verlaufsbericht bereits unter der Stellungnahme ausgegeben,
+    // bei den anderen Typen am Ende des Berichts.
+    if (!secs.some(x => x.besprochen)) besprochenBlock(data).forEach(b => content.push(b));
 
     // Anlagen-Hinweis (falls ein PDF-Anhang beigefuegt ist)
     if (opts.anhang) {
