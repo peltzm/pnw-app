@@ -5121,7 +5121,7 @@ renderUnterschriftFachkraefte();
   // ── Design-Tokens (Handoff-README + Token-Referenzseite) ──
   const C = {
     dunkelbraun: '#5A2D15', wood: '#7B3F1E', terra: '#A15F38',
-    terraHell: '#B56B4A', creme: '#F5F0EA', papier: '#FFFEFB',
+    terraHell: '#B56B4A', creme: '#F5F0EA', papier: '#FFFFFF',   // Seite reinweiß, kein getönter Hintergrund
     ink: '#211F1B', muted: '#4A4640', meta: '#8A857B',
     rahmenStark: '#D8D2C6', rahmenMittel: '#E4DED2',
     erreicht: '#2D6A4F',
@@ -5454,7 +5454,6 @@ renderUnterschriftFachkraefte();
       pageSize: 'A4',
       pageMargins: [MARGIN_X, 46, MARGIN_X, 62],
       defaultStyle: { font: 'Kodchasan', fontSize: F.fliess, color: C.ink },
-      background: () => ({ canvas: [{ type: 'rect', x: 0, y: 0, w: PAGE_W, h: 841.89, color: C.papier }] }),
       info: { title: `${label} ${kindName}`.trim(), author: 'Praxis NeueWege' },
 
       header: (page) => page === 1 ? null : {
