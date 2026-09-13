@@ -2529,7 +2529,7 @@ async function saveToList(data, existingId = null) {
   if (existingId && !_statusExplicit) {
     try {
       const freshResp = await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}?expand=fields(select=Status)`,
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}?expand=fields(select=Status,FormularDaten)`,
         { headers: { Authorization: 'Bearer ' + token } }
       );
       if (freshResp.ok) {
@@ -2539,6 +2539,27 @@ async function saveToList(data, existingId = null) {
           console.warn(`Status-Guard: Server-Status "${freshStatus}" behalten (Tab hatte "${data._status}")`);
           data._status = freshStatus;
           currentItemStatus = freshStatus;
+        }
+        // Kommentar-Guard: Die Teamleitung schreibt Kommentare, die Fachkraft nur deren
+        // Erledigt-Status. Ein Fachkraft-Tab, der die Kommentare noch nicht kennt (z. B. seit
+        // der Einreichung offen), darf sie mit seinem leeren Stand nicht ueberschreiben —
+        // Server-Kommentare sind die Basis, lokale Statusaenderungen werden uebernommen.
+        if (!_isReviewMode) {
+          try {
+            const serverData = freshItem.fields?.FormularDaten ? JSON.parse(freshItem.fields.FormularDaten) : null;
+            const serverK = serverData && serverData._tlKommentare && typeof serverData._tlKommentare === 'object' ? serverData._tlKommentare : null;
+            if (serverK && Object.keys(serverK).length) {
+              const lokal = _tlKommentare || {};
+              const merged = {};
+              Object.entries(serverK).forEach(([fid, c]) => {
+                merged[fid] = { ...c, status: (lokal[fid] && lokal[fid].status) || c.status };
+              });
+              const hatteLokal = Object.keys(lokal).length;
+              _tlKommentare = merged;
+              data._tlKommentare = merged;
+              if (!hatteLokal) { console.warn('Kommentar-Guard: Server-Kommentare in diesen Tab uebernommen'); renderFieldComments(); }
+            }
+          } catch(e) { /* best-effort */ }
         }
       }
     } catch(e) { /* Guard best-effort — im Zweifel bisheriges Verhalten */ }
