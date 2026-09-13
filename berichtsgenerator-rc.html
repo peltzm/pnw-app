@@ -5396,7 +5396,7 @@ renderUnterschriftFachkraefte();
     return {
       stack: [
         { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 0, 0, 1.5] },
-        { text: dash(value), font: 'KodchasanMedium', fontSize: F.fliess, color: C.ink, lineHeight: 1.2 },
+        { text: has(value) ? String(value) : ' ', font: 'KodchasanMedium', fontSize: F.fliess, color: C.ink, lineHeight: 1.2 },
       ],
       margin: [6, 5, 6, 5],
     };
@@ -5554,7 +5554,7 @@ renderUnterschriftFachkraefte();
   // Abschnitte je Typ: {title, text} | {title, ziele} | {title, ressRisiken} — leere entfallen
   function sections(typ, data) {
     const S = [];
-    const push = (title, text) => { if (has(text)) S.push({ title, text }); };
+    const push = (title, text) => { S.push({ title, text }); };   // Überschrift auch bei leerem Feld
     const ziele = (data._ziele || []).filter(z => has(z.beschreibung) || has(z.ergebnis));
 
     if (typ === 'verlauf') {
@@ -5562,16 +5562,16 @@ renderUnterschriftFachkraefte();
       push('Familiensystem', data.Familiensystem);
       push('Entwicklung der betroffenen Kinder / Jugendlichen', data.Entwicklung_Kind);
       push('Besondere Vorkommnisse im Berichtszeitraum', data.Besondere_Vorkommnisse);
-      if (has(data.Arbeitsbeziehung) || ziele.length) {
+      {
         S.push({ title: 'Verlauf der Hilfe', textLabel: 'Arbeitsbeziehung & Mitwirkungsbereitschaft', text: data.Arbeitsbeziehung, ziele, zieleLabel: 'Hilfeplanziele & Zielerreichung', mitMethoden: true });
       }
-      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else if (typ === 'abschluss') {
       push('Aktuelle Situation', data.Aktuelle_Situation);
       push('Verlauf der Maßnahme', data.Verlauf_Massnahme);
-      if (ziele.length) S.push({ title: 'Zielerreichung', ziele, mitMethoden: false });
-      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      S.push({ title: 'Zielerreichung', ziele, mitMethoden: false });
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else if (typ === 'clearing') {
       push('Ausgangssituation & beteiligte Personen', data.Ausgangssituation);
@@ -5579,10 +5579,10 @@ renderUnterschriftFachkraefte();
       push('Familienkonstellation — aktuelle Lebenssituation', data.Familienkonstellation);
       push('Rahmenbedingungen - Vorgehen - Methoden', data.Rahmenbedingungen);
       push('Anhang — Methodik', data.Anhang_Methodik);
-      if (has(data.Ergebnisse_Clearing) || has(data.Ressourcen) || has(data.Risiken)) {
+      {
         S.push({ title: 'Ergebnisse des Clearings', text: data.Ergebnisse_Clearing, ressRisiken: true });
       }
-      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else { // stationaer
       push('Aktuelle Lebenssituation in der Wohngruppe', data.Aktuelle_Lebenssituation);
@@ -5591,7 +5591,7 @@ renderUnterschriftFachkraefte();
       push('Sprachentwicklung', data.VBS_Sprache_Integration);
       push('Haushalt & Selbstständigkeit', data.VBS_Haushalt);
       push('Berufliche Perspektive', data.VBS_Berufliche_Perspektive);
-      if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     }
     return S;
@@ -5628,25 +5628,36 @@ renderUnterschriftFachkraefte();
 
     // Abschnitte
     const secs = sections(typ, data);
+    // Leere Abschnitte (nur Überschrift) werden mit der nächsten Überschrift zusammengehalten,
+    // damit keine inhaltslose Überschrift allein am Seitenende steht.
+    let offeneLeere = [];
+    const istLeer = s => !has(s.text) && !(s.sub && s.sub.some(([, t]) => has(t))) && !(s.ziele && s.ziele.length)
+      && !(s.ressRisiken && (has(data.Ressourcen) || has(data.Risiken))) && !(s.besprochen && has(data.Bericht_Besprochen));
     secs.forEach((s, i) => {
+      if (istLeer(s)) { offeneLeere.push(sectionHeading(i + 1, s.title)); return; }
       // Überschriften, denen direkt ein unteilbarer Block folgt (Zielkarte, Ressourcen/Risiken),
       // werden mit diesem Block zusammengefasst — sonst bliebe die Überschrift am Seitenende
       // stehen, während der Block komplett auf die nächste Seite rutscht.
       let heading = sectionHeading(i + 1, s.title);
-      const hatText = has(s.text) || (s.sub && s.sub.some(([, t]) => has(t)));
+      if (offeneLeere.length) {
+        heading = { unbreakable: true, headlineLevel: 1, minRest: 66 + 34 * offeneLeere.length, stack: [...offeneLeere, heading] };
+        offeneLeere = [];
+      }
       const mitBlock = (kopf, block) => ({ unbreakable: true, stack: [kopf, block] });
-      if (has(s.text)) {
+      if (has(s.text) || s.textLabel) {
         content.push(heading); heading = null;
         if (s.textLabel) content.push(subLabel(s.textLabel));
-        content.push(bodyText(s.text));
+        if (has(s.text)) content.push(bodyText(s.text));
       }
-      if (s.sub) s.sub.forEach(([l, t]) => { if (has(t)) { if (heading) { content.push(heading); heading = null; } content.push(subLabel(l)); content.push(bodyText(t)); } });
-      if (s.ziele && s.ziele.length) {
+      if (s.sub) s.sub.forEach(([l, t]) => { if (heading) { content.push(heading); heading = null; } content.push(subLabel(l)); if (has(t)) content.push(bodyText(t)); });
+      if (s.ziele) {
         const karten = s.ziele.map((z, zi) => zielCard(zi + 1, z, s.mitMethoden !== false));
         let kopf = s.zieleLabel ? subLabel(s.zieleLabel) : null;
         if (heading) { kopf = kopf ? { stack: [heading, kopf] } : heading; heading = null; }
-        content.push(kopf ? mitBlock(kopf, karten[0]) : karten[0]);
-        karten.slice(1).forEach(k => content.push(k));
+        if (karten.length) {
+          content.push(kopf ? mitBlock(kopf, karten[0]) : karten[0]);
+          karten.slice(1).forEach(k => content.push(k));
+        } else if (kopf) content.push(kopf);
       }
       if (s.ressRisiken) {
         const block = ressRisiken(data.Ressourcen, data.Risiken);
@@ -5655,6 +5666,7 @@ renderUnterschriftFachkraefte();
       if (heading) content.push(heading);
       if (s.besprochen) besprochenBlock(data).forEach(b => content.push(b));
     });
+    offeneLeere.forEach(h => content.push(h));
 
     // Besprochen-Hinweis: im Verlaufsbericht bereits unter der Stellungnahme ausgegeben,
     // bei den anderen Typen am Ende des Berichts.
@@ -5697,7 +5709,7 @@ renderUnterschriftFachkraefte();
       pageBreakBefore: (node) => {
         if (!node.headlineLevel || !node.startPosition) return false;
         const rest = node.startPosition.pageInnerHeight - node.startPosition.top;
-        return rest < (node.headlineLevel === 1 ? 66 : 48);
+        return rest < (node.minRest || (node.headlineLevel === 1 ? 66 : 48));
       },
       footer: (page, pages) => ({
         margin: [MARGIN_X, 16, MARGIN_X, 0],
