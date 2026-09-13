@@ -5362,13 +5362,17 @@ renderUnterschriftFachkraefte();
 
   function sectionHeading(n, title) {
     return {
-      unbreakable: true,      // Nummernkreis und Titel nie auf zwei Seiten verteilen
+      unbreakable: true,      // Nummernkreis, Titel und Linie nie auf zwei Seiten verteilen
       headlineLevel: 1,       // s. pageBreakBefore: keine Überschrift allein am Seitenende
-      columns: [
-        { width: 20, stack: [badge(n)] },
-        { width: '*', text: title, font: 'Baskerville', bold: true, fontSize: F.h2, color: C.dunkelbraun, margin: [0, 1, 0, 0] },
+      stack: [
+        { columns: [
+          { width: 20, stack: [badge(n)] },
+          { width: '*', text: title, font: 'Baskerville', bold: true, fontSize: F.h2, color: C.dunkelbraun, margin: [0, 1, 0, 0] },
+        ]},
+        // Unterstrich über die gesamte Textbreite
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: 0.8, lineColor: C.dunkelbraun }], margin: [0, 3, 0, 0] },
       ],
-      margin: [0, 14, 0, 5],
+      margin: [0, 14, 0, 6],
     };
   }
 
@@ -5382,8 +5386,8 @@ renderUnterschriftFachkraefte();
 
   function subLabel(t) {
     return { headlineLevel: 2,
-      text: upper(t), font: 'KodchasanSemi', fontSize: F.label + 0.5,
-      characterSpacing: 0.6, color: C.meta, margin: [20, 6, 0, 2],
+      text: upper(t), font: 'KodchasanSemi', fontSize: F.fliess,
+      characterSpacing: 0.4, color: C.ink, margin: [20, 8, 0, 2],
     };
   }
 
@@ -5392,7 +5396,7 @@ renderUnterschriftFachkraefte();
     return {
       stack: [
         { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 0, 0, 1.5] },
-        { text: dash(value), font: 'KodchasanMedium', fontSize: F.wert, color: C.ink, lineHeight: 1.2 },
+        { text: dash(value), font: 'KodchasanMedium', fontSize: F.fliess, color: C.ink, lineHeight: 1.2 },
       ],
       margin: [6, 5, 6, 5],
     };
@@ -5429,18 +5433,19 @@ renderUnterschriftFachkraefte();
 
   function zielCard(n, z, mitMethoden) {
     const inner = [
-      { text: `Ziel ${n}`, font: 'Baskerville', bold: true, fontSize: 9, color: C.dunkelbraun, margin: [0, 0, 0, 3] },
-      { text: dash(z.beschreibung), fontSize: 9.25, lineHeight: 1.4, color: C.ink, alignment: 'justify' },
+      { text: `Ziel ${n}`, font: 'Baskerville', bold: true, fontSize: F.h2, color: C.dunkelbraun, margin: [0, 0, 0, 3] },
+      { text: dash(z.beschreibung), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify' },
     ];
+    const zLabel = t => ({ text: t, font: 'KodchasanSemi', fontSize: F.fliess, characterSpacing: 0.4, color: C.ink, margin: [0, 7, 0, 2] });
     if (mitMethoden) {
       inner.push(
-        { text: 'METHODEN & MASSNAHMEN', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 5, 0, 1] },
-        { text: dash(z.methoden), fontSize: 9.25, lineHeight: 1.4, color: C.ink, alignment: 'justify' }
+        zLabel('METHODEN & MASSNAHMEN'),
+        { text: dash(z.methoden), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify' }
       );
     }
     inner.push(
-      { text: 'ZIELERREICHUNG — ERGEBNIS', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 5, 0, 1] },
-      { text: dash(z.ergebnis), fontSize: 9.25, lineHeight: 1.4, color: C.ink, alignment: 'justify' }
+      zLabel('ZIELERREICHUNG — ERGEBNIS'),
+      { text: dash(z.ergebnis), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify' }
     );
     return {
       unbreakable: true,
@@ -5460,8 +5465,8 @@ renderUnterschriftFachkraefte();
         table: {
           widths: ['*'], headerRows: 1, keepWithHeaderRows: 1,
           body: [
-            [{ text: upper(title), font: 'KodchasanSemi', fontSize: F.label + 1, characterSpacing: 0.6, color: C.wood, fillColor: C.creme, margin: [6, 4, 6, 4] }],
-            [{ text: dash(text), fontSize: 9.25, lineHeight: 1.4, color: C.ink, alignment: 'justify', margin: [6, 5, 6, 6] }],
+            [{ text: upper(title), font: 'KodchasanSemi', fontSize: F.fliess, characterSpacing: 0.4, color: C.ink, fillColor: C.creme, margin: [6, 4, 6, 4] }],
+            [{ text: dash(text), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify', margin: [6, 5, 6, 6] }],
           ],
         },
         layout: {
@@ -5624,14 +5629,30 @@ renderUnterschriftFachkraefte();
     // Abschnitte
     const secs = sections(typ, data);
     secs.forEach((s, i) => {
-      content.push(sectionHeading(i + 1, s.title));
-      if (has(s.text)) { if (s.textLabel) content.push(subLabel(s.textLabel)); content.push(bodyText(s.text)); }
-      if (s.sub) s.sub.forEach(([l, t]) => { if (has(t)) { content.push(subLabel(l)); content.push(bodyText(t)); } });
-      if (s.ziele && s.ziele.length) {
-        if (s.zieleLabel) content.push(subLabel(s.zieleLabel));
-        s.ziele.forEach((z, zi) => content.push(zielCard(zi + 1, z, s.mitMethoden !== false)));
+      // Überschriften, denen direkt ein unteilbarer Block folgt (Zielkarte, Ressourcen/Risiken),
+      // werden mit diesem Block zusammengefasst — sonst bliebe die Überschrift am Seitenende
+      // stehen, während der Block komplett auf die nächste Seite rutscht.
+      let heading = sectionHeading(i + 1, s.title);
+      const hatText = has(s.text) || (s.sub && s.sub.some(([, t]) => has(t)));
+      const mitBlock = (kopf, block) => ({ unbreakable: true, stack: [kopf, block] });
+      if (has(s.text)) {
+        content.push(heading); heading = null;
+        if (s.textLabel) content.push(subLabel(s.textLabel));
+        content.push(bodyText(s.text));
       }
-      if (s.ressRisiken) content.push(ressRisiken(data.Ressourcen, data.Risiken));
+      if (s.sub) s.sub.forEach(([l, t]) => { if (has(t)) { if (heading) { content.push(heading); heading = null; } content.push(subLabel(l)); content.push(bodyText(t)); } });
+      if (s.ziele && s.ziele.length) {
+        const karten = s.ziele.map((z, zi) => zielCard(zi + 1, z, s.mitMethoden !== false));
+        let kopf = s.zieleLabel ? subLabel(s.zieleLabel) : null;
+        if (heading) { kopf = kopf ? { stack: [heading, kopf] } : heading; heading = null; }
+        content.push(kopf ? mitBlock(kopf, karten[0]) : karten[0]);
+        karten.slice(1).forEach(k => content.push(k));
+      }
+      if (s.ressRisiken) {
+        const block = ressRisiken(data.Ressourcen, data.Risiken);
+        if (heading) { content.push(mitBlock(heading, block)); heading = null; } else content.push(block);
+      }
+      if (heading) content.push(heading);
       if (s.besprochen) besprochenBlock(data).forEach(b => content.push(b));
     });
 
@@ -5676,7 +5697,7 @@ renderUnterschriftFachkraefte();
       pageBreakBefore: (node) => {
         if (!node.headlineLevel || !node.startPosition) return false;
         const rest = node.startPosition.pageInnerHeight - node.startPosition.top;
-        return rest < (node.headlineLevel === 1 ? 60 : 44);
+        return rest < (node.headlineLevel === 1 ? 66 : 48);
       },
       footer: (page, pages) => ({
         margin: [MARGIN_X, 8, MARGIN_X, 0],
