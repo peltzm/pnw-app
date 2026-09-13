@@ -294,7 +294,7 @@
             </div>
           </div>
           <div class="field-grid">
-            <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" list="sachbearbeitungListe" placeholder="Name Sachbearbeiter*in" autocomplete="off"><datalist id="sachbearbeitungListe"></datalist></div>
+            <div class="field"><label>Sachbearbeitung Jugendamt</label><select id="Sachbearbeitung_JA" onchange="sachbearbeitungGeaendert(this)"><option value="">— bitte wählen —</option><option value="__custom__">Anderer Name…</option></select></div>
             <div class="field"><label>Fachkraft 1 (Auswahlliste)</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div class="field-grid" id="einrichtungRow" style="display:none;">
@@ -818,6 +818,30 @@ function _setSelect(id, val) {
 // wird immer bereitgestellt. Der Klient wird über die gespeicherte Kilanka-ID gefunden,
 // bei Altbestand über Name + Geburtsdatum. Kein Treffer (z. B. TL ohne eigene
 // Zuordnung) → keine Änderung.
+// Auswahlliste "Sachbearbeitung Jugendamt" aufbauen. Reihenfolge: aktueller Ansprechpartner
+// aus Kilanka, dann alle weiteren des Amts. Ein bereits gesetzter Wert bleibt erhalten;
+// ist das Feld leer, wird der aktuelle Ansprechpartner vorbelegt.
+function setzeSachbearbeitungListe(aktuellKilanka, weitere) {
+  const el = document.getElementById('Sachbearbeitung_JA');
+  if (!el) return;
+  const vorher = el.value && el.value !== '__custom__' ? el.value : '';
+  const namen = [aktuellKilanka, ...(weitere || []), vorher].filter((n, i, a) => n && a.indexOf(n) === i);
+  const esc = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  el.innerHTML = '<option value="">— bitte wählen —</option>' +
+    namen.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
+    '<option value="__custom__">Anderer Name…</option>';
+  el.value = vorher || aktuellKilanka || '';
+}
+
+// "Anderer Name…": Freitext erfassen und als Option übernehmen (Berichte ohne Kilanka-Zuordnung)
+function sachbearbeitungGeaendert(el) {
+  if (el.value !== '__custom__') return;
+  const name = (prompt('Name der Sachbearbeitung (Nachname, Vorname):') || '').trim();
+  if (name) { el.add(new Option(name, name), el.options.length - 1); el.value = name; }
+  else el.value = '';
+  if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+}
+
 async function ergaenzeAusKilanka(data) {
   try {
     if (_kilankaLadePromise) await _kilankaLadePromise;
@@ -845,7 +869,6 @@ async function ergaenzeAusKilanka(data) {
     };
     fuelleLeer('Jugendamt', k.Jugendamt, 'Jugendamt');
     fuelleLeer('Hilfeart', k.Hilfeart, 'Hilfeart');
-    fuelleLeer('Sachbearbeitung_JA', k.Sachbearbeitung_JA, 'Sachbearbeitung');
     fuelleLeer('Hilfebeginn', k.Hilfebeginn, 'Hilfebeginn');
     fuelleLeer('Hilfe_Ende', k.Hilfe_Ende, 'Hilfe-Ende');
     fuelleLeer('Naechstes_HPG', k.Naechstes_HPG, 'Nächstes HPG');
@@ -855,12 +878,10 @@ async function ergaenzeAusKilanka(data) {
     fuelleLeer('Kind_Strasse', k.Kind_Strasse, 'Straße');
     fuelleLeer('Kind_PLZ_Ort', k.Kind_PLZ_Ort, 'PLZ/Ort');
 
-    // Auswahlliste Sachbearbeitung immer bereitstellen
-    const sbl = document.getElementById('sachbearbeitungListe');
-    if (sbl) {
-      const namen = [k.Sachbearbeitung_JA, ...(k.Ansprechpartner_JA || [])].filter((n, i, a) => n && a.indexOf(n) === i);
-      sbl.innerHTML = namen.map(n => '<option value="' + String(n).replace(/"/g, '&quot;') + '">').join('');
-    }
+    // Auswahlliste Sachbearbeitung bereitstellen; leeres Feld mit dem aktuellen Ansprechpartner vorbelegen
+    const sbVorher = document.getElementById('Sachbearbeitung_JA')?.value || '';
+    setzeSachbearbeitungListe(k.Sachbearbeitung_JA, k.Ansprechpartner_JA);
+    if (!sbVorher && document.getElementById('Sachbearbeitung_JA')?.value) ergaenzt.push('Sachbearbeitung');
     if (ergaenzt.length) {
       console.info('Aus Kilanka ergänzt:', ergaenzt.join(', '));
       if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
@@ -875,13 +896,8 @@ function prefillFromKilanka(k, groupPromise) {
   _setVal('Jugendamt', k.Jugendamt);
   const ha = document.getElementById('Hilfeart');
   if (ha && !ha.disabled && k.Hilfeart) ha.value = k.Hilfeart; // Clearing-Preset nicht überschreiben
-  _setVal('Sachbearbeitung_JA', k.Sachbearbeitung_JA);
-  // Auswahlliste: alle in Kilanka für dieses Amt eingetragenen Ansprechpartner (aktueller zuerst)
-  const sbl = document.getElementById('sachbearbeitungListe');
-  if (sbl) {
-    const namen = [k.Sachbearbeitung_JA, ...(k.Ansprechpartner_JA || [])].filter((n, i, a) => n && a.indexOf(n) === i);
-    sbl.innerHTML = namen.map(n => '<option value="' + String(n).replace(/"/g, '&quot;') + '">').join('');
-  }
+  { const sb = document.getElementById('Sachbearbeitung_JA'); if (sb) sb.value = ''; }  // neuer Bericht: Kilanka-Wert vorbelegen
+  setzeSachbearbeitungListe(k.Sachbearbeitung_JA, k.Ansprechpartner_JA);
   _setVal('Hilfebeginn', k.Hilfebeginn);
   _setVal('Hilfe_Ende', k.Hilfe_Ende);
   _setVal('Naechstes_HPG', k.Naechstes_HPG);
@@ -2030,6 +2046,8 @@ async function copyStammdaten(id) {
       if (key === 'Weitere_Personen') { fillWeiterePersFound(value); return; }
       const el = document.getElementById(key);
       if (!el || !value || el.type === 'file') return;
+      // Auswahllisten: gespeicherten Wert als Option ergänzen statt still zu verwerfen
+      if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => o.value === value)) el.add(new Option(value, value));
       try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
     ergaenzeAusKilanka(data);
@@ -2178,6 +2196,7 @@ async function loadDraft(id) {
       if (key === 'Weitere_Personen') { fillWeiterePersFound(value); return; }
       const el = document.getElementById(key);
       if (!el || el.type === 'file') return;
+      if (el.tagName === 'SELECT' && value && !Array.from(el.options).some(o => o.value === value)) el.add(new Option(value, value));
       try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
     ergaenzeAusKilanka(data);
@@ -2376,6 +2395,7 @@ function resetForm() {
   _extraFachkraftCount = 0;
   _unterschriftCount = 1;
   renderUnterschriftFachkraefte();
+  setzeSachbearbeitungListe('', []);
   const btnFk = document.getElementById('btnAddFachkraft');
   if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
   // Reset list ID for new bericht
