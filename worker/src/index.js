@@ -97,6 +97,9 @@ const ALLOWED_ORIGINS = [
 // Schont das Rate-Limit (10 Req / 5 s) und beschleunigt die App.
 const CACHE_TTL_MIN = 10;
 
+// Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
+const WORKER_VERSION = "2026-09-13.3 (kurzname, beendete-massnahmen, ansprechpartner)";
+
 // Ausnahmen von der E-Mail-Namenskonvention:
 // Kilanka user.id (String!) → Entra-UPN (lowercase).
 // Befüllen nach dem Abgleich-Script (Spalte KilankaId der PRUEFEN-Zeilen).
@@ -1975,7 +1978,7 @@ export default {
     }
 
     if (url.pathname === "/api/health") {
-      return json({ ok: true, version: "v3.2-git", ts: new Date().toISOString() }, 200, origin);
+      return json({ ok: true, version: WORKER_VERSION, ts: new Date().toISOString() }, 200, origin);
     }
 
     if (url.pathname === "/api/meine-klienten" && request.method === "GET") {
