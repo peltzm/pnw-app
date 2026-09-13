@@ -446,6 +446,7 @@
           <!-- Bereits angenommen von jemand anderem -->
           <div id="tlAndererPruefer" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:var(--radius-lg); padding:0.75rem 1.25rem; margin-bottom:10px;">
             <div style="font-size:12px; color:var(--info);">ℹ Dieser Bericht wird bereits geprüft von: <strong id="tlAndererPrueferName"></strong></div>
+            <button class="btn btn-secondary" id="btnTlUebernehmen" onclick="tlUebernehmenHier()" style="display:none; margin-top:8px; min-height:38px; font-size:12px;">↪ Prüfung übernehmen (Vertretung)</button>
           </div>
           <!-- Aktions-Buttons (nur wenn angenommen) -->
           <div id="tlAktionen" style="display:none; background:var(--accent-light); border:1px solid #e8c4a8; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
@@ -3583,6 +3584,9 @@ function renderStatusBerichte() {
         ${archiviert
           ? `<button onclick="toggleArchiv('${itemId}', false)" title="Aus dem Archiv zurückholen"
               style="font-size:12px; padding:6px 12px; background:white; color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; min-height:36px;">↩ Wiederherstellen</button>` : ''}
+        ${st === 'TL angenommen' && isTLUser() && item.Assigned_Reviewer && item.Assigned_Reviewer !== (currentAccount?.name || '')
+          ? `<button onclick="tlUebernehmenAusListe('${itemId}')" title="Prüfung von ${(item.Assigned_Reviewer||'').replace(/"/g,'&quot;')} übernehmen (Vertretung)"
+              style="font-size:12px; padding:6px 12px; background:white; color:#1d4ed8; border:1px solid #1d4ed8; border-radius:var(--radius); cursor:pointer; min-height:36px;">↪ Übernehmen</button>` : ''}
         ${st === 'Entwurf'
           ? `<button onclick="deleteDraft('${itemId}')" title="Entwurf löschen"
               style="font-size:12px; padding:6px 12px; background:white; color:var(--error); border:1px solid var(--error); border-radius:var(--radius); cursor:pointer; min-height:36px;">🗑 Löschen</button>` : ''}
@@ -3644,6 +3648,81 @@ async function tlAnnehmenBericht() {
     alert('Fehler beim Speichern: ' + e.message);
     throw e;
   }
+}
+
+// ─── PRÜFUNG VON EINER ANDEREN TEAMLEITUNG ÜBERNEHMEN ───
+// Fall: Die zugewiesene Teamleitung ist verhindert (Urlaub, Krankheit). Jede andere
+// Teamleitung kann die Prüfung an sich ziehen. Die bisherige Prüferin wird per
+// E-Mail informiert. Gearbeitet wird auf dem gespeicherten Serverstand — nicht auf
+// dem DOM der Prüfansicht (dort fehlen Extra-Zeilen, s. rejectReport).
+async function tlPruefungUebernehmen(itemId) {
+  const id = itemId || currentListId;
+  if (!id) return false;
+  if (!isTLUser()) { alert('Die Übernahme ist Teamleitungen vorbehalten.'); return false; }
+  const myName = currentAccount?.name || currentAccount?.username || '';
+  const myMail = currentAccount?.username || '';
+  try {
+    const fresh = await loadItemById(id);
+    const freshStatus = fresh.Status || 'Entwurf';
+    const bisherName = fresh.Assigned_Reviewer || '';
+    const bisherMail = fresh.Assigned_Reviewer_Mail || '';
+    if (freshStatus !== 'TL angenommen' && freshStatus !== 'Eingereicht') {
+      alert(`Übernahme nicht möglich — der Bericht hat den Status „${statusLabel(freshStatus)}".`); return false;
+    }
+    if (bisherName && bisherName === myName) { alert('Sie prüfen diesen Bericht bereits.'); return false; }
+    const kind = `${fresh.Kind_Vorname || ''} ${fresh.Kind_Familienname || ''}`.trim();
+    const frage = bisherName
+      ? `Prüfung des Berichts zu ${kind} von ${bisherName} übernehmen?\n\n${bisherName} wird per E-Mail informiert.`
+      : `Prüfung des Berichts zu ${kind} übernehmen?`;
+    if (!confirm(frage)) return false;
+
+    const data = fresh.FormularDaten ? JSON.parse(fresh.FormularDaten) : {};
+    data._status = 'TL angenommen'; data._statusExplicit = true;
+    data._assignedReviewer = myName;
+    data._assignedReviewerMail = myMail;
+    await saveToList(data, id);
+    if (String(id) === String(currentListId)) {
+      currentAssignedReviewer = myName;
+      currentAssignedReviewerMail = myMail;
+      currentItemStatus = 'TL angenommen';
+    }
+    // Bisherige Prüferin informieren (best-effort)
+    if (bisherMail && bisherMail.toLowerCase() !== myMail.toLowerCase()) {
+      try {
+        const token = await getToken();
+        await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: {
+            subject: `[RC][Prüfung übernommen] ${kind}`,
+            body: { contentType: 'HTML', content:
+              `<p>${escHtml(myName)} hat die Prüfung des Berichts zu <strong>${escHtml(kind)}</strong> übernommen.</p>
+               <p style="font-size:13px;color:#666;">Ihre bisherigen Kommentare bleiben erhalten. Sie müssen nichts weiter tun.</p>` },
+            toRecipients: [{ emailAddress: { address: bisherMail } }],
+          }, saveToSentItems: false })
+        });
+      } catch(e) { console.warn('Info-Mail an bisherige Prüferin fehlgeschlagen:', e.message); }
+    }
+    return true;
+  } catch(e) {
+    alert('Übernahme fehlgeschlagen: ' + e.message);
+    return false;
+  }
+}
+
+// Übernahme aus der offenen Prüfansicht heraus (Banner / Popup)
+async function tlUebernehmenHier() {
+  const id = currentListId;
+  const ok = await tlPruefungUebernehmen(id);
+  if (!ok) return;
+  // Die Ansicht war im gesperrten Ansichtsmodus — Prüfansicht über den Review-Link sauber neu aufbauen
+  window.location.href = `${APP_BASE_URL}?review=${encodeURIComponent(id)}&typ=${encodeURIComponent(currentBerichtstyp || 'verlauf')}`;
+}
+
+// Übernahme aus der Statusübersicht
+async function tlUebernehmenAusListe(itemId) {
+  const ok = await tlPruefungUebernehmen(itemId);
+  if (ok && typeof goToStatusBerichte === 'function') goToStatusBerichte();
 }
 
 // ─── TL FREIGEBEN AN SONJA ───────────────────────────────────────────────────
@@ -3818,7 +3897,7 @@ function activateViewOnlyMode(grund) {
   // Aktions-Buttons sperren — Seitennavigation, Exportieren und Startseite ausgenommen
   document.querySelectorAll('#mainLayout button').forEach(btn => {
     const oc = btn.getAttribute('onclick') || '';
-    if (/goTo|goToNext|startScreen|downloadLocal/.test(oc)) return;
+    if (/goTo|goToNext|startScreen|downloadLocal|tlUebernehmenHier/.test(oc)) return;
     btn.disabled = true;
     btn.style.opacity = '0.45';
     btn.style.cursor = 'not-allowed';
@@ -3905,7 +3984,8 @@ function showTLAndererPrueferPopup(prueferName) {
       <div style="font-size:17px; font-weight:700; color:#1d4ed8; margin-bottom:8px;">Bericht bereits übernommen</div>
       <div style="font-size:13px; color:#555; margin-bottom:6px;">Der Bericht zu <strong>${escHtml(kind)}</strong> wird bereits geprüft von:</div>
       <div style="font-size:16px; font-weight:700; color:#1d4ed8; margin-bottom:20px;">${escHtml(prueferName)}</div>
-      <div style="font-size:12px; color:#888; margin-bottom:24px;">Sie können den Bericht trotzdem ansehen, aber nicht freigeben.</div>
+      <div style="font-size:12px; color:#888; margin-bottom:24px;">Sie können den Bericht ansehen. Ist ${escHtml(prueferName)} verhindert, können Sie die Prüfung übernehmen.</div>
+      ${isTLUser() ? `<button onclick="tlUebernehmenHier()" style="background:white; color:#1d4ed8; border:1px solid #1d4ed8; border-radius:8px; padding:12px 22px; font-size:14px; font-weight:600; cursor:pointer; margin-right:10px;">↪ Prüfung übernehmen</button>` : ''}
       <button onclick="document.getElementById('tlAndererModal').remove()" style="background:#1d4ed8; color:white; border:none; border-radius:8px; padding:12px 28px; font-size:14px; font-weight:600; cursor:pointer; min-height:44px;">Verstanden — Bericht ansehen</button>
     </div>`;
   document.body.appendChild(modal);
@@ -3968,6 +4048,7 @@ function activateReviewMode() {
     document.getElementById('tlAndererPruefer').style.display = 'block';
     document.getElementById('tlAndererPrueferName').textContent = currentAssignedReviewer;
     document.getElementById('tlAktionen').style.display = 'none';
+    { const b = document.getElementById('btnTlUebernehmen'); if (b) b.style.display = isTLUser() ? 'inline-flex' : 'none'; }
   }
   // ── Stationär-Sonderlogik: Freigabe-Button und Hinweistext anpassen ──
   const btnTlF = document.getElementById('btnTlFreigeben');
