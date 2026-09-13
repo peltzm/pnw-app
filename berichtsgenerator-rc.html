@@ -5354,7 +5354,7 @@ renderUnterschriftFachkraefte();
       push('Entwicklung der Kinder / Jugendlichen', data.Entwicklung_Kind);
       push('Besondere Vorkommnisse im Berichtszeitraum', data.Besondere_Vorkommnisse);
       if (has(data.Arbeitsbeziehung) || ziele.length) {
-        S.push({ title: 'Verlauf der Hilfe', text: data.Arbeitsbeziehung, ziele, zieleLabel: 'Hilfeplanziele & Zielerreichung', mitMethoden: true });
+        S.push({ title: 'Verlauf der Hilfe', textLabel: 'Arbeitsbeziehung & Mitwirkungsbereitschaft', text: data.Arbeitsbeziehung, ziele, zieleLabel: 'Hilfeplanziele & Zielerreichung', mitMethoden: true });
       }
       if (has(data.Stellungnahme) || has(data.Fachliche_Einschaetzung)) {
         S.push({ title: 'Perspektive & Empfehlung', sub: [
@@ -5426,7 +5426,7 @@ renderUnterschriftFachkraefte();
     const secs = sections(typ, data);
     secs.forEach((s, i) => {
       content.push(sectionHeading(i + 1, s.title));
-      if (has(s.text)) content.push(bodyText(s.text));
+      if (has(s.text)) { if (s.textLabel) content.push(subLabel(s.textLabel)); content.push(bodyText(s.text)); }
       if (s.sub) s.sub.forEach(([l, t]) => { if (has(t)) { content.push(subLabel(l)); content.push(bodyText(t)); } });
       if (s.ziele && s.ziele.length) {
         if (s.zieleLabel) content.push(subLabel(s.zieleLabel));
