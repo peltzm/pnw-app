@@ -870,7 +870,8 @@ async function ergaenzeAusKilanka(data) {
     fuelleLeer('Jugendamt', k.Jugendamt, 'Jugendamt');
     // Entwürfe, die noch den langen Behördennamen tragen, auf den Kilanka-Kurznamen umstellen
     { const ja = document.getElementById('Jugendamt');
-      if (ja && k.Jugendamt && k.Jugendamt_Lang && ja.value.trim() === k.Jugendamt_Lang.trim() && ja.value !== k.Jugendamt) { ja.value = k.Jugendamt; ergaenzt.push('Jugendamt (Kurzname)'); } }
+      const glatt = v => String(v || '').replace(/\s+/g, ' ').trim();   // Kilanka-Namen enthalten Zeilenumbrüche
+      if (ja && k.Jugendamt && k.Jugendamt_Lang && glatt(ja.value) === glatt(k.Jugendamt_Lang) && glatt(ja.value) !== glatt(k.Jugendamt)) { ja.value = k.Jugendamt; ergaenzt.push('Jugendamt (Kurzname)'); } }
     fuelleLeer('Hilfeart', k.Hilfeart, 'Hilfeart');
     fuelleLeer('Hilfebeginn', k.Hilfebeginn, 'Hilfebeginn');
     fuelleLeer('Hilfe_Ende', k.Hilfe_Ende, 'Hilfe-Ende');
