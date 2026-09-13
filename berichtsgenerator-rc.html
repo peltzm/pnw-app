@@ -5425,9 +5425,6 @@ renderUnterschriftFachkraefte();
     // Stammdaten
     content.push(stammBox(stammRows(typ, data)));
 
-    if (has(data.HPG_Begruendung)) {
-      content.push({ text: `Hinweis zur Vorlaufzeit: ${data.HPG_Begruendung}`, fontSize: 8.5, italics: true, color: C.muted, margin: [0, 2, 0, 0] });
-    }
 
     // Abschnitte
     const secs = sections(typ, data);
