@@ -705,6 +705,8 @@ async function getToken() {
 
 // ─── KILANKA-INTEGRATION (BETA) ──────────────────────────────────────────────
 let _kilankaKlienten = [];
+let _kilankaLadePromise = null;   // damit loadDraft auf die Klientenliste warten kann
+let _kilankaAktuell = null;       // { id, massnahme } des Klienten, aus dem der offene Bericht vorbefüllt wurde
 let _kilankaBetreuerListe = null; // Namen der Maßnahmen-Betreuer (HB/MB/V) — schränkt Fachkraft-Selects ein
 let _kilankaQualiListe = null;    // In Kilanka vergebene Qualifikationen — ersetzt QUALI1_OPTS
 
@@ -732,7 +734,12 @@ async function getApiToken() {
   }
 }
 
-async function loadKilankaKlienten(refresh) {
+function loadKilankaKlienten(refresh) {
+  _kilankaLadePromise = _loadKilankaKlienten(refresh);
+  return _kilankaLadePromise;
+}
+
+async function _loadKilankaKlienten(refresh) {
   const sel = document.getElementById('kilankaKlient');
   const status = document.getElementById('kilankaStatus');
   if (!sel || !status) return;
@@ -806,8 +813,64 @@ function _setSelect(id, val) {
   el.value = opt.value || opt.textContent;
 }
 
+// Nach dem Laden eines Entwurfs: Stammdaten aus Kilanka ergänzen. Nur LEERE Felder
+// werden befüllt (gespeicherte Werte bleiben), die Auswahlliste der Sachbearbeitung
+// wird immer bereitgestellt. Der Klient wird über die gespeicherte Kilanka-ID gefunden,
+// bei Altbestand über Name + Geburtsdatum. Kein Treffer (z. B. TL ohne eigene
+// Zuordnung) → keine Änderung.
+async function ergaenzeAusKilanka(data) {
+  try {
+    if (_kilankaLadePromise) await _kilankaLadePromise;
+    if (!_kilankaKlienten.length) return;
+    const norm = v => String(v || '').trim().toLowerCase();
+    let k = null;
+    if (data._kilankaId) {
+      const treffer = _kilankaKlienten.filter(x => String(x.kilankaId) === String(data._kilankaId));
+      k = treffer.find(x => x.massnahme && x.massnahme.name === data._kilankaMassnahme) || treffer[0] || null;
+    }
+    if (!k) {
+      k = _kilankaKlienten.find(x =>
+        norm(x.Kind_Familienname) === norm(data.Kind_Familienname) &&
+        norm(x.Kind_Vorname) === norm(data.Kind_Vorname) &&
+        (!data.Kind_Geburtsdatum || !x.Kind_Geburtsdatum || x.Kind_Geburtsdatum === data.Kind_Geburtsdatum)
+      ) || null;
+    }
+    if (!k) return;
+    _kilankaAktuell = { id: k.kilankaId || '', massnahme: (k.massnahme && k.massnahme.name) || '' };
+    const ergaenzt = [];
+    const fuelleLeer = (id, val, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.disabled || val == null || val === '' || (el.value || '').trim()) return;
+      _setVal(id, val); ergaenzt.push(label || id);
+    };
+    fuelleLeer('Jugendamt', k.Jugendamt, 'Jugendamt');
+    fuelleLeer('Hilfeart', k.Hilfeart, 'Hilfeart');
+    fuelleLeer('Sachbearbeitung_JA', k.Sachbearbeitung_JA, 'Sachbearbeitung');
+    fuelleLeer('Hilfebeginn', k.Hilfebeginn, 'Hilfebeginn');
+    fuelleLeer('Hilfe_Ende', k.Hilfe_Ende, 'Hilfe-Ende');
+    fuelleLeer('Naechstes_HPG', k.Naechstes_HPG, 'Nächstes HPG');
+    fuelleLeer('Fachleistungsstunden', k.Fachleistungsstunden, 'Stunden');
+    fuelleLeer('Stunden_Typ', k.Stunden_Typ, 'Kontingenttyp');
+    fuelleLeer('Kind_Geburtsdatum', k.Kind_Geburtsdatum, 'Geburtsdatum');
+    fuelleLeer('Kind_Strasse', k.Kind_Strasse, 'Straße');
+    fuelleLeer('Kind_PLZ_Ort', k.Kind_PLZ_Ort, 'PLZ/Ort');
+
+    // Auswahlliste Sachbearbeitung immer bereitstellen
+    const sbl = document.getElementById('sachbearbeitungListe');
+    if (sbl) {
+      const namen = [k.Sachbearbeitung_JA, ...(k.Ansprechpartner_JA || [])].filter((n, i, a) => n && a.indexOf(n) === i);
+      sbl.innerHTML = namen.map(n => '<option value="' + String(n).replace(/"/g, '&quot;') + '">').join('');
+    }
+    if (ergaenzt.length) {
+      console.info('Aus Kilanka ergänzt:', ergaenzt.join(', '));
+      if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    }
+  } catch(e) { console.warn('Kilanka-Ergänzung übersprungen:', e.message); }
+}
+
 function prefillFromKilanka(k, groupPromise) {
   if (!k) return;
+  _kilankaAktuell = { id: k.kilankaId || '', massnahme: (k.massnahme && k.massnahme.name) || '' };
   // S1 — Stammdaten
   _setVal('Jugendamt', k.Jugendamt);
   const ha = document.getElementById('Hilfeart');
@@ -1254,6 +1317,8 @@ function collectData() {
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
   // Collect extra Kinder and Sorgeberechtigte
   data._extraKinder = collectExtraKinder();
+  // Kilanka-Zuordnung mitschreiben, damit ein Entwurf später seinen Klienten wiederfindet
+  if (_kilankaAktuell && _kilankaAktuell.id) { data._kilankaId = _kilankaAktuell.id; data._kilankaMassnahme = _kilankaAktuell.massnahme; }
   data._extraSorg = collectExtraSorg();
   // Extras zusätzlich als flache Tokens für die Templates bereitstellen
   // (z.B. {{Kind2_Vorname_1}}, {{Sorg2_Beziehung_1}})
@@ -1967,6 +2032,7 @@ async function copyStammdaten(id) {
       if (!el || !value || el.type === 'file') return;
       try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
+    ergaenzeAusKilanka(data);
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
       _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
@@ -2114,6 +2180,7 @@ async function loadDraft(id) {
       if (!el || el.type === 'file') return;
       try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
+    ergaenzeAusKilanka(data);
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
       _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
