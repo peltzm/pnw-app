@@ -4320,9 +4320,9 @@ const SECTION_TEMPLATES = {
     },
     s4: {
       title: 'Ergebnisse',
-      sub: 'Ergebnisse des Clearings mit Ressourcen und Risiken',
+      sub: '',
       fields: [
-        { id: 'Ergebnisse_Clearing', label: 'Ergebnisse des Clearings', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...', subCols: [
+        { id: 'Ergebnisse_Clearing', label: '', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...', subCols: [
           { id: 'Ressourcen', label: 'Ressourcen', placeholder: 'Stärken, unterstützende Faktoren...' },
           { id: 'Risiken', label: 'Risiken', placeholder: 'Belastungen, Gefährdungsaspekte...' }
         ] },
@@ -4474,7 +4474,7 @@ function buildDynamicSections(force = false) {
         f.subCols.map(c => `<div class="field"><label>${c.label}</label>
           <textarea id="${c.id}" style="min-height:90px;" placeholder="${c.placeholder || ''}"></textarea>
         </div>`).join('') + `</div>` : '';
-      s4html += `<div class="card"><div class="card-title">${f.label}</div>
+      s4html += `<div class="card">${f.label ? `<div class="card-title">${f.label}</div>` : ''}
         <div class="field-grid full"><div class="field">
           <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
         </div></div>${cols}</div>`;
