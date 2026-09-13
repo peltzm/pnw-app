@@ -4316,17 +4316,16 @@ const SECTION_TEMPLATES = {
         { id: 'Familienkonstellation', label: 'Familienkonstellation – aktuelle Lebenssituation', placeholder: '' },
         { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen – Vorgehen - Methoden', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
         { id: 'Anhang_Methodik', label: 'Anhang - Methodik', placeholder: 'z.B. Bei Erstellung eines Genogramms, Soziogramms, etc. hier als Anhang/Bild einzufügen' },
+      ]
+    },
+    s4: {
+      title: 'Ergebnisse',
+      sub: 'Ergebnisse des Clearings mit Ressourcen und Risiken',
+      fields: [
         { id: 'Ergebnisse_Clearing', label: 'Ergebnisse des Clearings', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...', subCols: [
           { id: 'Ressourcen', label: 'Ressourcen', placeholder: 'Stärken, unterstützende Faktoren...' },
           { id: 'Risiken', label: 'Risiken', placeholder: 'Belastungen, Gefährdungsaspekte...' }
         ] },
-      ]
-    },
-    s4: {
-      title: 'Zielsetzung & Empfehlung',
-      sub: 'Clearing-Ziele und weiterführende Empfehlung',
-      fields: [
-        { id: 'Zusammenfassung_Ausblick', label: 'Zusammenfassung & Ausblick', placeholder: 'Wichtigste Erkenntnisse, Empfehlung für weitere Hilfen...' },
       ]
     },
     s5: {
@@ -4454,6 +4453,7 @@ function buildDynamicSections(force = false) {
   // Build S4
   const s4 = tpl.s4;
   const _s4t = document.getElementById('s4_title'); if(_s4t) _s4t.textContent = s4.title + ' — ' + _typLabel;
+  { const _n4 = document.querySelector('#nav4 span'); if (_n4) _n4.textContent = typ === 'clearing' ? 'Ergebnisse' : 'Ziele'; }
   const _s4s = document.getElementById('s4_sub'); if(_s4s) _s4s.textContent = s4.sub;
   let s4html = '';
   if (s4.extraFields) {
@@ -4469,10 +4469,15 @@ function buildDynamicSections(force = false) {
       <button class="btn-add" onclick="addZiel()">+ Ziel hinzufügen</button>`;
   } else if (s4.fields) {
     s4.fields.forEach(f => {
+      // Hauptfeld mit eingebetteten Spalten (Ergebnisse mit Ressourcen | Risiken) — wie auf Seite 3
+      const cols = f.subCols ? `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">` +
+        f.subCols.map(c => `<div class="field"><label>${c.label}</label>
+          <textarea id="${c.id}" style="min-height:90px;" placeholder="${c.placeholder || ''}"></textarea>
+        </div>`).join('') + `</div>` : '';
       s4html += `<div class="card"><div class="card-title">${f.label}</div>
         <div class="field-grid full"><div class="field">
           <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
-        </div></div></div>`;
+        </div></div>${cols}</div>`;
     });
   }
   // Bestehende Ziel-Eingaben VOR dem innerHTML-Ersatz sichern — der Ersatz
@@ -5445,7 +5450,6 @@ renderUnterschriftFachkraefte();
       if (has(data.Ergebnisse_Clearing) || has(data.Ressourcen) || has(data.Risiken)) {
         S.push({ title: 'Ergebnisse des Clearings', text: data.Ergebnisse_Clearing, ressRisiken: true });
       }
-      push('Zusammenfassung & Ausblick', data.Zusammenfassung_Ausblick);
       if (has(data.Stellungnahme) || has(data.Bericht_Besprochen)) S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
     } else { // stationaer
