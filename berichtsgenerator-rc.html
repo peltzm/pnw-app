@@ -4591,8 +4591,20 @@ function qualiAusPosition(i, erzwingen) {
   if (!q1) return;
   if (!erzwingen && q1.value) return;
   const pos = positionVon(name);
-  if (pos) _setSelect(`FK${i}_Quali1`, pos);
-  else if (erzwingen) q1.value = '';
+  if (pos) {
+    if (!Array.from(q1.options).some(o => o.value === pos)) q1.add(new Option(pos, pos), Math.max(0, q1.options.length - 1));
+    q1.value = pos;
+  } else if (erzwingen) q1.value = '';
+}
+
+// „Andere…" bei Qualifikation 1: Freitext erfassen und als Eintrag übernehmen
+function quali1Geaendert(i) {
+  const el = document.getElementById(`FK${i}_Quali1`);
+  if (!el || el.value !== '__custom__') return;
+  const q = (prompt('Qualifikation / Berufsbezeichnung:') || '').trim();
+  if (q) { el.add(new Option(q, q), el.options.length - 1); el.value = q; }
+  else el.value = '';
+  if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
 
 function unterschriftPersonGeaendert(i) {
@@ -4619,8 +4631,15 @@ function renderUnterschriftFachkraefte() {
   wrap.querySelectorAll('input[id], select[id]').forEach(el => prev[el.id] = el.value);
 
   const anzahl = Math.max(1, Math.min(4, _unterschriftCount));
-  const q1opts = (typeof _kilankaQualiListe !== 'undefined' && _kilankaQualiListe && _kilankaQualiListe.length) ? _kilankaQualiListe : QUALI1_OPTS;
-  const q1 = `<option value="">— bitte wählen —</option>` + q1opts.map(o => `<option>${o}</option>`).join('');
+  // Qualifikation 1: ausschließlich die in M365 gepflegten Positionen (jobTitle) — plus „Andere…" für Freitext
+  const q1opts = [...new Set([...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])]
+    .map(m => String(m.jobTitle || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+  const escQ = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const q1Html = i => {
+    const vorher = prev['FK' + i + '_Quali1'] || '';
+    const liste = vorher && vorher !== '__custom__' && !q1opts.includes(vorher) ? [...q1opts, vorher] : q1opts;
+    return `<option value="">— bitte wählen —</option>` + liste.map(o => `<option value="${escQ(o)}">${escQ(o)}</option>`).join('') + `<option value="__custom__">Andere…</option>`;
+  };
   const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere</option>`;
   let html = '';
   for (let i = 1; i <= anzahl; i++) {
@@ -4630,7 +4649,7 @@ function renderUnterschriftFachkraefte() {
     html += `
       <div id="unterschrift_zeile_${i}" style="display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:10px; align-items:end; margin-bottom:10px;">
         <div class="field"><label>Fachkraft ${i}</label><select id="FK${i}_Name" onchange="unterschriftPersonGeaendert(${i})">${_unterschriftOptionenHtml(prev['FK'+i+'_Name'] || '')}</select></div>
-        <div class="field"><label>Qualifikation 1</label><select id="FK${i}_Quali1">${q1}</select></div>
+        <div class="field"><label>Qualifikation 1</label><select id="FK${i}_Quali1" onchange="quali1Geaendert(${i})">${q1Html(i)}</select></div>
         <div class="field"><label>Qualifikation 2</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
         ${entfernen}
       </div>
