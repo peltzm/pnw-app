@@ -5498,7 +5498,7 @@ renderUnterschriftFachkraefte();
     const fk = [data.Fachkraft1_Name || data.Fachkraft_NeueWege, data.Fachkraft1_Quali1].filter(has).join(', ');   // Name, Position (M365)
     return {
       unbreakable: true,
-      columns: [sig('Ort, Datum', ortDatum), { width: 18, text: '' }, sig('Fachkraft / Qualifikation', fk), { width: 18, text: '' }, sig('Freigabe Leitung', freigegebenVon || '')],
+      columns: [sig('Ort, Datum', ortDatum), { width: 18, text: '' }, sig('Fachkraft / Qualifikation', fk), { width: 18, text: '' }, sig('Freigabe Leitung', freigegebenVon || 'Entwurf')],
       margin: [0, 16, 0, 0],
     };
   }
