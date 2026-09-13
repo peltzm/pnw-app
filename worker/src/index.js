@@ -561,9 +561,10 @@ function buildClientProfile(client, action, role, now, qualiMap) {
   // Alle aktiven Betreuer der Maßnahme (HB zuerst, dann MB, dann V) —
   // Namen in Anzeigeform "Vorname Nachname" (passend zur M365-Auswahlliste)
   const betreuerMap = new Map();
+  const stichtagBetreuer = stichtagFuer(action, now);
   for (const att of action.attendants || []) {
     if (!att.user || isArchived(att.user.recName)) continue;
-    if (!isCurrent(att.validFrom, att.validUntil, now)) continue;
+    if (!isCurrent(att.validFrom, att.validUntil, stichtagBetreuer)) continue;
     const rolle = att.attendantKind?.name;
     if (!ROLE_RANK[rolle]) continue;
     const prev = betreuerMap.get(String(att.user.id));
@@ -615,19 +616,24 @@ function buildClientProfile(client, action, role, now, qualiMap) {
   };
 }
 
-function clientsForUser(allClients, upn, now, qualiMap) {
+// Alle Maßnahmen, in denen der Nutzer als HB/MB/V zugeordnet ist — auch beendete.
+// Ausgeschlossen sind nur gelöschte bzw. archivierte Klienten, Maßnahmen und Betreuer:
+// Berichte (v. a. Abschlussberichte) werden regelmäßig NACH dem Maßnahmenende
+// geschrieben. Die Betreuer-Zuordnung wird zum Stichtag der Maßnahme bewertet
+// (bei beendeten Maßnahmen: deren Enddatum), nicht zum heutigen Tag.
+function clientsForUser(allClients, upn, now, qualiMap, ansprechpartnerMap) {
   const result = [];
   for (const client of allClients) {
     if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
 
-    // Beste (höchste) Rolle über alle aktiven Maßnahmen sammeln
     const matches = [];
     for (const action of client.actions || []) {
       if (kDate(action.deletedAt)) continue;
-      if (!isCurrent(action.validFrom, action.validUntil, now)) continue;
+      if (action.validFrom && kDate(action.validFrom) > now) continue; // künftige Maßnahme
+      const stichtag = stichtagFuer(action, now);
       for (const att of action.attendants || []) {
         if (!att.user || isArchived(att.user.recName)) continue;
-        if (!isCurrent(att.validFrom, att.validUntil, now)) continue;
+        if (!isCurrent(att.validFrom, att.validUntil, stichtag)) continue;
         const role = att.attendantKind?.name;
         if (!ROLE_RANK[role]) continue;
         if (upnForAttendant(att.user) !== upn) continue;
@@ -644,14 +650,46 @@ function clientsForUser(allClients, upn, now, qualiMap) {
       if (!prev || ROLE_RANK[m.role] > ROLE_RANK[prev.role]) perAction.set(key, m);
     }
     for (const m of perAction.values()) {
-      result.push(buildClientProfile(client, m.action, m.role, now, qualiMap));
+      const profil = buildClientProfile(client, m.action, m.role, now, qualiMap);
+      profil.aktiv = isCurrent(m.action.validFrom, m.action.validUntil, now);
+      profil.Ansprechpartner_JA = (ansprechpartnerMap && ansprechpartnerMap.get(String(m.action.department?.id ?? ""))) || [];
+      result.push(profil);
     }
   }
+  // Laufende Maßnahmen zuerst, dann nach Rolle, dann nach Name
   return result.sort(
     (a, b) =>
+      (b.aktiv ? 1 : 0) - (a.aktiv ? 1 : 0) ||
       ROLE_RANK[b.rolle] - ROLE_RANK[a.rolle] ||
       a.anzeigeName.localeCompare(b.anzeigeName, "de")
   );
+}
+
+// Stichtag für die Bewertung einer Maßnahme: heute, bei beendeten deren Enddatum
+function stichtagFuer(action, now) {
+  const bis = kDate(action.validUntil);
+  return bis && bis < now ? bis : now;
+}
+
+// Je Jugendamt (department.id) alle in Kilanka eingetragenen Ansprechpartner sammeln —
+// über sämtliche nicht gelöschten Maßnahmen aller nicht gelöschten Klienten.
+// Ergibt die Auswahlliste "Sachbearbeitung Jugendamt" ohne zusätzliche API-Freigabe.
+function ansprechpartnerJeAmt(allClients) {
+  const map = new Map();
+  for (const client of allClients) {
+    if (kDate(client.deletedAt)) continue;
+    for (const action of client.actions || []) {
+      if (kDate(action.deletedAt)) continue;
+      const amt = String(action.department?.id ?? "");
+      const name = action.departmentResponsible?.recName;
+      if (!amt || !name) continue;
+      if (!map.has(amt)) map.set(amt, new Set());
+      map.get(amt).add(name);
+    }
+  }
+  const out = new Map();
+  for (const [amt, set] of map) out.set(amt, [...set].sort((a, b) => a.localeCompare(b, "de")));
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1943,11 +1981,16 @@ export default {
       }
       try {
         const now = new Date();
+        // Manuelles Neuladen: Cache verwerfen, aber höchstens einmal pro Minute
+        // (Kilanka-Rate-Limit; ein Vollabruf besteht aus mehreren Seiten)
+        if (url.searchParams.get("refresh") === "1" && Date.now() - clientCache.fetchedAt > 60 * 1000) {
+          clientCache = { data: null, fetchedAt: 0 };
+        }
         const [all, qualiMap] = await Promise.all([
           fetchKilankaClients(env),
           fetchQualiMap(env, now),
         ]);
-        const klienten = clientsForUser(all, auth.upn, now, qualiMap);
+        const klienten = clientsForUser(all, auth.upn, now, qualiMap, ansprechpartnerJeAmt(all));
         // Alle vergebenen Qualifikationen als Auswahlliste (ohne "NICHT verwenden"-Alteintraege)
         const qualifikationen = [...new Set(Object.values(qualiMap))]
           .filter((q) => !/^\s*nicht\s/i.test(q))

@@ -197,7 +197,10 @@
         <select id="kilankaKlient" style="width:100%; font-size:13px; padding:8px;">
           <option value="">— ohne Vorbefüllung starten —</option>
         </select>
-        <div id="kilankaStatus" style="font-size:11px; color:var(--text-muted); margin-top:6px;">Anmeldung erforderlich…</div>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
+          <div id="kilankaStatus" style="font-size:11px; color:var(--text-muted);">Anmeldung erforderlich…</div>
+          <a href="#" id="kilankaRefresh" onclick="loadKilankaKlienten(true); return false;" title="Kilanka-Daten neu abrufen (Cache verwerfen)" style="font-size:11px; color:var(--accent); white-space:nowrap; text-decoration:none;">↻ aktualisieren</a>
+        </div>
       </div>
       <div class="start-grid" id="startGrid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
         
@@ -291,7 +294,7 @@
             </div>
           </div>
           <div class="field-grid">
-            <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Name Sachbearbeiter*in"></div>
+            <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" list="sachbearbeitungListe" placeholder="Name Sachbearbeiter*in" autocomplete="off"><datalist id="sachbearbeitungListe"></datalist></div>
             <div class="field"><label>Fachkraft 1 (Auswahlliste)</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div class="field-grid" id="einrichtungRow" style="display:none;">
@@ -729,15 +732,15 @@ async function getApiToken() {
   }
 }
 
-async function loadKilankaKlienten() {
+async function loadKilankaKlienten(refresh) {
   const sel = document.getElementById('kilankaKlient');
   const status = document.getElementById('kilankaStatus');
   if (!sel || !status) return;
-  status.textContent = 'Klienten werden aus Kilanka geladen…';
+  status.textContent = refresh ? 'Kilanka-Daten werden neu abgerufen…' : 'Klienten werden aus Kilanka geladen…';
   try {
     const token = await getApiToken();
     if (!token) { status.textContent = 'Kilanka-Anbindung nicht verfügbar (Token) — Formular manuell ausfüllbar.'; return; }
-    const r = await fetch(CONFIG.workerUrl + '/api/meine-klienten', {
+    const r = await fetch(CONFIG.workerUrl + '/api/meine-klienten' + (refresh ? '?refresh=1' : ''), {
       headers: { Authorization: 'Bearer ' + token }
     });
     if (!r.ok) {
@@ -755,13 +758,19 @@ async function loadKilankaKlienten() {
     _kilankaKlienten.forEach((k, i) => {
       const opt = document.createElement('option');
       opt.value = String(i);
+      // Beendete Maßnahmen bleiben wählbar (Abschlussberichte), werden aber gekennzeichnet
+      const beendet = k.aktiv === false
+        ? ' · beendet' + (k.Hilfe_Ende ? ' ' + new Date(k.Hilfe_Ende).toLocaleDateString('de-DE', {month:'2-digit', year:'numeric'}) : '')
+        : '';
       opt.textContent = k.anzeigeName + ' · ' + k.rolleKurz +
-        (nameCount[k.anzeigeName] > 1 ? ' · ' + (k.massnahme?.name || 'Maßnahme') : '');
+        (nameCount[k.anzeigeName] > 1 ? ' · ' + (k.massnahme?.name || 'Maßnahme') : '') + beendet;
       sel.appendChild(opt);
     });
+    const aktiv = _kilankaKlienten.filter(k => k.aktiv !== false).length;
     status.textContent = _kilankaKlienten.length
-      ? _kilankaKlienten.length + ' aktive Zuordnungen (HB/MB/V) · Stand: ' + new Date(d.stand).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) + ' Uhr'
-      : 'Keine aktiven Zuordnungen in Kilanka gefunden — Formular manuell ausfüllbar.';
+      ? _kilankaKlienten.length + ' Zuordnungen (HB/MB/V)' + (aktiv < _kilankaKlienten.length ? ', davon ' + aktiv + ' laufend' : '') +
+        ' · Stand: ' + new Date(d.stand).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) + ' Uhr'
+      : 'Keine Zuordnungen in Kilanka gefunden — Formular manuell ausfüllbar.';
   } catch(e) {
     status.textContent = 'Kilanka nicht erreichbar — Formular manuell ausfüllbar.';
     console.warn('Kilanka:', e);
@@ -804,6 +813,12 @@ function prefillFromKilanka(k, groupPromise) {
   const ha = document.getElementById('Hilfeart');
   if (ha && !ha.disabled && k.Hilfeart) ha.value = k.Hilfeart; // Clearing-Preset nicht überschreiben
   _setVal('Sachbearbeitung_JA', k.Sachbearbeitung_JA);
+  // Auswahlliste: alle in Kilanka für dieses Amt eingetragenen Ansprechpartner (aktueller zuerst)
+  const sbl = document.getElementById('sachbearbeitungListe');
+  if (sbl) {
+    const namen = [k.Sachbearbeitung_JA, ...(k.Ansprechpartner_JA || [])].filter((n, i, a) => n && a.indexOf(n) === i);
+    sbl.innerHTML = namen.map(n => '<option value="' + String(n).replace(/"/g, '&quot;') + '">').join('');
+  }
   _setVal('Hilfebeginn', k.Hilfebeginn);
   _setVal('Hilfe_Ende', k.Hilfe_Ende);
   _setVal('Naechstes_HPG', k.Naechstes_HPG);
@@ -1949,7 +1964,8 @@ async function copyStammdaten(id) {
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
       if (key === 'Weitere_Personen') { fillWeiterePersFound(value); return; }
       const el = document.getElementById(key);
-      if (el && value) el.value = value;
+      if (!el || !value || el.type === 'file') return;
+      try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
@@ -2095,7 +2111,8 @@ async function loadDraft(id) {
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
       if (key === 'Weitere_Personen') { fillWeiterePersFound(value); return; }
       const el = document.getElementById(key);
-      if (el) el.value = value;
+      if (!el || el.type === 'file') return;
+      try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
@@ -2312,7 +2329,8 @@ function loadFromJson(input) {
       // Fill form fields
       Object.entries(data).forEach(([key, value]) => {
         const el = document.getElementById(key);
-        if (el) el.value = value;
+        if (!el || el.type === 'file') return;
+        try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
       });
       // Restore ziele
       if (data._ziele && Array.isArray(data._ziele)) {
