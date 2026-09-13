@@ -953,8 +953,7 @@ function prefillFromKilanka(k, groupPromise) {
       // Unterschrift-Blöcke neu aufbauen und Qualifikationen aus Kilanka vorwählen
       if (typeof renderUnterschriftFachkraefte === 'function') renderUnterschriftFachkraefte();
       if (typeof syncUnterschriftNamen === 'function') syncUnterschriftNamen();
-      if (hb.quali) _setSelect('FK1_Quali1', hb.quali);
-      mbs.forEach((b, i) => { if (b.quali) _setSelect('FK' + (i + 2) + '_Quali1', b.quali); });
+      // Qualifikation 1 kommt aus der M365-Position (jobTitle), nicht mehr aus Kilanka
     };
     const p = groupPromise || (typeof _groupLoadPromise !== 'undefined' ? _groupLoadPromise : null);
     if (p && typeof p.then === 'function') p.then(anwenden).catch(anwenden);
@@ -4575,6 +4574,32 @@ function _anzahlFachkraefte() {
 // auf Seite 1 bleiben davon unberührt. Datenmodell unverändert: FK{i}_Name/_Quali1/_Quali2.
 let _unterschriftCount = 1;
 
+// M365-Position (Entra-Feld jobTitle) einer Person aus den geladenen Gruppenmitgliedern
+function positionVon(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return '';
+  const alle = [...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])];
+  const t = alle.find(m => String(m.displayName || '').trim().toLowerCase() === n);
+  return t && t.jobTitle ? String(t.jobTitle).trim() : '';
+}
+
+// Qualifikation 1 aus der M365-Position der gewählten Person setzen.
+// erzwingen=true beim Personenwechsel; sonst nur, wenn das Feld leer ist.
+function qualiAusPosition(i, erzwingen) {
+  const name = document.getElementById(`FK${i}_Name`)?.value || '';
+  const q1 = document.getElementById(`FK${i}_Quali1`);
+  if (!q1) return;
+  if (!erzwingen && q1.value) return;
+  const pos = positionVon(name);
+  if (pos) _setSelect(`FK${i}_Quali1`, pos);
+  else if (erzwingen) q1.value = '';
+}
+
+function unterschriftPersonGeaendert(i) {
+  qualiAusPosition(i, true);
+  if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+}
+
 function _unterschriftOptionenHtml(aktuell) {
   let namen = [];
   if (_kilankaBetreuerListe && _kilankaBetreuerListe.length) namen = _kilankaBetreuerListe.slice();
@@ -4604,7 +4629,7 @@ function renderUnterschriftFachkraefte() {
       : `<div></div>`;
     html += `
       <div id="unterschrift_zeile_${i}" style="display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:10px; align-items:end; margin-bottom:10px;">
-        <div class="field"><label>Fachkraft ${i}</label><select id="FK${i}_Name">${_unterschriftOptionenHtml(prev['FK'+i+'_Name'] || '')}</select></div>
+        <div class="field"><label>Fachkraft ${i}</label><select id="FK${i}_Name" onchange="unterschriftPersonGeaendert(${i})">${_unterschriftOptionenHtml(prev['FK'+i+'_Name'] || '')}</select></div>
         <div class="field"><label>Qualifikation 1</label><select id="FK${i}_Quali1">${q1}</select></div>
         <div class="field"><label>Qualifikation 2</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
         ${entfernen}
@@ -4679,9 +4704,12 @@ function toggleQuali2Custom(i) {
 function syncUnterschriftNamen() {
   const el = document.getElementById('FK1_Name');
   const me = currentAccount?.name || '';
-  if (!el || el.value || !me) return;
-  if (!Array.from(el.options).some(o => o.value === me)) el.add(new Option(me, me));
-  el.value = me;
+  if (el && !el.value && me) {
+    if (!Array.from(el.options).some(o => o.value === me)) el.add(new Option(me, me));
+    el.value = me;
+  }
+  // Qualifikation 1 aus der M365-Position nachziehen, wo sie noch fehlt
+  for (let i = 1; i <= _unterschriftCount; i++) qualiAusPosition(i, false);
 }
 
 // ─── ÜBERSICHT (S0) ───────────────────────────────────────────────────────────
