@@ -1420,6 +1420,11 @@ function collectData() {
 }
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
+// ISO-Datum (JJJJ-MM-TT) → TT.MM.JJJJ fuer die Anzeige; andere Werte unveraendert
+function _deDatum(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : (v || '');
+}
 function buildSummary() {
   const d = collectData();
   const kind = (d.Kind_Vorname + ' ' + d.Kind_Familienname).trim() || '—';
@@ -1430,7 +1435,7 @@ function buildSummary() {
   document.getElementById('summaryContent').innerHTML = `
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px;">
       ${[['Kind/Jugendliche*r',kind],['Jugendamt',d.Jugendamt||'—'],['Fachkraft',d.Fachkraft_NeueWege||'—'],
-         ['Hilfebeginn',d.Hilfebeginn||'—'],['Hilfeart',formatHilfeart(d.Hilfeart)||'—'],['Datum',d.Datum_Unterschrift||'—']]
+         ['Hilfebeginn',_deDatum(d.Hilfebeginn)||'—'],['Hilfeart',formatHilfeart(d.Hilfeart)||'—'],['Datum',_deDatum(d.Datum_Unterschrift)||'—']]
         .map(([l,v]) => `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;">
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${l}</div>
           <div style="font-size:13px;">${escHtml(v)}</div></div>`).join('')}
@@ -5231,8 +5236,7 @@ renderUnterschriftFachkraefte();
       ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
       : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
     return [
-      { text: 'BERICHT BESPROCHEN', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 8, 0, 2] },
-      { text: _b, fontSize: 9.25, lineHeight: 1.4, color: C.ink },
+      { text: _b, fontSize: 9.25, lineHeight: 1.4, color: C.ink, margin: [0, 6, 0, 0] },
     ];
   }
 
