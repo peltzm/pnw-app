@@ -868,6 +868,9 @@ async function ergaenzeAusKilanka(data) {
       _setVal(id, val); ergaenzt.push(label || id);
     };
     fuelleLeer('Jugendamt', k.Jugendamt, 'Jugendamt');
+    // Entwürfe, die noch den langen Behördennamen tragen, auf den Kilanka-Kurznamen umstellen
+    { const ja = document.getElementById('Jugendamt');
+      if (ja && k.Jugendamt && k.Jugendamt_Lang && ja.value.trim() === k.Jugendamt_Lang.trim() && ja.value !== k.Jugendamt) { ja.value = k.Jugendamt; ergaenzt.push('Jugendamt (Kurzname)'); } }
     fuelleLeer('Hilfeart', k.Hilfeart, 'Hilfeart');
     fuelleLeer('Hilfebeginn', k.Hilfebeginn, 'Hilfebeginn');
     fuelleLeer('Hilfe_Ende', k.Hilfe_Ende, 'Hilfe-Ende');

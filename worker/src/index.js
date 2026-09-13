@@ -621,7 +621,7 @@ function buildClientProfile(client, action, role, now, qualiMap) {
 // Berichte (v. a. Abschlussberichte) werden regelmäßig NACH dem Maßnahmenende
 // geschrieben. Die Betreuer-Zuordnung wird zum Stichtag der Maßnahme bewertet
 // (bei beendeten Maßnahmen: deren Enddatum), nicht zum heutigen Tag.
-function clientsForUser(allClients, upn, now, qualiMap, ansprechpartnerMap) {
+function clientsForUser(allClients, upn, now, qualiMap, ansprechpartnerMap, amtKurz) {
   const result = [];
   for (const client of allClients) {
     if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
@@ -653,6 +653,11 @@ function clientsForUser(allClients, upn, now, qualiMap, ansprechpartnerMap) {
       const profil = buildClientProfile(client, m.action, m.role, now, qualiMap);
       profil.aktiv = isCurrent(m.action.validFrom, m.action.validUntil, now);
       profil.Ansprechpartner_JA = (ansprechpartnerMap && ansprechpartnerMap.get(String(m.action.department?.id ?? ""))) || [];
+      // Jugendamt: Kurzname aus Kilanka (Behörden-Stammdaten), Langname als Referenz mitliefern
+      profil.Jugendamt_Lang = m.action.department?.name || "";
+      profil.Jugendamt = m.action.department?.shortName
+        || (amtKurz && amtKurz.get(String(m.action.department?.id ?? "")))
+        || profil.Jugendamt_Lang;
       result.push(profil);
     }
   }
@@ -1986,11 +1991,12 @@ export default {
         if (url.searchParams.get("refresh") === "1" && Date.now() - clientCache.fetchedAt > 60 * 1000) {
           clientCache = { data: null, fetchedAt: 0 };
         }
-        const [all, qualiMap] = await Promise.all([
+        const [all, qualiMap, amtKurz] = await Promise.all([
           fetchKilankaClients(env),
           fetchQualiMap(env, now),
+          fetchAmtKurznamen(env),
         ]);
-        const klienten = clientsForUser(all, auth.upn, now, qualiMap, ansprechpartnerJeAmt(all));
+        const klienten = clientsForUser(all, auth.upn, now, qualiMap, ansprechpartnerJeAmt(all), amtKurz);
         // Alle vergebenen Qualifikationen als Auswahlliste (ohne "NICHT verwenden"-Alteintraege)
         const qualifikationen = [...new Set(Object.values(qualiMap))]
           .filter((q) => !/^\s*nicht\s/i.test(q))
