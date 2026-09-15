@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-15.1 (kontakt-suche)";
+const WORKER_VERSION = "2026-09-15.2 (op-liste)";
 
 // Ausnahmen von der E-Mail-Namenskonvention:
 // Kilanka user.id (String!) → Entra-UPN (lowercase).
@@ -2033,6 +2033,57 @@ export default {
 
     if (url.pathname === "/api/health") {
       return json({ ok: true, version: WORKER_VERSION, ts: new Date().toISOString() }, 200, origin);
+    }
+
+    // ── OP-Abgleich: Rechnungsliste mit Zahlstatus (nur GF) ──────────
+    // Liefert alle nicht gelöschten Rechnungen inkl. Saldo/Zahlungen für
+    // den Bank-Abgleich in op-abgleich-beta.html. Bankdaten selbst bleiben
+    // im Browser — hier fließt nur Kilanka → Client.
+    if (url.pathname === "/api/op-liste" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Der OP-Abgleich ist der Geschäftsführung vorbehalten" }, 403, origin);
+      }
+      const unwrap = (v) => (v && typeof v === "object" ? (v.$date ?? v.$datetime ?? v.$decimal ?? null) : v);
+      try {
+        const graph = {
+          number: 1, date: 1, dueDate: 1, deletedAt: 1,
+          stateType: { name: 1 },
+          client: { recName: 1 },
+          recipient: { recName: 1 },
+          recipientName: 1,
+          totalWithTax: 1, depositsTotal: 1, balance: 1, paid: 1,
+          $limit: 500,
+        };
+        const alle = [];
+        for (let offset = 0; offset < 30000; offset += 500) {
+          const batch = await kilankaPost(env, "accounting/invoices", { ...graph, $offset: offset });
+          const arr = Array.isArray(batch) ? batch : [];
+          alle.push(...arr);
+          if (arr.length < 500) break;
+        }
+        const rechnungen = [];
+        for (const inv of alle) {
+          if (unwrap(inv.deletedAt)) continue;
+          rechnungen.push({
+            nummer: inv.number,
+            datum: String(unwrap(inv.date) || "").slice(0, 10),
+            faellig: String(unwrap(inv.dueDate) || "").slice(0, 10),
+            status: inv.stateType?.name || null,
+            klient: inv.client?.recName || null,
+            empfaenger: inv.recipient?.recName || inv.recipientName || null,
+            summe: Number(unwrap(inv.totalWithTax)) || 0,
+            gezahlt: Number(unwrap(inv.depositsTotal)) || 0,
+            saldo: Number(unwrap(inv.balance)) || 0,
+            bezahlt: !!inv.paid,
+          });
+        }
+        return json({ ok: true, stand: new Date().toISOString(), anzahl: rechnungen.length, rechnungen }, 200, origin);
+      } catch (e) {
+        return json({ error: `Kilanka-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
     }
 
     if (url.pathname === "/api/meine-klienten" && request.method === "GET") {
