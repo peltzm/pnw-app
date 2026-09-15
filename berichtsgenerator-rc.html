@@ -1055,7 +1055,7 @@ function showApp() {
     }
   }).catch(() => {});
   // Check if opened via review link
-  setTimeout(() => { if (pruefeSetupAufruf()) return; if (!handleReviewLink()) { /* normal flow */ } }, 500);
+  setTimeout(() => { if (pruefeSetupAufruf() || pruefeExportAufruf()) return; if (!handleReviewLink()) { /* normal flow */ } }, 500);
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
@@ -1590,6 +1590,36 @@ async function betaBackendEinrichten() {
   }
 
   return protokoll;
+}
+
+// ─── BACKUP: alle Listeneinträge als JSON herunterladen (?export=1) ───
+// Vollständiger Wiederherstellungspunkt vor Umstellungen: jedes Element mit allen
+// Spalten inkl. FormularDaten. Läuft im Browser mit dem Token der angemeldeten Person.
+async function berichteExportieren() {
+  const token = await getToken();
+  const { siteId, listId } = await getGraphListIds();
+  const items = [];
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200`;
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Listenabruf fehlgeschlagen: ' + r.status);
+    const d = await r.json();
+    (d.value || []).forEach(it => items.push({ id: it.id, created: it.createdDateTime, modified: it.lastModifiedDateTime, fields: it.fields }));
+    url = d['@odata.nextLink'] || null;
+  }
+  const stand = new Date();
+  const name = `Backup_${CONFIG.listName}_${stand.toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+  const blob = new Blob([JSON.stringify({ liste: CONFIG.listName, stand: stand.toISOString(), anzahl: items.length, items }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  return { name, anzahl: items.length };
+}
+
+function pruefeExportAufruf() {
+  if (new URLSearchParams(window.location.search).get('export') !== '1') return false;
+  berichteExportieren()
+    .then(r => alert(`Backup erstellt: ${r.name}\n${r.anzahl} Einträge aus „${CONFIG.listName}".`))
+    .catch(e => alert('Backup fehlgeschlagen:\n\n' + (e && e.message ? e.message : e)));
+  return true;
 }
 
 // Einrichtung ueber ?setup=1 anstossen
