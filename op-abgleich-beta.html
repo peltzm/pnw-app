@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
@@ -208,19 +208,26 @@ const MAX_DATEIEN = 4;
 /* ═══════════════════════════════════════════════════════════
  * MSAL
  * ═══════════════════════════════════════════════════════════ */
-let msalInstance, currentAccount = null;
+let msalInstance = null, currentAccount = null;
 function initMsal(){
+  if (msalInstance) return true;
+  if (typeof msal === 'undefined'){
+    zeige('gateMsg', 'MSAL-Bibliothek konnte nicht geladen werden — bitte Seite neu laden (ggf. Netzwerk/Adblocker prüfen).', 'fehler');
+    return false;
+  }
   msalInstance = new msal.PublicClientApplication({
     auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
-    cache:{ cacheLocation:'localStorage' }
+    cache:{ cacheLocation:'sessionStorage' }
   });
-  const accts = msalInstance.getAllAccounts();
-  if (accts.length) { currentAccount = accts[0]; nachLogin(); }
+  return true;
 }
 async function login(){
   try{
+    if (!initMsal()) return;
     const res = await msalInstance.loginPopup({scopes:SCOPES});
-    currentAccount = res.account; nachLogin();
+    currentAccount = res.account;
+    msalInstance.setActiveAccount(currentAccount);
+    nachLogin();
   }catch(e){ zeige('gateMsg', 'Anmeldung fehlgeschlagen: '+(e.message||e), 'fehler'); }
 }
 function nachLogin(){
@@ -565,7 +572,10 @@ document.getElementById('btnStart').onclick = starten;
 document.getElementById('btnReset').onclick = () => { dateien = []; malDateien(); document.getElementById('ergebnis').style.display='none'; verstecke('parseMsg'); verstecke('runMsg'); };
 document.getElementById('btnExport').onclick = exportCsv;
 document.getElementById('btnLogin').onclick = login;
-initMsal();
+if (initMsal()){
+  const accts = msalInstance.getAllAccounts();
+  if (accts.length){ currentAccount = accts[0]; msalInstance.setActiveAccount(currentAccount); nachLogin(); }
+}
 </script>
 </body>
 </html>
