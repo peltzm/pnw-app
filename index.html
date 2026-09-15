@@ -583,7 +583,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 'v850d4fb'; // auto-updated on deploy
+const APP_VERSION = 'v58b4134'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -4827,13 +4827,14 @@ function toggleQuali2Custom(i) {
   if (sel.value !== '__custom__') { const c = document.getElementById(`FK${i}_Quali2Custom`); if (c) c.value = ''; }
 }
 
-// Zeile 1 mit der angemeldeten Person vorbelegen, sofern noch leer
+// Zeile 1 vorbelegen, sofern noch leer: mit der Fachkraft aus den Stammdaten (Seite 1),
+// ersatzweise mit der angemeldeten Person. Bleibt danach frei änderbar.
 function syncUnterschriftNamen() {
   const el = document.getElementById('FK1_Name');
-  const me = currentAccount?.name || '';
-  if (el && !el.value && me) {
-    if (!Array.from(el.options).some(o => o.value === me)) el.add(new Option(me, me));
-    el.value = me;
+  const vorgabe = (document.getElementById('Fachkraft_NeueWege')?.value || '').trim() || (currentAccount?.name || '');
+  if (el && !el.value && vorgabe) {
+    if (!Array.from(el.options).some(o => o.value === vorgabe)) el.add(new Option(vorgabe, vorgabe));
+    el.value = vorgabe;
   }
   // Qualifikation 1 immer aus der M365-Position der gewählten Person übernehmen;
   // nur wenn dort keine Position gepflegt ist, bleibt ein vorhandener Wert stehen
