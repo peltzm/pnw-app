@@ -98,7 +98,9 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-15.3 (op-liste ohne RE2024)";
+const WORKER_VERSION = "2026-09-15.4 (op-liste Stichtag)";
+// OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
+const OP_STICHTAG = "2026-01-01";
 
 // Ausnahmen von der E-Mail-Namenskonvention:
 // Kilanka user.id (String!) → Entra-UPN (lowercase).
@@ -2067,8 +2069,12 @@ export default {
         const rechnungen = [];
         for (const inv of alle) {
           if (unwrap(inv.deletedAt)) continue;
-          // Altbestand 2024 (Einzelunternehmen, fehlerhafte Salden) nicht mitliefern
-          if (String(inv.number || "").startsWith("RE2024-")) continue;
+          // Altbestand nicht mitliefern: Rechnungen vor 2026 (Einzelunternehmen,
+          // in der Kilanka-GUI nicht als offen geführt, div. Nummernformate wie
+          // RE2023/12/00003) sowie Rechnungen archivierter Klienten.
+          const invDatum = String(unwrap(inv.date) || "").slice(0, 10);
+          if (!invDatum || invDatum < OP_STICHTAG) continue;
+          if (String(inv.client?.recName || "").startsWith("[archiviert]")) continue;
           rechnungen.push({
             nummer: inv.number,
             datum: String(unwrap(inv.date) || "").slice(0, 10),
