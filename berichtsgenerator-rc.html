@@ -2024,7 +2024,7 @@ async function showCopyList() {
         </div>
         <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
           <button onclick="copyStammdaten('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent-mid); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Übernehmen</button>
-          <button onclick="deleteDraft('${itemId}')" title="Löschen" style="font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">×</button>
+          <button onclick="deleteDraft('${itemId}')" title="Entwurf löschen" style="font-size:12px; padding:6px 12px; min-height:36px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; white-space:nowrap;">🗑 Löschen</button>
         </div>
       </div>`;
     }).join('');
@@ -2152,7 +2152,7 @@ async function showDraftList() {
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:11px; color:${statusColor}; font-weight:500;">${escHtml(statusLabel(item.Status || 'Entwurf'))}</span>
           <button onclick="loadDraft('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Öffnen</button>
-          <button onclick="deleteDraft('${itemId}')" title="Löschen" style="font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">×</button>
+          <button onclick="deleteDraft('${itemId}')" title="Entwurf löschen" style="font-size:12px; padding:6px 12px; min-height:36px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; white-space:nowrap;">🗑 Löschen</button>
         </div>
       </div>`;
     }).join('');
