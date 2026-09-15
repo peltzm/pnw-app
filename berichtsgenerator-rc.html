@@ -186,9 +186,8 @@
           <div onclick="selectBerichtstyp('stationaer')" id="bt_stationaer" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s; min-height:44px; display:flex; align-items:center; justify-content:center;" onmouseover="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--accent-mid)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Verlaufsbericht stationär</div>
           </div>
-          <div style="padding:10px; border:1px dashed var(--border); border-radius:var(--radius); text-align:center; background:var(--bg); cursor:default; opacity:0.55; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+          <div onclick="selectBerichtstyp('monat')" id="bt_monat" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s;" onmouseover="if(currentBerichtstyp!=='monat'){this.style.borderColor='var(--accent)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='monat'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Monatsbericht</div>
-            <div style="font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; background:var(--border); border-radius:20px; padding:1px 6px; display:inline-block;">Demnächst</div>
           </div>
         </div>
       </div>
@@ -472,7 +471,7 @@
         <div id="normalActions">
         </div>
         <div class="btn-row">
-          <button class="btn btn-secondary" onclick="navGoTo(5)">← Zurück</button>
+          <button class="btn btn-secondary" onclick="navGoTo(currentBerichtstyp==='monat'?3:5)">← Zurück</button>
           <div style="display:flex; gap:8px;">
             <button class="btn btn-secondary" onclick="saveEntwurf()" id="btnSaveEntwurf">💾 Entwurf speichern</button>
             <button class="btn btn-secondary" onclick="document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
@@ -1023,7 +1022,7 @@ function handleReviewLink() {
   const id = reviewId || sonjaId || editId;
   const typ = params.get('typ');
   if (!id || !typ) return false;
-  if (['verlauf','abschluss','clearing','stationaer'].includes(typ)) {
+  if (['verlauf','abschluss','clearing','stationaer','monat'].includes(typ)) {
     selectBerichtstyp(typ);
   }
   if (reviewId || sonjaId) {
@@ -1065,8 +1064,10 @@ function showApp() {
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 // "Weiter"-Navigation: Seite wechseln und Stand still als Entwurf sichern
 function goToNext(n) {
-  // Bei stationaer S4 (Hilfeplanziele) überspringen
-  const skip = (currentBerichtstyp === 'stationaer' && n === 4) ? 5 : n;
+  // Seiten ohne Inhalt überspringen: stationaer ohne S4, Monatsbericht ohne S4 und S5
+  let skip = n;
+  if (currentBerichtstyp === 'stationaer' && n === 4) skip = 5;
+  if (currentBerichtstyp === 'monat' && (n === 4 || n === 5)) skip = 6;
   goTo(skip);
   clearTimeout(_autoSaveTimer);
   autoSaveDraft();
@@ -1173,6 +1174,7 @@ function enableSpellcheck() {
 }
 
 function goTo(n) {
+  if (currentBerichtstyp === 'monat' && (n === 4 || n === 5)) n = 6;
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
   const section = document.getElementById('s' + n);
@@ -1203,7 +1205,7 @@ function goTo(n) {
 }
 
 function updateSectionTitles() {
-  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'};
+  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'};
   const typ = labels[currentBerichtstyp] || 'Verlaufsbericht';
   const staticTitles = {
     's1_title': 'Stammdaten',
@@ -1617,7 +1619,7 @@ function berichtsDateiname(data, version) {
   const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
   const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
   const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-  const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
+  const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[currentBerichtstyp] || 'VB';
   const v = version ? `_v${version}` : '';
   return `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}${v}.pdf`;
 }
@@ -1964,7 +1966,7 @@ function applyHilfeartPreset(typ) {
 function selectBerichtstyp(typ) {
   currentBerichtstyp = typ;
   applyHilfeartPreset(typ);
-  ['verlauf','abschluss','clearing','stationaer'].forEach(t => {
+  ['verlauf','abschluss','clearing','stationaer','monat'].forEach(t => {
     const el = document.getElementById('bt_' + t);
     if (!el) return;
     if (t === typ) {
@@ -1986,7 +1988,7 @@ function selectBerichtstyp(typ) {
     }
   });
   // Update template path in config
-  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'};
+  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'};
   const badge = document.getElementById('berichtstypBadge');
   if (badge) badge.textContent = labels[typ];
   updateSectionTitles();
@@ -2617,7 +2619,7 @@ async function saveToList(data, existingId = null) {
       const _mm = _d.length >= 7 ? _d.substring(5,7) : '00';
       const _nach = data.Kind_Familienname || 'Unbekannt';
       const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
-      const _pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[data._berichtstyp || currentBerichtstyp] || 'VB';
+      const _pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[data._berichtstyp || currentBerichtstyp] || 'VB';
       return `${_pre}_${_nach}_${_vor2}_${_jj}${_mm}`;
     })(),
     Eingereicht_Von: data._eingereichtVon || currentEingereichtVon || currentAccount?.username || '',
@@ -2760,7 +2762,7 @@ function isUserInvolvedInItem(item) {
 function _btBadge(item) {
   let bt = '';
   try { bt = (JSON.parse(item.FormularDaten || '{}')._berichtstyp) || ''; } catch(e) {}
-  const pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || '';
+  const pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[bt] || '';
   return pre ? `<span style="display:inline-block; font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-light); border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:middle;">${pre}</span>` : '';
 }
 
@@ -3105,7 +3107,7 @@ function getFalleitungMail() {
 
 async function sendApprovalEmail(listItemId, data, filename) {
   const token = await getToken();
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   const fachkraft = data.Fachkraft_NeueWege || currentAccount?.name || '';
   const jugendamt = data.Jugendamt || '';
@@ -3227,7 +3229,7 @@ async function sendApprovalEmail(listItemId, data, filename) {
 
 // Fertigstellungs-Mail an info@ nach finaler Freigabe + PDF-Erstellung
 async function sendCompletionEmail(token, driveId, pdfName, data) {
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
   const nachname = data.Kind_Familienname || 'Unbekannt';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // webUrl des finalen PDFs per Graph ermitteln
@@ -3536,7 +3538,7 @@ function renderStatusBerichte() {
     return `<span style="font-size:11px; font-weight:600; color:${c.fg}; background:${c.bg}; padding:3px 10px; border-radius:999px; white-space:nowrap;">${escHtml(statusLabel(s))}</span>`;
   };
 
-  const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || bt || '');
+  const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[bt] || bt || '');
 
   const rows = items.map(item => {
     const itemId = item._itemId || item.ID;
@@ -3762,7 +3764,7 @@ async function tlFreigebenAnSonja() {
 
     // Mail an Sonja
     const token = await getToken();
-    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
+    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
     const jugendamt = data.Jugendamt || '';
     const sonjaUrl = `${APP_BASE_URL}?sonja=${currentListId}&typ=${currentBerichtstyp}`;
@@ -3778,7 +3780,7 @@ async function tlFreigebenAnSonja() {
       const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
       const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
       const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-      const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
+      const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[currentBerichtstyp] || 'VB';
       const docxName = berichtsDateiname(data, currentVersion || 1);   // (Name historisch: zeigt jetzt auf das PDF dieser Version)
       const fileResp = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}`,
@@ -4404,6 +4406,17 @@ function getFachkraftMail(name) {
 // ─── DYNAMIC SECTIONS (S3/S4/S5) ─────────────────────────────────────────────
 
 const SECTION_TEMPLATES = {
+  monat: {
+    s3: {
+      title: 'Bericht',
+      sub: 'Aktuelle Situation im Berichtsmonat',
+      fields: [
+        { id: 'Aktuelle_Lebenssituation', label: '1 | Aktuelle Situation', placeholder: 'Aktuelle Situation, Entwicklung und besondere Vorkommnisse im Berichtsmonat...' },
+      ]
+    },
+    s4: null,   // keine Hilfeplanziele
+    s5: null,   // keine Perspektive/Stellungnahme
+  },
   verlauf: {
     s3: {
       title: 'Verlauf der Hilfe',
@@ -4530,7 +4543,7 @@ function buildDynamicSections(force = false) {
   
   // Build S3
   const s3 = tpl.s3;
-  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[typ] || typ;
+  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[typ] || typ;
   const _s3t = document.getElementById('s3_title'); if(_s3t) _s3t.textContent = s3.title + ' — ' + _typLabel;
   const _s3s = document.getElementById('s3_sub'); if(_s3s) _s3s.textContent = s3.sub;
   let s3html = '';
@@ -4598,7 +4611,11 @@ function buildDynamicSections(force = false) {
   if(s3c) s3c.innerHTML = s3html;
   
   // Build S4
-  const s4 = tpl.s4;
+  // Seiten ohne Inhalt (Monatsbericht) in der Seitenleiste ausblenden
+  { const n4 = document.getElementById('nav4'), n5 = document.getElementById('nav5');
+    if (n4) n4.style.display = tpl.s4 ? '' : 'none';
+    if (n5) n5.style.display = tpl.s5 ? '' : 'none'; }
+  const s4 = tpl.s4 || { title: '', sub: '', fields: [] };
   const _s4t = document.getElementById('s4_title'); if(_s4t) _s4t.textContent = s4.title + ' — ' + _typLabel;
   { const _n4 = document.querySelector('#nav4 span'); if (_n4) _n4.textContent = typ === 'clearing' ? 'Ergebnisse' : 'Ziele'; }
   const _s4s = document.getElementById('s4_sub'); if(_s4s) _s4s.textContent = s4.sub;
@@ -4649,7 +4666,7 @@ function buildDynamicSections(force = false) {
   }
   
   // Build S5
-  const s5 = tpl.s5;
+  const s5 = tpl.s5 || { title: '', sub: '', fields: [] };
   const _s5t = document.getElementById('s5_title'); if(_s5t) _s5t.textContent = s5.title + ' — ' + _typLabel;
   const _s5s = document.getElementById('s5_sub'); if(_s5s) _s5s.textContent = s5.sub;
   let s5html = '';
@@ -5366,7 +5383,7 @@ renderUnterschriftFachkraefte();
 
   const TYP_LABEL = {
     verlauf: 'Verlaufsbericht', abschluss: 'Abschlussbericht',
-    clearing: 'Clearingbericht', stationaer: 'Verlaufsbericht (stationär)',
+    clearing: 'Clearingbericht', stationaer: 'Verlaufsbericht (stationär)', monat: 'Monatsbericht',
   };
 
   // Badge als SVG-Kreis (pdfmake-fähig; Ziffer in generischer Sans)
@@ -5587,6 +5604,8 @@ renderUnterschriftFachkraefte();
       }
       S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
       push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
+    } else if (typ === 'monat') {
+      push('Aktuelle Situation', data.Aktuelle_Lebenssituation);
     } else if (typ === 'abschluss') {
       push('Aktuelle Situation', data.Aktuelle_Situation);
       push('Verlauf der Maßnahme', data.Verlauf_Massnahme);
