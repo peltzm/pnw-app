@@ -1120,6 +1120,9 @@ async function autoSaveDraft() {
   const fk1 = document.getElementById('Fachkraft_NeueWege')?.value?.trim();
   const hasExtraFk = (typeof _extraFachkraftCount === 'number' && _extraFachkraftCount > 0);
   if (!vn && !fn && !ja && !fk1 && !hasExtraFk) return;  // wirklich leeres Formular: nicht speichern
+  // Neuer Bericht: kein Listeneintrag, solange die Stammdaten-Seite nicht per "Weiter" verlassen wurde —
+  // sonst tauchen halbfertige Entwürfe sofort in der Statusübersicht auf
+  if (!currentListId && !_entwurfFreigegeben) return;
   _autoSaving = true;
   try {
     const data = collectData();
@@ -1170,8 +1173,13 @@ function enableSpellcheck() {
   });
 }
 
+let _aktuelleSeite = 1;
+let _entwurfFreigegeben = false;   // neuer Bericht: Listeneintrag erst nach "Weiter" auf den Stammdaten
+
 function goTo(n) {
   if (currentBerichtstyp === 'monat' && (n === 4 || n === 5)) n = 6;
+  if (_aktuelleSeite === 1 && n > 1) _entwurfFreigegeben = true;
+  _aktuelleSeite = n;
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
   const section = document.getElementById('s' + n);
@@ -2480,6 +2488,7 @@ function resetForm() {
   _unterschriftCount = 1;
   renderUnterschriftFachkraefte();
   setzeSachbearbeitungListe('', []);
+  _entwurfFreigegeben = false;
   const btnFk = document.getElementById('btnAddFachkraft');
   if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
   // Reset list ID for new bericht
