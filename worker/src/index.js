@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-15.2 (op-liste)";
+const WORKER_VERSION = "2026-09-15.3 (op-liste ohne RE2024)";
 
 // Ausnahmen von der E-Mail-Namenskonvention:
 // Kilanka user.id (String!) → Entra-UPN (lowercase).
@@ -2067,6 +2067,8 @@ export default {
         const rechnungen = [];
         for (const inv of alle) {
           if (unwrap(inv.deletedAt)) continue;
+          // Altbestand 2024 (Einzelunternehmen, fehlerhafte Salden) nicht mitliefern
+          if (String(inv.number || "").startsWith("RE2024-")) continue;
           rechnungen.push({
             nummer: inv.number,
             datum: String(unwrap(inv.date) || "").slice(0, 10),
