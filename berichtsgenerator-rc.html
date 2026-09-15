@@ -761,6 +761,7 @@ async function _loadKilankaKlienten(refresh) {
     _kilankaKlienten = d.klienten || [];
     if (Array.isArray(d.qualifikationen) && d.qualifikationen.length) _kilankaQualiListe = d.qualifikationen;
     if (Array.isArray(d.aemter)) _kilankaAemter = d.aemter;
+    if (typeof jugendamtAufKurznameUmstellen === 'function') jugendamtAufKurznameUmstellen();   // offenes Formular nachziehen
     // Doppelte Anzeigenamen (mehrere Maßnahmen) erkennen -> Maßnahme im Label zeigen
     const nameCount = {};
     _kilankaKlienten.forEach(k => { nameCount[k.anzeigeName] = (nameCount[k.anzeigeName] || 0) + 1; });
@@ -1375,6 +1376,12 @@ function collectData() {
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
   // Collect extra Kinder and Sorgeberechtigte
   data._extraKinder = collectExtraKinder();
+  // Jugendamt konsequent als Kilanka-Kurzname — auch wenn das Feld (Altbestand, manuelle Eingabe)
+  // noch den langen Namen trägt. Wirkt auf Speichern, Zusammenfassung und PDF.
+  if (data.Jugendamt && typeof jugendamtKurzname === 'function') {
+    const kurz = jugendamtKurzname(data.Jugendamt);
+    if (kurz && kurz !== data.Jugendamt) { data.Jugendamt = kurz; const el = document.getElementById('Jugendamt'); if (el) el.value = kurz; }
+  }
   // Kilanka-Zuordnung mitschreiben, damit ein Entwurf später seinen Klienten wiederfindet
   if (_kilankaAktuell && _kilankaAktuell.id) { data._kilankaId = _kilankaAktuell.id; data._kilankaMassnahme = _kilankaAktuell.massnahme; }
   data._extraSorg = collectExtraSorg();
