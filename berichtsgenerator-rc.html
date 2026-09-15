@@ -4411,7 +4411,7 @@ const SECTION_TEMPLATES = {
       title: 'Bericht',
       sub: 'Aktuelle Situation im Berichtsmonat',
       fields: [
-        { id: 'Aktuelle_Lebenssituation', label: '1 | Aktuelle Situation', placeholder: 'Aktuelle Situation, Entwicklung und besondere Vorkommnisse im Berichtsmonat...' },
+        { id: 'Aktuelle_Lebenssituation', label: '1 | Aktuelle Situation', placeholder: 'Aktuelle Situation, Entwicklung und besondere Vorkommnisse im Berichtsmonat...', minHeight: 300 },
       ]
     },
     s4: null,   // keine Hilfeplanziele
@@ -4573,7 +4573,7 @@ function buildDynamicSections(force = false) {
     if (f.id === 'Anhang_Methodik' && typ === 'clearing') {
       s3html += `<div class="card"><div class="card-title">${f.label}</div>
         <div class="field-grid full"><div class="field">
-          <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
+          <textarea id="${f.id}" style="min-height:${f.minHeight || 100}px;" placeholder="${f.placeholder}"></textarea>
         </div></div>
         <div id="anhangUploadArea" style="margin-top:12px; border:1.5px dashed var(--border-strong); border-radius:var(--radius); padding:14px 16px; background:var(--bg);">
           <div style="font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em;">PDF-Anhang (optional, max. 5 MB)</div>
@@ -4640,7 +4640,7 @@ function buildDynamicSections(force = false) {
         </div>`).join('') + `</div>` : '';
       s4html += `<div class="card">${f.label ? `<div class="card-title">${f.label}</div>` : ''}
         <div class="field-grid full"><div class="field">
-          <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
+          <textarea id="${f.id}" style="min-height:${f.minHeight || 100}px;" placeholder="${f.placeholder}"></textarea>
         </div></div>${cols}</div>`;
     });
   }
