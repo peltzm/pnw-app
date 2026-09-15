@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-13.4 (aemterliste)";
+const WORKER_VERSION = "2026-09-15.1 (kontakt-suche)";
 
 // Ausnahmen von der E-Mail-Namenskonvention:
 // Kilanka user.id (String!) → Entra-UPN (lowercase).
@@ -1969,6 +1969,43 @@ export default {
 
     // Diagnose: welche Kilanka-Modelle darf das hinterlegte Token lesen?
     // Nur GF — die Antwort verraet die Freigabestruktur des Zugangs.
+    // ── Kontaktsuche im Kilanka-Adressbuch (Behörden, Ansprechpartner) — nur GF ──
+    // Baustein für den Versand an das Jugendamt: liefert E-Mail/Telefon zu einem Namen.
+    if (url.pathname === "/api/kontakt-suche" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Nur für die Geschäftsführung" }, 403, origin);
+      }
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      if (q.length < 3) return json({ error: "Suchbegriff (mind. 3 Zeichen) fehlt" }, 400, origin);
+      try {
+        const treffer = [];
+        for (let offset = 0; offset < 20000; offset += 1000) {
+          const page = await kilankaPost(env, "contacts", {
+            id: 1, recName: 1, name: 1, firstName: 1, shortName: 1, email: 1, phone: 1, mobilePhone: 1, fax: 1,
+            kind: 1, deletedAt: 1, contactType: { id: 1, name: 1 }, subType: { id: 1, name: 1 },
+            $limit: 1000, $offset: offset,
+          });
+          if (!Array.isArray(page)) break;
+          for (const k of page) {
+            if (!k || kDate(k.deletedAt)) continue;
+            const hay = [k.recName, k.name, k.firstName, k.shortName, k.email].map((v) => String(v || "").toLowerCase()).join(" ");
+            if (hay.includes(q)) treffer.push({
+              id: k.id, recName: k.recName, shortName: k.shortName || null, email: k.email || null,
+              phone: k.phone || null, mobilePhone: k.mobilePhone || null, fax: k.fax || null,
+              kind: k.kind ?? null, contactType: k.contactType?.name || null, subType: k.subType?.name || null,
+            });
+          }
+          if (page.length < 1000) break;
+        }
+        return json({ anzahl: treffer.length, treffer: treffer.slice(0, 50) }, 200, origin);
+      } catch (e) {
+        return json({ error: e.message }, 502, origin);
+      }
+    }
+
     if (url.pathname === "/api/kilanka-check" && request.method === "GET") {
       const auth = await validateEntraToken(request.headers.get("Authorization"));
       if (!auth.ok) return json({ error: auth.error }, 401, origin);
