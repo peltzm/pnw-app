@@ -430,9 +430,9 @@
         </div>
         <div id="statusBar" style="display:none"></div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch;">
+          <button class="btn btn-secondary" onclick="saveEntwurf()" id="btnSaveEntwurf">💾 Entwurf speichern</button>
           <button class="btn btn-secondary" id="btnPdfNeu" onclick="erzeugeBerichtPdf()">📄 PDF-Vorschau</button>
-          <button class="btn btn-secondary" onclick="downloadLocal()">↓ PDF herunterladen</button>
-            <button class="btn btn-success" id="btnUpload" onclick="uploadToSharePoint()">↑ Freigabe anfordern</button>
+          <button class="btn btn-success" id="btnUpload" onclick="uploadToSharePoint()">↑ Freigabe anfordern</button>
         </div>
         <!-- TL-Prüfmodus -->
         <div id="reviewActions" style="display:none; margin-bottom:1rem;">
@@ -470,12 +470,9 @@
         </div>
         <div id="normalActions">
         </div>
-        <div class="btn-row">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin-top:10px;">
           <button class="btn btn-secondary" onclick="navGoTo(currentBerichtstyp==='monat'?3:5)">← Zurück</button>
-          <div style="display:flex; gap:8px;">
-            <button class="btn btn-secondary" onclick="saveEntwurf()" id="btnSaveEntwurf">💾 Entwurf speichern</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
-          </div>
+          <button class="btn btn-secondary" onclick="document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
         </div>
       </div>
 
