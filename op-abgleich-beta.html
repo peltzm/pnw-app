@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>OP-Abgleich · Praxis NeueWege</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏦</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#68351a}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--border-strong);color:var(--text)}
+.btn-sm{padding:5px 12px;min-height:30px;font-size:12px}
+
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px}
+.card h2{font-size:15px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card .sub{font-size:12px;color:var(--text-muted);margin-bottom:12px}
+
+/* Upload-Zone */
+.dropzone{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:28px 16px;text-align:center;cursor:pointer;transition:all .15s;background:var(--bg)}
+.dropzone.drag{border-color:var(--accent-mid);background:var(--accent-light)}
+.dropzone .dz-icon{font-size:34px;margin-bottom:6px}
+.dropzone .dz-main{font-size:14px;font-weight:600}
+.dropzone .dz-hint{font-size:12px;color:var(--text-muted);margin-top:4px}
+.filelist{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.filechip{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:12.5px}
+.filechip .fc-name{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filechip .fc-meta{color:var(--text-muted);white-space:nowrap}
+.filechip .fc-fmt{font-size:10px;font-weight:700;padding:1px 7px;border-radius:4px;background:var(--blue-bg);color:var(--blue);white-space:nowrap}
+.filechip .fc-fmt.unbekannt{background:var(--error-bg);color:var(--error)}
+.filechip button{background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:15px;padding:2px 6px}
+.filechip button:hover{color:var(--error)}
+
+/* Status / Meldungen */
+.msg{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:12px;display:none}
+.msg.zeigen{display:block}
+.msg.info{background:var(--blue-bg);color:var(--blue)}
+.msg.fehler{background:var(--error-bg);color:var(--error)}
+.msg.ok{background:var(--ok-bg);color:var(--ok)}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(0,0,0,.15);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Ergebnis-Kennzahlen */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px}
+.kpi .k-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.kpi .k-val{font-size:21px;font-weight:700;margin-top:2px}
+.kpi .k-sub{font-size:11.5px;color:var(--text-muted)}
+.kpi.gruen .k-val{color:var(--ok)}
+.kpi.orange .k-val{color:var(--warn)}
+
+/* Tabellen */
+.tabelle{width:100%;border-collapse:collapse;font-size:12.5px}
+.tabelle th{text-align:left;font-weight:600;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:7px 8px;border-bottom:2px solid var(--border);white-space:nowrap}
+.tabelle td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+.tabelle tr:last-child td{border-bottom:none}
+.tabelle .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tabelle .vz{color:var(--text-muted);font-size:11.5px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr.kuerzung td{background:var(--warn-bg)}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:4px;white-space:nowrap}
+.tag.renr{background:var(--ok-bg);color:var(--ok)}
+.tag.betrag{background:var(--blue-bg);color:var(--blue)}
+.tag.abw{background:var(--warn-bg);color:var(--warn)}
+.tag.mahn{background:var(--error-bg);color:var(--error)}
+.tab-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.summenzeile td{font-weight:700;border-top:2px solid var(--border-strong);background:var(--bg)}
+details.mehr{margin-top:10px}
+details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);user-select:none}
+.leer{color:var(--text-muted);font-size:13px;padding:8px 0}
+
+/* Login-Gate */
+.gate{max-width:420px;margin:80px auto;text-align:center}
+.gate .g-icon{font-size:44px;margin-bottom:10px}
+.gate h1{font-size:19px;margin-bottom:6px}
+.gate p{font-size:13px;color:var(--text-muted);margin-bottom:18px}
+
+.page-footer{text-align:center;font-size:11px;color:var(--text-hint);margin-top:28px}
+.page-footer a{color:var(--text-muted)}
+@media(max-width:640px){
+  .wrap{padding:14px 10px 50px}
+  .card{padding:14px}
+  .tabelle .vz{max-width:160px}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand" onclick="location.href='https://apps.praxisneuewege.de/beta-apps.html'">
+    <img src="https://apps.praxisneuewege.de/assets/pnw-logo.png" alt="PNW" onerror="this.style.display='none'">
+    <span>OP-Abgleich</span>
+    <span class="beta-badge">BETA</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge"><span class="user-dot"></span><span id="userName"></span></div>
+    <button class="btn btn-ghost btn-sm" id="btnLogout" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- Login-Gate -->
+<div class="gate" id="gate">
+  <div class="g-icon">🏦</div>
+  <h1>OP-Abgleich Bank ↔ Kilanka</h1>
+  <p>Kontoauszüge hochladen und automatisch prüfen, welche Zahlungseingänge in Kilanka noch nicht als bezahlt gebucht sind. Nur für die Geschäftsführung.</p>
+  <button class="btn btn-primary" id="btnLogin">Mit Microsoft anmelden</button>
+  <div class="msg fehler" id="gateMsg"></div>
+</div>
+
+<!-- App -->
+<div class="wrap" id="app" style="display:none">
+
+  <div class="card">
+    <h2>1 · Kontoauszüge hochladen</h2>
+    <div class="sub">Bis zu 4 CSV-Dateien — Raiffeisenbank/VR und Commerzbank werden automatisch erkannt. Die Dateien bleiben im Browser und werden nirgendwohin übertragen; nur die Rechnungsliste kommt aus Kilanka.</div>
+    <div class="dropzone" id="dropzone">
+      <div class="dz-icon">📄</div>
+      <div class="dz-main">CSV-Dateien hierher ziehen oder klicken</div>
+      <div class="dz-hint">Kontoumsätze-Export der Bank (max. 4 Dateien)</div>
+      <input type="file" id="fileInput" accept=".csv,text/csv" multiple style="display:none">
+    </div>
+    <div class="filelist" id="fileList"></div>
+    <div class="msg" id="parseMsg"></div>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btnStart" disabled>Gegen Kilanka prüfen</button>
+      <button class="btn btn-ghost" id="btnReset" style="display:none">Zurücksetzen</button>
+    </div>
+    <div class="msg" id="runMsg"></div>
+  </div>
+
+  <div id="ergebnis" style="display:none">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h2>✅ Bezahlt, in Kilanka noch offen <span id="cntOffen" style="font-weight:400;color:var(--text-muted);font-size:13px"></span></h2>
+      <div class="sub">Diese Zahlungseingänge wurden im Kontoauszug gefunden, die Rechnung hat in Kilanka aber noch einen offenen Saldo → ausbuchen. Gelb = Minderzahlung/Kürzung.</div>
+      <div class="tab-scroll"><table class="tabelle" id="tblAusbuchen"></table></div>
+      <div style="margin-top:12px"><button class="btn btn-ghost btn-sm" id="btnExport" style="display:none">⬇ Liste als CSV exportieren</button></div>
+    </div>
+
+    <div class="card">
+      <h2>⏳ Offen ohne Zahlungseingang <span id="cntUnbezahlt" style="font-weight:400;color:var(--text-muted);font-size:13px"></span></h2>
+      <div class="sub">Offene Kilanka-Posten, zu denen in den hochgeladenen Auszügen keine Zahlung gefunden wurde. Rot markiert = Zahlungsziel überschritten.</div>
+      <div class="tab-scroll"><table class="tabelle" id="tblUnbezahlt"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>ℹ️ Bereits in Kilanka gebucht</h2>
+      <div class="sub">Zahlungseingänge, deren Rechnung in Kilanka schon auf bezahlt steht — keine Aktion nötig.</div>
+      <details class="mehr"><summary id="cntGebucht">–</summary>
+        <div class="tab-scroll" style="margin-top:8px"><table class="tabelle" id="tblGebucht"></table></div>
+      </details>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    Praxis NeueWege GmbH · OP-Abgleich <span id="versionBadge"></span> ·
+    <a href="https://apps.praxisneuewege.de/beta-apps.html">Beta-Übersicht</a>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zu Mobilfunk / Fuhrpark
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/op-abgleich-beta.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read'];
+/* Clientseitige Sperre; die eigentliche Absicherung ist die GF-Prüfung
+ * im Worker-Endpunkt /api/op-liste (Entra-Token, GF_UPNS). */
+const ERLAUBT = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+const APP_VERSION = 'BETA-dev'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+
+const MAX_DATEIEN = 4;
+
+/* ═══════════════════════════════════════════════════════════
+ * MSAL
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance, currentAccount = null;
+function initMsal(){
+  msalInstance = new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'localStorage' }
+  });
+  const accts = msalInstance.getAllAccounts();
+  if (accts.length) { currentAccount = accts[0]; nachLogin(); }
+}
+async function login(){
+  try{
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account; nachLogin();
+  }catch(e){ zeige('gateMsg', 'Anmeldung fehlgeschlagen: '+(e.message||e), 'fehler'); }
+}
+function nachLogin(){
+  const upn = (currentAccount.username||'').toLowerCase();
+  if (!ERLAUBT.includes(upn)) {
+    zeige('gateMsg', 'Der OP-Abgleich ist der Geschäftsführung vorbehalten.', 'fehler');
+    return;
+  }
+  document.getElementById('gate').style.display='none';
+  document.getElementById('app').style.display='block';
+  const badge = document.getElementById('userBadge');
+  badge.style.display='flex';
+  document.getElementById('userName').textContent = currentAccount.name || upn;
+  const lo = document.getElementById('btnLogout');
+  lo.style.display='inline-flex';
+  lo.onclick = () => msalInstance.logoutPopup({account:currentAccount}).then(()=>location.reload());
+}
+function tokenAblauf(jwt){
+  try{ return JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000; }
+  catch(e){ return 0; }
+}
+async function idToken(){
+  const req = {scopes:SCOPES, account:currentAccount};
+  let r = await msalInstance.acquireTokenSilent(req).catch(async ()=>msalInstance.acquireTokenPopup(req));
+  if (tokenAblauf(r.idToken) < Date.now()+60000){
+    r = await msalInstance.acquireTokenSilent({...req, forceRefresh:true});
+  }
+  return r.idToken;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * CSV-PARSING — formatbewusst (deutsche Zahlen, zwei Bankformate)
+ * ═══════════════════════════════════════════════════════════ */
+/* Deutsche Beträge: 1.234,56 → nur bei vorhandenem Komma Punkte als
+ * Tausendertrenner entfernen; sonst parseFloat (Punkt = Dezimal). */
+function parseBetrag(s){
+  if (s == null) return NaN;
+  s = String(s).trim().replace(/\u00a0/g,'').replace(/€/g,'').trim();
+  if (!s) return NaN;
+  if (s.includes(',')) return parseFloat(s.replace(/\./g,'').replace(',', '.'));
+  return parseFloat(s);
+}
+/* CSV-Zeilen-Parser mit Quote-Unterstützung (auch eingebettete Umbrüche). */
+function csvParse(text, sep){
+  const zeilen = []; let feld = '', zeile = [], inQ = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (inQ){
+      if (c === '"'){ if (text[i+1] === '"'){ feld += '"'; i++; } else inQ = false; }
+      else feld += c;
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === sep){ zeile.push(feld); feld=''; }
+      else if (c === '\n'){ zeile.push(feld); zeilen.push(zeile); feld=''; zeile=[]; }
+      else if (c !== '\r') feld += c;
+    }
+  }
+  if (feld !== '' || zeile.length){ zeile.push(feld); zeilen.push(zeile); }
+  return zeilen.filter(z => z.some(f => String(f).trim() !== ''));
+}
+/* Bankformat am Header erkennen; liefert Spaltenzuordnung. */
+function erkenneFormat(kopf){
+  const h = kopf.map(x => String(x).trim().toLowerCase());
+  const idx = (...namen) => { for (const n of namen){ const i = h.findIndex(x => x === n || x.startsWith(n)); if (i >= 0) return i; } return -1; };
+  // Commerzbank: Buchungstag;...;Buchungstext;Betrag;...;Sender;Empfänger;Verwendungszweck
+  if (idx('buchungstag') >= 0 && idx('betrag') >= 0 && idx('sender') >= 0){
+    return { name:'Commerzbank', datum:idx('buchungstag'), betrag:idx('betrag'),
+             zahler:idx('sender'), vz1:idx('verwendungszweck'), vz2:idx('buchungstext') };
+  }
+  // Raiffeisen/VR: Buchungsdatum/Buchungstag;...;Empfängername/Auftraggeber bzw. Name Zahlungsbeteiligter;Verwendungszweck;Betrag in EUR/Betrag
+  const dat = idx('buchungsdatum','buchungstag','valutadatum');
+  const bet = idx('betrag in eur','betrag');
+  const zah = idx('empfängername/auftraggeber','name zahlungsbeteiligter','auftraggeber/empfänger','beguenstigter/zahlungspflichtiger','begünstigter/zahlungspflichtiger');
+  if (dat >= 0 && bet >= 0){
+    return { name:'Raiffeisen/VR', datum:dat, betrag:bet, zahler:zah,
+             vz1:idx('verwendungszweck'), vz2:-1 };
+  }
+  return null;
+}
+/* Eine Datei → Liste von Gutschriften {datum, betrag, zahler, vz}. */
+function parseDatei(name, text){
+  // Trennzeichen raten: erste Zeile mit mehr ';' als ',' → ';'
+  const kopfzeile = text.split(/\r?\n/, 1)[0] || '';
+  const sep = (kopfzeile.split(';').length >= kopfzeile.split(',').length) ? ';' : ',';
+  const rows = csvParse(text, sep);
+  if (!rows.length) return { format:null, gutschriften:[] };
+  const fmt = erkenneFormat(rows[0]);
+  if (!fmt) return { format:null, gutschriften:[] };
+  const out = [];
+  for (let i = 1; i < rows.length; i++){
+    const r = rows[i];
+    const betrag = parseBetrag(r[fmt.betrag]);
+    if (!isFinite(betrag) || betrag <= 0) continue; // nur Eingänge
+    const vz = [fmt.vz2 >= 0 ? r[fmt.vz2] : '', fmt.vz1 >= 0 ? r[fmt.vz1] : '']
+      .filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    out.push({
+      datum: String(r[fmt.datum]||'').trim(),
+      betrag: Math.round(betrag*100)/100,
+      zahler: fmt.zahler >= 0 ? String(r[fmt.zahler]||'').trim() : '',
+      vz, datei: name
+    });
+  }
+  return { format: fmt.name, gutschriften: out };
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * ABGLEICH — bewährte Logik aus den manuellen OP-Abgleichen
+ * ═══════════════════════════════════════════════════════════ */
+function normName(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/ä/gi,'ae').replace(/ö/gi,'oe').replace(/ü/gi,'ue').replace(/ß/gi,'ss').toUpperCase();
+}
+/* Rechnungsnummer REJJJJ-MM-NNNNN zerlegen. */
+function reTeile(nr){
+  const m = /^RE(\d{4})-(\d{2})-(\d+)$/.exec(String(nr||'').trim());
+  return m ? { jahr:m[1], monat:m[2], serie:parseInt(m[3],10) } : null;
+}
+function abgleichen(gutschriften, rechnungen){
+  const offene   = rechnungen.filter(r => r.saldo > 0.005 && r.status !== 'Storniert');
+  const gebuchte = rechnungen.filter(r => !(r.saldo > 0.005) && r.status !== 'Storniert');
+  const belegt = new Set();
+  const ausbuchen = [], unbezahlt = [];
+
+  for (const re of offene){
+    const t = reTeile(re.nummer);
+    if (!t){ unbezahlt.push({re}); continue; }
+    // 1) Rechnungsnummern-Muster im Verwendungszweck (tolerant ggü. Tippfehlern/Kürzungen)
+    const pat = new RegExp(t.monat + '\\s*[-/]?\\s*0*' + t.serie + '(?!\\d)');
+    const kand = gutschriften.filter((g,i) => !belegt.has(i) && pat.test(g.vz)).map(g => g);
+    let treffer = null, art = null;
+    if (kand.length){
+      const exakt = kand.find(g => Math.abs(g.betrag - re.saldo) < 0.02 || Math.abs(g.betrag - re.summe) < 0.02);
+      if (exakt){ treffer = exakt; art = 'Re-Nr. + Betrag'; }
+      else { treffer = kand[0]; art = 'Re-Nr. (Betrag weicht ab)'; }
+    } else {
+      // 2) Fallback: exakter Betrag + Klienten-Nachname, Monatsplausibilität beachten
+      const nach = normName(String(re.klient||'').split(',')[0]);
+      if (nach){
+        for (const g of gutschriften){
+          const gi = gutschriften.indexOf(g);
+          if (belegt.has(gi)) continue;
+          if (Math.abs(g.betrag - re.summe) >= 0.02 && Math.abs(g.betrag - re.saldo) >= 0.02) continue;
+          if (!normName(g.vz).includes(nach)) continue;
+          const zitiert = [...g.vz.matchAll(/20\d{2,3}-(\d{2})-\d{3,5}/g)].map(m => m[1]);
+          if (zitiert.length && !zitiert.includes(t.monat)) continue;
+          treffer = g; art = zitiert.length ? 'Betrag + Klient (Re-Nr. im VZ weicht ab!)' : 'Betrag + Klient';
+          break;
+        }
+      }
+    }
+    if (treffer){
+      belegt.add(gutschriften.indexOf(treffer));
+      ausbuchen.push({ re, g: treffer, art, diff: Math.round((treffer.betrag - re.saldo)*100)/100 });
+    } else {
+      unbezahlt.push({re});
+    }
+  }
+
+  // Gutschriften, die eine bereits gebuchte Rechnung zitieren (nur Info)
+  const schonGebucht = [];
+  gutschriften.forEach((g, i) => {
+    if (belegt.has(i)) return;
+    for (const re of gebuchte){
+      const t = reTeile(re.nummer);
+      if (!t) continue;
+      const pat = new RegExp(t.monat + '\\s*[-/]?\\s*0*' + t.serie + '(?!\\d)');
+      if (pat.test(g.vz)){ schonGebucht.push({ re, g }); belegt.add(i); return; }
+    }
+  });
+  return { ausbuchen, unbezahlt, schonGebucht };
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * UI-VERDRAHTUNG
+ * ═══════════════════════════════════════════════════════════ */
+let dateien = [];   // {name, format, gutschriften}
+let letztesErgebnis = null;
+
+function zeige(id, text, art){
+  const el = document.getElementById(id);
+  el.className = 'msg zeigen ' + (art||'info');
+  el.innerHTML = text;
+}
+function verstecke(id){ document.getElementById(id).className = 'msg'; }
+function eur(n){ return (n==null||!isFinite(n)) ? '–' : n.toLocaleString('de-DE',{minimumFractionDigits:2, maximumFractionDigits:2}) + ' €'; }
+function esc(s){ const d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
+
+function dateiHinzu(fileList){
+  const neu = Array.from(fileList).filter(f => /\.csv$/i.test(f.name) || f.type.includes('csv') || f.type.includes('text'));
+  if (!neu.length){ zeige('parseMsg','Bitte CSV-Dateien auswählen.','fehler'); return; }
+  if (dateien.length + neu.length > MAX_DATEIEN){ zeige('parseMsg','Maximal '+MAX_DATEIEN+' Dateien.','fehler'); return; }
+  verstecke('parseMsg');
+  neu.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let text = reader.result;
+      const p = parseDatei(f.name, text);
+      // ANSI-Verdacht: Ersatzzeichen im Ergebnis → als windows-1252 erneut lesen
+      if (text.includes('\ufffd')){
+        const r2 = new FileReader();
+        r2.onload = () => {
+          const p2 = parseDatei(f.name, r2.result);
+          dateien.push({ name:f.name, ...p2 }); malDateien();
+        };
+        r2.readAsText(f, 'windows-1252');
+        return;
+      }
+      dateien.push({ name:f.name, ...p }); malDateien();
+    };
+    reader.readAsText(f, 'utf-8');
+  });
+}
+function malDateien(){
+  const fl = document.getElementById('fileList');
+  fl.innerHTML = dateien.map((d,i) => `
+    <div class="filechip">
+      <span class="fc-fmt ${d.format?'':'unbekannt'}">${d.format || 'Format unbekannt'}</span>
+      <span class="fc-name">${esc(d.name)}</span>
+      <span class="fc-meta">${d.gutschriften.length} Eingänge · ${eur(d.gutschriften.reduce((s,g)=>s+g.betrag,0))}</span>
+      <button title="Entfernen" onclick="dateiWeg(${i})">✕</button>
+    </div>`).join('');
+  const ok = dateien.some(d => d.format && d.gutschriften.length);
+  document.getElementById('btnStart').disabled = !ok;
+  document.getElementById('btnReset').style.display = dateien.length ? 'inline-flex' : 'none';
+  if (dateien.some(d => !d.format)){
+    zeige('parseMsg','Mindestens eine Datei hat ein unbekanntes Format — sie wird ignoriert. Erwartet werden Kontoumsatz-Exporte (Raiffeisen/VR oder Commerzbank).','fehler');
+  }
+}
+function dateiWeg(i){ dateien.splice(i,1); malDateien(); }
+
+async function starten(){
+  const btn = document.getElementById('btnStart');
+  btn.disabled = true;
+  zeige('runMsg','<span class="spinner"></span>Rechnungsliste wird aus Kilanka geladen …','info');
+  try{
+    const t = await idToken();
+    const r = await fetch(CFG.workerUrl + '/api/op-liste', { headers:{ Authorization:'Bearer '+t } });
+    const d = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(d.error || ('HTTP '+r.status));
+
+    // Gutschriften zusammenführen + Duplikate über Dateien hinweg entfernen
+    const gesehen = new Set(); const gutschriften = [];
+    for (const dat of dateien){
+      for (const g of (dat.gutschriften||[])){
+        const key = g.datum + '|' + g.betrag.toFixed(2) + '|' + g.vz.slice(0,80);
+        if (gesehen.has(key)) continue;
+        gesehen.add(key); gutschriften.push(g);
+      }
+    }
+    zeige('runMsg','<span class="spinner"></span>' + d.anzahl + ' Rechnungen geladen, ' + gutschriften.length + ' Zahlungseingänge werden abgeglichen …','info');
+    const erg = abgleichen(gutschriften, d.rechnungen || []);
+    letztesErgebnis = erg;
+    malErgebnis(erg, d.rechnungen || []);
+    verstecke('runMsg');
+  }catch(e){
+    zeige('runMsg','Abgleich fehlgeschlagen: ' + esc(e.message||e),'fehler');
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+function malErgebnis(erg, rechnungen){
+  document.getElementById('ergebnis').style.display = 'block';
+  const sumA = erg.ausbuchen.reduce((s,x)=>s+x.g.betrag,0);
+  const sumU = erg.unbezahlt.reduce((s,x)=>s+x.re.saldo,0);
+  const kuerz = erg.ausbuchen.filter(x => Math.abs(x.diff) > 0.01);
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi gruen"><div class="k-label">Ausbuchen</div><div class="k-val">${erg.ausbuchen.length}</div><div class="k-sub">${eur(sumA)} eingegangen</div></div>
+    <div class="kpi orange"><div class="k-label">Offen ohne Zahlung</div><div class="k-val">${erg.unbezahlt.length}</div><div class="k-sub">${eur(sumU)} ausstehend</div></div>
+    <div class="kpi"><div class="k-label">Kürzungen</div><div class="k-val">${kuerz.length}</div><div class="k-sub">${eur(kuerz.reduce((s,x)=>s+x.diff,0))} Differenz</div></div>
+    <div class="kpi"><div class="k-label">Schon gebucht</div><div class="k-val">${erg.schonGebucht.length}</div><div class="k-sub">keine Aktion nötig</div></div>`;
+
+  // Ausbuchen-Tabelle
+  const tagFor = a => a.startsWith('Re-Nr. + Betrag') ? '<span class="tag renr">Re-Nr.+Betrag</span>'
+    : a.startsWith('Re-Nr.') ? '<span class="tag abw">Re-Nr., Betrag weicht ab</span>'
+    : a.includes('weicht ab') ? '<span class="tag abw">Betrag+Klient ⚠</span>'
+    : '<span class="tag betrag">Betrag+Klient</span>';
+  const tA = document.getElementById('tblAusbuchen');
+  document.getElementById('cntOffen').textContent = '(' + erg.ausbuchen.length + ')';
+  if (!erg.ausbuchen.length){ tA.innerHTML = '<tr><td class="leer">Kein Zahlungseingang zu offenen Posten gefunden.</td></tr>'; }
+  else {
+    tA.innerHTML = '<tr><th>Rechnung</th><th>Klient</th><th class="num">Offen lt. Kilanka</th><th class="num">Zahlbetrag</th><th class="num">Differenz</th><th>Zahldatum</th><th>Zahler</th><th>Match</th><th>Verwendungszweck</th></tr>'
+      + erg.ausbuchen.map(x => `<tr class="${Math.abs(x.diff)>0.01?'kuerzung':''}">
+          <td><strong>${esc(x.re.nummer)}</strong></td><td>${esc(x.re.klient)}</td>
+          <td class="num">${eur(x.re.saldo)}</td><td class="num">${eur(x.g.betrag)}</td>
+          <td class="num">${Math.abs(x.diff)>0.01 ? '<strong>'+eur(x.diff)+'</strong>' : '–'}</td>
+          <td>${esc(x.g.datum)}</td><td>${esc(x.g.zahler)}</td><td>${tagFor(x.art)}</td>
+          <td class="vz" title="${esc(x.g.vz)}">${esc(x.g.vz)}</td></tr>`).join('')
+      + `<tr class="summenzeile"><td colspan="2">Summe</td><td class="num">${eur(erg.ausbuchen.reduce((s,x)=>s+x.re.saldo,0))}</td><td class="num">${eur(sumA)}</td><td class="num">${eur(kuerz.reduce((s,x)=>s+x.diff,0))}</td><td colspan="4"></td></tr>`;
+  }
+  document.getElementById('btnExport').style.display = erg.ausbuchen.length ? 'inline-flex' : 'none';
+
+  // Unbezahlt-Tabelle
+  const heute = new Date().toISOString().slice(0,10);
+  const tU = document.getElementById('tblUnbezahlt');
+  document.getElementById('cntUnbezahlt').textContent = '(' + erg.unbezahlt.length + ')';
+  const sorted = erg.unbezahlt.slice().sort((a,b) => String(a.re.faellig||'9999').localeCompare(String(b.re.faellig||'9999')));
+  if (!sorted.length){ tU.innerHTML = '<tr><td class="leer">Alle offenen Posten haben einen Zahlungseingang. 🎉</td></tr>'; }
+  else {
+    tU.innerHTML = '<tr><th>Rechnung</th><th>Klient</th><th>Empfänger</th><th class="num">Offen</th><th>Fällig</th></tr>'
+      + sorted.map(x => {
+          const ueber = x.re.faellig && x.re.faellig < heute;
+          return `<tr><td><strong>${esc(x.re.nummer)}</strong></td><td>${esc(x.re.klient)}</td>
+            <td>${esc(x.re.empfaenger)}</td><td class="num">${eur(x.re.saldo)}</td>
+            <td>${esc(x.re.faellig||'–')} ${ueber?'<span class="tag mahn">überfällig</span>':''}</td></tr>`;
+        }).join('')
+      + `<tr class="summenzeile"><td colspan="3">Summe</td><td class="num">${eur(sumU)}</td><td></td></tr>`;
+  }
+
+  // Schon-gebucht-Tabelle
+  document.getElementById('cntGebucht').textContent = erg.schonGebucht.length + ' Zahlungseingänge zeigen auf bereits gebuchte Rechnungen — anzeigen';
+  const tG = document.getElementById('tblGebucht');
+  tG.innerHTML = erg.schonGebucht.length
+    ? '<tr><th>Rechnung</th><th>Klient</th><th class="num">Zahlbetrag</th><th>Zahldatum</th><th>Zahler</th></tr>'
+      + erg.schonGebucht.map(x => `<tr><td>${esc(x.re.nummer)}</td><td>${esc(x.re.klient)}</td><td class="num">${eur(x.g.betrag)}</td><td>${esc(x.g.datum)}</td><td>${esc(x.g.zahler)}</td></tr>`).join('')
+    : '<tr><td class="leer">Keine.</td></tr>';
+}
+
+function exportCsv(){
+  if (!letztesErgebnis || !letztesErgebnis.ausbuchen.length) return;
+  const de = n => String(n.toFixed(2)).replace('.', ',');
+  const zeilen = [['Rechnungsnummer','Klient','Offen lt. Kilanka','Zahlbetrag','Differenz','Zahldatum','Zahler','Match','Verwendungszweck']];
+  for (const x of letztesErgebnis.ausbuchen){
+    zeilen.push([x.re.nummer, x.re.klient, de(x.re.saldo), de(x.g.betrag), de(x.diff), x.g.datum, x.g.zahler, x.art, x.g.vz]);
+  }
+  const csv = zeilen.map(z => z.map(f => '"'+String(f==null?'':f).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'OP-Abgleich_Ausbuchen_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* Events */
+const dz = document.getElementById('dropzone');
+dz.onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = e => { dateiHinzu(e.target.files); e.target.value=''; };
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', e => dateiHinzu(e.dataTransfer.files));
+document.getElementById('btnStart').onclick = starten;
+document.getElementById('btnReset').onclick = () => { dateien = []; malDateien(); document.getElementById('ergebnis').style.display='none'; verstecke('parseMsg'); verstecke('runMsg'); };
+document.getElementById('btnExport').onclick = exportCsv;
+document.getElementById('btnLogin').onclick = login;
+initMsal();
+</script>
+</body>
+</html>
