@@ -519,6 +519,7 @@ async function loadOrg() {
       const lc = u.displayName.toLowerCase();
       if (SERVICE_NAMES.some(s => lc.startsWith(s))) return false;
       if (AUSGEBLENDETE_MITARBEITER.some(rx => rx.test(u.displayName))) return false;
+      if (RAUM_MUSTER.some(rx => rx.test(u.displayName))) return false; // Raum-Postfächer (Besprechungsräume)
       return true;
     });
     // Markus Peltz als Root behandeln: Manager-Referenz entfernen damit er auf Root-Ebene landet
@@ -586,7 +587,9 @@ function buildTree(users) {
   // Sort roots: most children first (Sonja), then others (Markus)
   const sortedRoots = [...roots].sort((a,b) => (children[b.id]||[]).length - (children[a.id]||[]).length);
   const primaryRoot = sortedRoots[0]; // Sonja
-  const tls = children[primaryRoot?.id] || [];
+  const direktUnterGf = children[primaryRoot?.id] || [];
+  const tls   = direktUnterGf.filter(u => !istStabsstelle(u));
+  const staebe = direktUnterGf.filter(istStabsstelle);
 
   // ── EBENE 0: Roots nebeneinander zentriert ──
   const lvl0 = document.createElement('div');
@@ -594,7 +597,7 @@ function buildTree(users) {
   sortedRoots.forEach(r => lvl0.appendChild(makeRowCard(r, 0, jungerAls, 'card-root', nordsternSet)));
   container.appendChild(lvl0);
 
-  if (tls.length === 0) return;
+  if (tls.length === 0 && staebe.length === 0) return;
 
   // Verbindungslinie Sonja → TL-Reihe
   const rootToTl = document.createElement('div');
@@ -642,6 +645,16 @@ function buildTree(users) {
       tlCol.appendChild(fkList);
     }
 
+    tlRowWrap.appendChild(tlCol);
+  });
+
+  // Stabsstellen mit Entra-Konto (z. B. Psychologin): eigene Spalte, keine TL-Beschriftung
+  staebe.forEach(s => {
+    const eintrag = STABSSTELLEN.find(e => e.muster.test(s.displayName || ''));
+    const person = { ...s, jobTitle: s.jobTitle || eintrag?.rolle || '' };
+    const tlCol = document.createElement('div');
+    tlCol.className = 'tl-col kommend-col';
+    tlCol.appendChild(makeRowCard(person, 2, jungerAls, 'card-staff', nordsternSet));
     tlRowWrap.appendChild(tlCol);
   });
 
@@ -871,10 +884,22 @@ function toggleAll() {
 // Eintrag entfernen, sobald das Konto in Entra deaktiviert ist.
 const AUSGEBLENDETE_MITARBEITER = [ /kosikowski/i ];
 
+// Raum-Postfächer (Besprechungs-/Beratungsräume) aus Exchange — keine Personen,
+// daher im Organigramm ausblenden. Namensschema: "HOP - Besprechung 1 (klein)",
+// "ELS - Dialog 1 (klein)" usw.
+const RAUM_MUSTER = [ /^(hop|els)\s*[-–]/i, /\b(besprechung|beratung|dialog)\s*\d/i ];
+
+// Stabsstellen: berichten direkt an die Geschäftsführung, sind aber keine
+// Teamleitung (z. B. Psychologin). Werden als eigene Spalte neben den TL
+// gezeigt. rolle = Fallback, falls in Entra kein jobTitle gepflegt ist.
+const STABSSTELLEN = [
+  { muster: /leurpendeur/i, rolle: 'Psychologin' },
+];
+const istStabsstelle = u => /psycholog|stabsstelle/i.test(u.jobTitle || '') || STABSSTELLEN.some(s => s.muster.test(u.displayName || ''));
+
 const KOMMENDE_MITARBEITER = [
   { name: 'Sharon Ogiemwonyi',  rolle: '',            team: /grund/i,     start: '2026-08-01', foto: 'assets/kommend/sharon-ogiemwonyi.png' },
   { name: 'Marie Reuter',       rolle: '',            team: /schneider/i, start: '2026-08-01', foto: 'assets/kommend/marie-reuter.png' },
-  { name: 'Marie Leurpendeur',  rolle: 'Psychologin', team: /sonja/i,     start: '2026-09-01', foto: 'assets/kommend/marie-leurpendeur.png' },
   { name: 'Peter Notz',         rolle: '',            team: /grund/i,     start: '2026-09-01', foto: 'assets/kommend/peter-notz.png' },
   { name: 'Katrin Lankl',       rolle: '',            team: /schneider/i, start: '2026-10-01', foto: 'assets/kommend/katrin-lankl.png' },
 ];
