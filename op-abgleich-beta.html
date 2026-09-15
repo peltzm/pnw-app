@@ -171,6 +171,12 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
       <div class="tab-scroll"><table class="tabelle" id="tblUnbezahlt"></table></div>
     </div>
 
+    <div class="card" id="cardArchiv" style="display:none">
+      <h2>⚠️ Archivierte Klienten mit offenem Saldo</h2>
+      <div class="sub">Diese Rechnungen (ab 2026) haben laut Kilanka noch einen offenen Saldo, der Klient ist aber archiviert — die Kilanka-GUI und der Abgleich blenden sie aus. Bitte prüfen: entweder in Kilanka ausbuchen oder Klient reaktivieren.</div>
+      <div class="tab-scroll"><table class="tabelle" id="tblArchiv"></table></div>
+    </div>
+
     <div class="card">
       <h2>ℹ️ Bereits in Kilanka gebucht</h2>
       <div class="sub">Zahlungseingänge, deren Rechnung in Kilanka schon auf bezahlt steht — keine Aktion nötig.</div>
@@ -481,6 +487,7 @@ async function starten(){
     const erg = abgleichen(gutschriften, d.rechnungen || []);
     letztesErgebnis = erg;
     malErgebnis(erg, d.rechnungen || []);
+    malHinweise(d.hinweise || []);
     verstecke('runMsg');
   }catch(e){
     zeige('runMsg','Abgleich fehlgeschlagen: ' + esc(e.message||e),'fehler');
@@ -544,6 +551,16 @@ function malErgebnis(erg, rechnungen){
     ? '<tr><th>Rechnung</th><th>Klient</th><th class="num">Zahlbetrag</th><th>Zahldatum</th><th>Zahler</th></tr>'
       + erg.schonGebucht.map(x => `<tr><td>${esc(x.re.nummer)}</td><td>${esc(x.re.klient)}</td><td class="num">${eur(x.g.betrag)}</td><td>${esc(x.g.datum)}</td><td>${esc(x.g.zahler)}</td></tr>`).join('')
     : '<tr><td class="leer">Keine.</td></tr>';
+}
+
+function malHinweise(hinweise){
+  const card = document.getElementById('cardArchiv');
+  card.style.display = hinweise.length ? 'block' : 'none';
+  if (!hinweise.length) return;
+  document.getElementById('tblArchiv').innerHTML =
+    '<tr><th>Rechnung</th><th>Klient</th><th>Empfänger</th><th class="num">Offener Saldo</th><th>Rechnungsdatum</th><th>Fällig</th></tr>'
+    + hinweise.map(x => `<tr><td><strong>${esc(x.nummer)}</strong></td><td>${esc(x.klient)}</td><td>${esc(x.empfaenger)}</td><td class="num">${eur(x.saldo)}</td><td>${esc(x.datum)}</td><td>${esc(x.faellig||'–')}</td></tr>`).join('')
+    + `<tr class="summenzeile"><td colspan="3">Summe</td><td class="num">${eur(hinweise.reduce((s,x)=>s+x.saldo,0))}</td><td colspan="2"></td></tr>`;
 }
 
 function exportCsv(){
