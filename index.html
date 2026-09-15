@@ -8,7 +8,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Berichtsgenerator — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <style>
   :root {
     --bg: #f7f6f2; --surface: #ffffff; --border: #e2dfd8; --border-strong: #c8c4bc;
@@ -32,7 +33,7 @@
   .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 1rem; font-size: 13px; color: var(--text-muted); cursor: pointer; border-left: 2px solid transparent; transition: all 0.12s; }
   .nav-item:hover { background: var(--bg); color: var(--text); }
   .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-light); font-weight: 500; }
-  .nav-num { width: 18px; height: 18px; border-radius: 50%; background: var(--border); font-size: 10px; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .nav-num { width: 12px; height: 12px; border-radius: 50%; background: var(--border); font-size: 0; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .nav-item.active .nav-num { background: var(--accent); color: white; }
   .nav-item.done .nav-num { background: var(--success); color: white; }
   .section { display: none; }
@@ -185,10 +186,19 @@
           <div onclick="selectBerichtstyp('stationaer')" id="bt_stationaer" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s; min-height:44px; display:flex; align-items:center; justify-content:center;" onmouseover="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--accent-mid)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='stationaer'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Verlaufsbericht stationär</div>
           </div>
-          <div style="padding:10px; border:1px dashed var(--border); border-radius:var(--radius); text-align:center; background:var(--bg); cursor:default; opacity:0.55; min-height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+          <div onclick="selectBerichtstyp('monat')" id="bt_monat" style="padding:10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; text-align:center; background:var(--surface); transition:all 0.15s;" onmouseover="if(currentBerichtstyp!=='monat'){this.style.borderColor='var(--accent)';this.style.background='var(--accent-light)'}" onmouseout="if(currentBerichtstyp!=='monat'){this.style.borderColor='var(--border)';this.style.background='var(--surface)'}">
             <div style="font-size:12px; font-weight:500; color:var(--text-muted);">Monatsbericht</div>
-            <div style="font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; background:var(--border); border-radius:20px; padding:1px 6px; display:inline-block;">Demnächst</div>
           </div>
+        </div>
+      </div>
+      <div id="kilankaPanel" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1rem 1.25rem; margin-bottom:1.5rem;">
+        <div style="font-size:12px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.75rem;">Klient aus Kilanka <span style="font-weight:400; text-transform:none; letter-spacing:0;">(befüllt Stammdaten automatisch)</span></div>
+        <select id="kilankaKlient" style="width:100%; font-size:13px; padding:8px;">
+          <option value="">— ohne Vorbefüllung starten —</option>
+        </select>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:6px;">
+          <div id="kilankaStatus" style="font-size:11px; color:var(--text-muted);">Anmeldung erforderlich…</div>
+          <a href="#" id="kilankaRefresh" onclick="loadKilankaKlienten(true); return false;" title="Kilanka-Daten neu abrufen (Cache verwerfen)" style="font-size:11px; color:var(--accent); white-space:nowrap; text-decoration:none;">↻ aktualisieren</a>
         </div>
       </div>
       <div class="start-grid" id="startGrid" style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
@@ -244,10 +254,10 @@
         <div id="berichtstypBadge" style="font-size:13px; font-weight:600; color:var(--accent);">Verlaufsbericht</div>
       </div>
       <div class="nav-section">Formular</div>
-      <div class="nav-item" onclick="goToStart()" id="nav0" title="Startseite"><div class="nav-num" id="nn0" style="font-size:10px; font-weight:700;">S</div> <span>Startseite</span></div>
+      <div class="nav-item" onclick="goToStart()" id="nav0" title="Startseite"><div class="nav-num" id="nn0" style="font-weight:700;">S</div> <span>Startseite</span></div>
       <div class="nav-item active" onclick="navGoTo(1)" id="nav1" title="Stammdaten"><div class="nav-num" id="nn1">1</div> <span>Stammdaten</span></div>
       <div class="nav-item" onclick="navGoTo(2)" id="nav2"><div class="nav-num" id="nn2">2</div> <span>Kind & Familie</span></div>
-      <div class="nav-item" onclick="navGoTo(3)" id="nav3"><div class="nav-num" id="nn3">3</div> <span>Situation</span></div>
+      <div class="nav-item" onclick="navGoTo(3)" id="nav3"><div class="nav-num" id="nn3">3</div> <span>Bericht</span></div>
       <div class="nav-item" onclick="navGoTo(4)" id="nav4"><div class="nav-num" id="nn4">4</div> <span>Ziele</span></div>
       <div class="nav-item" onclick="navGoTo(5)" id="nav5"><div class="nav-num" id="nn5">5</div> <span>Perspektive</span></div>
       <div class="nav-item" onclick="navGoTo(6)" id="nav6"><div class="nav-num" id="nn6">6</div> <span>Absenden</span></div>
@@ -276,29 +286,14 @@
           <div class="card-title">Jugendamt & Fachkräfte</div>
           <div class="field-grid">
             <div class="field"><label>Zuständiges Jugendamt</label>
-              <select id="Jugendamt"><option>Dachau</option><option>Dahme-Spreewald</option><option>Eichstätt</option><option>Freising</option><option>Ingolstadt</option><option>Kelheim</option><option>Landshut</option><option>Neuburg-Schrobenhausen</option><option>Pfaffenhofen</option><option>Regensburg</option><option>Starnberg</option></select>
+              <input type="text" id="Jugendamt" placeholder="wird aus Kilanka übernommen">
             </div>
             <div class="field"><label>Hilfeart</label>
-              <select id="Hilfeart">
-                <option value="§ 13 Abs. 3 SGB VIII - Jugendsozialarbeit">Jugendsozialarbeit - § 13 Abs. 3 SGB VIII</option>
-                <option value="§ 18 SGB VIII - Begleiteter Umgang">Begleiteter Umgang - § 18 SGB VIII</option>
-                <option value="§ 27 (2) SGB VIII - Clearing">Clearing - § 27 (2) SGB VIII</option>
-                <option value="§ 27 (3) SGB VIII - Aufsuchende Familientherapie (AFT)">Aufsuchende Familientherapie (AFT) - § 27 (3) SGB VIII</option>
-                <option value="§ 27 SGB VIII - Heimerziehung als sonstige betreute Wohnform">Heimerziehung als sonstige betreute Wohnform - § 27 SGB VIII</option>
-                <option value="§ 34 SGB VIII - Heimerziehung">Heimerziehung - § 34 SGB VIII</option>
-                <option value="§ 27 SGB VIII - Schnelle Hilfe">Schnelle Hilfe - § 27 SGB VIII</option>
-                <option value="§ 30 SGB VIII - Erziehungsbeistandschaft">Erziehungsbeistandschaft - § 30 SGB VIII</option>
-                <option value="§ 31 SGB VIII - Sozialpädagogische Familienhilfe">Sozialpädagogische Familienhilfe - § 31 SGB VIII</option>
-                <option value="§ 35a (2) SGB VIII - Intensive sozialpädagogische Einzelbetreuung">Intensive sozialpädagogische Einzelbetreuung - § 35a (2) SGB VIII</option>
-                <option value="§ 35a SGB VIII - Ambulante Eingliederungshilfe">Ambulante Eingliederungshilfe - § 35a SGB VIII</option>
-                <option value="§ 37a SGB VIII - Beratung und Unterstützung der Pflegeperson">Beratung und Unterstützung der Pflegeperson - § 37a SGB VIII</option>
-                <option value="§ 3 KKG - Bundeskinderschutzgesetz">Bundeskinderschutzgesetz - § 3 KKG</option>
-                <option value="§ 41 SGB VIII - Hilfe für junge Volljährige">Hilfe für junge Volljährige - § 41 SGB VIII</option>
-              </select>
+              <input type="text" id="Hilfeart" placeholder="wird aus Kilanka übernommen">
             </div>
           </div>
           <div class="field-grid">
-            <div class="field"><label>Sachbearbeitung Jugendamt</label><input type="text" id="Sachbearbeitung_JA" placeholder="Name Sachbearbeiter*in"></div>
+            <div class="field"><label>Sachbearbeitung Jugendamt</label><select id="Sachbearbeitung_JA" onchange="sachbearbeitungGeaendert(this)"><option value="">— bitte wählen —</option><option value="__custom__">Anderer Name…</option></select></div>
             <div class="field"><label>Fachkraft 1 (Auswahlliste)</label><select id="Fachkraft_NeueWege" onchange="updateFachkraftName()"><option value="">Wird geladen...</option></select></div>
           </div>
           <div class="field-grid" id="einrichtungRow" style="display:none;">
@@ -336,7 +331,7 @@
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
             <div class="field"><label>Stunden bewilligt</label><input type="number" inputmode="decimal" step="any" id="Fachleistungsstunden" placeholder="z.B. 115" style="font-size:12px; padding:6px 8px;"></div>
-            <div class="field"><label>Kontingenttyp</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Woche</option><option>Monat</option><option>Pool</option></select></div>
+            <div class="field"><label>Kontingenttyp</label><select id="Stunden_Typ" style="font-size:12px; padding:6px 8px;"><option value="">— bitte wählen —</option><option>Wochenstunden</option><option>Monatsstunden</option><option>Monatsstunden (30 Tage pro Monat)</option><option>Poolstunden</option></select></div>
           </div>
 
         </div>
@@ -410,14 +405,6 @@
           <div class="card-title">6 | Perspektive & Empfehlung der Fachkraft</div>
           <div class="field-grid full"><div class="field"><textarea id="Fachliche_Einschaetzung" style="min-height:140px;" placeholder="Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf..."></textarea></div></div>
         </div>
-        <div class="card">
-          <div class="card-title">Unterschrift</div>
-          <div class="field-grid triple">
-            <div class="field"><label>Ort</label><input type="text" id="Ort" value="Wolnzach"></div>
-            <div class="field"><label>Datum</label><input type="date" id="Datum_Unterschrift"></div>
-          </div>
-          <div id="unterschriftFachkraefte"></div>
-        </div>
         </div>
         <div class="btn-row"><button class="btn btn-secondary" onclick="navGoTo(currentBerichtstyp==='stationaer'?3:4)">← Zurück</button><button class="btn btn-primary" onclick="goToNext(6)">Zur Übersicht →</button></div>
       </div>
@@ -426,13 +413,25 @@
       <div class="section" id="s6">
         <div class="section-title" id="s6_title">Bericht absenden</div>
         <div class="section-sub">Zusammenfassung prüfen und Dokument speichern</div>
+        <div class="card" id="unterschriftCard">
+          <div class="card-title">Unterschrift</div>
+          <div class="field-grid triple">
+            <div class="field"><label>Ort</label><input type="text" id="Ort" value="Wolnzach"></div>
+            <div class="field"><label>Datum</label><input type="date" id="Datum_Unterschrift"></div>
+          </div>
+          <div id="unterschriftFachkraefte"></div>
+          <div style="margin-top:6px;">
+            <button class="btn-add" id="btnAddUnterschrift" onclick="addUnterschriftFachkraft()">+ Fachkraft hinzufügen</button>
+          </div>
+        </div>
         <div class="card" id="summaryCard">
           <div class="card-title">Zusammenfassung</div>
           <div id="summaryContent"></div>
         </div>
         <div id="statusBar" style="display:none"></div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch;">
-          <button class="btn btn-secondary" onclick="downloadLocal()">↓ Exportieren</button>
+          <button class="btn btn-secondary" onclick="saveEntwurf()" id="btnSaveEntwurf">💾 Entwurf speichern</button>
+          <button class="btn btn-secondary" id="btnPdfNeu" onclick="erzeugeBerichtPdf()">📄 PDF-Vorschau</button>
           <button class="btn btn-success" id="btnUpload" onclick="uploadToSharePoint()">↑ Freigabe anfordern</button>
         </div>
         <!-- TL-Prüfmodus -->
@@ -446,6 +445,7 @@
           <!-- Bereits angenommen von jemand anderem -->
           <div id="tlAndererPruefer" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:var(--radius-lg); padding:0.75rem 1.25rem; margin-bottom:10px;">
             <div style="font-size:12px; color:var(--info);">ℹ Dieser Bericht wird bereits geprüft von: <strong id="tlAndererPrueferName"></strong></div>
+            <button class="btn btn-secondary" id="btnTlUebernehmen" onclick="tlUebernehmenHier()" style="display:none; margin-top:8px; min-height:38px; font-size:12px;">↪ Prüfung übernehmen (Vertretung)</button>
           </div>
           <!-- Aktions-Buttons (nur wenn angenommen) -->
           <div id="tlAktionen" style="display:none; background:var(--accent-light); border:1px solid #e8c4a8; border-radius:var(--radius-lg); padding:1rem 1.25rem;">
@@ -470,12 +470,9 @@
         </div>
         <div id="normalActions">
         </div>
-        <div class="btn-row">
-          <button class="btn btn-secondary" onclick="navGoTo(5)">← Zurück</button>
-          <div style="display:flex; gap:8px;">
-            <button class="btn btn-secondary" onclick="saveEntwurf()" id="btnSaveEntwurf">💾 Entwurf speichern</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
-          </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin-top:10px;">
+          <button class="btn btn-secondary" onclick="navGoTo(currentBerichtstyp==='monat'?3:5)">← Zurück</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
         </div>
       </div>
 
@@ -512,25 +509,81 @@
 
 <script>
 // ─── FESTE KONFIGURATION ──────────────────────────────────────────────────────
-// Dynamische Basis-URL — funktioniert auf GitHub Pages und apps.praxisneuewege.de
-const APP_BASE_URL = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+// Basis-URL einschliesslich Dateiname. Der Dateiname MUSS erhalten bleiben:
+// ohne ihn zeigen alle Freigabe- und Korrektur-Links auf das Verzeichnis, der Server
+// liefert dort index.html — also die Produktionsfassung. Ein in der Beta begonnener
+// Vorgang wurde dadurch ab der Freigabe in der Produktion fortgesetzt und auch dort
+// zum Word-Dokument gerendert.
+const APP_BASE_URL = window.location.origin + window.location.pathname;
 
 const CONFIG = {
   clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
   tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev',
+  apiScope: 'api://f7e00950-2421-43b5-b48a-447bf8e7d4b3/access_as_user',
   redirectUri: (function() {
     // Dynamisch: funktioniert sowohl auf peltzm.github.io als auch auf apps.praxisneuewege.de
     const h = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
     return h.endsWith('/') ? h : h + '/';
   })(),
   siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com',
-  templatePath: '/Templates/Verlaufsbericht_Template.docx',
   outputFolder: '/Verlaufsberichte',
-  listName: 'Verlaufsberichte_Entwuerfe',
-  siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com'
+  listName: 'Verlaufsberichte_Entwuerfe'
 };
 
-const APP_VERSION = 'v5df0015'; // auto-updated on deploy
+/* ═══════════════════════════════════════════════════════════════════════
+ * VERSIONSPRUEFUNG — gegen veraltete Browser-Caches
+ *
+ * GitHub Pages liefert HTML mit einer Cache-Vorgabe von rund 10 Minuten aus,
+ * Browser halten die Seite oft deutlich laenger. Folge: Nach einem Deploy
+ * arbeiten Kolleginnen und Kollegen unbemerkt mit einer alten Fassung — genau
+ * das hat die Fehlersuche beim verschwundenen Bericht unnoetig verlaengert.
+ *
+ * Geprueft wird gegen die Datei selbst: sie wird mit no-store erneut abgerufen
+ * und die dort hinterlegte APP_VERSION mit der laufenden verglichen. Bewusst kein
+ * separates version.json — ein zweiter Pflegeort laeuft frueher oder spaeter
+ * auseinander und laesst den Hinweis dann dauerhaft stehen.
+ * ═══════════════════════════════════════════════════════════════════════ */
+async function ladeEigenenQuelltext(nurAnfang) {
+  const opt = { cache: 'no-store' };
+  if (nurAnfang) opt.headers = { Range: 'bytes=0-131071' };
+  const r = await fetch(location.pathname + '?t=' + Date.now(), opt);
+  return r.ok ? await r.text() : '';
+}
+
+function leseVersionAusQuelltext(html) {
+  // Suchmuster bewusst zusammengesetzt, damit diese Zeile sich nicht selbst trifft
+  const m = html && html.match(new RegExp('APP_VER' + "SION\\s*=\\s*'([^']+)'"));
+  return m ? m[1] : null;
+}
+
+async function pruefeAufNeueVersion() {
+  try {
+    let v = leseVersionAusQuelltext(await ladeEigenenQuelltext(true));
+    if (!v) v = leseVersionAusQuelltext(await ladeEigenenQuelltext(false));
+    if (!v || v === APP_VERSION) return;
+    const bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed; left:0; right:0; bottom:0; z-index:9999; background:#7b3f1e;'
+      + 'color:#fff; padding:10px 16px; font-size:13px; display:flex; align-items:center;'
+      + 'justify-content:center; gap:14px; box-shadow:0 -2px 8px rgba(0,0,0,.18);';
+    bar.innerHTML = '<span>Neue Version verf\u00fcgbar (' + v + ') \u2014 diese Ansicht ist veraltet.</span>';
+    const btn = document.createElement('button');
+    btn.textContent = 'Jetzt neu laden';
+    btn.style.cssText = 'background:#fff; color:#7b3f1e; border:none; border-radius:6px;'
+      + 'padding:6px 14px; font-size:13px; font-weight:600; cursor:pointer;';
+    btn.onclick = () => {
+      const u = new URL(location.href);
+      u.searchParams.set('v', v);   // erzwingt einen Abruf am Cache vorbei
+      location.replace(u.toString());
+    };
+    bar.appendChild(btn);
+    document.body.appendChild(bar);
+  } catch (e) {
+    console.warn('Versionspruefung nicht moeglich:', e.message);
+  }
+}
+
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -542,6 +595,7 @@ function applyVersionBadge() {
   document.querySelectorAll('#versionBadge, #versionBadgeStart').forEach(el => {
     if (el) el.textContent = APP_VERSION;
   });
+  pruefeAufNeueVersion();
 }
 
 async function initMsal() {
@@ -555,11 +609,6 @@ async function initMsal() {
     system: { allowNativeBroker: false }
   };
   msalInstance = new msal.PublicClientApplication(msalConfig);
-  // Deeplink (?review/?sonja/?edit/?typ) sichern — geht beim MSAL-Login-Redirect verloren
-  try {
-    const _q = new URLSearchParams(window.location.search);
-    if (_q.get('review') || _q.get('sonja') || _q.get('edit')) sessionStorage.setItem('pnw_bg_deeplink', window.location.search);
-  } catch(e) {}
   applyVersionBadge();
   await msalInstance.initialize();
   try {
@@ -651,6 +700,317 @@ async function getToken() {
   }
 }
 
+// ─── KILANKA-INTEGRATION (BETA) ──────────────────────────────────────────────
+let _kilankaKlienten = [];
+let _kilankaAemter = [];          // [{lang, kurz}] aller Jugendämter aus Kilanka
+let _kilankaLadePromise = null;   // damit loadDraft auf die Klientenliste warten kann
+let _kilankaAktuell = null;       // { id, massnahme } des Klienten, aus dem der offene Bericht vorbefüllt wurde
+let _kilankaBetreuerListe = null; // Namen der Maßnahmen-Betreuer (HB/MB/V) — schränkt Fachkraft-Selects ein
+let _kilankaQualiListe = null;    // In Kilanka vergebene Qualifikationen — ersetzt QUALI1_OPTS
+
+function _restrictFachkraftSelect(id) {
+  const el = document.getElementById(id);
+  if (!el || !_kilankaBetreuerListe || !_kilankaBetreuerListe.length) return;
+  const cur = el.value;
+  el.innerHTML = '<option value="">— bitte wählen —</option>' +
+    _kilankaBetreuerListe.map(n => '<option value="' + n + '">' + n + '</option>').join('');
+  if (cur && _kilankaBetreuerListe.includes(cur)) el.value = cur;
+}
+
+async function getApiToken() {
+  if (!currentAccount) return null;
+  const req = { scopes: [CONFIG.apiScope], account: currentAccount };
+  try {
+    const r = await msalInstance.acquireTokenSilent(req);
+    return r.accessToken;
+  } catch(e) {
+    if (_popupLikelyWorks()) {
+      try { const r2 = await msalInstance.acquireTokenPopup(req); return r2.accessToken; }
+      catch(e2) { console.warn('API-Token Popup fehlgeschlagen:', e2); }
+    }
+    return null;
+  }
+}
+
+function loadKilankaKlienten(refresh) {
+  _kilankaLadePromise = _loadKilankaKlienten(refresh);
+  return _kilankaLadePromise;
+}
+
+async function _loadKilankaKlienten(refresh) {
+  const sel = document.getElementById('kilankaKlient');
+  const status = document.getElementById('kilankaStatus');
+  if (!sel || !status) return;
+  status.textContent = refresh ? 'Kilanka-Daten werden neu abgerufen…' : 'Klienten werden aus Kilanka geladen…';
+  try {
+    const token = await getApiToken();
+    if (!token) { status.textContent = 'Kilanka-Anbindung nicht verfügbar (Token) — Formular manuell ausfüllbar.'; return; }
+    const r = await fetch(CONFIG.workerUrl + '/api/meine-klienten' + (refresh ? '?refresh=1' : ''), {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      status.textContent = 'Kilanka-Abruf fehlgeschlagen (' + r.status + (err.error ? ': ' + err.error : '') + ') — Formular manuell ausfüllbar.';
+      return;
+    }
+    const d = await r.json();
+    _kilankaKlienten = d.klienten || [];
+    if (Array.isArray(d.qualifikationen) && d.qualifikationen.length) _kilankaQualiListe = d.qualifikationen;
+    if (Array.isArray(d.aemter)) _kilankaAemter = d.aemter;
+    if (typeof jugendamtAufKurznameUmstellen === 'function') jugendamtAufKurznameUmstellen();   // offenes Formular nachziehen
+    // Doppelte Anzeigenamen (mehrere Maßnahmen) erkennen -> Maßnahme im Label zeigen
+    const nameCount = {};
+    _kilankaKlienten.forEach(k => { nameCount[k.anzeigeName] = (nameCount[k.anzeigeName] || 0) + 1; });
+    sel.innerHTML = '<option value="">— ohne Vorbefüllung starten —</option>';
+    _kilankaKlienten.forEach((k, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      // Beendete Maßnahmen bleiben wählbar (Abschlussberichte), werden aber gekennzeichnet
+      const beendet = k.aktiv === false
+        ? ' · beendet' + (k.Hilfe_Ende ? ' ' + new Date(k.Hilfe_Ende).toLocaleDateString('de-DE', {month:'2-digit', year:'numeric'}) : '')
+        : '';
+      opt.textContent = k.anzeigeName + ' · ' + k.rolleKurz +
+        (nameCount[k.anzeigeName] > 1 ? ' · ' + (k.massnahme?.name || 'Maßnahme') : '') + beendet;
+      sel.appendChild(opt);
+    });
+    const aktiv = _kilankaKlienten.filter(k => k.aktiv !== false).length;
+    status.textContent = _kilankaKlienten.length
+      ? _kilankaKlienten.length + ' Zuordnungen (HB/MB/V)' + (aktiv < _kilankaKlienten.length ? ', davon ' + aktiv + ' laufend' : '') +
+        ' · Stand: ' + new Date(d.stand).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) + ' Uhr'
+      : 'Keine Zuordnungen in Kilanka gefunden — Formular manuell ausfüllbar.';
+  } catch(e) {
+    status.textContent = 'Kilanka nicht erreichbar — Formular manuell ausfüllbar.';
+    console.warn('Kilanka:', e);
+  }
+}
+
+function _mapBeziehung(kindName) {
+  const s = (kindName || '').toLowerCase();
+  if (/mutter|mama/.test(s)) return 'Mutter';
+  if (/vater|papa/.test(s)) return 'Vater';
+  if (/eltern/.test(s) && /stief/.test(s)) return 'Stiefeltern';
+  if (/eltern/.test(s)) return 'Eltern';
+  if (/gro(ß|ss)|oma|opa/.test(s)) return 'Großeltern';
+  if (/betreuer|vormund|pfleger/.test(s)) return 'Betreuer';
+  if (/jugendamt|amtsvormund/.test(s)) return 'Jugendamt';
+  return kindName || '';
+}
+
+function _setVal(id, val) {
+  const el = document.getElementById(id);
+  if (!el || val == null || val === '') return;
+  // Einzeilige Inputs: Zeilenumbrueche (z.B. aus Kilanka-Stammdaten) in Leerzeichen
+  // wandeln — Browser entfernen sie sonst kommentarlos und kleben die Werte zusammen.
+  if (el.tagName === 'INPUT' && typeof val === 'string') val = val.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  el.value = val;
+}
+
+function _setSelect(id, val) {
+  const el = document.getElementById(id);
+  if (!el || !val) return;
+  let opt = Array.from(el.options).find(o => o.value === val || o.text === val);
+  if (!opt) { opt = document.createElement('option'); opt.textContent = val; el.appendChild(opt); }
+  el.value = opt.value || opt.textContent;
+}
+
+// Nach dem Laden eines Entwurfs: Stammdaten aus Kilanka ergänzen. Nur LEERE Felder
+// werden befüllt (gespeicherte Werte bleiben), die Auswahlliste der Sachbearbeitung
+// wird immer bereitgestellt. Der Klient wird über die gespeicherte Kilanka-ID gefunden,
+// bei Altbestand über Name + Geburtsdatum. Kein Treffer (z. B. TL ohne eigene
+// Zuordnung) → keine Änderung.
+// Auswahlliste "Sachbearbeitung Jugendamt" aufbauen. Reihenfolge: aktueller Ansprechpartner
+// aus Kilanka, dann alle weiteren des Amts. Ein bereits gesetzter Wert bleibt erhalten;
+// ist das Feld leer, wird der aktuelle Ansprechpartner vorbelegt.
+function setzeSachbearbeitungListe(aktuellKilanka, weitere) {
+  const el = document.getElementById('Sachbearbeitung_JA');
+  if (!el) return;
+  const vorher = el.value && el.value !== '__custom__' ? el.value : '';
+  const namen = [aktuellKilanka, ...(weitere || []), vorher].filter((n, i, a) => n && a.indexOf(n) === i);
+  const esc = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  el.innerHTML = '<option value="">— bitte wählen —</option>' +
+    namen.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
+    '<option value="__custom__">Anderer Name…</option>';
+  el.value = vorher || aktuellKilanka || '';
+}
+
+// "Anderer Name…": Freitext erfassen und als Option übernehmen (Berichte ohne Kilanka-Zuordnung)
+function sachbearbeitungGeaendert(el) {
+  if (el.value !== '__custom__') return;
+  const name = (prompt('Name der Sachbearbeitung (Nachname, Vorname):') || '').trim();
+  if (name) { el.add(new Option(name, name), el.options.length - 1); el.value = name; }
+  else el.value = '';
+  if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+}
+
+// Jugendamt-Wert auf den Kilanka-Kurznamen abbilden. Vergleich unempfindlich gegen
+// Zeilenumbrüche, Mehrfach-Leerzeichen, Gedankenstrich-Varianten und Groß-/Kleinschreibung.
+function jugendamtKurzname(wert) {
+  const glatt = v => String(v || '').replace(/[\u2013\u2014]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+  const w = glatt(wert);
+  if (!w || !_kilankaAemter.length) return '';
+  // 1) exakter Treffer auf Lang- oder Kurzname
+  for (const a of _kilankaAemter) {
+    if (glatt(a.lang) === w || glatt(a.kurz) === w) return a.kurz;
+  }
+  // 2) Altbestand: Bezeichnungen wie "Landratsamt Kelheim - Amt für Jugend und Familie" oder nur
+  //    "Kelheim" (frühere Auswahlliste). Der Kern des Kurznamens (ohne "LA"/"Stadt"/…) muss als
+  //    ganzes Wort im Wert vorkommen; bei mehreren Kandidaten entscheidet der passende Trägertyp
+  //    (LA ↔ Landratsamt, Stadt ↔ Stadt). Bleibt es mehrdeutig, wird nichts geändert.
+  const kern = k => glatt(k).replace(/^(la|lra|landratsamt|stadt|kreis|jobcenter)\s+/, '');
+  const wortIn = (kernwert, text) => kernwert && new RegExp('(^|[^a-zäöüß])' + kernwert.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|[^a-zäöüß])').test(text);
+  let kand = _kilankaAemter.filter(a => wortIn(kern(a.kurz), w));
+  if (kand.length > 1) {
+    const istLA = /^landratsamt\b|^lra\b|^la\b|^kreis/.test(w), istStadt = /^stadt\b/.test(w);
+    const gefiltert = kand.filter(a => istLA ? /^(la|lra|landratsamt)\b/i.test(a.kurz) : istStadt ? /^stadt\b/i.test(a.kurz) : true);
+    if (gefiltert.length) kand = gefiltert;
+  }
+  return kand.length === 1 ? kand[0].kurz : '';
+}
+
+// Feld "Zuständiges Jugendamt" eines geladenen Berichts auf den Kurznamen umstellen
+function jugendamtAufKurznameUmstellen() {
+  const ja = document.getElementById('Jugendamt');
+  if (!ja || !ja.value) return false;
+  const kurz = jugendamtKurzname(ja.value);
+  if (kurz && kurz !== ja.value) { ja.value = kurz; return true; }
+  return false;
+}
+
+async function ergaenzeAusKilanka(data) {
+  try {
+    if (_kilankaLadePromise) await _kilankaLadePromise;
+    // Kurzname unabhängig von der Klientenzuordnung (alle Berichtstypen, auch Altbestand)
+    if (jugendamtAufKurznameUmstellen() && typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    if (!_kilankaKlienten.length) return;
+    const norm = v => String(v || '').trim().toLowerCase();
+    let k = null;
+    if (data._kilankaId) {
+      const treffer = _kilankaKlienten.filter(x => String(x.kilankaId) === String(data._kilankaId));
+      k = treffer.find(x => x.massnahme && x.massnahme.name === data._kilankaMassnahme) || treffer[0] || null;
+    }
+    if (!k) {
+      k = _kilankaKlienten.find(x =>
+        norm(x.Kind_Familienname) === norm(data.Kind_Familienname) &&
+        norm(x.Kind_Vorname) === norm(data.Kind_Vorname) &&
+        (!data.Kind_Geburtsdatum || !x.Kind_Geburtsdatum || x.Kind_Geburtsdatum === data.Kind_Geburtsdatum)
+      ) || null;
+    }
+    if (!k) return;
+    _kilankaAktuell = { id: k.kilankaId || '', massnahme: (k.massnahme && k.massnahme.name) || '' };
+    const ergaenzt = [];
+    const fuelleLeer = (id, val, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.disabled || val == null || val === '' || (el.value || '').trim()) return;
+      _setVal(id, val); ergaenzt.push(label || id);
+    };
+    fuelleLeer('Jugendamt', k.Jugendamt, 'Jugendamt');
+    // Entwürfe, die noch den langen Behördennamen tragen, auf den Kilanka-Kurznamen umstellen
+    { const ja = document.getElementById('Jugendamt');
+      const glatt = v => String(v || '').replace(/\s+/g, ' ').trim();   // Kilanka-Namen enthalten Zeilenumbrüche
+      if (ja && k.Jugendamt && k.Jugendamt_Lang && glatt(ja.value) === glatt(k.Jugendamt_Lang) && glatt(ja.value) !== glatt(k.Jugendamt)) { ja.value = k.Jugendamt; ergaenzt.push('Jugendamt (Kurzname)'); } }
+    fuelleLeer('Hilfeart', k.Hilfeart, 'Hilfeart');
+    fuelleLeer('Hilfebeginn', k.Hilfebeginn, 'Hilfebeginn');
+    fuelleLeer('Hilfe_Ende', k.Hilfe_Ende, 'Hilfe-Ende');
+    fuelleLeer('Naechstes_HPG', k.Naechstes_HPG, 'Nächstes HPG');
+    fuelleLeer('Fachleistungsstunden', k.Fachleistungsstunden, 'Stunden');
+    fuelleLeer('Stunden_Typ', k.Stunden_Typ, 'Kontingenttyp');
+    fuelleLeer('Kind_Geburtsdatum', k.Kind_Geburtsdatum, 'Geburtsdatum');
+    fuelleLeer('Kind_Strasse', k.Kind_Strasse, 'Straße');
+    fuelleLeer('Kind_PLZ_Ort', k.Kind_PLZ_Ort, 'PLZ/Ort');
+
+    // Auswahlliste Sachbearbeitung bereitstellen; leeres Feld mit dem aktuellen Ansprechpartner vorbelegen
+    const sbVorher = document.getElementById('Sachbearbeitung_JA')?.value || '';
+    setzeSachbearbeitungListe(k.Sachbearbeitung_JA, k.Ansprechpartner_JA);
+    if (!sbVorher && document.getElementById('Sachbearbeitung_JA')?.value) ergaenzt.push('Sachbearbeitung');
+    if (ergaenzt.length) {
+      console.info('Aus Kilanka ergänzt:', ergaenzt.join(', '));
+      if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    }
+  } catch(e) { console.warn('Kilanka-Ergänzung übersprungen:', e.message); }
+}
+
+function prefillFromKilanka(k, groupPromise) {
+  if (!k) return;
+  _kilankaAktuell = { id: k.kilankaId || '', massnahme: (k.massnahme && k.massnahme.name) || '' };
+  // S1 — Stammdaten
+  _setVal('Jugendamt', k.Jugendamt);
+  const ha = document.getElementById('Hilfeart');
+  if (ha && !ha.disabled && k.Hilfeart) ha.value = k.Hilfeart; // Clearing-Preset nicht überschreiben
+  { const sb = document.getElementById('Sachbearbeitung_JA'); if (sb) sb.value = ''; }  // neuer Bericht: Kilanka-Wert vorbelegen
+  setzeSachbearbeitungListe(k.Sachbearbeitung_JA, k.Ansprechpartner_JA);
+  _setVal('Hilfebeginn', k.Hilfebeginn);
+  _setVal('Hilfe_Ende', k.Hilfe_Ende);
+  _setVal('Naechstes_HPG', k.Naechstes_HPG);
+  _setVal('BZ_Von', k.Bewilligung_Von);
+  _setVal('BZ_Bis', k.Bewilligung_Bis);
+  if (k.Fachleistungsstunden != null) _setVal('Fachleistungsstunden', k.Fachleistungsstunden);
+  _setSelect('Stunden_Typ', k.Stunden_Typ);
+  // S2 — Kind
+  _setVal('Kind_Vorname', k.Kind_Vorname);
+  _setVal('Kind_Familienname', (k.Kind_Familienname || '').toUpperCase());
+  _setVal('Kind_Geburtsdatum', k.Kind_Geburtsdatum);
+  _setVal('Kind_Strasse', k.Kind_Strasse);
+  _setVal('Kind_PLZ_Ort', k.Kind_PLZ_Ort);
+  if (typeof syncKind1Addr === 'function') syncKind1Addr();
+  // S2 — Sorgeberechtigte
+  const sorg = k.Sorgeberechtigte || [];
+  if (sorg[0]) {
+    _setVal('Sorg_Vorname', sorg[0].vorname);
+    _setVal('Sorg_Familienname', (sorg[0].familienname || '').toUpperCase());
+    _setSelect('Sorg_Beziehung', _mapBeziehung(sorg[0].beziehung));
+  }
+  for (let i = 1; i < Math.min(sorg.length, 5); i++) {
+    addExtraSorg();
+    _setVal('Sorg2_Vorname_' + extraSorgCount, sorg[i].vorname);
+    _setVal('Sorg2_Name_' + extraSorgCount, (sorg[i].familienname || '').toUpperCase());
+    _setSelect('Sorg2_Beziehung_' + extraSorgCount, _mapBeziehung(sorg[i].beziehung));
+  }
+  // S2 — weitere Kinder (Geschwister-Heuristik, ohne Geburtsdatum)
+  for (const kind of (k.WeitereKinder || []).slice(0, 8)) {
+    addExtraKind();
+    _setVal('Kind2_Vorname_' + extraKindCount, kind.vorname);
+    _setVal('Kind2_Name_' + extraKindCount, (kind.familienname || '').toUpperCase());
+  }
+  // Fachkräfte aus Kilanka: HB = Fachkraft 1, Mitbetreuer = weitere.
+  // Erst NACH loadGroupMembers anwenden (das wählt sonst den angemeldeten Nutzer vor).
+  if (Array.isArray(k.Betreuer) && k.Betreuer.length) {
+    const anwenden = () => {
+      // Auswahllisten auf die Betreuer der Maßnahme beschränken (inkl. Vertretungen)
+      _kilankaBetreuerListe = k.Betreuer.map(b => b.name);
+      _restrictFachkraftSelect('Fachkraft_NeueWege');
+      const hb = k.Betreuer.find(b => b.rolle === 'Hauptbetreuer') || k.Betreuer[0];
+      _setSelect('Fachkraft_NeueWege', hb.name);
+      if (typeof updateFachkraftName === 'function') updateFachkraftName();
+      const mbs = k.Betreuer.filter(b => b !== hb && b.rolle === 'Mitbetreuer').slice(0, 3);
+      mbs.forEach(b => {
+        addFachkraft(); // Wrapper unten schränkt die neue Liste automatisch ein
+        _setSelect('Fachkraft_' + (_extraFachkraftCount + 1), b.name);
+      });
+      // Unterschrift-Blöcke neu aufbauen und Qualifikationen aus Kilanka vorwählen
+      if (typeof renderUnterschriftFachkraefte === 'function') renderUnterschriftFachkraefte();
+      if (typeof syncUnterschriftNamen === 'function') syncUnterschriftNamen();
+      // Qualifikation 1 kommt aus der M365-Position (jobTitle), nicht mehr aus Kilanka
+    };
+    const p = groupPromise || (typeof _groupLoadPromise !== 'undefined' ? _groupLoadPromise : null);
+    if (p && typeof p.then === 'function') p.then(anwenden).catch(anwenden);
+    else anwenden();
+  }
+  // Hinweis bei auffälligem Kontingent (abgelaufen / künftig / Typ ungepflegt)
+  if (k.Kontingent_Hinweis) {
+    const fls = document.getElementById('Fachleistungsstunden');
+    if (fls) { fls.title = k.Kontingent_Hinweis; fls.style.borderColor = 'var(--accent-mid)'; }
+    const st = document.getElementById('kilankaStatus');
+    if (st) st.textContent = 'Hinweis Kontingent (' + k.anzeigeName + '): ' + k.Kontingent_Hinweis;
+  }
+}
+
+// addFachkraft umhüllen: neue Selects bei aktiver Kilanka-Auswahl einschränken
+const _origAddFachkraft = addFachkraft;
+addFachkraft = function() {
+  _origAddFachkraft();
+  if (_kilankaBetreuerListe) _restrictFachkraftSelect('Fachkraft_' + (_extraFachkraftCount + 1));
+};
+
 function handleReviewLink() {
   const params = new URLSearchParams(window.location.search);
   const reviewId = params.get('review');
@@ -659,7 +1019,7 @@ function handleReviewLink() {
   const id = reviewId || sonjaId || editId;
   const typ = params.get('typ');
   if (!id || !typ) return false;
-  if (['verlauf','abschluss','clearing','stationaer'].includes(typ)) {
+  if (['verlauf','abschluss','clearing','stationaer','monat'].includes(typ)) {
     selectBerichtstyp(typ);
   }
   if (reviewId || sonjaId) {
@@ -672,17 +1032,6 @@ function handleReviewLink() {
 }
 
 function showApp() {
-  // Deeplink nach Login-Redirect wiederherstellen (URL-Query ging beim Redirect verloren)
-  try {
-    const _saved = sessionStorage.getItem('pnw_bg_deeplink');
-    if (_saved) {
-      sessionStorage.removeItem('pnw_bg_deeplink');
-      const _cur = new URLSearchParams(window.location.search);
-      if (!_cur.get('review') && !_cur.get('sonja') && !_cur.get('edit')) {
-        history.replaceState(null, '', window.location.pathname + _saved);
-      }
-    }
-  } catch(e) {}
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('userBadge').style.display = 'flex';
@@ -692,6 +1041,7 @@ function showApp() {
   if (_siteEl) _siteEl.textContent = CONFIG.siteUrl;
   // Load M365 group members (Promise merken, damit Review-Link darauf warten kann)
   _groupLoadPromise = loadGroupMembers();
+  loadKilankaKlienten();
   _groupLoadPromise.catch(e => { console.warn('Group load failed:', e); });
   // Nach Gruppenladen: Status Berichte Nav-Item für TL einblenden
   _groupLoadPromise.then(() => {
@@ -705,14 +1055,16 @@ function showApp() {
     }
   }).catch(() => {});
   // Check if opened via review link
-  setTimeout(() => { if (!handleReviewLink()) { /* normal flow */ } }, 500);
+  setTimeout(() => { if (pruefeExportAufruf()) return; if (!handleReviewLink()) { /* normal flow */ } }, 500);
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
 // "Weiter"-Navigation: Seite wechseln und Stand still als Entwurf sichern
 function goToNext(n) {
-  // Bei stationaer S4 (Hilfeplanziele) überspringen
-  const skip = (currentBerichtstyp === 'stationaer' && n === 4) ? 5 : n;
+  // Seiten ohne Inhalt überspringen: stationaer ohne S4, Monatsbericht ohne S4 und S5
+  let skip = n;
+  if (currentBerichtstyp === 'stationaer' && n === 4) skip = 5;
+  if (currentBerichtstyp === 'monat' && (n === 4 || n === 5)) skip = 6;
   goTo(skip);
   clearTimeout(_autoSaveTimer);
   autoSaveDraft();
@@ -819,6 +1171,7 @@ function enableSpellcheck() {
 }
 
 function goTo(n) {
+  if (currentBerichtstyp === 'monat' && (n === 4 || n === 5)) n = 6;
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
   const section = document.getElementById('s' + n);
@@ -834,8 +1187,8 @@ function goTo(n) {
     if (main) main.style.maxWidth = '';
   }
   if (n === 3 || n === 4 || n === 5) buildDynamicSections(false);
-  // Seite 5: Unterschrift-Block an die aktuelle Fachkraft-Anzahl anpassen + Namen übernehmen
-  if (n === 5 && document.getElementById('unterschriftFachkraefte')) {
+  // Seite 6 (Absenden): Unterschriftenbereich aktualisieren (Auswahllisten) + Zeile 1 vorbelegen
+  if (n === 6 && document.getElementById('unterschriftFachkraefte')) {
     renderUnterschriftFachkraefte();
     syncUnterschriftNamen();
   }
@@ -843,16 +1196,13 @@ function goTo(n) {
   if (n === 6) {
     buildSummary();
   }
-  // Update template info
-  const tplEl = document.getElementById('infoTemplate');
-  if (tplEl) tplEl.textContent = CONFIG.templatePath || '—';
   // Update section titles with Berichtstyp
   updateSectionTitles();
   window.scrollTo(0,0);
 }
 
 function updateSectionTitles() {
-  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'};
+  const labels = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'};
   const typ = labels[currentBerichtstyp] || 'Verlaufsbericht';
   const staticTitles = {
     's1_title': 'Stammdaten',
@@ -1025,6 +1375,14 @@ function collectData() {
   ids.forEach(id => { const el = document.getElementById(id); data[id] = el ? el.value : ''; });
   // Collect extra Kinder and Sorgeberechtigte
   data._extraKinder = collectExtraKinder();
+  // Jugendamt konsequent als Kilanka-Kurzname — auch wenn das Feld (Altbestand, manuelle Eingabe)
+  // noch den langen Namen trägt. Wirkt auf Speichern, Zusammenfassung und PDF.
+  if (data.Jugendamt && typeof jugendamtKurzname === 'function') {
+    const kurz = jugendamtKurzname(data.Jugendamt);
+    if (kurz && kurz !== data.Jugendamt) { data.Jugendamt = kurz; const el = document.getElementById('Jugendamt'); if (el) el.value = kurz; }
+  }
+  // Kilanka-Zuordnung mitschreiben, damit ein Entwurf später seinen Klienten wiederfindet
+  if (_kilankaAktuell && _kilankaAktuell.id) { data._kilankaId = _kilankaAktuell.id; data._kilankaMassnahme = _kilankaAktuell.massnahme; }
   data._extraSorg = collectExtraSorg();
   // Extras zusätzlich als flache Tokens für die Templates bereitstellen
   // (z.B. {{Kind2_Vorname_1}}, {{Sorg2_Beziehung_1}})
@@ -1046,13 +1404,17 @@ function collectData() {
     data[`Sorg2_Name_${i+1}`] = s.name || '';
     data[`Sorg2_Beziehung_${i+1}`] = s.beziehung || '';
   });
-  // Sorg-Merge fuer Templates: siehe withMergedSorgTokens() — nicht mehr destruktiv hier.
+  // Hinweis: Die fruehere Zusammenfuehrung aller Sorgeberechtigten in Sorg_Vorname/
+  // Sorg_Familienname (DOCX-Template-Altlast) wurde entfernt. Sie zerstoerte beim
+  // Speichern/Neuladen die Einzelwerte (Inputs entfernen \n -> "FranciscaJuergen").
+  // Das PDF baut die Liste selbst aus Sorg_* + _extraSorg (alleSorg()).
   // TL-Kommentare mitpersistieren
   data._tlKommentare = _tlKommentare;
   // Dokumentversion mitpersistieren
   data._version = currentVersion || 0;
   // PDF-Anhang (Clearingbericht) mitpersistieren — nur Metadaten, kein Base64 (zu groß für SharePoint-Liste)
   data._anhangName = _anhangPDF ? _anhangPDF.name : null;
+  data._anhangTitel = _anhangPDF ? (_anhangPDF.titel || '') : null;
   // Unterschrift-Fachkräfte: Name + Qualifikationen als flache Tokens
   // (Quali2 = Freitext, falls "Andere…" gewählt)
   for (let i = 1; i <= 4; i++) {
@@ -1102,6 +1464,11 @@ function collectData() {
 }
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
+// ISO-Datum (JJJJ-MM-TT) → TT.MM.JJJJ fuer die Anzeige; andere Werte unveraendert
+function _deDatum(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : (v || '');
+}
 function buildSummary() {
   const d = collectData();
   const kind = (d.Kind_Vorname + ' ' + d.Kind_Familienname).trim() || '—';
@@ -1112,7 +1479,7 @@ function buildSummary() {
   document.getElementById('summaryContent').innerHTML = `
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:6px;">
       ${[['Kind/Jugendliche*r',kind],['Jugendamt',d.Jugendamt||'—'],['Fachkraft',d.Fachkraft_NeueWege||'—'],
-         ['Hilfebeginn',d.Hilfebeginn||'—'],['Hilfeart',formatHilfeart(d.Hilfeart)||'—'],['Datum',d.Datum_Unterschrift||'—']]
+         ['Hilfebeginn',_deDatum(d.Hilfebeginn)||'—'],['Hilfeart',formatHilfeart(d.Hilfeart)||'—'],['Datum',_deDatum(d.Datum_Unterschrift)||'—']]
         .map(([l,v]) => `<div style="background:var(--bg);border-radius:6px;padding:8px 10px;">
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;">${l}</div>
           <div style="font-size:13px;">${escHtml(v)}</div></div>`).join('')}
@@ -1123,109 +1490,6 @@ function buildSummary() {
   if (_infoSiteEl) _infoSiteEl.textContent = siteDisplay || '— bitte konfigurieren';
 }
 
-// ─── TEMPLATE BEFÜLLEN ────────────────────────────────────────────────────────
-async function fillTemplate(templateBytes, data) {
-  // Kopie, damit der gespeicherte Wert unangetastet bleibt; Hilfeart für die Ausgabe drehen.
-  data = { ...data };
-  if (data.Hilfeart) data.Hilfeart = formatHilfeart(data.Hilfeart);
-  const zip = await JSZip.loadAsync(templateBytes);
-  let xml = await zip.file('word/document.xml').async('string');
-
-  // Word zerlegt Tokens oft in mehrere <w:r>/<w:t>-Fragmente (z.B. durch Bearbeitung
-  // oder Rechtschreibprüfung), sodass "{{Kind_Familienname}}" im XML nicht am Stück steht.
-  // Vorbehandlung: Innerhalb jedes Absatzes (<w:p>) die Token-Klammern wieder zusammenführen,
-  // indem die dazwischenliegenden XML-Tags entfernt werden – aber NUR zwischen {{ und }}.
-  xml = repairSplitTokens(xml);
-
-  // Optionale Blöcke ({{#Name}}…{{/Name}}) auflösen: leere Blöcke (z.B. nicht
-  // belegte Ziele) komplett entfernen, statt nur deren Tokens — sonst blieben
-  // die festen Überschriften ("Ziel 3", "Methoden…") als leere Abschnitte stehen.
-  xml = processConditionalBlocks(xml, data);
-
-  for (const [key, value] of Object.entries(data)) {
-    // ISO-Datum (yyyy-mm-dd) ins deutsche Kurzformat dd.mm.yy umwandeln.
-    // Datumsfelder kommen aus <input type="date"> immer als "2026-04-01".
-    let v = value;
-    if (typeof v === 'string') {
-      const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (m) v = `${m[3]}.${m[2]}.${m[1].slice(2)}`;
-    }
-    // Sonderzeichen maskieren, dann Zeilenumbrüche aus den Textfeldern in echte
-    // Word-Umbrüche (<w:br/>) umsetzen — ein literales "\n" im <w:t> erzeugt sonst
-    // keinen Umbruch und der Text läuft im Dokument zu einem Block zusammen.
-    const safe = String(v == null ? '' : v)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/\r\n?/g,'\n')
-      .split('\n').join('</w:t><w:br/><w:t xml:space="preserve">');
-    xml = xml.split('{{'+key+'}}').join(safe);
-  }
-  // Im Datensatz nicht belegte Tokens entfernen (z.B. ungenutzte Kind2-/Sorg2-Slots),
-  // damit keine {{...}}-Platzhalter im fertigen Dokument sichtbar bleiben.
-  // Bewusst eng gefasst auf token-artige Namen (Wortzeichen/Punkt/Bindestrich),
-  // um echten Fließtext mit geschweiften Klammern nicht zu beschädigen.
-  // Auch verwaiste Blockmarker ({{#Name}}/{{/Name}} ohne Gegenstück) mitentfernen —
-  // sonst bleibt z.B. ein einzelnes {{#Fachkraft2}} im Dokument sichtbar.
-  xml = xml.replace(/\{\{\s*[#\/]?[\w.\-]+\s*\}\}/g, '');
-  zip.file('word/document.xml', xml);
-  return await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-}
-
-// Optionale Template-Blöcke verarbeiten.
-// Konvention: ein Block wird mit {{#Name}} … {{/Name}} markiert (Marker liegen im
-// Text der ersten bzw. letzten Zeile des Blocks). Enthält KEINES der im Block
-// referenzierten Tokens einen nicht-leeren Wert, wird der gesamte Block inkl. der
-// umschließenden Absätze entfernt. Andernfalls bleiben nur die Marker-Zeichen weg.
-// Generisch: funktioniert für Ziele und jeden künftigen optionalen Block.
-function processConditionalBlocks(xml, data) {
-  const names = [...xml.matchAll(/\{\{#([\w.\-]+)\}\}/g)].map(m => m[1]);
-  for (const name of names) {
-    const region = xml.match(new RegExp('\\{\\{#' + name + '\\}\\}([\\s\\S]*?)\\{\\{/' + name + '\\}\\}'));
-    if (!region) continue;
-    const tokens = [...region[1].matchAll(/\{\{([\w.\-]+)\}\}/g)].map(t => t[1]);
-    const hasContent = tokens.some(t => String(data[t] == null ? '' : data[t]).trim() !== '');
-    if (hasContent) {
-      // Block behalten: nur die beiden Marker-Zeichenfolgen entfernen
-      xml = xml.replace('{{#' + name + '}}', '').replace('{{/' + name + '}}', '');
-    } else {
-      // Block entfernen: vom <w:p> mit dem Start-Marker bis zur </w:p> nach dem End-Marker
-      const block = new RegExp(
-        '<w:p\\b[^>]*>(?:(?!</w:p>)[\\s\\S])*?\\{\\{#' + name +
-        '\\}\\}[\\s\\S]*?\\{\\{/' + name + '\\}\\}(?:(?!</w:p>)[\\s\\S])*?</w:p>'
-      );
-      xml = xml.replace(block, '');
-    }
-  }
-  return xml;
-}
-
-// Fügt Tokens zusammen, die Word über mehrere Text-Runs verteilt hat.
-// Sucht "{{ ... }}"-Bereiche, in denen XML-Tags zwischen den Zeichen stehen,
-// und entfernt diese Tags, sodass der reine Token-Text übrig bleibt.
-function repairSplitTokens(xml) {
-  // Schritt 1: Alle <w:t>-Textsegmente eines möglichen Tokens zusammenziehen.
-  // Wir scannen nach "{{" und führen bis zum passenden "}}" alle <w:t>-Inhalte zusammen,
-  // wobei sämtliche dazwischenliegenden XML-Tags (Run-Wechsel, proofErr, etc.) entfernt werden.
-  // Vorgehen: zeichenweiser Parser, der außerhalb von Tags den sichtbaren Text verfolgt.
-  // Einfacher und robust: ersetze Sequenzen "{" + (Tags)* + "{" zu "{{" und analog für "}}"
-  // sowie Buchstaben/Unterstriche, die durch Tags getrennt sind, innerhalb eines Tokens.
-
-  // Wir arbeiten nur an Stellen, wo "{" vorkommt, um den Rest des Dokuments nicht anzutasten.
-  // Strategie: Finde "{{" (ggf. fragmentiert) ... "}}" (ggf. fragmentiert) und säubere den Bereich.
-
-  // 1) Fragmentierte öffnende/schließende Klammern normalisieren: "{" <tags> "{" -> "{{"
-  const tagsBetween = '(?:<[^>]*>)*';
-  xml = xml.replace(new RegExp('\\{' + tagsBetween + '\\{', 'g'), '{{');
-  xml = xml.replace(new RegExp('\\}' + tagsBetween + '\\}', 'g'), '}}');
-
-  // 2) Innerhalb von {{ ... }} alle XML-Tags entfernen, sodass der Tokenname zusammenhängend wird.
-  //    Begrenzung: nur bis zum nächsten "}}", keine gierige Übernahme über Tokengrenzen hinweg.
-  xml = xml.replace(/\{\{([\s\S]*?)\}\}/g, (m, inner) => {
-    const clean = inner.replace(/<[^>]*>/g, '');           // XML-Tags raus
-    return '{{' + clean + '}}';
-  });
-
-  return xml;
-}
 
 // ─── GRAPH API HELPERS ────────────────────────────────────────────────────────
 async function getSiteAndDrive() {
@@ -1244,29 +1508,103 @@ async function getSiteAndDrive() {
   return { token, siteId: site.id, driveId: drive.id };
 }
 
-async function fetchTemplate() {
-  const { token, driveId } = await getSiteAndDrive();
-  const resp = await fetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.templatePath}:/content`, { headers: { Authorization: 'Bearer '+token } });
-  if (!resp.ok) throw new Error('Template nicht gefunden: ' + CONFIG.templatePath);
-  return await resp.arrayBuffer();
+// ─── BACKUP: alle Listeneinträge als JSON herunterladen (?export=1) ───
+// Vollständiger Wiederherstellungspunkt vor Umstellungen: jedes Element mit allen
+// Spalten inkl. FormularDaten. Läuft im Browser mit dem Token der angemeldeten Person.
+async function berichteExportieren() {
+  const token = await getToken();
+  const { siteId, listId } = await getGraphListIds();
+  const items = [];
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200`;
+  while (url) {
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Listenabruf fehlgeschlagen: ' + r.status);
+    const d = await r.json();
+    (d.value || []).forEach(it => items.push({ id: it.id, created: it.createdDateTime, modified: it.lastModifiedDateTime, fields: it.fields }));
+    url = d['@odata.nextLink'] || null;
+  }
+  const stand = new Date();
+  const name = `Backup_${CONFIG.listName}_${stand.toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+  const blob = new Blob([JSON.stringify({ liste: CONFIG.listName, stand: stand.toISOString(), anzahl: items.length, items }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  return { name, anzahl: items.length };
+}
+
+function pruefeExportAufruf() {
+  if (new URLSearchParams(window.location.search).get('export') !== '1') return false;
+  berichteExportieren()
+    .then(r => alert(`Backup erstellt: ${r.name}\n${r.anzahl} Einträge aus „${CONFIG.listName}".`))
+    .catch(e => alert('Backup fehlgeschlagen:\n\n' + (e && e.message ? e.message : e)));
+  return true;
+}
+
+
+
+// ─── PDF-ERZEUGUNG (ersetzt den Word-Template-Pfad) ───────────────────────────
+// Der Bericht wird vollstaendig im Browser mit pdfmake gerendert (Layout in
+// buildBerichtDocDefinition, Schrift Kodchasan aus assets/fonts). Es gibt kein
+// Word-Zwischenformat mehr; die Graph-Konvertierung docx→pdf entfaellt.
+// Persistenz der Inhalte bleibt das FormularDaten-JSON in der SharePoint-Liste.
+
+// Einheitlicher Dateiname: <Praefix>_<Nachname>_<Vo>_<JJMM>[_vN].pdf
+function berichtsDateiname(data, version) {
+  const _datum = data.Datum_Unterschrift || '';
+  const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
+  const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
+  const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
+  const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
+  const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[currentBerichtstyp] || 'VB';
+  const v = version ? `_v${version}` : '';
+  return `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}${v}.pdf`;
+}
+
+// Liefert die PDF-Bytes des Berichts.
+//   opts.freigegebenVon  Name der freigebenden Person (nur beim finalen PDF)
+//   opts.mitAnhang       Anhang-PDF an den Bericht anhaengen
+async function erzeugePdfBytes(data, opts) {
+  opts = opts || {};
+  if (typeof pdfMake === 'undefined') throw new Error('PDF-Bibliothek nicht geladen (CDN blockiert?)');
+  const assets = await _ladePdfAssets();
+  pdfMake.vfs = assets.vfs;
+  pdfMake.fonts = assets.fonts;
+  const d = { ...data };
+  if (d.Hilfeart) d.Hilfeart = formatHilfeart(d.Hilfeart);
+  if (!Array.isArray(d._ziele)) d._ziele = collectZiele() || _zieleSnapshot || [];
+  const typ = currentBerichtstyp || 'verlauf';
+  const dd = buildBerichtDocDefinition(typ, d, {
+    logoDataUrl: assets.logo,
+    freigegebenVon: opts.freigegebenVon || '',
+    freigabeLeitung: opts.freigabeLeitung || '',   // Teamleitung, die inhaltlich freigegeben hat (Unterschriftenblock)
+    anhang: _anhangPDF ? { titel: _anhangPDF.titel || '', name: _anhangPDF.name } : null,
+  });
+  let bytes = new Uint8Array(await new Promise(res => pdfMake.createPdf(dd).getBuffer(res)));
+  if (opts.mitAnhang && _anhangPDF) bytes = await _mergeAnhangInPdf(bytes);
+  return bytes;
+}
+
+// PDF per Graph in den Ausgabeordner schreiben (ueberschreibt)
+async function pdfHochladen(driveId, token, name, bytes) {
+  const resp = await fetch(
+    `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(name)}:/content`,
+    { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' }, body: bytes }
+  );
+  if (!resp.ok) {
+    let msg = 'PDF-Upload fehlgeschlagen';
+    try { msg = (await resp.json()).error?.message || msg; } catch(e) {}
+    throw new Error(msg);
+  }
+  return await resp.json();
 }
 
 // ─── DOWNLOAD LOKAL ───────────────────────────────────────────────────────────
 async function downloadLocal() {
   if (!validateRequiredFields()) return;
-  setStatus('uploading', 'Dokument wird befüllt...');
+  setStatus('uploading', 'PDF wird erstellt...');
   try {
     const data = collectData();
-    const templateBytes = await fetchTemplate();
-    const filled = await fillTemplate(templateBytes, withMergedSorgTokens(data));
-    const _datum = data.Datum_Unterschrift || '';
-    const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
-    const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
-    const _nach = data.Kind_Familienname || 'Unbekannt';
-    const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
-    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
-    const name = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}.docx`;
-    const blob = new Blob([filled], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const bytes = await erzeugePdfBytes(data, { mitAnhang: true });
+    const name = berichtsDateiname(data);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
     setStatus('done', '✓ Heruntergeladen: ' + name);
   } catch(e) { setStatus('error', 'Fehler: ' + e.message); }
@@ -1285,27 +1623,16 @@ function sanitizeFileName(s) {
 async function uploadToSharePoint() {
   if (_isViewOnly) { setStatus('error', 'Ansichtsmodus — Einreichen ist nicht möglich.'); return; }
   if (!validateRequiredFields()) return;
-  setStatus('uploading', 'Dokument wird befüllt und hochgeladen...');
+  setStatus('uploading', 'PDF wird erstellt und hochgeladen...');
   document.getElementById('btnUpload').disabled = true;
   try {
     const data = collectData();
-    const templateBytes = await fetchTemplate();
-    const filled = await fillTemplate(templateBytes, withMergedSorgTokens(data));
-    const _datum = data.Datum_Unterschrift || '';
-    const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
-    const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
-    const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
-    const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
     // Version aufsteigend: bei jeder Freigabeanfrage +1 (erst nach erfolgreichem Upload übernommen)
     const newVersion = (currentVersion || 0) + 1;
-    const name = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${newVersion}.docx`;
+    const name = berichtsDateiname(data, newVersion);
+    const bytes = await erzeugePdfBytes(data);
     const { token, driveId } = await getSiteAndDrive();
-    const uploadResp = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(name)}:/content`,
-      { method: 'PUT', headers: { Authorization: 'Bearer '+token, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: filled }
-    );
-    if (!uploadResp.ok) { const err = await uploadResp.json(); throw new Error(err.error?.message || 'Upload fehlgeschlagen'); }
+    await pdfHochladen(driveId, token, name, bytes);
     currentVersion = newVersion;
     // Anhang-PDF hochladen (alle Berichtstypen, falls vorhanden)
     if (_anhangPDF) {
@@ -1355,12 +1682,6 @@ function setStatus(type, msg) {
 
 // ─── START SCREEN ────────────────────────────────────────────────────────────
 function startNew() {
-  CONFIG.templatePath = {
-    verlauf: '/Templates/Verlaufsbericht_Template.docx',
-    abschluss: '/Templates/Abschlussbericht_Template.docx',
-    clearing: '/Templates/Clearingbericht_Template.docx',
-    stationaer: '/Templates/Verlaufsbericht-Stationaer_Template.docx'
-  }[currentBerichtstyp];
   showMainLayout();
   // Reihenfolge wichtig (wie in loadDraft): resetForm löscht Werte und setzt
   // dataset.builtFor='' — buildDynamicSections baut danach frisch auf und setzt
@@ -1371,13 +1692,45 @@ function startNew() {
   // Re-apply pre-selections after reset (Hilfeart bei Clearing fest vorbelegt + gesperrt)
   applyHilfeartPreset(currentBerichtstyp);
   // Re-apply Fachkraft and TL pre-selections
-  loadGroupMembers();
+  const _glp = loadGroupMembers();
+  // Kilanka-Vorbefüllung (BETA): gewählten Klienten anwenden
+  const _ksel = document.getElementById('kilankaKlient');
+  if (_ksel && _ksel.value !== '') prefillFromKilanka(_kilankaKlienten[parseInt(_ksel.value, 10)], _glp);
+  else _kilankaBetreuerListe = null; // ohne Klient: volle M365-Liste wie bisher
   goTo(1);
 }
 
 let currentListId = null; // tracks current list item ID
 let currentItemStatus = null;   // Status des geladenen Berichts (bleibt bei Zwischenspeichern erhalten)
 let currentEingereichtVon = ''; // ursprüngliche/r Einreicher/in (darf durch TL-Speichern nicht überschrieben werden)
+let currentOwnerOid = '';       // Entra-Objekt-ID der/des Einreichenden — analog geschützt
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * IDENTITAET: Objekt-ID statt Name oder UPN
+ *
+ * Namen UND UPNs aendern sich (Heirat, Umbenennung, Mailwechsel) — genau daran
+ * gingen Berichte nach einer Namensaenderung verloren. Die Entra-Objekt-ID
+ * bleibt ueber den gesamten Lebenszyklus eines Kontos stabil.
+ *
+ * Bewusst NICHT als Ersatz fuer die Namensfelder: "Fachkraft" ist Inhalt und
+ * erscheint in der Unterschrift des Word-Dokuments. Die IDs laufen zusaetzlich
+ * in FormularDaten mit — dadurch ist keine neue SharePoint-Spalte noetig.
+ *
+ * Altbestand ohne IDs bleibt ueber Adressen und Namensvarianten auffindbar;
+ * beim naechsten Speichern werden die IDs automatisch nachgetragen.
+ * ═══════════════════════════════════════════════════════════════════════ */
+function meineOid() {
+  return (currentAccount?.idTokenClaims?.oid || currentAccount?.localAccountId || '').toLowerCase();
+}
+
+// Anzeigename → Objekt-ID über die bereits geladenen Gruppenmitglieder
+function oidZuName(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return null;
+  const alle = [...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])];
+  const t = alle.find(m => (m.displayName || '').trim().toLowerCase() === n);
+  return t?.id ? String(t.id).toLowerCase() : null;
+}
 let currentVersion = 0;         // Versionsnummer der hochgeladenen Dokumente (steigt bei jeder Freigabeanfrage)
 let currentAssignedReviewer = ''; // TL der den Bericht angenommen hat (displayName)
 let currentAssignedReviewerMail = ''; // Mail des annehmenden TL
@@ -1467,7 +1820,34 @@ async function saveEntwurf() {
 let currentBerichtstyp = 'verlauf';
 
 // PDF-Anhang für Clearingbericht (Anhang-Methodik)
-let _anhangPDF = null; // { name: string, base64: string, size: number } | null
+let _anhangPDF = null; // { name, base64, size, titel } | null
+
+// Bezeichnung des Anhangs setzen und beide Eingabefelder synchron halten
+function setAnhangTitel(v) {
+  if (_anhangPDF) _anhangPDF.titel = v;
+  ['anhangTitel', 'anhangTitelS5'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value !== v) el.value = v;
+  });
+}
+
+// Angehaengtes PDF (falls vorhanden) per pdf-lib an ein Basis-PDF anfuegen.
+// Gibt bei Fehlern das unveraenderte Basis-PDF zurueck.
+async function _mergeAnhangInPdf(baseBytes) {
+  if (!_anhangPDF) return baseBytes;
+  if (typeof PDFLib === 'undefined') { console.warn('pdf-lib nicht geladen — PDF ohne Anhang'); return baseBytes; }
+  try {
+    const doc = await PDFLib.PDFDocument.load(baseBytes);
+    const anhangBytes = Uint8Array.from(atob(_anhangPDF.base64), c => c.charCodeAt(0));
+    const anhangDoc = await PDFLib.PDFDocument.load(anhangBytes, { ignoreEncryption: true });
+    const pages = await doc.copyPages(anhangDoc, anhangDoc.getPageIndices());
+    pages.forEach(p => doc.addPage(p));
+    return await doc.save();
+  } catch(e) {
+    console.warn('Anhang-Merge fehlgeschlagen — PDF ohne Anhang:', e);
+    return baseBytes;
+  }
+}
 
 // Betreuungszeitraum automatisch aus Hilfebeginn – Befristet/Ende ableiten.
 // Manuelle Eingabe (dataset.manuallySet) hat Vorrang und wird nicht überschrieben.
@@ -1505,18 +1885,12 @@ function applyHilfeartPreset(typ) {
   const el = document.getElementById('Hilfeart');
   if (!el) return;
   if (typ === 'clearing') {
-    const opt = Array.from(el.options).find(o => o.text.includes('Clearing'));
-    if (opt) el.value = opt.value;
+    el.value = '§ 27 (2) SGB VIII - Clearing';
     el.disabled = true;
     el.style.background = 'var(--bg)';
     el.style.cursor = 'not-allowed';
-  } else if (typ === 'stationaer') {
-    const opt = Array.from(el.options).find(o => o.value.includes('§ 27 SGB VIII - Heimerziehung'));
-    if (opt) el.value = opt.value;
-    el.disabled = false;
-    el.style.background = '';
-    el.style.cursor = '';
   } else {
+    if (typ === 'stationaer' && !el.value) el.value = '§ 27 SGB VIII - Heimerziehung als sonstige betreute Wohnform';
     el.disabled = false;
     el.style.background = '';
     el.style.cursor = '';
@@ -1526,7 +1900,7 @@ function applyHilfeartPreset(typ) {
 function selectBerichtstyp(typ) {
   currentBerichtstyp = typ;
   applyHilfeartPreset(typ);
-  ['verlauf','abschluss','clearing','stationaer'].forEach(t => {
+  ['verlauf','abschluss','clearing','stationaer','monat'].forEach(t => {
     const el = document.getElementById('bt_' + t);
     if (!el) return;
     if (t === typ) {
@@ -1548,14 +1922,7 @@ function selectBerichtstyp(typ) {
     }
   });
   // Update template path in config
-  const paths = {
-    verlauf: '/Templates/Verlaufsbericht_Template.docx',
-    abschluss: '/Templates/Abschlussbericht_Template.docx',
-    clearing: '/Templates/Clearingbericht_Template.docx',
-    stationaer: '/Templates/Verlaufsbericht-Stationaer_Template.docx'
-  };
-  CONFIG.templatePath = paths[typ];
-  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'};
+  const labels = {verlauf:'Berichtsgenerator', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'};
   const badge = document.getElementById('berichtstypBadge');
   if (badge) badge.textContent = labels[typ];
   updateSectionTitles();
@@ -1600,7 +1967,7 @@ async function showCopyList() {
         </div>
         <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
           <button onclick="copyStammdaten('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent-mid); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Übernehmen</button>
-          <button onclick="deleteDraft('${itemId}')" title="Löschen" style="font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">×</button>
+          <button onclick="deleteDraft('${itemId}')" title="Entwurf löschen" style="font-size:12px; padding:6px 12px; min-height:36px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; white-space:nowrap;">🗑 Löschen</button>
         </div>
       </div>`;
     }).join('');
@@ -1620,6 +1987,7 @@ async function copyStammdaten(id) {
     }
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
+    currentOwnerOid = data._ownerOid || '';   // darf beim Speichern durch TL nicht wechseln
     currentListId = null; // new report
     // Berichtstyp setzen BEVOR resetForm, damit buildDynamicSections die richtigen Felder erzeugt
     if (data._berichtstyp) selectBerichtstyp(data._berichtstyp);
@@ -1662,13 +2030,18 @@ async function copyStammdaten(id) {
         sel.value = name;
       }
     });
+    unterschriftAusDaten(data);
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
       if (key === 'Weitere_Personen') { fillWeiterePersFound(value); return; }
       const el = document.getElementById(key);
-      if (el && value) el.value = value;
+      if (!el || !value || el.type === 'file') return;
+      // Auswahllisten: gespeicherten Wert als Option ergänzen statt still zu verwerfen
+      if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => o.value === value)) el.add(new Option(value, value));
+      try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
+    ergaenzeAusKilanka(data);
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
       _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
@@ -1701,7 +2074,12 @@ async function showDraftList() {
     // Nur Berichte in Arbeit (Entwurf/Eingereicht/Abgelehnt) — freigegebene sind abgeschlossen
     const items = (await loadMyDrafts()).filter(item => item.Status !== 'Genehmigt');
     if (items.length === 0) {
-      document.getElementById('draftListContent').innerHTML = '<div style="color:var(--text-muted); padding:1rem 0;">Keine Entwürfe gefunden.</div>';
+      const d = window._draftDiag;
+      const hinweis = (d && d.gesamt > 0)
+        ? '<div style="color:var(--text-muted); padding:1rem 0 0;">Keine Entwürfe gefunden — in der Liste liegen aber '
+          + d.gesamt + ' Bericht(e), die dir aktuell nicht zugeordnet sind. Bitte die Angaben unten an die Verwaltung weitergeben.</div>'
+        : '<div style="color:var(--text-muted); padding:1rem 0 0;">Keine Entwürfe gefunden.</div>';
+      document.getElementById('draftListContent').innerHTML = hinweis + diagZeile();
       return;
     }
     const rows = items.map(item => {
@@ -1717,13 +2095,14 @@ async function showDraftList() {
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:11px; color:${statusColor}; font-weight:500;">${escHtml(statusLabel(item.Status || 'Entwurf'))}</span>
           <button onclick="loadDraft('${itemId}')" style="font-size:12px; padding:4px 12px; background:var(--accent); color:white; border:none; border-radius:var(--radius); cursor:pointer;">Öffnen</button>
-          <button onclick="deleteDraft('${itemId}')" title="Löschen" style="font-size:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">×</button>
+          <button onclick="deleteDraft('${itemId}')" title="Entwurf löschen" style="font-size:12px; padding:6px 12px; min-height:36px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer; white-space:nowrap;">🗑 Löschen</button>
         </div>
       </div>`;
     }).join('');
     document.getElementById('draftListContent').innerHTML = rows;
   } catch(e) {
-    document.getElementById('draftListContent').innerHTML = `<div class="alert alert-error">${e.message}</div>`;
+    document.getElementById('draftListContent').innerHTML =
+      `<div class="alert alert-error">${escHtml(alsKlartext(e))}</div>` + diagZeile();
   }
 }
 
@@ -1738,6 +2117,7 @@ async function loadDraft(id) {
     }
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
+    currentOwnerOid = data._ownerOid || '';   // darf beim Speichern durch TL nicht wechseln
     currentListId = id; // Graph item ID (string)
     currentItemStatus = item.Status || 'Entwurf';
     currentEingereichtVon = item.Eingereicht_Von || '';
@@ -1800,13 +2180,17 @@ async function loadDraft(id) {
         sel.value = name;
       }
     });
+    unterschriftAusDaten(data);
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('_')) return;
       if (key === 'Weitere_Kinder') { fillWeitereKinder(value); return; }
       if (key === 'Weitere_Personen') { fillWeiterePersFound(value); return; }
       const el = document.getElementById(key);
-      if (el) el.value = value;
+      if (!el || el.type === 'file') return;
+      if (el.tagName === 'SELECT' && value && !Array.from(el.options).some(o => o.value === value)) el.add(new Option(value, value));
+      try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
+    ergaenzeAusKilanka(data);
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
       _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
@@ -1983,6 +2367,7 @@ function resetForm() {
   _isViewOnly = false;
   currentItemStatus = null;
   currentEingereichtVon = '';
+  currentOwnerOid = '';
   currentVersion = 0;
   currentAssignedReviewer = '';
   currentAssignedReviewerMail = '';
@@ -1999,6 +2384,9 @@ function resetForm() {
   const ekc = document.getElementById('extraFachkraefteContainer');
   if (ekc) { ekc.innerHTML = ''; }
   _extraFachkraftCount = 0;
+  _unterschriftCount = 1;
+  renderUnterschriftFachkraefte();
+  setzeSachbearbeitungListe('', []);
   const btnFk = document.getElementById('btnAddFachkraft');
   if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
   // Reset list ID for new bericht
@@ -2019,8 +2407,11 @@ function loadFromJson(input) {
       // Fill form fields
       Object.entries(data).forEach(([key, value]) => {
         const el = document.getElementById(key);
-        if (el) el.value = value;
+        if (!el || el.type === 'file') return;
+        if (el.tagName === 'SELECT' && value && !Array.from(el.options).some(o => o.value === value)) el.add(new Option(value, value));
+        try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
       });
+      ergaenzeAusKilanka(data);
       // Restore ziele
       if (data._ziele && Array.isArray(data._ziele)) {
         _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
@@ -2045,43 +2436,6 @@ function loadFromJson(input) {
   input.value = '';
 }
 
-async function importFromDocx(input) {
-  const file = input.files[0];
-  if (!file) return;
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    const docXml = await zip.file('word/document.xml').async('string');
-    // Extract token values from filled DOCX
-    const tokenMap = {};
-    const tokens = ['Hilfeart','Jugendamt','Sachbearbeitung_JA','Fachkraft_NeueWege','Fallleitung',
-      'Kind_Vorname','Kind_Familienname','Kind_Geburtsdatum','Kind_Strasse','Kind_PLZ_Ort',
-      'Hilfebeginn','Hilfe_Ende','Fachleistungsstunden','Letztes_HPG'];
-    // Tokens were replaced, so try to find field values from table cells
-    // Parse XML text content
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(docXml, 'text/xml');
-    const tNodes = xmlDoc.getElementsByTagNameNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 't');
-    const allText = Array.from(tNodes).map(n => n.textContent).filter(t => t.trim());
-    // Pre-fill what we can: reset and show form
-    resetForm();
-    // Set Berichtszeitraum empty for new report
-    document.getElementById('BZ_Von').value = '';
-    document.getElementById('BZ_Bis').value = '';
-    // Show success
-    showMainLayout();
-    goTo(1);
-    // Show hint
-    setTimeout(() => {
-      setStatus('uploading', 'Stammdaten aus Dokument übernommen — bitte prüfen und ergänzen.');
-      document.getElementById('statusBar').style.display = 'flex';
-    }, 500);
-  } catch(err) {
-    document.getElementById('startError').style.display = 'block';
-    document.getElementById('startError').textContent = 'Fehler beim Import: ' + err.message;
-  }
-  input.value = '';
-}
 
 // Save as JSON for "Weiterbearbeiten"
 function saveAsJson() {
@@ -2115,7 +2469,7 @@ async function getGraphListIds() {
     headers: { Authorization: 'Bearer ' + token }
   });
   const lists = await listResp.json();
-  if (!lists.value || lists.value.length === 0) throw new Error(`Liste "${CONFIG.listName}" nicht gefunden`);
+  if (!lists.value || lists.value.length === 0) throw new Error(`Liste "${CONFIG.listName}" nicht gefunden.`);
   _graphListId = lists.value[0].id;
   return { siteId: _graphSiteId, listId: _graphListId };
 }
@@ -2132,7 +2486,7 @@ async function saveToList(data, existingId = null) {
   if (existingId && !_statusExplicit) {
     try {
       const freshResp = await fetch(
-        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}?expand=fields(select=Status)`,
+        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${existingId}?expand=fields(select=Status,FormularDaten)`,
         { headers: { Authorization: 'Bearer ' + token } }
       );
       if (freshResp.ok) {
@@ -2142,6 +2496,27 @@ async function saveToList(data, existingId = null) {
           console.warn(`Status-Guard: Server-Status "${freshStatus}" behalten (Tab hatte "${data._status}")`);
           data._status = freshStatus;
           currentItemStatus = freshStatus;
+        }
+        // Kommentar-Guard: Die Teamleitung schreibt Kommentare, die Fachkraft nur deren
+        // Erledigt-Status. Ein Fachkraft-Tab, der die Kommentare noch nicht kennt (z. B. seit
+        // der Einreichung offen), darf sie mit seinem leeren Stand nicht ueberschreiben —
+        // Server-Kommentare sind die Basis, lokale Statusaenderungen werden uebernommen.
+        if (!_isReviewMode) {
+          try {
+            const serverData = freshItem.fields?.FormularDaten ? JSON.parse(freshItem.fields.FormularDaten) : null;
+            const serverK = serverData && serverData._tlKommentare && typeof serverData._tlKommentare === 'object' ? serverData._tlKommentare : null;
+            if (serverK && Object.keys(serverK).length) {
+              const lokal = _tlKommentare || {};
+              const merged = {};
+              Object.entries(serverK).forEach(([fid, c]) => {
+                merged[fid] = { ...c, status: (lokal[fid] && lokal[fid].status) || c.status };
+              });
+              const hatteLokal = Object.keys(lokal).length;
+              _tlKommentare = merged;
+              data._tlKommentare = merged;
+              if (!hatteLokal) { console.warn('Kommentar-Guard: Server-Kommentare in diesen Tab uebernommen'); renderFieldComments(); }
+            }
+          } catch(e) { /* best-effort */ }
         }
       }
     } catch(e) { /* Guard best-effort — im Zweifel bisheriges Verhalten */ }
@@ -2163,6 +2538,14 @@ async function saveToList(data, existingId = null) {
   }
   data._berichtstyp = currentBerichtstyp || 'verlauf';
 
+  // Stabile Identitaeten mitschreiben. Bei Altbestand wird hier automatisch
+  // nachgetragen; ein bereits gesetzter Eigentuemer bleibt unveraendert,
+  // damit ein TL-Speichern die Zuordnung nicht an sich zieht.
+  data._ownerOid = data._ownerOid || currentOwnerOid || meineOid() || '';
+  const fkNamen = [data.Fachkraft_NeueWege, data.Fachkraft_2, data.Fachkraft_3, data.Fachkraft_4];
+  const fkOids = fkNamen.map(oidZuName).filter(Boolean);
+  if (fkOids.length) data._fachkraftOids = [...new Set(fkOids)];
+
   const fields = {
     Title: (() => {
       const _d = data.Datum_Unterschrift || '';
@@ -2170,7 +2553,7 @@ async function saveToList(data, existingId = null) {
       const _mm = _d.length >= 7 ? _d.substring(5,7) : '00';
       const _nach = data.Kind_Familienname || 'Unbekannt';
       const _vor2 = (data.Kind_Vorname || 'X').substring(0,2);
-      const _pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[data._berichtstyp || currentBerichtstyp] || 'VB';
+      const _pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[data._berichtstyp || currentBerichtstyp] || 'VB';
       return `${_pre}_${_nach}_${_vor2}_${_jj}${_mm}`;
     })(),
     Eingereicht_Von: data._eingereichtVon || currentEingereichtVon || currentAccount?.username || '',
@@ -2213,13 +2596,71 @@ async function saveToList(data, existingId = null) {
 }
 
 // Namensvarianten der angemeldeten Person ("Vorname Nachname" und "Nachname, Vorname")
+/* ═══════════════════════════════════════════════════════════════════════
+ * NAMENSAENDERUNG (z. B. Heirat) — warum das hier ueberhaupt eine Rolle spielt
+ *
+ * Die Zuordnung "gehoert mir" lief ausschliesslich ueber den AKTUELLEN
+ * Anmeldenamen und den AKTUELLEN Anzeigenamen. Aendert sich der Nachname,
+ * passt beides nicht mehr zu Berichten, die vorher gespeichert wurden:
+ *   Eingereicht_Von: "martina.graf@..."   vs. angemeldet als "martina.kraus@..."
+ *   Fachkraft:       "Martina Graf"       vs. Anzeigename "Martina Kraus"
+ * Der Bericht liegt weiterhin in SharePoint, wird aber herausgefiltert und
+ * ist damit fuer die Betroffene unsichtbar.
+ *
+ * Loesung: Entra behaelt die frueheren Adressen als proxyAddresses. Daraus
+ * bilden wir sowohl die Alias-Menge (fuer Eingereicht_Von) als auch
+ * zusaetzliche Namensvarianten (aus dem lokalen Teil, z. B.
+ * "martina.graf" → "martina graf" / "graf, martina").
+ * ═══════════════════════════════════════════════════════════════════════ */
+let _myAliases = null;          // Set aller eigenen Mailadressen, klein geschrieben
+let _myAliasPromise = null;
+
+async function ladeMeineAliase() {
+  if (_myAliases) return _myAliases;
+  if (_myAliasPromise) return _myAliasPromise;
+  _myAliasPromise = (async () => {
+    const menge = new Set();
+    const eigen = (currentAccount?.username || '').trim().toLowerCase();
+    if (eigen) menge.add(eigen);
+    try {
+      const token = await getToken();
+      const r = await fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName,proxyAddresses',
+        { headers: { Authorization: 'Bearer ' + token } });
+      if (r.ok) {
+        const d = await r.json();
+        for (const a of [d.mail, d.userPrincipalName, ...(d.proxyAddresses || [])]) {
+          if (!a) continue;
+          // proxyAddresses kommen als "SMTP:adresse" (primaer) bzw. "smtp:adresse" (Alias)
+          const adr = String(a).replace(/^smtp:/i, '').trim().toLowerCase();
+          if (adr.includes('@')) menge.add(adr);
+        }
+      }
+    } catch (e) {
+      console.warn('Mail-Aliase konnten nicht geladen werden — Zuordnung nur ueber die aktuelle Adresse:', e.message);
+    }
+    _myAliases = menge;
+    return menge;
+  })();
+  return _myAliasPromise;
+}
+
 function _myNameVariants() {
-  const dn = (currentAccount?.name || '').trim();
   const variants = new Set();
-  if (dn) {
-    variants.add(dn.toLowerCase());
-    const parts = dn.split(/\s+/);
+  const ausName = (dn) => {
+    const n = (dn || '').trim();
+    if (!n) return;
+    variants.add(n.toLowerCase());
+    const parts = n.split(/\s+/);
     if (parts.length > 1) variants.add(`${parts[parts.length - 1]}, ${parts.slice(0, -1).join(' ')}`.toLowerCase());
+  };
+  ausName(currentAccount?.name);
+  // Frueherer Name aus den Alias-Adressen ableiten: "martina.graf@..." → "Martina Graf"
+  for (const adr of (_myAliases || [])) {
+    const lokal = adr.split('@')[0];
+    if (!lokal.includes('.')) continue;                   // nur klare Vorname.Nachname-Aliase
+    const teile = lokal.split('.').filter(Boolean);
+    if (teile.length < 2 || teile.some(t => t.length < 2)) continue;
+    ausName(teile.join(' '));
   }
   return variants;
 }
@@ -2228,13 +2669,24 @@ function _myNameVariants() {
 // (Einreicher/in, als Fachkraft 1–4 hinterlegt, oder Altbestand ohne Besitzer)
 function isUserInvolvedInItem(item) {
   if (!item) return false;
-  if (!item.Eingereicht_Von) return true; // Altbestand ohne Besitzer (backwards compat)
-  const myEmail = (currentAccount?.username || '').toLowerCase();
-  if ((item.Eingereicht_Von || '').toLowerCase() === myEmail) return true;
-  const variants = _myNameVariants();
-  if (variants.size === 0) return false;
   let d = {};
   try { d = JSON.parse(item.FormularDaten || '{}'); } catch(e) {}
+  // 1. Stabile Objekt-ID — unabhaengig von Namen, UPN und Mailadresse
+  const oid = meineOid();
+  if (oid) {
+    if (String(d._ownerOid || '').toLowerCase() === oid) return true;
+    if ((d._fachkraftOids || []).some(x => String(x).toLowerCase() === oid)) return true;
+  }
+  // 2./3. Altbestand ohne IDs: Adressen und Namensvarianten
+  if (!item.Eingereicht_Von) return true; // Altbestand ohne Besitzer (backwards compat)
+  const eingereichtVon = (item.Eingereicht_Von || '').trim().toLowerCase();
+  const myEmail = (currentAccount?.username || '').toLowerCase();
+  if (eingereichtVon === myEmail) return true;
+  // Auch frueher genutzte Adressen zaehlen — sonst verliert man nach einer
+  // Namensaenderung den Zugriff auf die eigenen aelteren Berichte.
+  if (_myAliases && _myAliases.has(eingereichtVon)) return true;
+  const variants = _myNameVariants();
+  if (variants.size === 0) return false;
   const namen = [d.Fachkraft_NeueWege, d.Fachkraft_2, d.Fachkraft_3, d.Fachkraft_4, item.Fachkraft]
     .filter(Boolean).map(s => String(s).trim().toLowerCase());
   return namen.some(n => variants.has(n));
@@ -2244,7 +2696,7 @@ function isUserInvolvedInItem(item) {
 function _btBadge(item) {
   let bt = '';
   try { bt = (JSON.parse(item.FormularDaten || '{}')._berichtstyp) || ''; } catch(e) {}
-  const pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || '';
+  const pre = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[bt] || '';
   return pre ? `<span style="display:inline-block; font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-light); border-radius:4px; padding:1px 6px; margin-right:6px; vertical-align:middle;">${pre}</span>` : '';
 }
 
@@ -2276,8 +2728,35 @@ document.addEventListener('focusin', e => {
   if (e.target && e.target.tagName === 'SELECT') sortSelectOptions(e.target);
 });
 
+// "Failed to fetch" ist ein TypeError des Browsers: die Anfrage hat den Server
+// nie erreicht (Netzwerk, VPN, Proxy, Virenscanner). Das passiert VOR jeder
+// Zuordnungspruefung und hat mit Namen oder Berechtigungen nichts zu tun.
+function alsKlartext(e) {
+  const m = String(e?.message || e);
+  if (/failed to fetch|networkerror|load failed/i.test(m)) {
+    return 'Keine Verbindung zu Microsoft 365. Die Anfrage wurde blockiert oder das Netz ist getrennt — '
+         + 'bitte VPN, Firewall/Virenscanner (z. B. McAfee WebAdvisor) und Internetverbindung prüfen. '
+         + 'Die Berichte selbst sind davon nicht betroffen.';
+  }
+  return m;
+}
+
+function diagZeile() {
+  const d = window._draftDiag;
+  if (!d) return '';
+  return `<div style="font-size:11px; color:var(--text-muted); margin-top:8px; line-height:1.5;">
+    Geladen: ${d.gesamt} Bericht(e) in der Liste, davon ${d.sichtbar} dir zugeordnet.<br>
+    Angemeldet als ${escHtml(d.konto)} (${escHtml(d.anzeigename)})${d.istTL ? ' · TL-Sicht: alle Berichte' : ''}<br>
+    Erkannte Adressen: ${d.aliase.length ? escHtml(d.aliase.join(', ')) : '—'}<br>
+    Erkannte Namensformen: ${d.varianten.length ? escHtml(d.varianten.join(' · ')) : '—'}<br>
+    Objekt-ID: ${escHtml(d.oid || '— (nicht verfügbar)')} · Berichte mit hinterlegter ID: ${d.mitOid}
+  </div>`;
+}
+
 async function loadMyDrafts() {
   const token = await getToken();
+  // Aliase VOR dem Filtern bereitstellen (Namensaenderung, s. _myNameVariants)
+  await ladeMeineAliase();
   const { siteId, listId } = await getGraphListIds();
   // Check if user is TL member (safe even if not loaded yet)
   const isTL = _tlMembers.length > 0 && _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
@@ -2299,8 +2778,20 @@ async function loadMyDrafts() {
   const allItems = rawItems.map(item => ({ ...item.fields, ID: item.id, _itemId: item.id }));
   // Client-side filter: TL sieht alles, andere sehen Berichte, an denen sie beteiligt sind
   // (selbst eingereicht ODER als Fachkraft 1–4 hinterlegt)
-  if (isTL) return allItems;
-  return allItems.filter(item => isUserInvolvedInItem(item));
+  const sichtbar = isTL ? allItems : allItems.filter(item => isUserInvolvedInItem(item));
+  // Diagnose: unterscheidet "Liste ist leer" von "alles wegen Zuordnung ausgeblendet"
+  window._draftDiag = {
+    gesamt: allItems.length,
+    sichtbar: sichtbar.length,
+    konto: (currentAccount?.username || '—'),
+    anzeigename: (currentAccount?.name || '—'),
+    aliase: [...(_myAliases || [])],
+    varianten: [..._myNameVariants()],
+    oid: meineOid(),
+    mitOid: allItems.filter(i => { try { return !!JSON.parse(i.FormularDaten || '{}')._ownerOid; } catch(e) { return false; } }).length,
+    istTL: isTL,
+  };
+  return sichtbar;
 }
 
 async function loadItemById(id) {
@@ -2550,7 +3041,7 @@ function getFalleitungMail() {
 
 async function sendApprovalEmail(listItemId, data, filename) {
   const token = await getToken();
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   const fachkraft = data.Fachkraft_NeueWege || currentAccount?.name || '';
   const jugendamt = data.Jugendamt || '';
@@ -2672,7 +3163,7 @@ async function sendApprovalEmail(listItemId, data, filename) {
 
 // Fertigstellungs-Mail an info@ nach finaler Freigabe + PDF-Erstellung
 async function sendCompletionEmail(token, driveId, pdfName, data) {
-  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
+  const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
   const nachname = data.Kind_Familienname || 'Unbekannt';
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // webUrl des finalen PDFs per Graph ermitteln
@@ -2686,7 +3177,7 @@ async function sendCompletionEmail(token, driveId, pdfName, data) {
   } catch(e) { /* Link bleibt leer, Dateiname wird trotzdem genannt */ }
   const mail = {
     message: {
-      subject: `${berichtstyp} ${nachname} ist fertiggestellt`,
+      subject: ` ${berichtstyp} ${nachname} ist fertiggestellt`,
       body: { contentType: 'HTML', content: `
 <html><body style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
   <div style="border-left: 4px solid #2e7d32; padding-left: 16px; margin-bottom: 24px;">
@@ -2735,69 +3226,48 @@ async function approveReport() {
     data._status = 'Genehmigt'; data._statusExplicit = true;
     await saveToList(data, currentListId);
     
-    // 2. Upload corrected DOCX to SharePoint (overwrites)
+    // 2. Finales PDF rendern — Stand nach TL-Korrektur, mit Freigabevermerk
     const token = await getToken();
     const { driveId } = await getSiteAndDrive();
-    const _datum = data.Datum_Unterschrift || '';
-    const _jj = _datum.length >= 4 ? _datum.substring(2,4) : '00';
-    const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
-    const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
-    const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-    const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
-    const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
-    
-    const templateBytes = await fetchTemplate();
-    const filled = await fillTemplate(templateBytes, withMergedSorgTokens(data));
-    
-    const uploadResp = await fetch(
-      `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}:/content`,
-      { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }, body: filled }
-    );
-    if (!uploadResp.ok) throw new Error('DOCX Upload fehlgeschlagen');
-    const uploadedFile = await uploadResp.json();
-    
-    // 3. Convert to PDF via Graph (Word → PDF)
-    // Wait for SharePoint to index the file before converting
+    const versionsName = berichtsDateiname(data, currentVersion || 1);   // Stand dieser Version
+    const pdfName = berichtsDateiname(data);                             // finales PDF ohne _vN
     setStatus('uploading', 'PDF wird erstellt...');
-    // Finales PDF ohne Versionsnummer (_vN wird entfernt)
-    const pdfName = docxName.replace(/(_v\d+)?\.docx$/, '.pdf');
-    
-    async function convertToPdf(retries = 3, delayMs = 3000) {
-      for (let i = 0; i < retries; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, delayMs));
-        try {
-          const pdfResp = await fetch(
-            `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}:/content?format=pdf`,
-            { headers: { Authorization: 'Bearer ' + token } }
-          );
-          if (pdfResp.ok) {
-            const pdfBytes = await pdfResp.arrayBuffer();
-            const pdfUpload = await fetch(
-              `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(pdfName)}:/content`,
-              { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' }, body: pdfBytes }
-            );
-            if (pdfUpload.ok) return { ok: true, name: pdfName };
-          }
-          const errText = await pdfResp.text().catch(() => '');
-          console.warn(`PDF attempt ${i+1} failed:`, pdfResp.status, errText.substring(0,200));
-        } catch(e) {
-          console.warn(`PDF attempt ${i+1} error:`, e.message);
+    const freigeber = (currentAccount && (currentAccount.name || currentAccount.username)) || '';
+    // Unterschrift "Freigabe Leitung": die Teamleitung, die den Bericht angenommen und inhaltlich
+    // freigegeben hat — nicht die Person der finalen Freigabe (GF)
+    const freigabeLeitung = currentAssignedReviewer || data._assignedReviewer || freigeber;
+    // Der Anhang liegt seit dem Einreichen als <Basis>_Anhang.pdf im Ordner. Die freigebende
+    // Person hat ihn nicht im Browser — fuer das finale PDF wird er nachgeladen und angehaengt.
+    if (!_anhangPDF && data._anhangName) {
+      try {
+        const anhangName = berichtsDateiname(data).replace(/\.pdf$/, '') + '_Anhang.pdf';
+        const r = await fetch(
+          `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(anhangName)}:/content`,
+          { headers: { Authorization: 'Bearer ' + token } });
+        if (r.ok) {
+          const buf = new Uint8Array(await r.arrayBuffer());
+          let bin = ''; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+          _anhangPDF = { name: data._anhangName, base64: btoa(bin), size: buf.length, titel: data._anhangTitel || '' };
         }
-      }
-      return { ok: false };
+      } catch(e) { console.warn('Anhang konnte nicht nachgeladen werden:', e.message); }
     }
-    
-    // First attempt after 3s delay
-    await new Promise(r => setTimeout(r, 3000));
-    const pdfResult = await convertToPdf(3, 4000);
-    
+    const finalBytes = await erzeugePdfBytes(data, { freigegebenVon: freigeber, freigabeLeitung, mitAnhang: true });
+    let pdfResult = { ok: false };
+    try {
+      await pdfHochladen(driveId, token, versionsName, finalBytes);
+      await pdfHochladen(driveId, token, pdfName, finalBytes);
+      pdfResult = { ok: true, name: pdfName };
+    } catch(e) {
+      console.warn('PDF-Upload fehlgeschlagen:', e.message);
+    }
+
     if (pdfResult.ok) {
-      // Anhang-PDF hochladen (alle Berichtstypen, falls vorhanden)
+      // Anhang-PDF zusaetzlich einzeln ablegen (alle Berichtstypen, falls vorhanden)
       let anhangName = null;
       if (_anhangPDF) {
         try {
           setStatus('uploading', 'Anhang wird hochgeladen...');
-          anhangName = await uploadAnhangToSharePoint(driveId, token, docxName);
+          anhangName = await uploadAnhangToSharePoint(driveId, token, pdfName);
         } catch(e) {
           console.warn('Anhang-Upload fehlgeschlagen:', e.message);
         }
@@ -2807,21 +3277,12 @@ async function approveReport() {
       try { infoMailOk = await sendCompletionEmail(token, driveId, pdfName, data); }
       catch(e) { console.warn('Fertigstellungs-Mail fehlgeschlagen:', e.message); }
       const anhangHinweis = anhangName ? ` — Anhang: ${anhangName}` : '';
-      setStatus('done', `✓ Freigegeben — PDF gespeichert: ${pdfName}${anhangHinweis}${infoMailOk ? ' — Fertigstellungs-Mail an info@praxisneuewege.de gesendet.' : ' — Hinweis: Fertigstellungs-Mail konnte nicht gesendet werden.'}`);
+      setStatus('done', `✓ Freigegeben — PDF gespeichert: ${pdfName}${anhangHinweis}${infoMailOk ? ' — Fertigstellungs-Mail an info@praxisneuewege.de gesendet.' : ''}`);
     } else {
-      // Fallback: try converting via SharePoint convert endpoint
-      try {
-        const spConvertResp = await fetch(
-          `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}:/microsoft.graph.createLink`,
-          { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'view', scope: 'organization' }) }
-        );
-        setStatus('done', `✓ Freigegeben — DOCX in SharePoint gespeichert. PDF: In SharePoint Datei öffnen → "Als PDF herunterladen" oder rechtsklick → Konvertieren.`);
-      } catch(e) {
-        setStatus('done', `✓ Freigegeben — DOCX gespeichert als ${docxName}. PDF-Erstellung manuell in SharePoint.`);
-      }
+      // Freigabe ist in der Liste gespeichert; das PDF kann per Download-Button erneut erzeugt werden
+      setStatus('error', '✓ Freigabe gespeichert — aber der PDF-Upload ist fehlgeschlagen. Bitte „PDF herunterladen" nutzen und das PDF manuell nach SharePoint legen.');
     }
-    
+
     // 4. Send confirmation email to submitter
     const fachkraftEmail = data.Fachkraft_NeueWege || '';
     // (optional: send confirmation)
@@ -3011,7 +3472,7 @@ function renderStatusBerichte() {
     return `<span style="font-size:11px; font-weight:600; color:${c.fg}; background:${c.bg}; padding:3px 10px; border-radius:999px; white-space:nowrap;">${escHtml(statusLabel(s))}</span>`;
   };
 
-  const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[bt] || bt || '');
+  const btLabel = bt => ({verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[bt] || bt || '');
 
   const rows = items.map(item => {
     const itemId = item._itemId || item.ID;
@@ -3079,6 +3540,9 @@ function renderStatusBerichte() {
         ${archiviert
           ? `<button onclick="toggleArchiv('${itemId}', false)" title="Aus dem Archiv zurückholen"
               style="font-size:12px; padding:6px 12px; background:white; color:var(--text-muted); border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; min-height:36px;">↩ Wiederherstellen</button>` : ''}
+        ${st === 'TL angenommen' && isTLUser() && item.Assigned_Reviewer && item.Assigned_Reviewer !== (currentAccount?.name || '')
+          ? `<button onclick="tlUebernehmenAusListe('${itemId}')" title="Prüfung von ${(item.Assigned_Reviewer||'').replace(/"/g,'&quot;')} übernehmen (Vertretung)"
+              style="font-size:12px; padding:6px 12px; background:white; color:#1d4ed8; border:1px solid #1d4ed8; border-radius:var(--radius); cursor:pointer; min-height:36px;">↪ Übernehmen</button>` : ''}
         ${st === 'Entwurf'
           ? `<button onclick="deleteDraft('${itemId}')" title="Entwurf löschen"
               style="font-size:12px; padding:6px 12px; background:white; color:var(--error); border:1px solid var(--error); border-radius:var(--radius); cursor:pointer; min-height:36px;">🗑 Löschen</button>` : ''}
@@ -3142,6 +3606,81 @@ async function tlAnnehmenBericht() {
   }
 }
 
+// ─── PRÜFUNG VON EINER ANDEREN TEAMLEITUNG ÜBERNEHMEN ───
+// Fall: Die zugewiesene Teamleitung ist verhindert (Urlaub, Krankheit). Jede andere
+// Teamleitung kann die Prüfung an sich ziehen. Die bisherige Prüferin wird per
+// E-Mail informiert. Gearbeitet wird auf dem gespeicherten Serverstand — nicht auf
+// dem DOM der Prüfansicht (dort fehlen Extra-Zeilen, s. rejectReport).
+async function tlPruefungUebernehmen(itemId) {
+  const id = itemId || currentListId;
+  if (!id) return false;
+  if (!isTLUser()) { alert('Die Übernahme ist Teamleitungen vorbehalten.'); return false; }
+  const myName = currentAccount?.name || currentAccount?.username || '';
+  const myMail = currentAccount?.username || '';
+  try {
+    const fresh = await loadItemById(id);
+    const freshStatus = fresh.Status || 'Entwurf';
+    const bisherName = fresh.Assigned_Reviewer || '';
+    const bisherMail = fresh.Assigned_Reviewer_Mail || '';
+    if (freshStatus !== 'TL angenommen' && freshStatus !== 'Eingereicht') {
+      alert(`Übernahme nicht möglich — der Bericht hat den Status „${statusLabel(freshStatus)}".`); return false;
+    }
+    if (bisherName && bisherName === myName) { alert('Sie prüfen diesen Bericht bereits.'); return false; }
+    const kind = `${fresh.Kind_Vorname || ''} ${fresh.Kind_Familienname || ''}`.trim();
+    const frage = bisherName
+      ? `Prüfung des Berichts zu ${kind} von ${bisherName} übernehmen?\n\n${bisherName} wird per E-Mail informiert.`
+      : `Prüfung des Berichts zu ${kind} übernehmen?`;
+    if (!confirm(frage)) return false;
+
+    const data = fresh.FormularDaten ? JSON.parse(fresh.FormularDaten) : {};
+    data._status = 'TL angenommen'; data._statusExplicit = true;
+    data._assignedReviewer = myName;
+    data._assignedReviewerMail = myMail;
+    await saveToList(data, id);
+    if (String(id) === String(currentListId)) {
+      currentAssignedReviewer = myName;
+      currentAssignedReviewerMail = myMail;
+      currentItemStatus = 'TL angenommen';
+    }
+    // Bisherige Prüferin informieren (best-effort)
+    if (bisherMail && bisherMail.toLowerCase() !== myMail.toLowerCase()) {
+      try {
+        const token = await getToken();
+        await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: {
+            subject: `[Prüfung übernommen] ${kind}`,
+            body: { contentType: 'HTML', content:
+              `<p>${escHtml(myName)} hat die Prüfung des Berichts zu <strong>${escHtml(kind)}</strong> übernommen.</p>
+               <p style="font-size:13px;color:#666;">Ihre bisherigen Kommentare bleiben erhalten. Sie müssen nichts weiter tun.</p>` },
+            toRecipients: [{ emailAddress: { address: bisherMail } }],
+          }, saveToSentItems: false })
+        });
+      } catch(e) { console.warn('Info-Mail an bisherige Prüferin fehlgeschlagen:', e.message); }
+    }
+    return true;
+  } catch(e) {
+    alert('Übernahme fehlgeschlagen: ' + e.message);
+    return false;
+  }
+}
+
+// Übernahme aus der offenen Prüfansicht heraus (Banner / Popup)
+async function tlUebernehmenHier() {
+  const id = currentListId;
+  const ok = await tlPruefungUebernehmen(id);
+  if (!ok) return;
+  // Die Ansicht war im gesperrten Ansichtsmodus — Prüfansicht über den Review-Link sauber neu aufbauen
+  window.location.href = `${APP_BASE_URL}?review=${encodeURIComponent(id)}&typ=${encodeURIComponent(currentBerichtstyp || 'verlauf')}`;
+}
+
+// Übernahme aus der Statusübersicht
+async function tlUebernehmenAusListe(itemId) {
+  const ok = await tlPruefungUebernehmen(itemId);
+  if (ok && typeof goToStatusBerichte === 'function') goToStatusBerichte();
+}
+
 // ─── TL FREIGEBEN AN SONJA ───────────────────────────────────────────────────
 
 async function tlFreigebenAnSonja() {
@@ -3159,7 +3698,7 @@ async function tlFreigebenAnSonja() {
 
     // Mail an Sonja
     const token = await getToken();
-    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[currentBerichtstyp] || 'Bericht';
+    const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
     const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
     const jugendamt = data.Jugendamt || '';
     const sonjaUrl = `${APP_BASE_URL}?sonja=${currentListId}&typ=${currentBerichtstyp}`;
@@ -3175,8 +3714,8 @@ async function tlFreigebenAnSonja() {
       const _mm = _datum.length >= 7 ? _datum.substring(5,7) : '00';
       const _nach = sanitizeFileName(data.Kind_Familienname) || 'Unbekannt';
       const _vor2 = (sanitizeFileName(data.Kind_Vorname) || 'X').substring(0,2);
-      const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S'}[currentBerichtstyp] || 'VB';
-      const docxName = `${_prefix}_${_nach}_${_vor2}_${_jj}${_mm}_v${currentVersion || 1}.docx`;
+      const _prefix = {verlauf:'VB', abschluss:'AB', clearing:'CL', stationaer:'VB-S', monat:'MB'}[currentBerichtstyp] || 'VB';
+      const docxName = berichtsDateiname(data, currentVersion || 1);   // (Name historisch: zeigt jetzt auf das PDF dieser Version)
       const fileResp = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(docxName)}`,
         { headers: { Authorization: 'Bearer ' + token } }
@@ -3314,7 +3853,7 @@ function activateViewOnlyMode(grund) {
   // Aktions-Buttons sperren — Seitennavigation, Exportieren und Startseite ausgenommen
   document.querySelectorAll('#mainLayout button').forEach(btn => {
     const oc = btn.getAttribute('onclick') || '';
-    if (/goTo|goToNext|startScreen|downloadLocal/.test(oc)) return;
+    if (/goTo|goToNext|startScreen|downloadLocal|tlUebernehmenHier/.test(oc)) return;
     btn.disabled = true;
     btn.style.opacity = '0.45';
     btn.style.cursor = 'not-allowed';
@@ -3401,7 +3940,8 @@ function showTLAndererPrueferPopup(prueferName) {
       <div style="font-size:17px; font-weight:700; color:#1d4ed8; margin-bottom:8px;">Bericht bereits übernommen</div>
       <div style="font-size:13px; color:#555; margin-bottom:6px;">Der Bericht zu <strong>${escHtml(kind)}</strong> wird bereits geprüft von:</div>
       <div style="font-size:16px; font-weight:700; color:#1d4ed8; margin-bottom:20px;">${escHtml(prueferName)}</div>
-      <div style="font-size:12px; color:#888; margin-bottom:24px;">Sie können den Bericht trotzdem ansehen, aber nicht freigeben.</div>
+      <div style="font-size:12px; color:#888; margin-bottom:24px;">Sie können den Bericht ansehen. Ist ${escHtml(prueferName)} verhindert, können Sie die Prüfung übernehmen.</div>
+      ${isTLUser() ? `<button onclick="tlUebernehmenHier()" style="background:white; color:#1d4ed8; border:1px solid #1d4ed8; border-radius:8px; padding:12px 22px; font-size:14px; font-weight:600; cursor:pointer; margin-right:10px;">↪ Prüfung übernehmen</button>` : ''}
       <button onclick="document.getElementById('tlAndererModal').remove()" style="background:#1d4ed8; color:white; border:none; border-radius:8px; padding:12px 28px; font-size:14px; font-weight:600; cursor:pointer; min-height:44px;">Verstanden — Bericht ansehen</button>
     </div>`;
   document.body.appendChild(modal);
@@ -3464,6 +4004,7 @@ function activateReviewMode() {
     document.getElementById('tlAndererPruefer').style.display = 'block';
     document.getElementById('tlAndererPrueferName').textContent = currentAssignedReviewer;
     document.getElementById('tlAktionen').style.display = 'none';
+    { const b = document.getElementById('btnTlUebernehmen'); if (b) b.style.display = isTLUser() ? 'inline-flex' : 'none'; }
   }
   // ── Stationär-Sonderlogik: Freigabe-Button und Hinweistext anpassen ──
   const btnTlF = document.getElementById('btnTlFreigeben');
@@ -3551,13 +4092,26 @@ async function loadGroupMembers() {
     return d.value?.[0]?.id;
   }
   
+  // Graph liefert Sammlungen seitenweise und verlinkt den Rest ueber
+  // @odata.nextLink. Gruppenmitglieder und /users kamen bisher nur als erste
+  // Seite an — bei aktuell ~25 Konten unauffaellig, ab ~100 lautlos unvollstaendig.
+  async function graphAlleSeiten(pfad) {
+    const alle = [];
+    let url = pfad.startsWith('http') ? pfad : 'https://graph.microsoft.com/v1.0' + pfad;
+    for (let seite = 0; url && seite < 50; seite++) {   // Sicherheitslimit: 50 Seiten
+      const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (!r.ok) throw new Error('Graph HTTP ' + r.status);
+      const d = await r.json();
+      alle.push(...(d.value || []));
+      url = d['@odata.nextLink'] || null;
+    }
+    return alle;
+  }
+
   async function getMembers(groupId) {
     if (!groupId) return [];
-    const r = await fetch(`https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,givenName,surname,mail,jobTitle,mobilePhone,businessPhones`, {
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    const d = await r.json();
-    return (d.value || []).filter(m => m['@odata.type'] === '#microsoft.graph.user');
+    const mitglieder = await graphAlleSeiten(`/groups/${groupId}/members?$select=id,displayName,givenName,surname,mail,jobTitle,mobilePhone,businessPhones`);
+    return mitglieder.filter(m => m['@odata.type'] === '#microsoft.graph.user');
   }
   
   async function getMyManager() {
@@ -3665,15 +4219,13 @@ async function loadGroupMembers() {
     // Fallback: static options
     // Fallback: load all org users
     try {
-      const r2 = await fetch('https://graph.microsoft.com/v1.0/users?$select=id,displayName,givenName,surname,mail&$top=100&$filter=accountEnabled eq true', {
-        headers: { Authorization: 'Bearer ' + token }
-      });
-      if (r2.ok) {
-        const d2 = await r2.json();
-        _teamMembers = (d2.value || []).filter(u => u.mail);
-        _teamMembers.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
-      }
-    } catch(e2) {}
+      const alle = await graphAlleSeiten('/users?$select=id,displayName,givenName,surname,mail&$top=100&$filter=accountEnabled eq true');
+      _teamMembers = alle.filter(u => u.mail);
+      _teamMembers.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
+    } catch(e2) {
+      // Ohne Log war hier nicht erkennbar, ob die Liste leer ist oder der Abruf scheiterte.
+      console.warn('Fallback-Nutzerliste konnte nicht geladen werden:', e2.message);
+    }
     const fkSelect3 = document.getElementById('Fachkraft_NeueWege');
     if (fkSelect3 && _teamMembers.length > 0) {
       const sortName = m => { const p = (m.displayName||'').split(' '); return p.length>1?`${p[p.length-1]}, ${p[0]}`:m.displayName; };
@@ -3788,6 +4340,17 @@ function getFachkraftMail(name) {
 // ─── DYNAMIC SECTIONS (S3/S4/S5) ─────────────────────────────────────────────
 
 const SECTION_TEMPLATES = {
+  monat: {
+    s3: {
+      title: 'Bericht',
+      sub: 'Aktuelle Situation im Berichtsmonat',
+      fields: [
+        { id: 'Aktuelle_Lebenssituation', label: '1 | Aktuelle Situation', placeholder: 'Aktuelle Situation, Entwicklung und besondere Vorkommnisse im Berichtsmonat...', minHeight: 300 },
+      ]
+    },
+    s4: null,   // keine Hilfeplanziele
+    s5: null,   // keine Perspektive/Stellungnahme
+  },
   verlauf: {
     s3: {
       title: 'Verlauf der Hilfe',
@@ -3829,10 +4392,11 @@ const SECTION_TEMPLATES = {
       hasZiele: true
     },
     s5: {
-      title: 'Fachliche Einschätzung & Empfehlung',
-      sub: 'Abschließende Bewertung und Empfehlung',
+      title: 'Perspektive & Empfehlung',
+      sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
       fields: [
-        { id: 'Fachliche_Einschaetzung', label: 'Fachliche Einschätzung und Empfehlung', placeholder: 'Abschließende fachliche Bewertung...' },
+        { id: 'Stellungnahme', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
+        { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
       ]
     }
   },
@@ -3844,26 +4408,26 @@ const SECTION_TEMPLATES = {
         { id: 'Ausgangssituation', label: 'Clearingprozess – Ausgangssituation und Beteiligte Personen', placeholder: 'Gründe für das ambulante Clearing und zu klärende Fragestellungen, sowie die beteiligten Personen, Familiensysteme, ...' },
         { id: 'Zielsetzung_Clearing', label: 'Zielsetzung des Clearingprozesses', placeholder: '' },
         { id: 'Familienkonstellation', label: 'Familienkonstellation – aktuelle Lebenssituation', placeholder: '' },
-        { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen – Vorgehen - Methoden', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
+        { id: 'Rahmenbedingungen', label: 'Rahmenbedingungen - Vorgehen - Methoden', placeholder: 'Häufigkeit, Dauer, einbezogene Personen...' },
         { id: 'Anhang_Methodik', label: 'Anhang - Methodik', placeholder: 'z.B. Bei Erstellung eines Genogramms, Soziogramms, etc. hier als Anhang/Bild einzufügen' },
-        { id: 'Ergebnisse_Clearing', label: 'Ergebnisse des Clearings', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...', subCols: [
+      ]
+    },
+    s4: {
+      title: 'Ergebnisse',
+      sub: '',
+      fields: [
+        { id: 'Ergebnisse_Clearing', label: '', placeholder: 'Zusammenfassung der identifizierten Herausforderungen...', subCols: [
           { id: 'Ressourcen', label: 'Ressourcen', placeholder: 'Stärken, unterstützende Faktoren...' },
           { id: 'Risiken', label: 'Risiken', placeholder: 'Belastungen, Gefährdungsaspekte...' }
         ] },
       ]
     },
-    s4: {
-      title: 'Zielsetzung & Empfehlung',
-      sub: 'Clearing-Ziele und weiterführende Empfehlung',
-      fields: [
-        { id: 'Zusammenfassung_Ausblick', label: 'Zusammenfassung & Ausblick', placeholder: 'Wichtigste Erkenntnisse, Empfehlung für weitere Hilfen...' },
-      ]
-    },
     s5: {
-      title: 'Abschluss',
-      sub: 'Fachliche Einschätzung',
+      title: 'Perspektive & Empfehlung',
+      sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
       fields: [
-        { id: 'Fachliche_Einschaetzung', label: 'Fachliche Einschätzung', placeholder: 'Abschließende Bewertung...' },
+        { id: 'Stellungnahme', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
+        { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
       ]
     }
   },
@@ -3873,12 +4437,11 @@ const SECTION_TEMPLATES = {
       sub: 'Fachliche Beschreibung gemäß Berichtsstruktur',
       fields: [
         { id: 'Aktuelle_Lebenssituation', label: '1 | Aktuelle Situation', placeholder: 'Aktuelle Lebenssituation, Wohnsituation, Grundversorgung...' },
-        { id: 'VBS_Gesundheit', label: '2 | Gesundheitliche Versorgung', placeholder: 'Medizinische Versorgung, Arzttermine, Medikamente, Gesundheitszustand...' },
-        { id: 'VBS_Psychologie', label: '3 | Psychologische Begleitung', placeholder: 'Therapeutische Maßnahmen, psychische Stabilität, Begleitangebote...' },
-        { id: 'VBS_Soziale_Teilhabe', label: '4 | Soziale Teilhabe und Engagement', placeholder: 'Freizeitgestaltung, Peer-Kontakte, soziales Netzwerk, Gruppenangebote...' },
-        { id: 'VBS_Sprache_Integration', label: '5 | Deutsche Sprache und Integration', placeholder: 'Sprachkenntnisse, Sprachkurse, schulische/sprachliche Förderung...' },
-        { id: 'VBS_Haushalt', label: '6 | Haushalt und Selbstständigkeit', placeholder: 'Alltagskompetenzen, Ordnung, Körperhygiene, Eigenverantwortung...' },
-        { id: 'VBS_Berufliche_Perspektive', label: '7 | Berufliche Perspektive', placeholder: 'Schule, Ausbildung, Praktikum, berufliche Orientierung...' },
+        { id: 'VBS_Gesundheit', label: '2 | Gesundheitlicher Bereich', placeholder: 'Medizinische Versorgung, Arzttermine, Medikamente, Gesundheitszustand...' },
+        { id: 'VBS_Soziale_Teilhabe', label: '3 | Soziale Teilhabe und Engagement', placeholder: 'Freizeitgestaltung, Peer-Kontakte, soziales Netzwerk, Gruppenangebote...' },
+        { id: 'VBS_Sprache_Integration', label: '4 | Sprachentwicklung', placeholder: 'Sprachkenntnisse, Sprachkurse, schulische/sprachliche Förderung...' },
+        { id: 'VBS_Haushalt', label: '5 | Haushalt und Selbstständigkeit', placeholder: 'Alltagskompetenzen, Ordnung, Körperhygiene, Eigenverantwortung...' },
+        { id: 'VBS_Berufliche_Perspektive', label: '6 | Berufliche Perspektive', placeholder: 'Schule, Ausbildung, Praktikum, berufliche Orientierung...' },
       ]
     },
     s4: {
@@ -3890,6 +4453,7 @@ const SECTION_TEMPLATES = {
       title: 'Perspektive & Empfehlung',
       sub: 'Fachliche Einschätzung und Empfehlung der Fachkraft',
       fields: [
+        { id: 'Stellungnahme', label: 'Stellungnahme & Sichtweise Hilfeempfänger', placeholder: 'Stellungnahme und Sichtweise des Hilfeempfängers...' },
         { id: 'Fachliche_Einschaetzung', label: 'Perspektive & Empfehlung der Fachkraft', placeholder: 'Fachliche Einschätzung, Empfehlung zum weiteren Hilfebedarf...' },
       ]
     }
@@ -3913,7 +4477,7 @@ function buildDynamicSections(force = false) {
   
   // Build S3
   const s3 = tpl.s3;
-  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär'}[typ] || typ;
+  const _typLabel = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[typ] || typ;
   const _s3t = document.getElementById('s3_title'); if(_s3t) _s3t.textContent = s3.title + ' — ' + _typLabel;
   const _s3s = document.getElementById('s3_sub'); if(_s3s) _s3s.textContent = s3.sub;
   let s3html = '';
@@ -3943,7 +4507,7 @@ function buildDynamicSections(force = false) {
     if (f.id === 'Anhang_Methodik' && typ === 'clearing') {
       s3html += `<div class="card"><div class="card-title">${f.label}</div>
         <div class="field-grid full"><div class="field">
-          <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
+          <textarea id="${f.id}" style="min-height:${f.minHeight || 100}px;" placeholder="${f.placeholder}"></textarea>
         </div></div>
         <div id="anhangUploadArea" style="margin-top:12px; border:1.5px dashed var(--border-strong); border-radius:var(--radius); padding:14px 16px; background:var(--bg);">
           <div style="font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em;">PDF-Anhang (optional, max. 5 MB)</div>
@@ -3959,6 +4523,7 @@ function buildDynamicSections(force = false) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             <span id="anhangFileName" style="font-size:13px; font-weight:500; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
             <span id="anhangFileSize" style="font-size:12px; color:var(--text-muted); white-space:nowrap;"></span>
+            <input type="text" id="anhangTitel" placeholder="Bezeichnung des Anhangs (z.B. Genogramm)" oninput="setAnhangTitel(this.value)" style="flex-basis:100%; margin-top:6px; font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius); font-family:inherit;">
             <button onclick="previewAnhang()" title="Anhang ansehen" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:white; cursor:pointer; transition:all 0.12s;" onmouseover="this.style.borderColor=\'var(--accent-mid)\';this.style.background=\'var(--accent-light)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.background=\'white\'">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
@@ -3975,24 +4540,18 @@ function buildDynamicSections(force = false) {
         <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
   });
-  // Ressourcen/Risiken als Teil von s3html (nicht per innerHTML += um DOM-Reset nach Befüllung zu vermeiden)
-  if (typ === 'stationaer') {
-    s3html += `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:4px;">
-      <div class="card"><div class="card-title">Ressourcen</div>
-        <div class="field-grid full"><div class="field">
-          <textarea id="Ressourcen" style="min-height:90px;" placeholder="Stärken, unterstützende Faktoren..."></textarea>
-        </div></div></div>
-      <div class="card"><div class="card-title">Risiken</div>
-        <div class="field-grid full"><div class="field">
-          <textarea id="Risiken" style="min-height:90px;" placeholder="Belastungen, Gefährdungsaspekte..."></textarea>
-        </div></div></div>
-    </div>`;
-  }
+  // Ressourcen/Risiken im stationaeren Bericht entfaellt (Stand 08/2026) —
+  // im Clearingbericht bleiben die Felder als subCols von "Ergebnisse des Clearings" bestehen.
   if(s3c) s3c.innerHTML = s3html;
   
   // Build S4
-  const s4 = tpl.s4;
+  // Seiten ohne Inhalt (Monatsbericht) in der Seitenleiste ausblenden
+  { const n4 = document.getElementById('nav4'), n5 = document.getElementById('nav5');
+    if (n4) n4.style.display = tpl.s4 ? '' : 'none';
+    if (n5) n5.style.display = tpl.s5 ? '' : 'none'; }
+  const s4 = tpl.s4 || { title: '', sub: '', fields: [] };
   const _s4t = document.getElementById('s4_title'); if(_s4t) _s4t.textContent = s4.title + ' — ' + _typLabel;
+  { const _n4 = document.querySelector('#nav4 span'); if (_n4) _n4.textContent = typ === 'clearing' ? 'Ergebnisse' : 'Ziele'; }
   const _s4s = document.getElementById('s4_sub'); if(_s4s) _s4s.textContent = s4.sub;
   let s4html = '';
   if (s4.extraFields) {
@@ -4008,10 +4567,15 @@ function buildDynamicSections(force = false) {
       <button class="btn-add" onclick="addZiel()">+ Ziel hinzufügen</button>`;
   } else if (s4.fields) {
     s4.fields.forEach(f => {
-      s4html += `<div class="card"><div class="card-title">${f.label}</div>
+      // Hauptfeld mit eingebetteten Spalten (Ergebnisse mit Ressourcen | Risiken) — wie auf Seite 3
+      const cols = f.subCols ? `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">` +
+        f.subCols.map(c => `<div class="field"><label>${c.label}</label>
+          <textarea id="${c.id}" style="min-height:90px;" placeholder="${c.placeholder || ''}"></textarea>
+        </div>`).join('') + `</div>` : '';
+      s4html += `<div class="card">${f.label ? `<div class="card-title">${f.label}</div>` : ''}
         <div class="field-grid full"><div class="field">
-          <textarea id="${f.id}" style="min-height:100px;" placeholder="${f.placeholder}"></textarea>
-        </div></div></div>`;
+          <textarea id="${f.id}" style="min-height:${f.minHeight || 100}px;" placeholder="${f.placeholder}"></textarea>
+        </div></div>${cols}</div>`;
     });
   }
   // Bestehende Ziel-Eingaben VOR dem innerHTML-Ersatz sichern — der Ersatz
@@ -4036,7 +4600,7 @@ function buildDynamicSections(force = false) {
   }
   
   // Build S5
-  const s5 = tpl.s5;
+  const s5 = tpl.s5 || { title: '', sub: '', fields: [] };
   const _s5t = document.getElementById('s5_title'); if(_s5t) _s5t.textContent = s5.title + ' — ' + _typLabel;
   const _s5s = document.getElementById('s5_sub'); if(_s5s) _s5s.textContent = s5.sub;
   let s5html = '';
@@ -4045,11 +4609,8 @@ function buildDynamicSections(force = false) {
       <div class="field-grid full"><div class="field">
         <textarea id="${f.id}" style="min-height:${f.id === 'Fachliche_Einschaetzung' ? '140' : '80'}px;" placeholder="${f.placeholder}"></textarea>
       </div></div></div>`;
-    // Besprochen-Abfrage: beim Verlaufsbericht unter der Stellungnahme-Box,
-    // beim Abschlussbericht unter "Fachliche Einschätzung und Empfehlung"
-    if ((typ === 'verlauf' && f.id === 'Stellungnahme') ||
-        (typ === 'abschluss' && f.id === 'Fachliche_Einschaetzung') ||
-        (typ === 'stationaer' && f.id === 'Fachliche_Einschaetzung')) {
+    // Besprochen-Abfrage: bei allen Berichtstypen unter der Stellungnahme-Box
+    if (f.id === 'Stellungnahme') {
       s5html += `<div class="card"><div class="card-title">Bericht wurde mit Hilfeempfänger besprochen</div>
       <div class="field-grid">
         <div class="field"><label>Besprochen? (Auswahlliste)</label>
@@ -4075,6 +4636,7 @@ function buildDynamicSections(force = false) {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         <span id="anhangFileNameS5" style="font-size:13px; font-weight:500; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
         <span id="anhangFileSizeS5" style="font-size:12px; color:var(--text-muted); white-space:nowrap;"></span>
+        <input type="text" id="anhangTitelS5" placeholder="Bezeichnung des Anhangs (z.B. Genogramm)" oninput="setAnhangTitel(this.value)" style="flex-basis:100%; margin-top:6px; font-size:13px; padding:7px 10px; border:1px solid var(--border); border-radius:var(--radius); font-family:inherit;">
         <button onclick="previewAnhang()" title="Anhang ansehen" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:1px solid var(--border); border-radius:var(--radius); background:white; cursor:pointer; transition:all 0.12s;" onmouseover="this.style.borderColor=\'var(--accent-mid)\';this.style.background=\'var(--accent-light)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.background=\'white\'">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
@@ -4085,14 +4647,7 @@ function buildDynamicSections(force = false) {
     </div>`;
   }
   // Add signature card (always present)
-  s5html += `<div class="card">
-    <div class="card-title">Unterschrift</div>
-    <div class="field-grid triple">
-      <div class="field"><label>Ort</label><input type="text" id="Ort" value="Wolnzach"></div>
-      <div class="field"><label>Datum</label><input type="date" id="Datum_Unterschrift"></div>
-    </div>
-    <div id="unterschriftFachkraefte"></div>
-  </div>`;
+  s5html += ``;
   const s5c2 = document.getElementById('s5_content'); if(s5c2) s5c2.innerHTML = s5html;
   // Nach dem Rebuild: Anhang-UI-Status wiederherstellen (falls PDF bereits geladen)
   if (typ !== 'clearing') updateAnhangUI();
@@ -4121,6 +4676,61 @@ function _anzahlFachkraefte() {
 }
 
 // Unterschrift-Block je Fachkraft erzeugen: Name + Qualifikation 1 + Qualifikation 2 (+ Freitext bei „Andere…“)
+// Unterschriftenbereich (Seite „Absenden"): eine Zeile je unterschreibender Fachkraft —
+// Auswahlliste (Name) + zwei Qualifikationen. Zeile 1 ist mit der angemeldeten Person
+// vorbelegt, weitere Zeilen kommen über „+ Fachkraft hinzufügen". Die Fachkraft-Felder
+// auf Seite 1 bleiben davon unberührt. Datenmodell unverändert: FK{i}_Name/_Quali1/_Quali2.
+let _unterschriftCount = 1;
+
+// M365-Position (Entra-Feld jobTitle) einer Person aus den geladenen Gruppenmitgliedern
+function positionVon(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return '';
+  const alle = [...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])];
+  const t = alle.find(m => String(m.displayName || '').trim().toLowerCase() === n);
+  return t && t.jobTitle ? String(t.jobTitle).trim() : '';
+}
+
+// Qualifikation 1 aus der M365-Position der gewählten Person setzen.
+// erzwingen=true beim Personenwechsel; sonst nur, wenn das Feld leer ist.
+function qualiAusPosition(i, erzwingen) {
+  const name = document.getElementById(`FK${i}_Name`)?.value || '';
+  const q1 = document.getElementById(`FK${i}_Quali1`);
+  if (!q1) return;
+  if (!erzwingen && q1.value) return;
+  const pos = positionVon(name);
+  if (pos) {
+    if (!Array.from(q1.options).some(o => o.value === pos)) q1.add(new Option(pos, pos), Math.max(0, q1.options.length - 1));
+    q1.value = pos;
+  } else if (erzwingen) q1.value = '';
+}
+
+// „Andere…" bei Qualifikation 1: Freitext erfassen und als Eintrag übernehmen
+function quali1Geaendert(i) {
+  const el = document.getElementById(`FK${i}_Quali1`);
+  if (!el || el.value !== '__custom__') return;
+  const q = (prompt('Qualifikation / Berufsbezeichnung:') || '').trim();
+  if (q) { el.add(new Option(q, q), el.options.length - 1); el.value = q; }
+  else el.value = '';
+  if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+}
+
+function unterschriftPersonGeaendert(i) {
+  qualiAusPosition(i, true);
+  if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+}
+
+function _unterschriftOptionenHtml(aktuell) {
+  let namen = [];
+  if (_kilankaBetreuerListe && _kilankaBetreuerListe.length) namen = _kilankaBetreuerListe.slice();
+  else if (_teamMembers && _teamMembers.length) namen = _teamMembers.map(m => m.displayName || '').filter(Boolean);
+  const me = currentAccount?.name || '';
+  if (me && !namen.includes(me)) namen.push(me);
+  if (aktuell && !namen.includes(aktuell)) namen.push(aktuell);
+  const esc = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return '<option value="">— bitte wählen —</option>' + namen.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+}
+
 function renderUnterschriftFachkraefte() {
   const wrap = document.getElementById('unterschriftFachkraefte');
   if (!wrap) return;
@@ -4128,21 +4738,31 @@ function renderUnterschriftFachkraefte() {
   const prev = {};
   wrap.querySelectorAll('input[id], select[id]').forEach(el => prev[el.id] = el.value);
 
-  const anzahl = _anzahlFachkraefte();
+  const anzahl = Math.max(1, Math.min(4, _unterschriftCount));
+  // Qualifikation 1: ausschließlich die in M365 gepflegten Positionen (jobTitle) — plus „Andere…" für Freitext
+  const q1opts = [...new Set([...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])]
+    .map(m => String(m.jobTitle || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+  const escQ = v => String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const q1Html = i => {
+    const vorher = prev['FK' + i + '_Quali1'] || '';
+    const liste = vorher && vorher !== '__custom__' && !q1opts.includes(vorher) ? [...q1opts, vorher] : q1opts;
+    return `<option value="">— bitte wählen —</option>` + liste.map(o => `<option value="${escQ(o)}">${escQ(o)}</option>`).join('') + `<option value="__custom__">Andere…</option>`;
+  };
+  const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere</option>`;
   let html = '';
   for (let i = 1; i <= anzahl; i++) {
-    const q1 = `<option value="">— bitte wählen —</option>` + QUALI1_OPTS.map(o => `<option>${o}</option>`).join('');
-    const q2 = `<option value="">— bitte wählen —</option>` + QUALI2_OPTS.map(o => `<option>${o}</option>`).join('') + `<option value="__custom__">Andere…</option>`;
+    const entfernen = i > 1
+      ? `<button type="button" class="btn-remove" onclick="removeUnterschriftFachkraft(${i})" title="Fachkraft entfernen" style="height:38px; padding:0 12px; background:none; border:1px solid var(--error); color:var(--error); border-radius:var(--radius); cursor:pointer;">✕</button>`
+      : `<div></div>`;
     html += `
-      <div class="divider" style="font-size:12px; font-weight:600; color:var(--accent); margin:6px 0 10px;">Fachkraft ${i}</div>
-      <div class="field-grid sig-triple">
-        <div class="field"><label>Name</label><input type="text" id="FK${i}_Name" oninput="this.dataset.manuallySet='1'"></div>
-        <div class="field"><label>Qualifikation 1 (Auswahlliste)</label><select id="FK${i}_Quali1">${q1}</select></div>
-        <div class="field"><label>Qualifikation 2 (Auswahlliste)</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
+      <div id="unterschrift_zeile_${i}" style="display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:10px; align-items:end; margin-bottom:10px;">
+        <div class="field"><label>Fachkraft ${i}</label><select id="FK${i}_Name" onchange="unterschriftPersonGeaendert(${i})">${_unterschriftOptionenHtml(prev['FK'+i+'_Name'] || '')}</select></div>
+        <div class="field"><label>Qualifikation 1</label><select id="FK${i}_Quali1" onchange="quali1Geaendert(${i})">${q1Html(i)}</select></div>
+        <div class="field"><label>Qualifikation 2</label><select id="FK${i}_Quali2" onchange="toggleQuali2Custom(${i})">${q2}</select></div>
+        ${entfernen}
       </div>
-      <div class="field-grid sig-triple" id="FK${i}_Quali2CustomWrap" style="display:none;">
-        <div></div>
-        <div></div>
+      <div class="field-grid sig-triple" id="FK${i}_Quali2CustomWrap" style="display:none; margin-bottom:10px;">
+        <div></div><div></div>
         <div class="field"><label>Eigene Qualifikation 2</label><input type="text" id="FK${i}_Quali2Custom" placeholder="z.B. Traumafachberater:in"></div>
       </div>`;
   }
@@ -4150,7 +4770,52 @@ function renderUnterschriftFachkraefte() {
   // Werte zurückschreiben
   Object.keys(prev).forEach(id => { const el = document.getElementById(id); if (el) el.value = prev[id]; });
   for (let i = 1; i <= anzahl; i++) toggleQuali2Custom(i);
+  const btn = document.getElementById('btnAddUnterschrift');
+  if (btn) { btn.disabled = anzahl >= 4; btn.style.opacity = anzahl >= 4 ? '0.4' : '1'; }
   enableSpellcheck();
+}
+
+function addUnterschriftFachkraft() {
+  if (_unterschriftCount >= 4) return;
+  _unterschriftCount++;
+  renderUnterschriftFachkraefte();
+}
+
+// Zeile n entfernen; nachfolgende rücken auf, damit FK1..n lückenlos bleiben
+function removeUnterschriftFachkraft(n) {
+  const lesen = i => ({
+    name: document.getElementById('FK' + i + '_Name')?.value || '',
+    q1: document.getElementById('FK' + i + '_Quali1')?.value || '',
+    q2: document.getElementById('FK' + i + '_Quali2')?.value || '',
+    q2c: document.getElementById('FK' + i + '_Quali2Custom')?.value || '',
+  });
+  const rest = [];
+  for (let i = 2; i <= _unterschriftCount; i++) if (i !== n) rest.push(lesen(i));
+  _unterschriftCount = 1 + rest.length;
+  renderUnterschriftFachkraefte();
+  rest.forEach((r, idx) => {
+    const i = idx + 2;
+    const sel = document.getElementById('FK' + i + '_Name');
+    if (sel) { if (r.name && !Array.from(sel.options).some(o => o.value === r.name)) sel.add(new Option(r.name, r.name)); sel.value = r.name; }
+    const q1 = document.getElementById('FK' + i + '_Quali1'); if (q1) q1.value = r.q1;
+    const q2 = document.getElementById('FK' + i + '_Quali2'); if (q2) q2.value = r.q2;
+    const c = document.getElementById('FK' + i + '_Quali2Custom'); if (c) c.value = r.q2c;
+    toggleQuali2Custom(i);
+  });
+}
+
+// Zeilenanzahl aus gespeicherten Daten ableiten (Bestandsberichte) und aufbauen
+function unterschriftAusDaten(data) {
+  let n = 1;
+  for (let i = 2; i <= 4; i++) if ((data['FK' + i + '_Name'] || '').trim()) n = i;
+  _unterschriftCount = n;
+  renderUnterschriftFachkraefte();
+  // gespeicherte Namen wählbar machen (Bestand: Person evtl. nicht mehr im Team / nicht Betreuerin)
+  for (let i = 1; i <= n; i++) {
+    const nm = (data['FK' + i + '_Name'] || '').trim();
+    const sel = document.getElementById('FK' + i + '_Name');
+    if (sel && nm && !Array.from(sel.options).some(o => o.value === nm)) sel.add(new Option(nm, nm));
+  }
 }
 
 // "Andere…" bei Qualifikation 2 -> Freitextfeld einblenden
@@ -4162,14 +4827,17 @@ function toggleQuali2Custom(i) {
   if (sel.value !== '__custom__') { const c = document.getElementById(`FK${i}_Quali2Custom`); if (c) c.value = ''; }
 }
 
-// Namen aus Seite 1 in die Unterschrift übernehmen (sofern nicht manuell überschrieben)
+// Zeile 1 mit der angemeldeten Person vorbelegen, sofern noch leer
 function syncUnterschriftNamen() {
-  const namen = [document.getElementById('Fachkraft_NeueWege')?.value || ''];
-  for (let i = 2; i <= 4; i++) namen.push(document.getElementById('Fachkraft_' + i)?.value || '');
-  for (let i = 1; i <= 4; i++) {
-    const el = document.getElementById(`FK${i}_Name`);
-    if (el && !el.dataset.manuallySet) el.value = namen[i-1] || '';
+  const el = document.getElementById('FK1_Name');
+  const me = currentAccount?.name || '';
+  if (el && !el.value && me) {
+    if (!Array.from(el.options).some(o => o.value === me)) el.add(new Option(me, me));
+    el.value = me;
   }
+  // Qualifikation 1 immer aus der M365-Position der gewählten Person übernehmen;
+  // nur wenn dort keine Position gepflegt ist, bleibt ein vorhandener Wert stehen
+  for (let i = 1; i <= _unterschriftCount; i++) { if (positionVon(document.getElementById(`FK${i}_Name`)?.value)) qualiAusPosition(i, true); }
 }
 
 // ─── ÜBERSICHT (S0) ───────────────────────────────────────────────────────────
@@ -4451,7 +5119,8 @@ function handleAnhangUpload(input) {
   const reader = new FileReader();
   reader.onload = function(e) {
     const base64 = e.target.result.split(',')[1];
-    _anhangPDF = { name: file.name, base64: base64, size: file.size };
+    _anhangPDF = { name: file.name, base64: base64, size: file.size,
+      titel: file.name.replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() };
     updateAnhangUI();
   };
   reader.readAsDataURL(file);
@@ -4474,6 +5143,7 @@ function updateAnhangUI() {
       previewDiv.style.display = 'flex';
       if (nameSpan) nameSpan.textContent = _anhangPDF.name;
       if (sizeSpan) sizeSpan.textContent = (_anhangPDF.size / 1024).toFixed(0) + ' KB';
+      setAnhangTitel(_anhangPDF.titel || '');
     } else {
       noneDiv.style.display    = 'flex';
       previewDiv.style.display = 'none';
@@ -4501,7 +5171,7 @@ function removeAnhang() {
 // Anhang als separate PDF-Datei in SharePoint hochladen (gleicher Ordner wie DOCX/PDF)
 async function uploadAnhangToSharePoint(driveId, token, baseDocxName) {
   if (!_anhangPDF) return null;
-  const anhangName = baseDocxName.replace(/(_v\d+)?\.docx$/, '') + '_Anhang.pdf';
+  const anhangName = baseDocxName.replace(/(_v\d+)?\.(docx|pdf)$/, '') + '_Anhang.pdf';
   const bytes = Uint8Array.from(atob(_anhangPDF.base64), c => c.charCodeAt(0));
   const resp = await fetch(
     `https://graph.microsoft.com/v1.0/drives/${driveId}/root:${CONFIG.outputFolder}/${encodeURIComponent(anhangName)}:/content`,
@@ -4592,6 +5262,502 @@ window.addEventListener('DOMContentLoaded', () => {
   if (window.msal) { initMsal(); }
   else { setTimeout(() => { if (window.msal) initMsal(); else { document.getElementById('loginError').style.display='block'; document.getElementById('loginError').textContent='MSAL konnte nicht geladen werden. Bitte Seite neu laden.'; }}, 2000); }
 });
+
+// Unterschriftenbereich einmalig aufbauen, damit die Felder existieren, bevor loadDraft Werte setzt
+renderUnterschriftFachkraefte();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+ * PNW Berichts-PDF — pdfmake docDefinition
+ * Praxis NeueWege · nach Design-Handoff "Berichtdesign_NeueWege"
+ *
+ * buildBerichtDocDefinition(typ, data, opts)
+ *   typ:  'verlauf' | 'abschluss' | 'clearing' | 'stationaer'
+ *   data: das Objekt aus collectData() des Berichtsgenerators
+ *   opts: { logoDataUrl, freigegebenVon }
+ *
+ * Läuft im Browser (pdfMake) und in Node (pdfmake printer) — reine
+ * Funktion ohne DOM-Zugriff.
+ * ═══════════════════════════════════════════════════════════════ */
+
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.buildBerichtDocDefinition = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+
+  // ── Design-Tokens (Handoff-README + Token-Referenzseite) ──
+  const C = {
+    dunkelbraun: '#5A2D15', wood: '#7B3F1E', terra: '#A15F38',
+    terraHell: '#B56B4A', creme: '#F5F0EA', papier: '#FFFFFF',   // Seite reinweiß, kein getönter Hintergrund
+    ink: '#211F1B', muted: '#4A4640', meta: '#8A857B',
+    rahmenStark: '#D8D2C6', rahmenMittel: '#E4DED2',
+    erreicht: '#2D6A4F',
+  };
+  const F = {
+    titel: 19.5, untertitel: 9.75, eyebrow: 6.4, h2: 10.1,
+    badge: 7.5, label: 6, wert: 8.25, fliess: 10.5, fuss: 8,
+  };
+  const LINE = { fussAkzent: 1.1, trenner: 0.75 };
+  const PAGE_W = 595.28; // A4 pt
+  const MARGIN_X = 34.5; // 46 px ≈ 12,2 mm
+
+  // ── Helfer ──
+  const dash = v => (v == null || String(v).trim() === '') ? '—' : String(v).trim();
+  const has = v => v != null && String(v).trim() !== '';
+  function fmtDate(iso) {
+    if (!has(iso)) return '';
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}.${m[2]}.${m[1]}` : String(iso);
+  }
+  function fmtDateLong(d) {
+    const dt = d instanceof Date ? d : new Date();
+    return dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+  function upper(s) { return String(s || '').toUpperCase(); }
+
+  const TYP_LABEL = {
+    verlauf: 'Verlaufsbericht', abschluss: 'Abschlussbericht',
+    clearing: 'Clearingbericht', stationaer: 'Verlaufsbericht (stationär)', monat: 'Monatsbericht',
+  };
+
+  // Badge als SVG-Kreis (pdfmake-fähig; Ziffer in generischer Sans)
+  function badge(n) {
+    return {
+      svg: `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="7" cy="7" r="7" fill="${C.terra}"/>
+        <text x="7" y="9.6" font-size="7.5" font-weight="bold" fill="${C.papier}" text-anchor="middle" font-family="sans-serif">${n}</text>
+      </svg>`,
+      width: 14, margin: [0, 0.5, 0, 0],
+    };
+  }
+
+  function sectionHeading(n, title) {
+    return {
+      unbreakable: true,      // Nummernkreis, Titel und Linie nie auf zwei Seiten verteilen
+      headlineLevel: 1,       // s. pageBreakBefore: keine Überschrift allein am Seitenende
+      stack: [
+        { columns: [
+          { width: 20, stack: [badge(n)] },
+          { width: '*', text: title, font: 'Baskerville', bold: true, fontSize: F.h2, color: C.dunkelbraun, margin: [0, 1, 0, 0] },
+        ]},
+        // Unterstrich über die gesamte Textbreite
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: 0.8, lineColor: C.dunkelbraun }], margin: [0, 3, 0, 0] },
+      ],
+      margin: [0, 14, 0, 6],
+    };
+  }
+
+  function bodyText(t) {
+    return {
+      text: String(t || '').trim(), fontSize: F.fliess, lineHeight: 1.45,
+      color: C.ink, alignment: 'justify', margin: [20, 0, 0, 4],
+      preserveLeadingSpaces: false,
+    };
+  }
+
+  function subLabel(t) {
+    return { headlineLevel: 2,
+      text: upper(t), font: 'KodchasanSemi', fontSize: F.fliess,
+      characterSpacing: 0.4, color: C.ink, margin: [20, 8, 0, 2],
+    };
+  }
+
+  // ── Stammdaten-Box ──
+  function stammCell(label, value) {
+    return {
+      stack: [
+        { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 0, 0, 1.5] },
+        { text: has(value) ? String(value) : ' ', font: 'KodchasanMedium', fontSize: F.fliess, color: C.ink, lineHeight: 1.2 },
+      ],
+      margin: [6, 5, 6, 5],
+    };
+  }
+
+  function stammBox(rows) {
+    return {
+      table: {
+        widths: ['*', '*'],
+        body: rows.map(([l, r]) => [stammCell(l[0], l[1]), stammCell(r[0], r[1])]),
+      },
+      layout: {
+        hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 0.9 : LINE.trenner,
+        vLineWidth: (i, node) => (i === 0 || i === node.table.widths.length) ? 0.9 : 0,
+        hLineColor: (i, node) => (i === 0 || i === node.table.body.length) ? C.rahmenStark : C.rahmenMittel,
+        vLineColor: () => C.rahmenStark,
+        paddingLeft: () => 8, paddingRight: () => 8, paddingTop: () => 2, paddingBottom: () => 2,
+      },
+      margin: [0, 10, 0, 4],
+    };
+  }
+
+  // ── Ziel-Karte (unbreakable) ──
+  // "Bericht besprochen" — Select liefert 'Ja'/'Nein' (Grossschreibung); leer → nichts
+  function besprochenBlock(data) {
+    if (!has(data.Bericht_Besprochen)) return [];
+    const _b = data.Bericht_Besprochen === 'Ja'
+      ? 'Der Bericht wurde mit dem Hilfeempfänger besprochen' + (has(data.Bericht_Besprochen_Datum) ? ` am ${fmtDate(data.Bericht_Besprochen_Datum)}` : '') + '.'
+      : 'Der Bericht wurde mit dem Hilfeempfänger nicht besprochen.';
+    return [
+      { text: _b, fontSize: F.fliess, lineHeight: 1.45, color: C.ink, margin: [20, 4, 0, 4] },   // gleicher Einzug wie die Textbloecke
+    ];
+  }
+
+  function zielCard(n, z, mitMethoden) {
+    const inner = [
+      { text: `Ziel ${n}`, font: 'Baskerville', bold: true, fontSize: F.h2, color: C.dunkelbraun, margin: [0, 0, 0, 3] },
+      { text: dash(z.beschreibung), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify' },
+    ];
+    const zLabel = t => ({ text: t, font: 'KodchasanSemi', fontSize: F.fliess, characterSpacing: 0.4, color: C.ink, margin: [0, 7, 0, 2] });
+    if (mitMethoden) {
+      inner.push(
+        zLabel('METHODEN & MASSNAHMEN'),
+        { text: dash(z.methoden), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify' }
+      );
+    }
+    inner.push(
+      zLabel('ZIELERREICHUNG — ERGEBNIS'),
+      { text: dash(z.ergebnis), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify' }
+    );
+    return {
+      unbreakable: true,
+      table: { widths: ['*'], body: [[{ stack: inner, margin: [8, 6, 8, 7] }]] },
+      layout: {
+        hLineWidth: () => LINE.trenner, vLineWidth: () => LINE.trenner,
+        hLineColor: () => C.rahmenMittel, vLineColor: () => C.rahmenMittel,
+      },
+      margin: [20, 0, 0, 7],
+    };
+  }
+
+  // ── Ressourcen/Risiken-Zweispalter ──
+  function ressRisiken(ress, risi) {
+    function col(title, text) {
+      return {
+        table: {
+          widths: ['*'], headerRows: 1, keepWithHeaderRows: 1,
+          body: [
+            [{ text: upper(title), font: 'KodchasanSemi', fontSize: F.fliess, characterSpacing: 0.4, color: C.ink, fillColor: C.creme, margin: [6, 4, 6, 4] }],
+            [{ text: dash(text), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify', margin: [6, 5, 6, 6] }],
+          ],
+        },
+        layout: {
+          hLineWidth: () => LINE.trenner, vLineWidth: () => LINE.trenner,
+          hLineColor: () => C.rahmenMittel, vLineColor: () => C.rahmenMittel,
+        },
+      };
+    }
+    // Kopfzeilen nie allein am Seitenende: Tabelle haelt Kopf + Inhalt zusammen (keepWithHeaderRows),
+    // zusaetzlich greift pageBreakBefore ueber headlineLevel, wenn unter dem Block kein Platz mehr ist
+    return { headlineLevel: 2, columns: [col('Ressourcen', ress), { width: 10, text: '' }, col('Risiken', risi)], margin: [20, 4, 0, 4] };
+  }
+
+  // ── Unterschriftenblock ──
+  function signatureBlock(data, freigegebenVon) {
+    // Eintrag steht auf der Linie, die Bezeichnung darunter — wie bei einer
+    // handschriftlichen Unterschrift. Ort mit dem Datum der PDF-Erzeugung,
+    // Namen ohne Berufsbezeichnung.
+    function sig(label, value) {
+      return {
+        stack: [
+          { text: dash(value), font: 'KodchasanMedium', fontSize: F.fliess, color: C.ink, margin: [0, 22, 0, 2] },
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: LINE.trenner, lineColor: C.ink }], margin: [0, 0, 0, 3] },
+          { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta },
+        ],
+      };
+    }
+    const ortDatum = [dash(data.Ort), fmtDateLong(new Date())].filter(v => v !== '—').join(', ');
+    const fk = [data.Fachkraft1_Name || data.Fachkraft_NeueWege, data.Fachkraft1_Quali1].filter(has).join(', ');   // Name, Position (M365)
+    return {
+      unbreakable: true,
+      columns: [sig('Ort, Datum', ortDatum), { width: 18, text: '' }, sig('Fachkraft / Qualifikation', fk), { width: 18, text: '' }, sig('Freigabe Leitung', freigegebenVon || 'Entwurf')],
+      margin: [0, 16, 0, 0],
+    };
+  }
+
+  // ── Konfiguration je Berichtstyp ──
+  function stundenumfang(data) {
+    if (!has(data.Fachleistungsstunden)) return '';
+    const typ = data.Stunden_Typ || '';
+    if (/stunden/i.test(typ)) return `${data.Fachleistungsstunden} ${typ}`; // z.B. "6 Wochenstunden"
+    return `${data.Fachleistungsstunden} h${typ ? ' / ' + typ : ''}`;
+  }
+
+  function alleSorg(data) {
+    const erste = [data.Sorg_Vorname, data.Sorg_Familienname].filter(has).join(' ');
+    const beziehung = has(data.Sorg_Beziehung) ? ` (${data.Sorg_Beziehung})` : '';
+    const extra = (data._extraSorg || []).map(s =>
+      [s.vorname, s.name].filter(Boolean).join(' ') + (s.beziehung ? ` (${s.beziehung})` : ''));
+    return [erste ? erste + beziehung : '', ...extra].filter(Boolean).join('\n');
+  }
+
+  function weitereKinder(data) {
+    return (data._extraKinder || []).map(k => {
+      const nm = [k.vorname, k.name].filter(Boolean).join(' ');
+      return k.geburtsdatum ? `${nm} (geb. ${fmtDate(k.geburtsdatum)})` : nm;
+    }).filter(Boolean).join('\n') || (data.Kind2_Liste || '');
+  }
+
+  function stammRows(typ, data) {
+    const kind = [data.Kind_Vorname, data.Kind_Familienname].filter(has).join(' ');
+    const adresse = [data.Kind_Strasse, data.Kind_PLZ_Ort].filter(has).join(', ');
+    const bz = data.Berichtszeitraum ||
+      [fmtDate(data.BZ_Von), fmtDate(data.BZ_Bis)].filter(Boolean).join(' – ');
+    const rows = [
+      [['Kind / Jugendliche*r', kind], ['Geburtsdatum', fmtDate(data.Kind_Geburtsdatum)]],
+      [['Adresse', adresse], ['Sorgeberechtigte', alleSorg(data)]],
+      [['Weitere Kinder', weitereKinder(data)], ['Jugendamt', data.Jugendamt]],
+      [['Sachbearbeitung Jugendamt', data.Sachbearbeitung_JA], ['Hilfeart', data.Hilfeart]],
+    ];
+    if (typ === 'stationaer') {
+      rows.push([['Einrichtung', data.Einrichtung || 'Nordstern (Wolnzach)'], ['Berichtszeitraum', bz]]);
+      rows.push([['Letztes HPG', fmtDate(data.Letztes_HPG)], ['Nächstes HPG', fmtDate(data.Naechstes_HPG)]]);
+    } else {
+      rows.push([['Hilfebeginn', fmtDate(data.Hilfebeginn)], ['Stundenumfang lt. Bescheid', stundenumfang(data)]]);
+      rows.push([['Berichtszeitraum', bz], ['Letztes HPG', fmtDate(data.Letztes_HPG)]]);
+      rows.push([['Nächstes HPG', fmtDate(data.Naechstes_HPG)], ['Teamleitung', data.Fallleitung]]);
+    }
+    const fk1 = data.Fachkraft1_Name || data.Fachkraft_NeueWege;
+    const fk2 = data.Fachkraft2_Name || data.Fachkraft_2; // fuer alle Berichtstypen
+    rows.push([['Fachkraft NeueWege', fk1], has(fk2) ? ['Fachkraft 2', fk2] : ['', '']]);
+    return rows;
+  }
+
+  // Abschnitte je Typ: {title, text} | {title, ziele} | {title, ressRisiken} — leere entfallen
+  function sections(typ, data) {
+    const S = [];
+    const push = (title, text) => { S.push({ title, text }); };   // Überschrift auch bei leerem Feld
+    const ziele = (data._ziele || []).filter(z => has(z.beschreibung) || has(z.ergebnis));
+
+    if (typ === 'verlauf') {
+      push('Beschreibung der aktuellen Lebenssituation', data.Aktuelle_Lebenssituation);
+      push('Familiensystem', data.Familiensystem);
+      push('Entwicklung der betroffenen Kinder / Jugendlichen', data.Entwicklung_Kind);
+      push('Besondere Vorkommnisse im Berichtszeitraum', data.Besondere_Vorkommnisse);
+      {
+        S.push({ title: 'Verlauf der Hilfe', textLabel: 'Arbeitsbeziehung & Mitwirkungsbereitschaft', text: data.Arbeitsbeziehung, ziele, zieleLabel: 'Hilfeplanziele & Zielerreichung', mitMethoden: true });
+      }
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
+    } else if (typ === 'monat') {
+      push('Aktuelle Situation', data.Aktuelle_Lebenssituation);
+    } else if (typ === 'abschluss') {
+      push('Aktuelle Situation', data.Aktuelle_Situation);
+      push('Verlauf der Maßnahme', data.Verlauf_Massnahme);
+      S.push({ title: 'Zielerreichung', ziele, mitMethoden: false });
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
+    } else if (typ === 'clearing') {
+      push('Ausgangssituation & beteiligte Personen', data.Ausgangssituation);
+      push('Zielsetzung des Clearingprozesses', data.Zielsetzung_Clearing);
+      push('Familienkonstellation — aktuelle Lebenssituation', data.Familienkonstellation);
+      push('Rahmenbedingungen - Vorgehen - Methoden', data.Rahmenbedingungen);
+      push('Anhang — Methodik', data.Anhang_Methodik);
+      {
+        S.push({ title: 'Ergebnisse des Clearings', text: data.Ergebnisse_Clearing, ressRisiken: true });
+      }
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
+    } else { // stationaer
+      push('Aktuelle Lebenssituation in der Wohngruppe', data.Aktuelle_Lebenssituation);
+      push('Gesundheitlicher Bereich', data.VBS_Gesundheit);
+      push('Soziale Teilhabe & Engagement', data.VBS_Soziale_Teilhabe);
+      push('Sprachentwicklung', data.VBS_Sprache_Integration);
+      push('Haushalt & Selbstständigkeit', data.VBS_Haushalt);
+      push('Berufliche Perspektive', data.VBS_Berufliche_Perspektive);
+      S.push({ title: 'Stellungnahme & Sichtweise Hilfeempfänger', text: data.Stellungnahme, besprochen: true });
+      push('Perspektive & Empfehlung der Fachkraft', data.Fachliche_Einschaetzung);
+    }
+    return S;
+  }
+
+  // ── Hauptfunktion ──
+  return function buildBerichtDocDefinition(typ, data, opts) {
+    opts = opts || {};
+    data = data || {};
+    const label = TYP_LABEL[typ] || 'Bericht';
+    const kindName = [data.Kind_Vorname, data.Kind_Familienname].filter(has).join(' ');
+    const erstelltAm = fmtDateLong(opts.erstelltAm);
+    const freigegebenVon = opts.freigegebenVon || '';
+    const untertitel = has(data.Hilfeart) ? data.Hilfeart : '';
+
+    // Kopf Seite 1
+    const content = [];
+    const kopfLinks = [];
+    kopfLinks.push({ text: label, font: 'Baskerville', bold: true, fontSize: F.titel, color: C.dunkelbraun, margin: [0, 0, 0, 3] });
+    if (untertitel) kopfLinks.push({ text: untertitel, font: 'Baskerville', italics: true, fontSize: F.untertitel, color: C.terra, margin: [0, 0, 0, 4] });
+    kopfLinks.push({ text: `ERSTELLT AM ${erstelltAm}`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta, margin: [0, 2, 0, 2] });
+    content.push({
+      columns: [
+        { width: '*', stack: kopfLinks },
+        ...(opts.logoDataUrl ? [{ image: opts.logoDataUrl, fit: [210, 55], width: 210, margin: [12, 0, 0, 0] }] : []),
+      ],
+      margin: [0, 0, 0, 4],
+    });
+    content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.trenner, lineColor: C.rahmenStark }], margin: [0, 4, 0, 0] });
+
+    // Stammdaten
+    content.push(stammBox(stammRows(typ, data)));
+
+
+    // Abschnitte
+    const secs = sections(typ, data);
+    // Leere Abschnitte (nur Überschrift) werden mit der nächsten Überschrift zusammengehalten,
+    // damit keine inhaltslose Überschrift allein am Seitenende steht.
+    let offeneLeere = [];
+    const istLeer = s => !has(s.text) && !(s.sub && s.sub.some(([, t]) => has(t))) && !(s.ziele && s.ziele.length)
+      && !(s.ressRisiken && (has(data.Ressourcen) || has(data.Risiken))) && !(s.besprochen && has(data.Bericht_Besprochen));
+    secs.forEach((s, i) => {
+      if (istLeer(s)) { offeneLeere.push(sectionHeading(i + 1, s.title)); return; }
+      // Überschriften, denen direkt ein unteilbarer Block folgt (Zielkarte, Ressourcen/Risiken),
+      // werden mit diesem Block zusammengefasst — sonst bliebe die Überschrift am Seitenende
+      // stehen, während der Block komplett auf die nächste Seite rutscht.
+      let heading = sectionHeading(i + 1, s.title);
+      if (offeneLeere.length) {
+        heading = { unbreakable: true, headlineLevel: 1, minRest: 66 + 34 * offeneLeere.length, stack: [...offeneLeere, heading] };
+        offeneLeere = [];
+      }
+      const mitBlock = (kopf, block) => ({ unbreakable: true, stack: [kopf, block] });
+      if (has(s.text) || s.textLabel) {
+        content.push(heading); heading = null;
+        if (s.textLabel) content.push(subLabel(s.textLabel));
+        if (has(s.text)) content.push(bodyText(s.text));
+      }
+      if (s.sub) s.sub.forEach(([l, t]) => { if (heading) { content.push(heading); heading = null; } content.push(subLabel(l)); if (has(t)) content.push(bodyText(t)); });
+      if (s.ziele) {
+        const karten = s.ziele.map((z, zi) => zielCard(zi + 1, z, s.mitMethoden !== false));
+        let kopf = s.zieleLabel ? subLabel(s.zieleLabel) : null;
+        if (heading) { kopf = kopf ? { stack: [heading, kopf] } : heading; heading = null; }
+        if (karten.length) {
+          content.push(kopf ? mitBlock(kopf, karten[0]) : karten[0]);
+          karten.slice(1).forEach(k => content.push(k));
+        } else if (kopf) content.push(kopf);
+      }
+      if (s.ressRisiken) {
+        const block = ressRisiken(data.Ressourcen, data.Risiken);
+        if (heading) { content.push(mitBlock(heading, block)); heading = null; } else content.push(block);
+      }
+      if (heading) content.push(heading);
+      if (s.besprochen) besprochenBlock(data).forEach(b => content.push(b));
+    });
+    offeneLeere.forEach(h => content.push(h));
+
+    // Besprochen-Hinweis: im Verlaufsbericht bereits unter der Stellungnahme ausgegeben,
+    // bei den anderen Typen am Ende des Berichts.
+    if (!secs.some(x => x.besprochen)) besprochenBlock(data).forEach(b => content.push(b));
+
+    // Anlagen-Hinweis (falls ein PDF-Anhang beigefuegt ist)
+    if (opts.anhang) {
+      const _at = has(opts.anhang.titel) ? opts.anhang.titel : opts.anhang.name;
+      content.push({ text: 'ANLAGEN', font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 14, 0, 2] });
+      content.push({ text: `Diesem Bericht ist folgende Anlage beigefügt: ${_at}${_at !== opts.anhang.name ? ` (${opts.anhang.name})` : ''}. Die Anlage folgt am Ende dieses Dokuments.`, fontSize: 9.25, lineHeight: 1.4, color: C.ink });
+    }
+
+    // Unterschriften
+    content.push(signatureBlock(data, opts.freigabeLeitung || freigegebenVon));
+
+    return {
+      pageSize: 'A4',
+      pageMargins: [MARGIN_X, 46, MARGIN_X, 56],
+      defaultStyle: { font: 'Kodchasan', fontSize: F.fliess, color: C.ink },
+      info: { title: `${label} ${kindName}`.trim(), author: 'Praxis NeueWege' },
+
+      header: (page) => page === 1 ? null : {
+        margin: [MARGIN_X, 18, MARGIN_X, 0],
+        stack: [
+          {
+            columns: [
+              { text: `PRAXIS NEUEWEGE · ${upper(label)}`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta },
+              { text: kindName, alignment: 'right', font: 'KodchasanMedium', fontSize: F.fuss, color: C.muted },
+            ],
+          },
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.trenner, lineColor: C.rahmenStark }], margin: [0, 4, 0, 0] },
+        ],
+      },
+
+      // Überschriften (Abschnitt und Unterüberschrift) nie als letztes Element einer Seite
+      // Kriterium: bleibt unter der Überschrift nicht mehr Platz für Überschrift + mindestens
+      // eine Textzeile, wandert die Überschrift auf die nächste Seite. (followingNodesOnPage
+      // taugt hier nicht: ein Textblock "startet" auch dann noch auf der Seite, wenn keine
+      // seiner Zeilen mehr hineinpasst.)
+      pageBreakBefore: (node) => {
+        if (!node.headlineLevel || !node.startPosition) return false;
+        const rest = node.startPosition.pageInnerHeight - node.startPosition.top;
+        return rest < (node.minRest || (node.headlineLevel === 1 ? 66 : 48));
+      },
+      footer: (page, pages) => ({
+        margin: [MARGIN_X, 16, MARGIN_X, 0],
+        stack: [
+          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.fussAkzent, lineColor: C.terra }] },
+          {
+            columns: [
+              { width: '*', stack: [
+                { text: 'Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach', fontSize: F.fuss - 1, color: C.meta },
+                { text: 'info@praxisneuewege.de', fontSize: F.fuss - 1, color: C.meta },
+              ]},
+              { width: '*', alignment: 'right', margin: [0, 2, 0, 0],
+                text: `Seite ${page} von ${pages}`, fontSize: F.fuss, color: C.meta },
+            ],
+            margin: [0, 5, 0, 0],
+          },
+        ],
+      }),
+
+      content,
+    };
+  };
+});
+
+</script>
+<script>
+// ─── PDF-ERZEUGUNG (BETA, neues Design) ──────────────────────────────────────
+let _pdfAssets = null; // { vfs, fonts, logo } — einmal laden, dann Cache
+
+async function _ladePdfAssets() {
+  if (_pdfAssets) return _pdfAssets;
+  const basis = window.location.pathname.replace(/[^/]*$/, '');
+  async function b64(pfad) {
+    const r = await fetch(basis + pfad);
+    if (!r.ok) throw new Error(pfad + ' nicht gefunden (' + r.status + ')');
+    const buf = await r.arrayBuffer();
+    let bin = ''; const bytes = new Uint8Array(buf);
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    return btoa(bin);
+  }
+  const namen = ['Kodchasan-Regular.ttf','Kodchasan-Medium.ttf','Kodchasan-SemiBold.ttf','Kodchasan-Bold.ttf','Kodchasan-Italic.ttf','LibreBaskerville-Regular.ttf','LibreBaskerville-Bold.ttf','LibreBaskerville-Italic.ttf'];
+  const geladen = await Promise.all(namen.map(n => b64('assets/fonts/' + n)));
+  const vfs = {}; namen.forEach((n, i) => vfs[n] = geladen[i]);
+  const fonts = {
+    Kodchasan:       { normal: 'Kodchasan-Regular.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+    KodchasanMedium: { normal: 'Kodchasan-Medium.ttf', bold: 'Kodchasan-SemiBold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-SemiBold.ttf' },
+    KodchasanSemi:   { normal: 'Kodchasan-SemiBold.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+    Baskerville:     { normal: 'LibreBaskerville-Regular.ttf', bold: 'LibreBaskerville-Bold.ttf', italics: 'LibreBaskerville-Italic.ttf', bolditalics: 'LibreBaskerville-Bold.ttf' },
+  };
+  let logo = null;
+  try { logo = 'data:image/png;base64,' + await b64('assets/logo-praxisneuewege.png'); }
+  catch(e) { console.warn('Logo nicht gefunden — PDF ohne Logo:', e.message); }
+  _pdfAssets = { vfs, fonts, logo };
+  return _pdfAssets;
+}
+
+async function erzeugeBerichtPdf() {
+  const btn = document.getElementById('btnPdfNeu');
+  const orig = btn ? btn.textContent : '';
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'PDF wird erstellt…'; }
+    const data = collectData();
+    const bytes = await erzeugePdfBytes(data, { mitAnhang: true });
+    const dateiname = berichtsDateiname(data);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const w = window.open(url);
+    if (!w) { const a = document.createElement('a'); a.href = url; a.download = dateiname; a.click(); }
+  } catch (e) {
+    alert('PDF-Erzeugung fehlgeschlagen: ' + e.message);
+    console.error(e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+}
 </script>
 </body>
 </html>
