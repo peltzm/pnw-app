@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-15.4 (op-liste Stichtag)";
+const WORKER_VERSION = "2026-09-15.5 (op-liste Hinweise)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -2067,14 +2067,32 @@ export default {
           if (arr.length < 500) break;
         }
         const rechnungen = [];
+        const hinweise = []; // archivierte Klienten mit offenem Saldo ab Stichtag
         for (const inv of alle) {
           if (unwrap(inv.deletedAt)) continue;
-          // Altbestand nicht mitliefern: Rechnungen vor 2026 (Einzelunternehmen,
+          // Altbestand nicht mitliefern: Rechnungen vor dem Stichtag (Einzelunternehmen,
           // in der Kilanka-GUI nicht als offen geführt, div. Nummernformate wie
-          // RE2023/12/00003) sowie Rechnungen archivierter Klienten.
+          // RE2023/12/00003).
           const invDatum = String(unwrap(inv.date) || "").slice(0, 10);
           if (!invDatum || invDatum < OP_STICHTAG) continue;
-          if (String(inv.client?.recName || "").startsWith("[archiviert]")) continue;
+          // Archivierte Klienten: wie in der Kilanka-GUI nicht in den Abgleich —
+          // mit offenem Saldo aber als Hinweis mitgeben statt still zu verschlucken.
+          const istArchiviert = String(inv.client?.recName || "").startsWith("[archiviert]");
+          if (istArchiviert) {
+            const saldo = Number(unwrap(inv.balance)) || 0;
+            if (saldo > 0.005 && inv.stateType?.name !== "Storniert") {
+              hinweise.push({
+                nummer: inv.number,
+                datum: invDatum,
+                faellig: String(unwrap(inv.dueDate) || "").slice(0, 10),
+                klient: inv.client?.recName || null,
+                empfaenger: inv.recipient?.recName || inv.recipientName || null,
+                summe: Number(unwrap(inv.totalWithTax)) || 0,
+                saldo,
+              });
+            }
+            continue;
+          }
           rechnungen.push({
             nummer: inv.number,
             datum: String(unwrap(inv.date) || "").slice(0, 10),
@@ -2088,7 +2106,7 @@ export default {
             bezahlt: !!inv.paid,
           });
         }
-        return json({ ok: true, stand: new Date().toISOString(), anzahl: rechnungen.length, rechnungen }, 200, origin);
+        return json({ ok: true, stand: new Date().toISOString(), anzahl: rechnungen.length, rechnungen, hinweise }, 200, origin);
       } catch (e) {
         return json({ error: `Kilanka-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
       }
