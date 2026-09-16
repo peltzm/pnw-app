@@ -1675,7 +1675,10 @@ async function erzeugePdfBytes(data, opts) {
   const dd = buildBerichtDocDefinition(typ, d, {
     logoDataUrl: assets.logo,
     freigegebenVon: opts.freigegebenVon || '',
-    freigabeLeitung: opts.freigabeLeitung || '',   // Teamleitung, die inhaltlich freigegeben hat (Unterschriftenblock)
+    // Teamleitung im Unterschriftenblock: explizit übergeben, sonst ab dem Status "TL freigegeben"
+    // bzw. in der GF-Prüfung die zugewiesene Teamleitung — vor der TL-Freigabe steht "Entwurf"
+    freigabeLeitung: opts.freigabeLeitung
+      || ((['TL freigegeben', 'GF-Prüfung', 'Genehmigt'].includes(currentItemStatus) && (currentAssignedReviewer || data._assignedReviewer)) || ''),
     anhang: _anhangPDF ? { titel: _anhangPDF.titel || '', name: _anhangPDF.name } : null,
   });
   let bytes = new Uint8Array(await new Promise(res => pdfMake.createPdf(dd).getBuffer(res)));
@@ -3797,6 +3800,15 @@ async function tlFreigebenAnSonja() {
     data._assignedReviewerMail = currentAssignedReviewerMail;
     currentItemStatus = 'TL freigegeben';
     await saveToList(data, currentListId);
+
+    // PDF dieser Version neu rendern: Stand nach der TL-Prüfung, mit der Teamleitung im Unterschriftenblock
+    try {
+      setStatus('uploading', 'PDF wird aktualisiert...');
+      const { driveId: _d } = await getSiteAndDrive();
+      const _t = await getToken();
+      const _bytes = await erzeugePdfBytes(data, { freigabeLeitung: currentAssignedReviewer || '' });
+      await pdfHochladen(_d, _t, berichtsDateiname(data, currentVersion || 1), _bytes);
+    } catch(e) { console.warn('PDF-Aktualisierung bei TL-Freigabe fehlgeschlagen:', e.message); }
 
     // Mail an Sonja
     const token = await getToken();
