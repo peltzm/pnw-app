@@ -83,6 +83,8 @@ table.daten th{background:var(--creme);font-size:10px;font-weight:600;letter-spa
 table.daten td{border:1px solid var(--r2);padding:6px 10px;vertical-align:middle}
 table.daten tr:nth-child(odd) td{background:#FBF8F4}
 table.daten td input{border:none;background:transparent;padding:4px 2px}
+.gesperrt{background:var(--creme);border:1px dashed var(--r1);border-radius:6px;padding:12px 14px;font-size:12.5px;color:var(--text-muted)}
+.nur-druck{display:none}
 .quelle{font-size:10px;color:var(--meta);letter-spacing:.4px;text-transform:uppercase}
 .bogen-fuss{border-top:1.5px solid var(--terra);margin-top:28px;padding-top:8px;font-size:10.5px;color:var(--meta)}
 .leiste{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;align-items:center;justify-content:flex-end;z-index:90;flex-wrap:wrap}
@@ -107,6 +109,7 @@ table.admin select,table.admin input{padding:5px 8px;font-size:12.5px}
   textarea,input[type=text]{border:none;border-bottom:.5pt solid var(--r1);border-radius:0;padding:2pt 0;background:transparent!important;resize:none}
   h2.teil{break-after:avoid}table,.frage-block{break-inside:avoid}
   .umbruch{break-before:page}
+  .nur-druck{display:block}
 }
 </style>
 </head>
@@ -385,8 +388,25 @@ function renderBogen(){
   const themen = V.themen.map(t=>`<label><input type="checkbox" value="${esc(t)}" ${a.themen.includes(t)?'checked':''} ${roMA?'disabled':''} onchange="setThema(this)">${esc(t)}</label>`).join('');
   const fragen = V.fragen.map(([id,q])=>`<div class="frage-block"><div class="frage">${esc(q)}</div><textarea ${roMA?'readonly':''} oninput="setText('${id}',this.value)">${esc(a.text[id]||'')}</textarea></div>`).join('');
   const kz = kennzahlenZeilen(akt.kennzahlen).map(([l,w])=>`<tr><td>${esc(l)}</td><td><b>${esc(w)}</b></td><td><span class="quelle">Kilanka</span></td></tr>`).join('');
-  const man = V.manuell.map(([id,l])=>`<tr><td>${esc(l)}</td><td colspan="2"><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'wird von der Leitung ergänzt':'eintragen …'}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
+  const man = V.manuell.map(([id,l])=>`<tr><td>${esc(l)}</td><td colspan="2"><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'🔒 wird von der Leitung ergänzt':'eintragen …'}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
   const ver = [0,1,2,3].map(n=>{ const z=L.vereinbarungen?.[n]||{}; return `<tr>${['was','wer','bis'].map(k=>`<td><input type="text" ${roGF?'readonly':''} value="${esc(z[k]||'')}" oninput="setVer(${n},'${k}',this.value)"></td>`).join('')}</tr>`; }).join('');
+
+  /* Teil 5: Mitarbeiter:in schlägt vor (eigenes Feld), die Leitung hält im Gespräch die Vereinbarungen fest.
+   * In der Mitarbeiter-Sicht gibt es bewusst KEINE leeren, gesperrten Eingabefelder — das wirkte wie ein Fehler. */
+  const hatVer = (L.vereinbarungen||[]).some(z=>z&&(z.was||z.wer||z.bis)) || !!L.naechster;
+  const verTabelle = `<table class="daten"><tr><th style="width:62%">Was nehmen wir uns vor?</th><th>Wer</th><th>Bis wann</th></tr>${ver}</table>
+    <div class="frage">Zwischencheck / nächstes Gespräch am:</div>
+    <input type="text" ${roGF?'readonly':''} value="${esc(L.naechster||'')}" oninput="akt.leitung.naechster=this.value;geaendert()" style="max-width:280px">`;
+  const vorschlag = a.text.ziele||'';
+  const teil5 = gfSicht
+    ? `<div class="teil-hinweis">Im Gespräch gemeinsam ausfüllen. Auch die Leitung trägt hier ein, was sie zusagt.</div>
+       ${vorschlag?`<div class="frage">Vorschläge von ${esc((akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim())}:</div><textarea readonly>${esc(vorschlag)}</textarea><div style="height:12px"></div>`:''}
+       ${verTabelle}`
+    : `<div class="frage-block"><div class="frage">Meine Vorschläge: Welche Ziele oder Vereinbarungen wünschst du dir – von dir selbst und von uns? <span style="color:var(--meta)">(optional)</span></div>
+       <textarea ${roMA?'readonly':''} oninput="setText('ziele',this.value)">${esc(vorschlag)}</textarea></div>
+       <div class="frage">Unsere Vereinbarungen</div>
+       ${hatVer ? `<div class="teil-hinweis">Im Gespräch gemeinsam festgehalten – von der Leitung eingetragen.</div>${verTabelle}`
+                : `<div class="gesperrt no-print">🔒 Die Vereinbarungen tragen wir <b>im Gespräch gemeinsam</b> ein – die Leitung schreibt mit. Danach findest du sie hier zum Nachlesen. Bis dahin musst du hier nichts ausfüllen.</div><div class="nur-druck">${verTabelle}</div>`}`;
 
   app().className='wrap';
   app().innerHTML = `
@@ -399,7 +419,7 @@ function renderBogen(){
       <div><span class="eyebrow">Wochenstunden / Team</span><b>${esc(num(akt.kennzahlen?.wochenstunden,' h'))}${akt.kennzahlen?.team?' · '+esc(akt.kennzahlen.team):''}</b></div>
       <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div>
     </div>
-    ${gfSicht?'':`<div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 10 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Du kannst jederzeit zwischenspeichern und später weitermachen. Erst mit <b>„Final abgeben“</b> sehen wir deinen Bogen als fertig an. <b>Lesen können ihn nur du und die Geschäftsführung</b> (Sonja und Markus Peltz).</div>`}
+    ${gfSicht?'':`<div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 10 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Du kannst jederzeit zwischenspeichern und später weitermachen. Erst mit <b>„Final abgeben“</b> sehen wir deinen Bogen als fertig an. <b>Lesen können ihn nur du und die Geschäftsführung</b> (Sonja und Markus Peltz).</div>`}
 
     <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung</h2>
     <div style="overflow-x:auto"><table class="skala"><tr><th>${esc(V.skalaTitel)}</th>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<th>${n}</th>`).join('')}<th>k. A.</th></tr>${skala}</table></div>
@@ -418,10 +438,7 @@ function renderBogen(){
     ${gfSicht && !roGF ? `<div class="no-print" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="kennzahlenNeu()">↻ Kennzahlen aus Kilanka aktualisieren</button></div>`:''}
 
     <h2 class="teil"><span>Teil 5 ·</span> Ziele &amp; Vereinbarungen</h2>
-    <div class="teil-hinweis">Wird im Gespräch gemeinsam ausgefüllt. Auch die Leitung trägt hier ein, was sie zusagt.</div>
-    <table class="daten"><tr><th style="width:62%">Was nehmen wir uns vor?</th><th>Wer</th><th>Bis wann</th></tr>${ver}</table>
-    <div class="frage">Zwischencheck / nächstes Gespräch am:</div>
-    <input type="text" ${roGF?'readonly':''} value="${esc(L.naechster||'')}" oninput="akt.leitung.naechster=this.value;geaendert()" style="max-width:280px">
+    ${teil5}
 
     <div class="bogen-fuss">Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach · Amtsgericht Ingolstadt HRB 13133 · GF: Sonja Peltz, Markus Peltz<br>info@praxisneuewege.de · vertraulich – Personalunterlage</div>
   </div>`;
