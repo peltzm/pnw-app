@@ -112,8 +112,10 @@ dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
   .header,.leiste,.no-print,.footer-note{display:none!important}
   .wrap{max-width:none;padding:0}.card{border:none;padding:0;margin:0}
   textarea,input[type=text]{border:none;border-bottom:.5pt solid var(--r1);border-radius:0;padding:2pt 0;background:transparent!important;resize:none}
-  h2.teil{break-after:avoid}table,.frage-block{break-inside:avoid}
-  .umbruch{break-before:page}
+  h2.teil{break-after:avoid;margin-top:16pt}.teil-hinweis{break-after:avoid}
+  .frage-block,.themen,.stamm,.hinweis{break-inside:avoid}
+  table.skala tr,table.daten tr{break-inside:avoid}table.skala td,table.skala th{padding:3.5pt 3pt}
+  textarea{min-height:48pt}
   .nur-druck{display:block}
 }
 </style>
@@ -155,6 +157,18 @@ const CFG = {
 };
 const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
 const GF = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+/* Standard-Version je Gruppe (Vorgabe GF 20.09.2026) — in der Übersicht je Person änderbar.
+ * Abgleich über den Kilanka-Namen „Nachname, Vorname", weil UPNs nach Namensänderungen abweichen können.
+ * Nordstern-Team datenbasiert geprüft: Gruppendienst-Buchungen (Kostenstelle Nordstern) 06–09/2026. */
+const GRUPPEN = {
+  A: { label:'Teamleitung', namen:['schneider, jörg','grund, nadine','meier, laura'] },
+  C: { label:'Nordstern',   namen:['hermann, jessica','edler, franziska','freundl, kilian','kerschenlohr, nadine','kraus, martina','tischoff, silvia','schütze, danielle','dietrich, saskia'] }
+};
+function standardVersion(m){
+  const n=(m.name||'').trim().toLowerCase();
+  for(const [v,g] of Object.entries(GRUPPEN)) if(g.namen.some(x=>n.startsWith(x))) return v;
+  return 'B';
+}
 const SENTINEL = '__sentinel__';           // GF-Element: darf für Mitarbeitende NIE sichtbar sein
 const APP_VERSION = 'BETA-ea00678'; // auto-updated on deploy
 document.getElementById('versionBadge').textContent = APP_VERSION;
@@ -599,7 +613,7 @@ function oeffneFuerGF(zielUpn){
 }
 function zurueckAdmin(){ if(dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return; dirty=false; akt=null; zeigeAdmin(); }
 function linkFuer(m,runde){
-  const p=plan[m.upn]||{}; const q=new URLSearchParams({r:runde,v:p.v||'B',ma:m.upn}); if(p.t) q.set('t',p.t);
+  const p=plan[m.upn]||{}; const q=new URLSearchParams({r:runde,v:p.v||standardVersion(m),ma:m.upn}); if(p.t) q.set('t',p.t);
   return CFG.redirectUri+'?'+q.toString();
 }
 async function zeigeAdmin(){
@@ -613,8 +627,9 @@ async function zeigeAdmin(){
   try{ plan = planItem ? JSON.parse(planItem.f.AntwortenJSON||'{}') : {}; }catch(e){ plan={}; }
   const zeilen = mitarbeiter.map(m=>{
     const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===m.upn && x.f.Runde===runde), st=i?.f.OGStatus||'Offen', p=plan[m.upn]||{};
-    return `<tr><td><b>${esc(m.name)}</b><br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
-      <td><select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).map(([k,v])=>`<option value="${k}" ${(p.v||'B')===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select></td>
+    const grp=GRUPPEN[standardVersion(m)]?.label;
+    return `<tr><td><b>${esc(m.name)}</b>${grp?` <span class="status abgeschlossen" style="font-weight:500">${esc(grp)}</span>`:''}<br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
+      <td><select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).map(([k,v])=>`<option value="${k}" ${(p.v||standardVersion(m))===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select></td>
       <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)"></td>
       <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
       <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="zeigeKennzahlen('${esc(m.upn)}')" title="Kennzahlen aus Kilanka – auch bevor der Bogen angelegt ist">📊 Kennzahlen</button>
