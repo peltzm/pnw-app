@@ -1905,6 +1905,214 @@ function json(data, status, origin) {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Orientierungsgespräch — erweiterte Kennzahlen (Teil 4 des Bogens)
+//   1. Arbeitszeitkonto            ← rosters/accounts
+//   2. Anteil Klientenzeit : Rest  ← clients/timeSheets (+ rosters/timeSheets ohne Klientbezug)
+//   3. Fahrzeug privat/dienstlich  ← tour an clients/timeSheets
+// Jeder Zweig ist fail-soft: ein Fehler liefert { fehler } statt die Antwort
+// zu kippen — der Bogen zeigt dann das manuelle Feld der Leitung.
+// Bewusst schmal: keine Adressen, keine GPS-Daten, keine Klienten.
+// ═══════════════════════════════════════════════════════════════
+const OG_TS_GRAPH = {
+  id: 1, date: 1, total: 1, drivingTime: 1, kilometers: 1,
+  user: { id: 1 }, service: { id: 1 },
+  tour: { id: 1, begin: 1, end: 1, mileageStartKm: 1, mileageEndKm: 1, distanceKm: 1, privateTour: 1, car: { id: 1, recName: 1 } },
+  $limit: 1000,
+};
+let ogAlleCache = new Map(); // "von" → { data, fetchedAt } — nur für den ungefilterten Fallback
+
+function ogStundenSigniert(w) {
+  const s = typeof w === "string" ? w : (w && w.$interval) || "";
+  if (!s) return null;
+  return /^-/.test(s) ? -kStunden(s.slice(1)) : kStunden(s);
+}
+const ogRund = (n, st = 1) => (n == null || !isFinite(n) ? null : Math.round(n * 10 ** st) / 10 ** st);
+const ogTag = (w) => isoDate(kDate(w)) || "";
+
+async function ogKilankaId(env, upn) {
+  const users = await fetchCockpitUsers(env);
+  const me = (users || []).find((u) => !kDate(u.deletedAt) &&
+    ((UPN_OVERRIDES[String(u.id)] ?? deriveEmail(userRecName(u)) ?? "").toLowerCase()) === upn);
+  return me ? String(me.id) : null;
+}
+
+// Ob (und wie) Kilanka nach user filtert, ist nicht dokumentiert. Ein unwirksamer
+// Filter liefert still ALLE oder KEINE Zeilen — deshalb erst mit 50 Zeilen proben
+// und nur eine nachweislich wirksame Variante verwenden.
+async function ogUserFilter(env, model, kid, von) {
+  const idNum = Number(kid);
+  const varianten = [{ user: { id: idNum } }, { user: idNum }, { "user.id": idNum }];
+  for (const v of varianten) {
+    try {
+      const probe = await kilankaPost(env, model, { id: 1, user: { id: 1 }, $limit: 50, $filter: { date: { $gte: { $date: von } }, ...v } });
+      if (Array.isArray(probe) && probe.length && probe.every((r) => String(r.user?.id) === kid)) return v;
+    } catch (_) { /* nächste Variante */ }
+  }
+  return null;
+}
+
+async function ogTimeSheets(env, kid) {
+  const voll = "2023-01-01";
+  const uf = await ogUserFilter(env, "clients/timeSheets", kid, voll);
+  if (uf) {
+    const rows = await kilankaSeiten(env, "clients/timeSheets", { ...OG_TS_GRAPH, $filter: { date: { $gte: { $date: voll } }, ...uf } }, 20);
+    return { rows, vollstaendig: true, alleFahrer: false, userFilter: uf, von: voll };
+  }
+  // Fallback: alle Mitarbeitenden, begrenzt auf 12 Monate (Volumen/Rate-Limit), 10 Min. gecacht
+  const d = new Date(); d.setFullYear(d.getFullYear() - 1);
+  const von = isoDate(d);
+  let c = ogAlleCache.get(von);
+  if (!c || Date.now() - c.fetchedAt > CACHE_TTL_MIN * 60 * 1000) {
+    const data = await kilankaSeiten(env, "clients/timeSheets", { ...OG_TS_GRAPH, $filter: { date: { $gte: { $date: von } } } }, 30);
+    c = { data, fetchedAt: Date.now() };
+    ogAlleCache.clear(); ogAlleCache.set(von, c);
+  }
+  return { rows: c.data, vollstaendig: false, alleFahrer: true, userFilter: null, von };
+}
+
+// ── Fahrzeug: gefahren = letzter km-Stand − km-Stand bei Übernahme; alle Fahrtenbuch-
+//    Einträge sind dienstlich; privat = gefahren − dienstlich. ──
+function ogFahrzeug(rows, kid, alleFahrer) {
+  const touren = new Map(); // tour.id → Tour (eine Tour kann an mehreren Nachweisen hängen)
+  for (const t of rows) {
+    const tr = t.tour;
+    if (!tr || !tr.car?.id) continue;
+    const key = String(tr.id ?? `${t.id}`);
+    if (touren.has(key)) continue;
+    const start = decimalToNumber(tr.mileageStartKm), ende = decimalToNumber(tr.mileageEndKm);
+    let dist = decimalToNumber(tr.distanceKm);
+    if (!dist && start && ende) dist = ende - start;
+    touren.set(key, { car: String(tr.car.id), carName: tr.car.recName || null, user: String(t.user?.id ?? ""),
+      tag: ogTag(tr.begin) || ogTag(t.date), start, ende, dist, privat: tr.privateTour === true });
+  }
+  const eigene = [...touren.values()].filter((x) => x.user === kid && x.tag).sort((a, b) => a.tag.localeCompare(b.tag));
+  if (!eigene.length) return { vorhanden: false, grund: "keine Fahrtenbuch-Einträge gefunden" };
+
+  // Aktuelles Fahrzeug = Fahrzeug der jüngsten Fahrt; Übernahme = erste eigene Fahrt damit
+  const car = eigene[eigene.length - 1].car;
+  const mit = eigene.filter((x) => x.car === car);
+  const uebernahme = mit.find((x) => x.start > 0) || mit[0];
+  const bisTag = mit[mit.length - 1].tag;
+
+  // Letzter plausibler km-Stand: Tippfehler (z. B. 491.387) dürfen ihn nicht verfälschen
+  let letzter = uebernahme.start || 0, verworfen = 0, unplausibel = 0;
+  const imFenster = [...touren.values()].filter((x) => x.car === car && x.tag >= uebernahme.tag && x.tag <= bisTag)
+    .sort((a, b) => a.tag.localeCompare(b.tag));
+  for (const x of imFenster) {
+    if (!x.ende) continue;
+    if (x.ende >= letzter - 50 && x.ende <= letzter + 3000) letzter = Math.max(letzter, x.ende); else verworfen++;
+  }
+  let dienstlich = 0, dienstlichAndere = 0, privatMarkiert = 0, anzahl = 0;
+  for (const x of imFenster) {
+    if (!(x.dist > 0) || x.dist > 1000) { if (x.dist) unplausibel++; continue; }
+    if (x.privat) { privatMarkiert += x.dist; continue; }
+    if (x.user === kid) { dienstlich += x.dist; anzahl++; } else if (alleFahrer) dienstlichAndere += x.dist;
+  }
+  const gefahren = letzter - (uebernahme.start || 0);
+  const privat = gefahren - dienstlich - dienstlichAndere;
+  const hinweise = [];
+  if (!uebernahme.start) hinweise.push("km-Stand bei Übernahme fehlt in der ersten Fahrt");
+  if (verworfen) hinweise.push(`${verworfen} unplausible km-Stände ignoriert`);
+  if (unplausibel) hinweise.push(`${unplausibel} Fahrten mit unplausibler Strecke ignoriert`);
+  if (!alleFahrer) hinweise.push("Fahrten anderer Personen mit diesem Fahrzeug sind nicht abgezogen");
+  if (privat < 0) hinweise.push("dienstliche km übersteigen die gefahrenen km – km-Stände im Fahrtenbuch prüfen");
+  return {
+    vorhanden: true, carId: car, carName: mit.map((x) => x.carName).find(Boolean) || null,
+    uebernahmeDatum: uebernahme.tag, uebernahmeKm: ogRund(uebernahme.start, 0),
+    letzterKm: ogRund(letzter, 0), letzterDatum: bisTag,
+    gefahrenKm: ogRund(gefahren, 0), dienstlichKm: ogRund(dienstlich, 0), dienstlichAndereKm: ogRund(dienstlichAndere, 0),
+    privatKm: ogRund(privat, 0), privatAnteil: gefahren > 0 ? ogRund((privat / gefahren) * 100, 0) : null,
+    fahrten: anzahl, hinweise,
+  };
+}
+
+// ── Anteil Klientenzeit : Rest (letzte 3 volle Monate) ──
+function ogKategorie(name) {
+  const n = String(name || "").toLowerCase();
+  if (/\bkm\b|kilometer|fahrzeit|fahrtzeit|fahrt/.test(n)) return "fahrt";
+  if (/bericht|dokumentation|doku\b/.test(n)) return "doku";
+  if (/medial|telefon|videocall|e-?mail/.test(n)) return "medial";
+  if (/arbeitszeit|team|supervision|fortbildung|leitung|verwaltung|besprechung|fallberatung|intern/.test(n)) return "intern";
+  return "klient";
+}
+function ogAnteil(rows, rosterIntern, namen, kid, von, bis) {
+  const sum = { klient: 0, fahrt: 0, doku: 0, medial: 0, intern: 0 };
+  const proLeistung = new Map();
+  for (const t of rows) {
+    if (String(t.user?.id) !== kid) continue;
+    const tag = ogTag(t.date);
+    if (!tag || tag < von || tag > bis) continue;
+    const name = namen.get(String(t.service?.id)) || "(ohne Leistung)";
+    const kat = ogKategorie(name), h = kStunden(t.total);
+    sum[kat] += h;
+    sum.fahrt += kStunden(t.drivingTime);
+    const e = proLeistung.get(name) || { name, kat, std: 0 }; e.std += h; proLeistung.set(name, e);
+  }
+  sum.intern += rosterIntern || 0;
+  const gesamt = Object.values(sum).reduce((a, b) => a + b, 0);
+  if (!gesamt) return { vorhanden: false, grund: "keine Zeiterfassung im Zeitraum" };
+  const pct = (x) => ogRund((x / gesamt) * 100, 0);
+  return {
+    vorhanden: true, von, bis, gesamtStd: ogRund(gesamt),
+    klientStd: ogRund(sum.klient), fahrtStd: ogRund(sum.fahrt), dokuStd: ogRund(sum.doku), medialStd: ogRund(sum.medial), internStd: ogRund(sum.intern),
+    klientPct: pct(sum.klient), fahrtPct: pct(sum.fahrt), dokuPct: pct(sum.doku), medialPct: pct(sum.medial), internPct: pct(sum.intern),
+    dienstplanEinbezogen: rosterIntern != null,
+    leistungen: [...proLeistung.values()].sort((a, b) => b.std - a.std).slice(0, 8).map((e) => ({ ...e, std: ogRund(e.std) })),
+  };
+}
+
+async function ogRosterIntern(env, kid, von, bis, userFilter) {
+  const graph = { id: 1, date: 1, total: 1, totalDecimal: 1, user: { id: 1 }, clientTimeSheet: { id: 1 }, $limit: 1000,
+    $filter: { date: { $gte: { $date: von } }, ...(userFilter || {}) } };
+  const rows = await kilankaSeiten(env, "rosters/timeSheets", graph, 8);
+  let h = 0;
+  for (const r of rows) {
+    if (String(r.user?.id) !== kid || r.clientTimeSheet?.id) continue;
+    const tag = ogTag(r.date);
+    if (!tag || tag < von || tag > bis) continue;
+    h += decimalToNumber(r.totalDecimal) || kStunden(r.total);
+  }
+  return h;
+}
+
+async function ogZeitkonten(env, kid) {
+  const rows = await kilankaSeiten(env, "rosters/accounts",
+    { id: 1, user: { id: 1 }, type: { id: 1, name: 1, recName: 1, salaryType: 1 }, totalHours: 1, totalQuantity: 1, totalEntitlement: 1, $limit: 1000 }, 5);
+  if (rows.length && !rows.some((r) => r.user?.id != null)) {
+    return { vorhanden: false, grund: "Konten ohne Mitarbeiter-Zuordnung geliefert", felder: Object.keys(rows[0] || {}) };
+  }
+  const konten = rows.filter((r) => String(r.user?.id) === kid).map((r) => ({
+    typ: r.type?.name || r.type?.recName || "Konto",
+    stunden: ogRund(ogStundenSigniert(r.totalHours), 2),
+    anspruch: r.totalEntitlement != null ? ogRund(decimalToNumber(r.totalEntitlement), 2) : null,
+  }));
+  if (!konten.length) return { vorhanden: false, grund: "kein Konto für diese Person" };
+  return { vorhanden: true, konten };
+}
+
+async function buildOgKennzahlen(env, upn, now) {
+  const kid = await ogKilankaId(env, upn);
+  if (!kid) return { upn, personVerfuegbar: false, stand: now.toISOString() };
+  const zweig = async (fn) => { try { return await fn(); } catch (e) { return { vorhanden: false, fehler: e.message }; } };
+
+  const zeitkonto = await zweig(() => ogZeitkonten(env, kid));
+  let ts = null, fahrzeug, anteil;
+  try { ts = await ogTimeSheets(env, kid); } catch (e) { fahrzeug = anteil = { vorhanden: false, fehler: e.message }; }
+  if (ts) {
+    fahrzeug = await zweig(async () => ({ ...ogFahrzeug(ts.rows, kid, ts.alleFahrer), zeitraumVollstaendig: ts.vollstaendig, datenAb: ts.von }));
+    anteil = await zweig(async () => {
+      const ende = new Date(now.getFullYear(), now.getMonth(), 0);           // letzter Tag des Vormonats
+      const start = new Date(ende.getFullYear(), ende.getMonth() - 2, 1);    // drei volle Monate
+      const von = isoDate(start), bis = isoDate(ende);
+      let intern = null;
+      try { intern = await ogRosterIntern(env, kid, von, bis, ts.userFilter); } catch (e) { console.warn("rosters/timeSheets optional —", e.message); }
+      return ogAnteil(ts.rows, intern, await serviceNamen(env), kid, von, bis);
+    });
+  }
+  return { upn, personVerfuegbar: true, zeitkonto, anteil, fahrzeug, stand: now.toISOString() };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -2323,6 +2531,26 @@ export default {
         return json(data, 200, origin);
       } catch (e) {
         return json({ error: `Cockpit-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    if (url.pathname === "/api/og-kennzahlen" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      if (!auth.upn.endsWith(`@${MAIL_DOMAIN}`)) {
+        return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      }
+      try {
+        // Personalgespräch: nur die eigene Sicht oder die Geschäftsführung — bewusst KEINE Teamleitungs-Sicht
+        const caller = (auth.upn || "").trim().toLowerCase();
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        const target = (url.searchParams.get("mitarbeiter") || "").toLowerCase() || caller;
+        if (target !== caller && !istGf) {
+          return json({ error: "Keine Berechtigung für diese Mitarbeiter-Sicht" }, 403, origin);
+        }
+        return json(await buildOgKennzahlen(env, target, new Date()), 200, origin);
+      } catch (e) {
+        return json({ error: `Kennzahlen-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
       }
     }
 

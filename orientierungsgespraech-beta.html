@@ -336,8 +336,73 @@ async function holeKennzahlen(zielUpn){
     flsIst: fls.istMonatsstunden ?? null, flsMonat: fls.istMonat || null, flsSoll64: fls.benchmark64 ?? null, flsSollWoche: fls.sollWochenstunden ?? null,
     urlaubRest: u.restTage ?? null, urlaubGenommen: u.genommenTage ?? null, urlaubGeplant: u.geplantTage ?? null,
     krankTage: d.abwesenheitenVerfuegbar ? (k.tage ?? null) : null, kindKrankTage: d.abwesenheitenVerfuegbar ? (k.kindKrankTage ?? null) : null, jahr: k.jahr || u.jahr || null,
+    erweitert: await holeErweitert(zielUpn, t, d.person?.name),
     _mitarbeiterListe: d.sicht?.mitarbeiter || null
   };
+}
+/* Arbeitszeitkonto, Zeitanteile und Fahrzeug (privat/dienstlich) — eigener Worker-Endpunkt.
+ * Fail-soft: fehlt etwas, bleibt dafür das manuelle Feld der Leitung. */
+async function holeErweitert(zielUpn, t, personName){
+  try{
+    const url = CFG.workerUrl+'/api/og-kennzahlen'+(zielUpn && zielUpn!==upn ? '?mitarbeiter='+encodeURIComponent(zielUpn) : '');
+    const r = await fetch(url,{headers:{Authorization:'Bearer '+t.id}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const e = await r.json();
+    if(e.fahrzeug?.vorhanden) e.fahrzeug.stamm = await fuhrparkStamm(e.fahrzeug.carName, personName);
+    return e;
+  }catch(e){ console.warn('Erweiterte Kennzahlen nicht verfügbar —', e.message); return null; }
+}
+let FUHRPARK=null;
+async function fuhrparkStamm(carName, personName){
+  try{
+    FUHRPARK = FUHRPARK || await (await fetch('data/fahrzeuge.json',{cache:'no-cache'})).json();
+    const nr = s => (String(s||'').match(/(\d{3})\s*E?\b/)||[])[1];
+    const n = nr(carName);
+    const perNr = n && FUHRPARK.find(f=>f.status==='aktiv' && nr(f.kennzeichen)===n);
+    if(perNr) return perNr;
+    /* Nur ein Teil der Kilanka-Fahrzeuge ist nach Kennzeichen benannt → sonst eindeutiger Treffer über den Nachnamen */
+    const nach=(personName||'').split(',')[0].trim().toLowerCase();
+    const perName = nach ? FUHRPARK.filter(f=>f.status==='aktiv' && (f.fahrer||'').toLowerCase()===nach) : [];
+    return perName.length===1 ? perName[0] : null;
+  }catch(e){ return null; }
+}
+const km = n => n==null ? '—' : Number(n).toLocaleString('de-DE')+' km';
+const std = n => n==null ? '—' : (n>0?'+':'')+String(n).replace('.',',')+' h';
+function erweitertZeilen(k, nachname){
+  const e=k?.erweitert, out=[], da={};
+  if(!e) return {zeilen:out, da};
+  const z=e.zeitkonto;
+  if(z?.vorhanden){
+    const az=z.konten.filter(x=>!/urlaub/i.test(x.typ));
+    if(az.length){ da.zeitkonto=true; out.push(['Arbeitszeitkonto', az.map(x=>`${x.typ}: ${std(x.stunden)}`).join(' · '), '']); }
+  }
+  const a=e.anteil;
+  if(a?.vorhanden){
+    da.overhead=true;
+    const mon=d=>new Date(d).toLocaleDateString('de-DE',{month:'short',year:'2-digit'});
+    out.push([`Zeitanteile ${mon(a.von)} – ${mon(a.bis)} (${String(a.gesamtStd).replace('.',',')} h erfasst)`,
+      `Klientenzeit ${a.klientPct} % · Fahrt ${a.fahrtPct} % · Doku ${a.dokuPct} % · medial ${a.medialPct} % · intern ${a.internPct} %`,
+      a.dienstplanEinbezogen?'':'ohne Dienstplan-Zeiten']);
+  }
+  const f=e.fahrzeug;
+  if(f?.vorhanden){
+    da.kfz=true;
+    const st=f.stamm, name=st?`${st.kennzeichen} (${st.fahrzeug})`:(f.carName||'Fahrzeug');
+    out.push([`${name}: gefahren seit Übernahme ${new Date(f.uebernahmeDatum).toLocaleDateString('de-DE')}`,
+      `${km(f.gefahrenKm)} (Stand ${km(f.uebernahmeKm)} → ${km(f.letzterKm)})`, '']);
+    out.push(['davon dienstlich laut Fahrtenbuch / privat',
+      `${km(f.dienstlichKm+(f.dienstlichAndereKm||0))} / ${km(f.privatKm)}${f.privatAnteil!=null?` = ${f.privatAnteil} % privat`:''}`,
+      (f.hinweise||[]).join(' · ')]);
+    if(st && /leasing|finanz/i.test(st.finanzierung||'') && st.ez){
+      const proJahr = st.kmProJahr || (st.kmVertrag&&st.laufzeitMonate ? st.kmVertrag/(st.laufzeitMonate/12) : null);
+      if(proJahr){
+        const jahre=(Date.now()-new Date(st.ez))/31557600000, soll=Math.round(proJahr*jahre/100)*100, ist=f.letzterKm ?? st.kmStand, diff=ist-soll;
+        out.push([`Vertragliche Laufleistung (${Number(proJahr).toLocaleString('de-DE')} km/Jahr${st.rueckgabe?', Rückgabe '+new Date(st.rueckgabe).toLocaleDateString('de-DE'):''})`,
+          `Soll bis heute ca. ${km(soll)} · Ist ${km(ist)} (${diff>0?'+':''}${Number(diff).toLocaleString('de-DE')} km)`, '']);
+      }
+    }
+  }
+  return {zeilen:out, da};
 }
 function kennzahlenZeilen(k){
   if(!k) return [];
@@ -372,6 +437,13 @@ async function oeffneEigenen(){
   }
   akt = entpacke(i); gfSicht=false;
   leseModus = ['Abgegeben','Abgeschlossen'].includes(akt.f.OGStatus);
+  if(!leseModus && !akt.kennzahlen?.erweitert){
+    try{
+      lade('Kennzahlen werden aktualisiert …');
+      const k=await holeKennzahlen(); delete k._mitarbeiterListe; akt.kennzahlen=k;
+      await graph(`${LISTE()}/items/${akt.spId}/fields`,{method:'PATCH',body:JSON.stringify({KennzahlenJSON:JSON.stringify(k)})});
+    }catch(e){ console.warn('Kennzahlen-Aktualisierung übersprungen —',e.message); }
+  }
   renderBogen();
 }
 
@@ -387,8 +459,10 @@ function renderBogen(){
     `<td><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${roMA?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></td>`).join('')}</tr>`).join('');
   const themen = V.themen.map(t=>`<label><input type="checkbox" value="${esc(t)}" ${a.themen.includes(t)?'checked':''} ${roMA?'disabled':''} onchange="setThema(this)">${esc(t)}</label>`).join('');
   const fragen = V.fragen.map(([id,q])=>`<div class="frage-block"><div class="frage">${esc(q)}</div><textarea ${roMA?'readonly':''} oninput="setText('${id}',this.value)">${esc(a.text[id]||'')}</textarea></div>`).join('');
-  const kz = kennzahlenZeilen(akt.kennzahlen).map(([l,w])=>`<tr><td>${esc(l)}</td><td><b>${esc(w)}</b></td><td><span class="quelle">Kilanka</span></td></tr>`).join('');
-  const man = V.manuell.map(([id,l])=>`<tr><td>${esc(l)}</td><td colspan="2"><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'🔒 wird von der Leitung ergänzt':'eintragen …'}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
+  const erw = erweitertZeilen(akt.kennzahlen);
+  const kz = [...kennzahlenZeilen(akt.kennzahlen).map(z=>[...z,'']), ...erw.zeilen].map(([l,w,h])=>`<tr><td>${esc(l)}${h?`<br><span class="quelle" style="text-transform:none;letter-spacing:0">${esc(h)}</span>`:''}</td><td><b>${esc(w)}</b></td><td><span class="quelle">Kilanka</span></td></tr>`).join('');
+  /* Manuelle Zeile entfällt für Mitarbeitende, sobald der Wert automatisch vorliegt; die Leitung behält das Feld als Anmerkung/Korrektur. */
+  const man = V.manuell.filter(([id])=> gfSicht || !erw.da[id] || (L.manuell?.[id])).map(([id,l])=>`<tr><td>${esc(l)}</td><td colspan="2"><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'🔒 wird von der Leitung ergänzt':(erw.da[id]?'optional: Anmerkung / Korrektur':'eintragen …')}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
   const ver = [0,1,2,3].map(n=>{ const z=L.vereinbarungen?.[n]||{}; return `<tr>${['was','wer','bis'].map(k=>`<td><input type="text" ${roGF?'readonly':''} value="${esc(z[k]||'')}" oninput="setVer(${n},'${k}',this.value)"></td>`).join('')}</tr>`; }).join('');
 
   /* Teil 5: Mitarbeiter:in schlägt vor (eigenes Feld), die Leitung hält im Gespräch die Vereinbarungen fest.
@@ -432,7 +506,7 @@ function renderBogen(){
     ${fragen}
 
     <h2 class="teil umbruch"><span>Teil 4 ·</span> Zahlen &amp; Fakten</h2>
-    <div class="teil-hinweis">Automatisch aus Kilanka übernommen${akt.kennzahlen?.stand?' (Stand '+esc(fmtDT(akt.kennzahlen.stand))+')':''}; die übrigen Werte ergänzt die Leitung. Stimmt etwas nicht? Sprich es im Gespräch an.</div>
+    <div class="teil-hinweis">Automatisch aus Kilanka übernommen${akt.kennzahlen?.stand?' (Stand '+esc(fmtDT(akt.kennzahlen.stand))+')':''}. Privat gefahrene km = gefahrene km seit Fahrzeugübernahme abzüglich aller Fahrtenbuch-Einträge (diese gelten als dienstlich). Stimmt etwas nicht? Sprich es im Gespräch an.</div>
     <table class="daten"><tr><th>Kennzahl</th><th>Stand</th><th>Quelle</th></tr>
       ${kz || '<tr><td colspan="3">Kennzahlen aus Kilanka derzeit nicht verfügbar.</td></tr>'}${man}</table>
     ${gfSicht && !roGF ? `<div class="no-print" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="kennzahlenNeu()">↻ Kennzahlen aus Kilanka aktualisieren</button></div>`:''}
