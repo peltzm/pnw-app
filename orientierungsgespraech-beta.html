@@ -35,6 +35,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,sans-serif;background:var(
 .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#68351a}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}.btn-ghost:hover{border-color:var(--border-strong);color:var(--text)}
+.btn-danger{background:transparent;color:var(--error);border:1px solid #e9b4b4}.btn-danger:hover{background:var(--error-bg)}
 .btn-sm{padding:5px 12px;min-height:30px;font-size:12px}
 .wrap{max-width:900px;margin:0 auto;padding:20px 16px 120px}
 .wrap.wide{max-width:1180px}
@@ -591,11 +592,11 @@ function renderLeiste(){
   const druck=`<button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`;
   if(gfSicht){
     const zu = akt.f.OGStatus==='Abgeschlossen';
-    el.innerHTML = stand+druck+
+    el.innerHTML = stand+`<button class="btn btn-danger" onclick="loeschen()">Bogen löschen</button>`+druck+
       (akt.f.OGStatus!=='Entwurf'?`<button class="btn btn-ghost" onclick="setStatus('Entwurf')">Für Mitarbeiter:in wieder öffnen</button>`:'')+
       (zu?'':`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="setStatus('Abgeschlossen')">Gespräch abschließen</button>`);
   } else if(leseModus){ el.innerHTML = stand+druck; }
-  else { el.innerHTML = stand+`<button class="btn btn-ghost" onclick="papier()">Auf Papier ausfüllen</button>`+druck+`<button class="btn btn-ghost" onclick="speichern(true)">Zwischenspeichern</button><button class="btn btn-primary" onclick="abgeben()">Final abgeben</button>`; }
+  else { el.innerHTML = stand+`<button class="btn btn-danger" onclick="loeschen()">Löschen</button><button class="btn btn-ghost" onclick="papier()">Auf Papier ausfüllen</button>`+druck+`<button class="btn btn-ghost" onclick="speichern(true)">Zwischenspeichern</button><button class="btn btn-primary" onclick="abgeben()">Final abgeben</button>`; }
 }
 function setKommentar(id,w){ (akt.antworten.kommentar ||= {})[id]=w; geaendert(); }
 function setSkala(id,w){ akt.antworten.skala[id] = w==='ka' ? 'ka' : Number(w); geaendert(); }
@@ -683,6 +684,23 @@ async function papier(){
   const zurueck=()=>{ document.body.classList.remove('papier'); akt.antworten=merk; renderBogen(); window.removeEventListener('afterprint',zurueck); };
   window.addEventListener('afterprint',zurueck);
   setTimeout(()=>window.print(),150);
+}
+/* Bogen löschen: Mitarbeitende nur den eigenen, noch nicht abgegebenen Bogen; die GF jeden (z. B. Testbögen).
+ * Das Element landet im SharePoint-Papierkorb der Website (dort 93 Tage wiederherstellbar). */
+async function loeschen(){
+  const name=(akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
+  const frage = gfSicht
+    ? `Bogen von ${name} (Runde ${akt.f.Runde}, Status „${akt.f.OGStatus}“) wirklich löschen?\n\nAlle Antworten, Kennzahlen und Vereinbarungen dieses Bogens werden entfernt. Öffnet ${name} den Link erneut, wird ein neuer, leerer Bogen angelegt.`
+    : 'Deinen Bogen wirklich löschen?\n\nAlle bisherigen Eingaben gehen verloren. Wenn du den Link aus der Einladung erneut öffnest, wird ein neuer, leerer Bogen angelegt.';
+  if(!confirm(frage)) return;
+  clearTimeout(saveTimer); dirty=false;
+  try{
+    await graph(`${LISTE()}/items/${akt.spId}`,{method:'DELETE'});
+    items = items.filter(i=>i.spId!==akt.spId);
+    const warGF=gfSicht; akt=null;
+    if(warGF) return zeigeAdmin();
+    meldung('ok','Dein Bogen wurde gelöscht. <a href="'+esc(location.href)+'">Neuen Bogen anlegen</a> – oder den Link aus der Einladung später erneut öffnen.');
+  }catch(e){ alert('Löschen fehlgeschlagen: '+e.message); }
 }
 async function setStatus(neu){
   if(neu==='Abgeschlossen' && !confirm('Gespräch abschließen? Teil 4 und 5 werden danach gesperrt (über „wieder öffnen“ änderbar).')) return;
