@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Orientierungsgespräch · Praxis NeueWege</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<!-- MSAL-Regel: immer 2.38.0 von alcdn (2.38.3 existiert dort nicht) -->
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+/* CI-Tokens: App-Shell wie die übrigen PNW-Apps, Bogen wie das PDF-Layout des Berichtsgenerators */
+:root{
+  --bg:#f7f6f2;--surface:#fff;--border:#e2dfd8;--border-strong:#c8c4bc;
+  --text:#1a1916;--text-muted:#6b6860;--text-hint:#a09e99;
+  --accent:#7b3f1e;--accent-light:#f5ede7;--accent-mid:#c47848;
+  --ok:#2d6a4f;--ok-bg:#eaf4ee;--warn:#b45309;--warn-bg:#fef7ec;--error:#9b1c1c;--error-bg:#fef2f2;
+  --dunkelbraun:#5A2D15;--terra:#A15F38;--creme:#F5F0EA;--ink:#211F1B;--meta:#8A857B;--r1:#D8D2C6;--r2:#E4DED2;
+  --radius:8px;--radius-lg:12px;--hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid)}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit;min-height:36px;transition:all .12s}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#68351a}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}.btn-ghost:hover{border-color:var(--border-strong);color:var(--text)}
+.btn-sm{padding:5px 12px;min-height:30px;font-size:12px}
+.wrap{max-width:900px;margin:0 auto;padding:20px 16px 120px}
+.wrap.wide{max-width:1180px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:22px 24px;margin-bottom:16px}
+.login{max-width:440px;margin:12vh auto 0;text-align:center}
+.login img{height:60px;margin-bottom:18px}
+.login h1{font-family:'Libre Baskerville',serif;font-size:22px;color:var(--dunkelbraun);margin-bottom:6px}
+.login p{color:var(--text-muted);font-size:13px;margin-bottom:18px}
+.msg{display:none;border-radius:var(--radius);padding:10px 14px;font-size:13px;margin:12px 0;text-align:left}
+.msg.err{display:block;background:var(--error-bg);color:var(--error);border:1px solid #fca5a5}
+.msg.warn{display:block;background:var(--warn-bg);color:var(--warn);border:1px solid #fcd34d}
+.msg.ok{display:block;background:var(--ok-bg);color:var(--ok);border:1px solid #a7d7bd}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ── Bogen (CI Berichtsgenerator-PDF) ── */
+.bogen-kopf{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--r1);margin-bottom:14px}
+.bogen-kopf h1{font-family:'Libre Baskerville',serif;font-weight:700;font-size:26px;color:var(--dunkelbraun);line-height:1.2}
+.bogen-kopf .unter{font-family:'Libre Baskerville',serif;font-style:italic;font-size:13.5px;color:var(--terra);margin:3px 0 5px}
+.eyebrow{font-size:9.5px;font-weight:600;letter-spacing:1.1px;color:var(--meta);text-transform:uppercase}
+.bogen-kopf img{height:54px;width:auto}
+.stamm{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 24px;margin-bottom:14px}
+.stamm div b{display:block;font-weight:500;font-size:13.5px;color:var(--ink)}
+.hinweis{background:var(--creme);border-left:3px solid var(--terra);padding:9px 14px;font-size:12.5px;border-radius:0 6px 6px 0;margin-bottom:6px}
+.hinweis b{color:var(--accent)}
+h2.teil{font-family:'Libre Baskerville',serif;font-size:15px;color:var(--dunkelbraun);border-bottom:1px solid var(--dunkelbraun);padding-bottom:4px;margin:26px 0 6px}
+h2.teil span{color:var(--terra)}
+.teil-hinweis{font-size:11.5px;font-style:italic;color:var(--meta);margin-bottom:10px}
+table.skala{width:100%;border-collapse:collapse;font-size:13px}
+table.skala th{background:var(--creme);font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--ink);padding:7px 4px;border:1px solid var(--r2)}
+table.skala th:first-child{text-align:left;padding-left:10px}
+table.skala td{border:1px solid var(--r2);padding:6px 4px;text-align:center}
+table.skala td:first-child{text-align:left;padding-left:10px}
+table.skala tr:nth-child(odd) td{background:#FBF8F4}
+table.skala input{accent-color:var(--accent);width:17px;height:17px;cursor:pointer}
+.themen{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 18px}
+.themen label{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer}
+.themen input{accent-color:var(--accent);width:16px;height:16px}
+.frage{margin:14px 0 4px;font-size:13.5px}
+textarea,input[type=text],input[type=datetime-local],input[type=month],select{width:100%;font-family:inherit;font-size:13.5px;color:var(--ink);border:1px solid var(--r1);border-radius:6px;padding:8px 10px;background:#fff}
+textarea{min-height:74px;resize:vertical;line-height:1.5}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent-light);border-color:var(--accent-mid)}
+textarea[readonly],input[readonly]{background:#FBF8F4;color:var(--text-muted)}
+table.daten{width:100%;border-collapse:collapse;font-size:13px}
+table.daten th{background:var(--creme);font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;text-align:left;padding:7px 10px;border:1px solid var(--r2)}
+table.daten td{border:1px solid var(--r2);padding:6px 10px;vertical-align:middle}
+table.daten tr:nth-child(odd) td{background:#FBF8F4}
+table.daten td input{border:none;background:transparent;padding:4px 2px}
+.quelle{font-size:10px;color:var(--meta);letter-spacing:.4px;text-transform:uppercase}
+.bogen-fuss{border-top:1.5px solid var(--terra);margin-top:28px;padding-top:8px;font-size:10.5px;color:var(--meta)}
+.leiste{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:10px;align-items:center;justify-content:flex-end;z-index:90;flex-wrap:wrap}
+.leiste .stand{margin-right:auto;font-size:12px;color:var(--text-muted)}
+.status{display:inline-block;font-size:11px;font-weight:600;border-radius:10px;padding:2px 10px}
+.status.offen{background:#eee;color:#666}.status.entwurf{background:var(--warn-bg);color:var(--warn)}
+.status.abgegeben{background:var(--ok-bg);color:var(--ok)}.status.abgeschlossen{background:var(--accent-light);color:var(--accent)}
+table.admin{width:100%;border-collapse:collapse;font-size:13px}
+table.admin th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);padding:8px;border-bottom:1px solid var(--border-strong)}
+table.admin td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.admin select,table.admin input{padding:5px 8px;font-size:12.5px}
+.adminbar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
+.adminbar label{font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px}
+.footer-note{text-align:center;font-size:11px;color:var(--text-hint);margin-top:18px}
+
+/* ── Druck: DIN A4 ── */
+@page{size:A4;margin:14mm 13mm}
+@media print{
+  body{background:#fff;font-size:10.5pt}
+  .header,.leiste,.no-print,.footer-note{display:none!important}
+  .wrap{max-width:none;padding:0}.card{border:none;padding:0;margin:0}
+  textarea,input[type=text]{border:none;border-bottom:.5pt solid var(--r1);border-radius:0;padding:2pt 0;background:transparent!important;resize:none}
+  h2.teil{break-after:avoid}table,.frage-block{break-inside:avoid}
+  .umbruch{break-before:page}
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-brand"><img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege"><span>Orientierungsgespräch</span><span class="beta-badge">BETA</span></div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge"><span class="user-dot"></span><span id="userName"></span></div>
+    <button class="btn btn-ghost btn-sm" id="logoutBtn" style="display:none" onclick="logout()">Abmelden</button>
+  </div>
+</div>
+
+<div id="loginScreen" class="wrap">
+  <div class="card login">
+    <img src="assets/logo-pnw-neu.png" alt="">
+    <h1>Orientierungsgespräch</h1>
+    <p id="loginText">Bitte melde dich mit deinem Praxis-NeueWege-Konto an. Deinen Bogen sehen nur du und die Geschäftsführung.</p>
+    <button class="btn btn-primary" onclick="login()">Mit Microsoft anmelden</button>
+    <div class="msg" id="loginError"></div>
+  </div>
+</div>
+
+<div id="appScreen" class="wrap" style="display:none"></div>
+<div class="leiste no-print" id="leiste" style="display:none"></div>
+<div class="footer-note no-print">Praxis NeueWege GmbH · Orientierungsgespräch <span id="versionBadge"></span></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zu den übrigen PNW-Apps
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/orientierungsgespraech-beta.html',
+  spHost: 'praxisneuewegesonjapeltz978.sharepoint.com',
+  listName: 'PNW-Orientierungsgespraeche',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
+const GF = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+const SENTINEL = '__sentinel__';           // GF-Element: darf für Mitarbeitende NIE sichtbar sein
+const APP_VERSION = 'BETA-dev'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+
+/* ═══════════════════════════════════════════════════════════
+ * INHALTE — Kurzfassung für 60 Minuten, drei Versionen
+ * IDs sind stabil (Auswertung über Runden hinweg) — Texte dürfen sich ändern.
+ * ═══════════════════════════════════════════════════════════ */
+const GEMEINSAM = [
+  ['fallzahl','Fallzahl und Stundenumfang passen bei mir zusammen'],
+  ['ausfall','Die Stundenregelung bei Terminausfällen empfinde ich als fair'],
+  ['gesund','So wie jetzt kann ich meine Arbeit dauerhaft gesund leisten'],
+  ['info','Entscheidungen erfahre ich rechtzeitig und mit Begründung'],
+  ['ton','Der Ton der Leitung mir gegenüber ist respektvoll'],
+  ['kritik','Ich kann Kritik äußern, ohne Nachteile zu befürchten'],
+  ['anerkennung','Meine Arbeit wird gesehen und anerkannt'],
+  ['verguetung','Meine Vergütung ist für mich nachvollziehbar und fair'],
+  ['fahrzeug','Die Regeln zur Fahrzeugnutzung (dienstlich / privat) sind klar und fair'],
+  ['motivation','Meine Motivation ist aktuell hoch'],
+];
+const THEMEN_FK = ['Arbeitsbelastung','Terminausfälle & Stundenkonto','Gesund bleiben','Kommunikation der Leitung','Wertschätzung','Bezahlung','Dienstfahrzeug','Team & Austausch','Entwicklung / Fortbildung'];
+const F_RUECK = ['rueckblick','Rückblick: Was lief gut – und was lässt dich den Kopf schütteln?'];
+const F_SSW   = ['ssw','Womit sollte die Leitung anfangen, womit aufhören, was beibehalten (Kommunikation, Wertschätzung)?'];
+const VERSIONEN = {
+  A: { titel:'Teamleitung', skalaTitel:'Meine Rolle, mein Team, unsere Zusammenarbeit',
+    items:[['rolle','Meine Rolle und meine Entscheidungsbefugnisse sind klar'],['leitungszeit','Die Leitungszeit reicht – Leitung und Fallarbeit sind vereinbar'],
+      ['ueberblick','Ich habe den Überblick über Auslastung, Stunden und Ausfälle im Team'],['fehlzeiten','Mit Fehlzeiten im Team kann ich gut umgehen (Vertretung, Rückkehrgespräch)'],
+      ['gehoert','Meine Einschätzung wird gehört, bevor die Geschäftsführung entscheidet'],['vertreten','Entscheidungen der Geschäftsführung kann ich im Team vertreten'],
+      ['ton','Der Ton der Geschäftsführung mir gegenüber ist respektvoll'],['kritik','Ich kann Kritik äußern, ohne Nachteile zu befürchten'],
+      ['anerkennung','Meine Leitungsarbeit wird gesehen und anerkannt'],['verguetung','Mein Vergütungsmodell (Eingruppierung + Leitungszulage) ist nachvollziehbar und fair'],
+      ['gesund','Meine eigene Arbeitsbelastung ist dauerhaft tragbar'],['motivation','Meine Motivation ist aktuell hoch']],
+    themen:['Krankenstand im Team','Arbeitsbelastung (Team / ich)','Terminausfälle & Stundenlogik','Kommunikation der GF','Wertschätzung','Bezahlung (Team / ich)','Dienstfahrzeuge im Team','Meine Leitungsrolle','Entwicklung / Qualifizierung'],
+    fragen:[['rueckblick','Rückblick: Was lief in deiner Leitungsrolle gut – und was lässt dich den Kopf schütteln?'],
+      ['team','Was nimmst du im Team wahr (Krankenstand, Belastung, Bezahlung, Fahrzeuge, Stimmung), das wir wissen sollten?'],
+      ['ssw','Womit sollte die Geschäftsführung anfangen, womit aufhören, was beibehalten (Kommunikation, Wertschätzung)?']],
+    manuell:[['team_auslastung','Team: Auslastung (abrechenbare Std. Soll / Ist)'],['team_konten','Team: Arbeitszeitkonten und Abwesenheitsquote'],['team_kfz','Team: Fahrzeuge km gesamt / davon privat'],['leitungsstunden','Leitungsstunden Soll – Ist'],['zeitkonto','Eigenes Arbeitszeitkonto (Über- / Minusstunden)']] },
+  B: { titel:'Fachkraft ambulant', skalaTitel:'Meine Arbeit und unsere Zusammenarbeit',
+    items:[['sicher','In meinen Fällen fühle ich mich handlungssicher – auch in Krisen'],['asd','Der Austausch mit ASD und Fachstellen funktioniert'],
+      ['tl','Meine Teamleitung ist erreichbar und unterstützt mich'],['team','Ich habe genug Kontakt zu Kolleg:innen und fühle mich als Teil des Teams'],...GEMEINSAM],
+    themen:THEMEN_FK,
+    fragen:[F_RUECK,['belastung','Was belastet dich aktuell am meisten, und was würde am schnellsten entlasten (z. B. an Tagen, an denen Termine ausfallen)?'],F_SSW],
+    manuell:[['overhead','Anteil abrechenbar : Overhead (Fahrt, Doku, Team)'],['zeitkonto','Arbeitszeitkonto (Über- / Minusstunden)'],['kfz','Fahrzeug: km gesamt / davon privat / Leasinggrenze']] },
+  C: { titel:'Fachkraft ambulant + stationär', skalaTitel:'Meine Arbeit in beiden Bereichen',
+    items:[['sicher','Ambulant und im Gruppendienst fühle ich mich handlungssicher – auch in Krisen'],['aufteilung','Die Aufteilung meiner Stunden auf ambulant und Nordstern passt'],
+      ['dienstplan','Dienstplan, Rufbereitschaft und ambulante Termine sind vereinbar (inkl. Ruhezeiten)'],['zustaendig','Ich weiß, welche Leitung für welches Thema zuständig ist'],
+      ['team','Ich fühle mich in beiden Teams zugehörig'],...GEMEINSAM],
+    themen:['Wechsel ambulant / stationär','Dienstplan & Rufbereitschaft',...THEMEN_FK.filter(t=>t!=='Team & Austausch'&&t!=='Gesund bleiben')],
+    fragen:[F_RUECK,['belastung','Wo reiben sich ambulant und stationär bei dir am meisten, was würde am schnellsten entlasten (auch an Tagen mit Terminausfällen) – und wo willst du in einem Jahr deinen Schwerpunkt haben?'],F_SSW],
+    manuell:[['stunden_as','Stunden ambulant / stationär (Soll / Ist)'],['dienste','Dienste & Rufbereitschaften (letzte 3 Monate)'],['zeitkonto','Arbeitszeitkonto (Über- / Minusstunden)'],['kfz','Fahrzeug: km gesamt / davon privat / Leasinggrenze']] }
+};
+
+/* SharePoint-Schema der zentralen Ablage */
+const SPALTEN = [
+  {name:'MitarbeiterUpn',text:{}},{name:'MitarbeiterName',text:{}},{name:'Runde',text:{}},{name:'Version',text:{}},
+  {name:'OGStatus',text:{}},{name:'Termin',text:{}},{name:'AbgegebenAm',dateTime:{format:'dateTime'}},
+  {name:'AntwortenJSON',text:{allowMultipleLines:true,textType:'plain'}},
+  {name:'KennzahlenJSON',text:{allowMultipleLines:true,textType:'plain'}},
+  {name:'LeitungJSON',text:{allowMultipleLines:true,textType:'plain'}}
+];
+
+/* ═══════════════════════════════════════════════════════════
+ * ZUSTAND
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance, currentAccount, upn = '', istGF = false;
+let items = [];                 // alle für mich sichtbaren Listenelemente
+let akt = null;                 // aktuell geöffneter Bogen {spId, f:{...}, antworten, kennzahlen, leitung}
+let leseModus = false, gfSicht = false, dirty = false, saveTimer = null;
+const P = new URLSearchParams(location.search);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const aktRunde = () => P.get('r') || new Date().toISOString().slice(0,7);
+const fmtDT = iso => iso ? new Date(iso).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}) : '';
+const num = (v, einheit='') => v == null || v === '' ? '—' : String(v).replace('.', ',') + einheit;
+
+/* ═══════════════════════════════════════════════════════════
+ * ANMELDUNG — defensiv nach Mobilfunk-Muster (lazy, typeof-Prüfung, sessionStorage)
+ * ═══════════════════════════════════════════════════════════ */
+function zeigeLoginFehler(t){ const e=document.getElementById('loginError'); e.className='msg err'; e.textContent=t; }
+function initMsal(){
+  if (typeof msal === 'undefined') throw new Error('Die Microsoft-Anmeldebibliothek konnte nicht geladen werden. Bitte Seite neu laden (Strg+F5) oder Werbeblocker prüfen.');
+  msalInstance = msalInstance || new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'sessionStorage' }
+  });
+}
+async function login(){
+  try{
+    initMsal();
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account; msalInstance.setActiveAccount(currentAccount);
+    upn = (currentAccount.username||'').toLowerCase();
+    istGF = GF.includes(upn);
+    document.getElementById('userName').textContent = currentAccount.name || upn;
+    document.getElementById('userBadge').style.display='flex';
+    document.getElementById('logoutBtn').style.display='';
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('appScreen').style.display='block';
+    await start();
+  }catch(e){ zeigeLoginFehler('Anmeldung fehlgeschlagen: '+e.message); }
+}
+/* Sitzung wiederaufnehmen (z. B. nach Rundenwechsel/Reload) — ohne erneutes Popup */
+async function wiederaufnahme(){
+  try{
+    initMsal();
+    const acc = msalInstance.getAllAccounts()[0];
+    if(!acc) return;
+    currentAccount = acc; msalInstance.setActiveAccount(acc);
+    upn = (acc.username||'').toLowerCase(); istGF = GF.includes(upn);
+    document.getElementById('userName').textContent = acc.name || upn;
+    document.getElementById('userBadge').style.display='flex';
+    document.getElementById('logoutBtn').style.display='';
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('appScreen').style.display='block';
+    await start();
+  }catch(e){ console.warn('Keine Wiederaufnahme —', e.message); }
+}
+window.addEventListener('load', wiederaufnahme);
+function logout(){ if(msalInstance) msalInstance.logoutPopup({account:currentAccount}).catch(()=>{}); location.href=location.pathname; }
+async function tokens(){
+  const req={scopes:SCOPES,account:currentAccount};
+  let r = await msalInstance.acquireTokenSilent(req).catch(()=>msalInstance.acquireTokenPopup(req));
+  const exp = (()=>{try{return JSON.parse(atob(r.idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000}catch(e){return 0}})();
+  if (exp < Date.now()+60000) r = await msalInstance.acquireTokenSilent({...req,forceRefresh:true});
+  return {graph:r.accessToken, id:r.idToken};   // Worker prüft das idToken (aud = clientId)
+}
+async function graph(pfad,opt={}){
+  const t=(await tokens()).graph;
+  const r=await fetch(pfad.startsWith('http')?pfad:'https://graph.microsoft.com/v1.0'+pfad,{...opt,headers:{Authorization:'Bearer '+t,'Content-Type':'application/json',...(opt.headers||{})}});
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error('Graph '+r.status+': '+(await r.text()).slice(0,300));
+  return r.status===204?true:r.json();
+}
+/* Sammlungen IMMER paginiert laden (@odata.nextLink) */
+async function graphAlle(pfad){
+  const alle=[]; let url='https://graph.microsoft.com/v1.0'+pfad;
+  for(let s=0; url && s<50; s++){ const d=await graph(url); if(!d) return null; alle.push(...(d.value||[])); url=d['@odata.nextLink']||null; }
+  return alle;
+}
+const LISTE = () => `/sites/${CFG.spHost}/lists/${CFG.listName}`;
+
+/* ═══════════════════════════════════════════════════════════
+ * START
+ * ═══════════════════════════════════════════════════════════ */
+const app = () => document.getElementById('appScreen');
+function lade(text){ app().className='wrap'; app().innerHTML=`<div class="card"><span class="spinner"></span>${esc(text)}</div>`; document.getElementById('leiste').style.display='none'; }
+function meldung(art,html){ app().className='wrap'; app().innerHTML=`<div class="card"><div class="msg ${art}" style="margin:0">${html}</div></div>`; document.getElementById('leiste').style.display='none'; }
+
+async function start(){
+  lade('Daten werden geladen …');
+  let roh;
+  try{ roh = await graphAlle(LISTE()+'/items?$expand=fields&$top=200'); }
+  catch(e){ return meldung('err','Die Ablage konnte nicht gelesen werden: '+esc(e.message)); }
+  if (roh === null){
+    if (istGF) return zeigeSetup();
+    return meldung('warn','Die Orientierungsgespräche sind noch nicht eingerichtet. Bitte wende dich an die Verwaltung.');
+  }
+  items = roh.map(i=>({spId:i.id, f:i.fields||{}}));
+
+  /* Fail-closed: Sieht ein:e Mitarbeiter:in fremde Elemente (oder das GF-Sentinel),
+   * sind die Listenberechtigungen falsch — dann wird NICHT gespeichert. */
+  if (!istGF && items.some(i => (i.f.MitarbeiterUpn||'').toLowerCase() !== upn)){
+    return meldung('err','<b>Sicherheitsprüfung fehlgeschlagen.</b> Die Ablage ist nicht korrekt abgesichert – aus Datenschutzgründen ist das Ausfüllen gesperrt. Bitte gib der Verwaltung Bescheid (Markus Peltz).');
+  }
+  const ma = (P.get('ma')||'').toLowerCase();
+  if (istGF && !(ma && ma===upn && P.get('selbst'))) return ma ? oeffneFuerGF(ma) : zeigeAdmin();
+  if (ma && ma !== upn) return meldung('warn','Dieser Link ist für ein anderes Konto bestimmt ('+esc(ma)+'). Du bist angemeldet als '+esc(upn)+'.');
+  if (!P.get('r') || !VERSIONEN[P.get('v')]) return meldung('warn','Der Link ist unvollständig. Bitte verwende den Link aus deiner Einladung.');
+  await oeffneEigenen();
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * KENNZAHLEN AUS KILANKA (über den Worker, Berechtigung serverseitig)
+ * ═══════════════════════════════════════════════════════════ */
+async function holeKennzahlen(zielUpn){
+  const t = await tokens();
+  const url = CFG.workerUrl+'/api/mitarbeiter-cockpit'+(zielUpn && zielUpn!==upn ? '?mitarbeiter='+encodeURIComponent(zielUpn) : '');
+  const r = await fetch(url,{headers:{Authorization:'Bearer '+t.id,'X-Graph-Token':t.graph}});
+  if(!r.ok){ let d=''; try{d=(await r.json()).error||''}catch(_){}; throw new Error('HTTP '+r.status+(d?' — '+d:'')); }
+  const d = await r.json();
+  const fls=d.fls||{}, u=d.urlaub||{}, k=d.krankheit||{}, kl=d.klienten||{};
+  return {
+    stand: d.stand || new Date().toISOString(),
+    name: d.person?.name || null, team: d.person?.team || null, wochenstunden: d.person?.wochenstundenVertrag ?? null,
+    faelle: kl.aktiv ?? null, faelleHb: kl.hb ?? null, faelleMb: kl.mb ?? null, faelleV: kl.v ?? null,
+    flsIst: fls.istMonatsstunden ?? null, flsMonat: fls.istMonat || null, flsSoll64: fls.benchmark64 ?? null, flsSollWoche: fls.sollWochenstunden ?? null,
+    urlaubRest: u.restTage ?? null, urlaubGenommen: u.genommenTage ?? null, urlaubGeplant: u.geplantTage ?? null,
+    krankTage: d.abwesenheitenVerfuegbar ? (k.tage ?? null) : null, kindKrankTage: d.abwesenheitenVerfuegbar ? (k.kindKrankTage ?? null) : null, jahr: k.jahr || u.jahr || null,
+    _mitarbeiterListe: d.sicht?.mitarbeiter || null
+  };
+}
+function kennzahlenZeilen(k){
+  if(!k) return [];
+  const mon = k.flsMonat ? new Date(k.flsMonat+'-01').toLocaleDateString('de-DE',{month:'long',year:'numeric'}) : 'Vormonat';
+  return [
+    ['Aktive Fälle (HB / MB / Vertretung)', k.faelle==null?'—':`${k.faelle} (${num(k.faelleHb)} / ${num(k.faelleMb)} / ${num(k.faelleV)})`],
+    [`Abrechenbare Stunden ${mon} (Ist / Soll 64 %)`, `${num(k.flsIst,' h')} / ${num(k.flsSoll64,' h')}`],
+    ['Vertragliche Wochenstunden', num(k.wochenstunden,' h')],
+    [`Urlaub ${k.jahr||''}: genommen / geplant / Rest`, `${num(k.urlaubGenommen)} / ${num(k.urlaubGeplant)} / ${num(k.urlaubRest)} Tage`],
+    [`Abwesenheitstage Krankheit ${k.jahr||''} (davon Kind krank)`, k.krankTage==null?'—':`${num(k.krankTage)} (${num(k.kindKrankTage)}) Tage`],
+  ];
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * MITARBEITER-SICHT
+ * ═══════════════════════════════════════════════════════════ */
+function entpacke(i){
+  const j = s => { try{ return s ? JSON.parse(s) : null }catch(e){ return null } };
+  return { spId:i.spId, f:i.f, antworten:j(i.f.AntwortenJSON)||{skala:{},themen:[],text:{}}, kennzahlen:j(i.f.KennzahlenJSON), leitung:j(i.f.LeitungJSON)||{manuell:{},vereinbarungen:[],naechster:''} };
+}
+async function oeffneEigenen(){
+  const runde=P.get('r'), v=P.get('v');
+  let i = items.find(x => (x.f.MitarbeiterUpn||'').toLowerCase()===upn && x.f.Runde===runde);
+  if(!i){
+    lade('Dein Bogen wird angelegt und mit deinen Kennzahlen aus Kilanka vorbefüllt …');
+    let k=null; try{ k=await holeKennzahlen(); delete k._mitarbeiterListe; }catch(e){ console.warn('Kennzahlen nicht verfügbar —',e.message); }
+    const name = k?.name || currentAccount.name || upn;
+    const fields = { Title:`${name} – ${runde}`, MitarbeiterUpn:upn, MitarbeiterName:name, Runde:runde, Version:v, OGStatus:'Entwurf', Termin:P.get('t')||'',
+      AntwortenJSON:JSON.stringify({skala:{},themen:[],text:{}}), KennzahlenJSON:k?JSON.stringify(k):'', LeitungJSON:'' };
+    try{ const neu = await graph(LISTE()+'/items',{method:'POST',body:JSON.stringify({fields})}); i={spId:neu.id,f:{...fields}}; items.push(i); }
+    catch(e){ return meldung('err','Dein Bogen konnte nicht angelegt werden: '+esc(e.message)); }
+  }
+  akt = entpacke(i); gfSicht=false;
+  leseModus = ['Abgegeben','Abgeschlossen'].includes(akt.f.OGStatus);
+  renderBogen();
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * BOGEN RENDERN (beide Sichten)
+ * ═══════════════════════════════════════════════════════════ */
+function renderBogen(){
+  const V = VERSIONEN[akt.f.Version] || VERSIONEN.B, a=akt.antworten, L=akt.leitung;
+  const roMA = leseModus || gfSicht;         // Teil 1–3: nur Mitarbeiter:in, solange nicht abgegeben
+  const roGF = !gfSicht || akt.f.OGStatus==='Abgeschlossen';   // Teil 4 (manuell) + 5: nur GF
+  const termin = akt.f.Termin ? fmtDT(akt.f.Termin) : '—';
+  const skala = V.items.map(([id,txt])=>`<tr><td>${esc(txt)}</td>${[1,2,3,4,5,6,7,8,9,10,'ka'].map(w=>
+    `<td><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${roMA?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></td>`).join('')}</tr>`).join('');
+  const themen = V.themen.map(t=>`<label><input type="checkbox" value="${esc(t)}" ${a.themen.includes(t)?'checked':''} ${roMA?'disabled':''} onchange="setThema(this)">${esc(t)}</label>`).join('');
+  const fragen = V.fragen.map(([id,q])=>`<div class="frage-block"><div class="frage">${esc(q)}</div><textarea ${roMA?'readonly':''} oninput="setText('${id}',this.value)">${esc(a.text[id]||'')}</textarea></div>`).join('');
+  const kz = kennzahlenZeilen(akt.kennzahlen).map(([l,w])=>`<tr><td>${esc(l)}</td><td><b>${esc(w)}</b></td><td><span class="quelle">Kilanka</span></td></tr>`).join('');
+  const man = V.manuell.map(([id,l])=>`<tr><td>${esc(l)}</td><td colspan="2"><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'wird von der Leitung ergänzt':'eintragen …'}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
+  const ver = [0,1,2,3].map(n=>{ const z=L.vereinbarungen?.[n]||{}; return `<tr>${['was','wer','bis'].map(k=>`<td><input type="text" ${roGF?'readonly':''} value="${esc(z[k]||'')}" oninput="setVer(${n},'${k}',this.value)"></td>`).join('')}</tr>`; }).join('');
+
+  app().className='wrap';
+  app().innerHTML = `
+  ${gfSicht?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zurueckAdmin()">← Übersicht</button></div>`:''}
+  <div class="card">
+    <div class="bogen-kopf"><div><h1>Orientierungsgespräch</h1><div class="unter">${esc(V.titel)}</div><div class="eyebrow">Praxis NeueWege · Vorbereitungsbogen · Runde ${esc(akt.f.Runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt="Praxis NeueWege"></div>
+    <div class="stamm">
+      <div><span class="eyebrow">Name</span><b>${esc(akt.f.MitarbeiterName)}</b></div>
+      <div><span class="eyebrow">Gesprächstermin</span><b>${esc(termin)}</b></div>
+      <div><span class="eyebrow">Wochenstunden / Team</span><b>${esc(num(akt.kennzahlen?.wochenstunden,' h'))}${akt.kennzahlen?.team?' · '+esc(akt.kennzahlen.team):''}</b></div>
+      <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div>
+    </div>
+    ${gfSicht?'':`<div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 10 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Du kannst jederzeit zwischenspeichern und später weitermachen. Erst mit <b>„Final abgeben“</b> sehen wir deinen Bogen als fertig an. <b>Lesen können ihn nur du und die Geschäftsführung</b> (Sonja und Markus Peltz).</div>`}
+
+    <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung</h2>
+    <div style="overflow-x:auto"><table class="skala"><tr><th>${esc(V.skalaTitel)}</th>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<th>${n}</th>`).join('')}<th>k. A.</th></tr>${skala}</table></div>
+
+    <h2 class="teil"><span>Teil 2 ·</span> Meine 3 wichtigsten Themen für das Gespräch</h2>
+    <div class="teil-hinweis">Bitte höchstens drei ankreuzen – darauf verwenden wir den Großteil der Stunde.</div>
+    <div class="themen">${themen}</div>
+
+    <h2 class="teil"><span>Teil 3 ·</span> Kurz in Stichpunkten</h2>
+    ${fragen}
+
+    <h2 class="teil umbruch"><span>Teil 4 ·</span> Zahlen &amp; Fakten</h2>
+    <div class="teil-hinweis">Automatisch aus Kilanka übernommen${akt.kennzahlen?.stand?' (Stand '+esc(fmtDT(akt.kennzahlen.stand))+')':''}; die übrigen Werte ergänzt die Leitung. Stimmt etwas nicht? Sprich es im Gespräch an.</div>
+    <table class="daten"><tr><th>Kennzahl</th><th>Stand</th><th>Quelle</th></tr>
+      ${kz || '<tr><td colspan="3">Kennzahlen aus Kilanka derzeit nicht verfügbar.</td></tr>'}${man}</table>
+    ${gfSicht && !roGF ? `<div class="no-print" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="kennzahlenNeu()">↻ Kennzahlen aus Kilanka aktualisieren</button></div>`:''}
+
+    <h2 class="teil"><span>Teil 5 ·</span> Ziele &amp; Vereinbarungen</h2>
+    <div class="teil-hinweis">Wird im Gespräch gemeinsam ausgefüllt. Auch die Leitung trägt hier ein, was sie zusagt.</div>
+    <table class="daten"><tr><th style="width:62%">Was nehmen wir uns vor?</th><th>Wer</th><th>Bis wann</th></tr>${ver}</table>
+    <div class="frage">Zwischencheck / nächstes Gespräch am:</div>
+    <input type="text" ${roGF?'readonly':''} value="${esc(L.naechster||'')}" oninput="akt.leitung.naechster=this.value;geaendert()" style="max-width:280px">
+
+    <div class="bogen-fuss">Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach · Amtsgericht Ingolstadt HRB 13133 · GF: Sonja Peltz, Markus Peltz<br>info@praxisneuewege.de · vertraulich – Personalunterlage</div>
+  </div>`;
+  renderLeiste();
+}
+function renderLeiste(){
+  const el=document.getElementById('leiste'); el.style.display='flex';
+  const stand=`<span class="stand" id="saveStand">${leseModus&&!gfSicht?'Dein Bogen ist abgegeben und kann nicht mehr geändert werden.':''}</span>`;
+  const druck=`<button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`;
+  if(gfSicht){
+    const zu = akt.f.OGStatus==='Abgeschlossen';
+    el.innerHTML = stand+druck+
+      (akt.f.OGStatus!=='Entwurf'?`<button class="btn btn-ghost" onclick="setStatus('Entwurf')">Für Mitarbeiter:in wieder öffnen</button>`:'')+
+      (zu?'':`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="setStatus('Abgeschlossen')">Gespräch abschließen</button>`);
+  } else if(leseModus){ el.innerHTML = stand+druck; }
+  else { el.innerHTML = stand+druck+`<button class="btn btn-ghost" onclick="speichern(true)">Zwischenspeichern</button><button class="btn btn-primary" onclick="abgeben()">Final abgeben</button>`; }
+}
+function setSkala(id,w){ akt.antworten.skala[id] = w==='ka' ? 'ka' : Number(w); geaendert(); }
+function setThema(cb){
+  const t=akt.antworten.themen;
+  if(cb.checked){ if(t.length>=3){ cb.checked=false; alert('Bitte höchstens drei Themen – so bleibt im Gespräch genug Zeit dafür.'); return; } t.push(cb.value); }
+  else akt.antworten.themen = t.filter(x=>x!==cb.value);
+  geaendert();
+}
+function setText(id,w){ akt.antworten.text[id]=w; geaendert(); }
+function setManuell(id,w){ (akt.leitung.manuell ||= {})[id]=w; geaendert(); }
+function setVer(n,k,w){ const v=(akt.leitung.vereinbarungen ||= []); (v[n] ||= {})[k]=w; geaendert(); }
+function geaendert(){
+  dirty=true; const s=document.getElementById('saveStand'); if(s) s.textContent='Nicht gespeicherte Änderungen …';
+  clearTimeout(saveTimer); saveTimer=setTimeout(()=>speichern(false),2500);   // automatisches Zwischenspeichern
+}
+window.addEventListener('beforeunload',e=>{ if(dirty){ e.preventDefault(); e.returnValue=''; } });
+
+async function speichern(manuell, extra={}){
+  clearTimeout(saveTimer);
+  const s=document.getElementById('saveStand');
+  /* Jede Sicht schreibt NUR ihre eigenen Felder — so überschreiben sich Mitarbeiter:in und Leitung nie gegenseitig. */
+  const fields = gfSicht ? { LeitungJSON:JSON.stringify(akt.leitung), KennzahlenJSON:akt.kennzahlen?JSON.stringify(akt.kennzahlen):'', ...extra }
+                         : { AntwortenJSON:JSON.stringify(akt.antworten), ...extra };
+  try{
+    if(s) s.textContent='Speichert …';
+    await graph(`${LISTE()}/items/${akt.spId}/fields`,{method:'PATCH',body:JSON.stringify(fields)});
+    Object.assign(akt.f,fields); dirty=false;
+    if(s) s.textContent='Gespeichert um '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr';
+    return true;
+  }catch(e){
+    if(s) s.textContent='⚠ Speichern fehlgeschlagen';
+    if(manuell) alert('Speichern fehlgeschlagen: '+e.message+'\n\nDeine Eingaben bleiben im Fenster erhalten – bitte gleich noch einmal versuchen.');
+    return false;
+  }
+}
+async function abgeben(){
+  const V=VERSIONEN[akt.f.Version], offen=V.items.filter(([id])=>akt.antworten.skala[id]==null).length;
+  let frage='Bogen jetzt final abgeben? Danach kannst du ihn nicht mehr ändern.';
+  if(offen) frage=`In Teil 1 sind noch ${offen} Zeile(n) ohne Angabe.\n\n`+frage;
+  if(!akt.antworten.themen.length) frage='Du hast in Teil 2 noch kein Thema gewählt.\n\n'+frage;
+  if(!confirm(frage)) return;
+  if(await speichern(true,{OGStatus:'Abgegeben',AbgegebenAm:new Date().toISOString()})){ leseModus=true; renderBogen(); window.scrollTo(0,0); }
+}
+async function setStatus(neu){
+  if(neu==='Abgeschlossen' && !confirm('Gespräch abschließen? Teil 4 und 5 werden danach gesperrt (über „wieder öffnen“ änderbar).')) return;
+  if(await speichern(true,{OGStatus:neu})) { leseModus = neu!=='Entwurf'; renderBogen(); }
+}
+async function kennzahlenNeu(){
+  try{ const k=await holeKennzahlen(akt.f.MitarbeiterUpn); delete k._mitarbeiterListe; akt.kennzahlen=k; await speichern(true); renderBogen(); }
+  catch(e){ alert('Kennzahlen konnten nicht geladen werden: '+e.message); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * GF-SICHT: Runde planen, Links verteilen, Status, Gespräch führen
+ * ═══════════════════════════════════════════════════════════ */
+let mitarbeiter=null, plan={}, planItem=null;
+const planKey = r => '__runde__:'+r;
+function oeffneFuerGF(zielUpn){
+  const runde=aktRunde();
+  const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===zielUpn && x.f.Runde===runde);
+  if(!i) return meldung('warn',esc(zielUpn)+' hat den Bogen für die Runde '+esc(runde)+' noch nicht geöffnet. <a href="'+location.pathname+'?r='+esc(runde)+'">Zur Übersicht</a>');
+  akt=entpacke(i); gfSicht=true; leseModus=true; renderBogen(); window.scrollTo(0,0);
+}
+function zurueckAdmin(){ if(dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return; dirty=false; akt=null; zeigeAdmin(); }
+function linkFuer(m,runde){
+  const p=plan[m.upn]||{}; const q=new URLSearchParams({r:runde,v:p.v||'B',ma:m.upn}); if(p.t) q.set('t',p.t);
+  return CFG.redirectUri+'?'+q.toString();
+}
+async function zeigeAdmin(){
+  const runde=aktRunde();
+  lade('Mitarbeiterliste wird aus Kilanka geladen …');
+  if(!mitarbeiter){
+    try{ const k=await holeKennzahlen(); mitarbeiter=(k._mitarbeiterListe||[]).filter(m=>!GF.includes(m.upn)).sort((a,b)=>a.name.localeCompare(b.name,'de')); }
+    catch(e){ return meldung('err','Mitarbeiterliste nicht verfügbar: '+esc(e.message)); }
+  }
+  planItem = items.find(x=>x.f.MitarbeiterUpn===planKey(runde)) || null;
+  try{ plan = planItem ? JSON.parse(planItem.f.AntwortenJSON||'{}') : {}; }catch(e){ plan={}; }
+  const zeilen = mitarbeiter.map(m=>{
+    const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===m.upn && x.f.Runde===runde), st=i?.f.OGStatus||'Offen', p=plan[m.upn]||{};
+    return `<tr><td><b>${esc(m.name)}</b><br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
+      <td><select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).map(([k,v])=>`<option value="${k}" ${(p.v||'B')===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select></td>
+      <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)"></td>
+      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
+      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
+        <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">E-Mail</button>
+        ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}</td></tr>`;
+  }).join('');
+  const zahl = s => items.filter(x=>x.f.Runde===runde && x.f.OGStatus===s).length;
+  app().className='wrap wide';
+  app().innerHTML=`<div class="card">
+    <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
+      <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
+    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „Öffnen“ zeigt den Bogen; dort ergänzt ihr die manuellen Kennzahlen und im Gespräch Teil 5. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
+    <div style="overflow-x:auto"><table class="admin"><tr><th>Mitarbeiter:in</th><th>Version</th><th>Gesprächstermin</th><th>Status</th><th></th></tr>${zeilen}</table></div>
+    <div class="msg" id="adminMsg"></div></div>`;
+  document.getElementById('leiste').style.display='none';
+}
+async function setPlan(u,k,w){
+  (plan[u] ||= {})[k]=w;
+  const runde=aktRunde(), body={AntwortenJSON:JSON.stringify(plan)};
+  try{
+    if(planItem) await graph(`${LISTE()}/items/${planItem.spId}/fields`,{method:'PATCH',body:JSON.stringify(body)});
+    else { const neu=await graph(LISTE()+'/items',{method:'POST',body:JSON.stringify({fields:{Title:'Planung '+runde,MitarbeiterUpn:planKey(runde),Runde:runde,...body}})}); planItem={spId:neu.id,f:{MitarbeiterUpn:planKey(runde),Runde:runde,...body}}; items.push(planItem); }
+  }catch(e){ const m=document.getElementById('adminMsg'); m.className='msg err'; m.textContent='Planung konnte nicht gespeichert werden: '+e.message; }
+}
+async function kopiere(u){
+  const m=mitarbeiter.find(x=>x.upn===u); await navigator.clipboard.writeText(linkFuer(m,aktRunde()));
+  const el=document.getElementById('adminMsg'); el.className='msg ok'; el.textContent='Link für '+m.name+' kopiert.';
+}
+function mail(u){
+  const m=mitarbeiter.find(x=>x.upn===u), p=plan[u]||{}, vor=(m.name.split(',')[1]||m.name).trim().split(' ')[0];
+  const termin=p.t?' am '+fmtDT(p.t):'';
+  const text=`Hallo ${vor},\n\nunser Orientierungsgespräch steht an${termin}. Zur Vorbereitung haben wir einen kurzen Online-Bogen für dich (ca. 10 Minuten):\n\n${linkFuer(m,aktRunde())}\n\nDu meldest dich mit deinem Praxis-NeueWege-Konto an. Du kannst jederzeit zwischenspeichern und später weitermachen – bitte gib den Bogen spätestens zwei Tage vor dem Gespräch final ab. Lesen können ihn nur du und wir beide.\n\nWir freuen uns auf das Gespräch!\nSonja & Markus`;
+  location.href=`mailto:${encodeURIComponent(u)}?subject=${encodeURIComponent('Dein Orientierungsgespräch – Vorbereitungsbogen')}&body=${encodeURIComponent(text)}`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * EINRICHTUNG (nur GF, einmalig)
+ * ═══════════════════════════════════════════════════════════ */
+function zeigeSetup(){
+  app().innerHTML=`<div class="card"><h2 class="teil" style="margin-top:0">Einrichtung der zentralen Ablage</h2>
+    <p style="margin:8px 0 14px">Die SharePoint-Liste <b>${esc(CFG.listName)}</b> existiert noch nicht. Sie wird jetzt mit allen Spalten und einem Prüf-Element angelegt.</p>
+    <button class="btn btn-primary" onclick="setup()">Liste anlegen</button><div class="msg" id="setupMsg"></div></div>`;
+}
+async function setup(){
+  const m=document.getElementById('setupMsg');
+  try{
+    m.className='msg warn'; m.textContent='Berechtigung anfordern …';
+    const req={scopes:['Sites.Manage.All'],account:currentAccount};
+    const t=(await msalInstance.acquireTokenSilent(req).catch(()=>msalInstance.acquireTokenPopup(req))).accessToken;
+    m.textContent='Liste wird angelegt …';
+    const r=await fetch(`https://graph.microsoft.com/v1.0/sites/${CFG.spHost}/lists`,{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+      body:JSON.stringify({displayName:CFG.listName,columns:SPALTEN,list:{template:'genericList'}})});
+    if(!r.ok) throw new Error(r.status+': '+(await r.text()).slice(0,300));
+    await graph(LISTE()+'/items',{method:'POST',body:JSON.stringify({fields:{Title:'Sicherheitsprüfung – nicht löschen',MitarbeiterUpn:SENTINEL,OGStatus:'System'}})});
+    m.className='msg ok';
+    m.innerHTML=`<b>Liste angelegt.</b> Jetzt bitte <u>einmalig in SharePoint</u> absichern – ohne diese Schritte sperrt die App das Ausfüllen:<br><br>
+      1. Liste öffnen → ⚙ → Listeneinstellungen → <b>Erweiterte Einstellungen</b> → „Berechtigungen auf Elementebene“: Lesezugriff <b>„Elemente, die vom Benutzer erstellt wurden“</b>, Erstell-/Bearbeitungszugriff <b>„Eigene Elemente erstellen und bearbeiten“</b>.<br>
+      2. Listeneinstellungen → <b>Berechtigungen für diese Liste</b> → Vererbung beenden → Mitglieder und Besucher auf <b>„Mitwirken“</b> setzen (nicht „Bearbeiten“ – das enthält „Listen verwalten“ und hebelt Schritt 1 aus). Vollzugriff nur Sonja und Markus.<br>
+      3. Mit einem Test-Mitarbeiterkonto einen Link öffnen: Erscheint der Bogen, ist alles richtig. Erscheint „Sicherheitsprüfung fehlgeschlagen“, stimmt Schritt 1 oder 2 noch nicht.<br><br>
+      <button class="btn btn-primary btn-sm" onclick="location.reload()">Zur Übersicht</button>`;
+  }catch(e){ m.className='msg err'; m.textContent='Einrichtung fehlgeschlagen: '+e.message; }
+}
+</script>
+</body>
+</html>
