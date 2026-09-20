@@ -26,6 +26,22 @@
   (Tippfehler wie 491.387), und Strecken > 1.000 km werden ignoriert und als Hinweis ausgewiesen.
 - Eine Tour hängt ggf. an mehreren Leistungsnachweisen → Deduplizierung über `tour.id`.
 
+## Verifiziert gegen Produktion (20.09.2026)
+
+- Kilanka-IDs sind **UUID-Strings** (nicht numerisch). `$filter: { user: { id: "<uuid>" } }` filtert serverseitig;
+  `{ user: "<uuid>" }` und `{ "user.id": … }` ergeben 400 „malformed $filter". Ebenso wirkt `{ tour: { car: { id } } }`
+  → alle Fahrten eines Fahrzeugs (alle Fahrer:innen) seit Übernahme sind abrufbar.
+- Eine leere Antwort auf den user-Filter heißt „keine Daten" (neue Mitarbeitende), nicht „Filter unwirksam".
+- `clients/timeSheets.tour.car` liefert nur die `id`, keinen Namen → Kennzeichen/Leasingdaten kommen über den
+  Nachnamen aus `data/fahrzeuge.json`. Privat-PKW (Kilometerabrechnung) haben km-Stand 0 → „kein Dienstwagen".
+- `rosters/accounts`: je Person ~11 Konten (Krank, Urlaub, Geburtstag, Fortbildung …). Relevant ist **„Stundenkonto"**;
+  der Saldo steht vorzeichenrichtig in `totalQuantity`, `totalHours` ist der Betrag.
+- `rosters/timeSheets` ohne `clientTimeSheet` tragen die Kostenstelle: „Nordstern  Erziehung und Betreuung"
+  (Gruppendienst → Kategorie *stationär*, keine Overhead-Zeit), „Team", „Fachlicher Austausch" (→ *intern*).
+- Typische Fehler im Fahrtenbuch: Tippfehler (200.595 statt 20.595), falsches Fahrzeug gewählt, Nachträge in
+  anderer Reihenfolge → Ausreißer nur bei > +3.000 km bzw. < −1.000 km gegenüber dem letzten akzeptierten Stand.
+- Abgleich: letzter km-Stand FS-NW 922 aus der API = 28.006 km = Wert der KFZ-Übersicht vom 18.09.2026.
+
 ## Abruf-Strategie
 
 Ob Kilanka nach `user` filtert, ist nicht dokumentiert; ein unwirksamer Filter liefert still alle

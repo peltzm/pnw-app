@@ -358,12 +358,11 @@ async function fuhrparkStamm(carName, personName){
     FUHRPARK = FUHRPARK || await (await fetch('data/fahrzeuge.json',{cache:'no-cache'})).json();
     const nr = s => (String(s||'').match(/(\d{3})\s*E?\b/)||[])[1];
     const n = nr(carName);
-    const perNr = n && FUHRPARK.find(f=>f.status==='aktiv' && nr(f.kennzeichen)===n);
-    if(perNr) return perNr;
-    /* Nur ein Teil der Kilanka-Fahrzeuge ist nach Kennzeichen benannt → sonst eindeutiger Treffer über den Nachnamen */
+    /* Die API liefert am Leistungsnachweis nur die Fahrzeug-ID, keinen Namen → Zuordnung über den Nachnamen aus der KFZ-Übersicht */
     const nach=(personName||'').split(',')[0].trim().toLowerCase();
     const perName = nach ? FUHRPARK.filter(f=>f.status==='aktiv' && (f.fahrer||'').toLowerCase()===nach) : [];
-    return perName.length===1 ? perName[0] : null;
+    if(perName.length===1) return perName[0];
+    return (n && FUHRPARK.find(f=>f.status==='aktiv' && nr(f.kennzeichen)===n)) || null;
   }catch(e){ return null; }
 }
 const km = n => n==null ? '—' : Number(n).toLocaleString('de-DE')+' km';
@@ -373,17 +372,17 @@ function erweitertZeilen(k, nachname){
   if(!e) return {zeilen:out, da};
   const z=e.zeitkonto;
   if(z?.vorhanden){
-    const az=z.konten.filter(x=>!/urlaub/i.test(x.typ));
-    if(az.length){ da.zeitkonto=true; out.push(['Arbeitszeitkonto', az.map(x=>`${x.typ}: ${std(x.stunden)}`).join(' · '), '']); }
-  }
+    da.zeitkonto=true; out.push(['Arbeitszeitkonto', z.konten.map(x=>`${x.typ}: ${x.stunden===0?'0 h':std(x.stunden)}`).join(' · '), '']);
+  } else if(z?.grund){ da.zeitkonto=true; out.push(['Arbeitszeitkonto','—',z.grund]); }
   const a=e.anteil;
   if(a?.vorhanden){
     da.overhead=true;
     const mon=d=>new Date(d).toLocaleDateString('de-DE',{month:'short',year:'2-digit'});
-    out.push([`Zeitanteile ${mon(a.von)} – ${mon(a.bis)} (${String(a.gesamtStd).replace('.',',')} h erfasst)`,
-      `Klientenzeit ${a.klientPct} % · Fahrt ${a.fahrtPct} % · Doku ${a.dokuPct} % · medial ${a.medialPct} % · intern ${a.internPct} %`,
-      a.dienstplanEinbezogen?'':'ohne Dienstplan-Zeiten']);
-  }
+    const teile=[['Klientenzeit'+(a.stationaerPct?' ambulant':''),a.klientPct],['Nordstern / stationär',a.stationaerPct],['Fahrt',a.fahrtPct],['Doku',a.dokuPct],['medial',a.medialPct],['Team & intern',a.internPct]]
+      .filter(([,p])=>p).map(([n,p])=>`${n} ${p} %`).join(' · ');
+    out.push([`Zeitanteile ${mon(a.von)} – ${mon(a.bis)} (${String(a.gesamtStd).replace('.',',')} h erfasst)`, teile,
+      a.dienstplanEinbezogen?'':'ohne Dienstplan-Zeiten (Team, Nordstern)']);
+  } else if(a?.grund){ da.overhead=true; out.push(['Zeitanteile (letzte 3 Monate)','—','noch '+a.grund]); }
   const f=e.fahrzeug;
   if(f?.vorhanden){
     da.kfz=true;
@@ -402,6 +401,7 @@ function erweitertZeilen(k, nachname){
       }
     }
   }
+  else if(f?.grund){ da.kfz=true; out.push(['Dienstfahrzeug','—',f.grund]); }
   return {zeilen:out, da};
 }
 function kennzahlenZeilen(k){

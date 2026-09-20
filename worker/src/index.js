@@ -1941,12 +1941,13 @@ async function ogKilankaId(env, upn) {
 // Filter liefert still ALLE oder KEINE Zeilen — deshalb erst mit 50 Zeilen proben
 // und nur eine nachweislich wirksame Variante verwenden.
 async function ogUserFilter(env, model, kid, von) {
-  const idNum = Number(kid);
-  const varianten = [{ user: { id: idNum } }, { user: idNum }, { "user.id": idNum }];
+  // IDs sind UUID-Strings. Verifiziert 20.09.2026: { user: { id } } filtert serverseitig;
+  // { user: id } und { "user.id": id } ergeben 400 "malformed $filter".
+  const varianten = [{ user: { id: kid } }];
   for (const v of varianten) {
     try {
       const probe = await kilankaPost(env, model, { id: 1, user: { id: 1 }, $limit: 50, $filter: { date: { $gte: { $date: von } }, ...v } });
-      if (Array.isArray(probe) && probe.length && probe.every((r) => String(r.user?.id) === kid)) return v;
+      if (Array.isArray(probe) && probe.every((r) => String(r.user?.id) === kid)) return v; // auch leer: Filter wirkt, es gibt nur keine Daten
     } catch (_) { /* nächste Variante */ }
   }
   return null;
@@ -1984,24 +1985,29 @@ function ogFahrzeug(rows, kid, alleFahrer) {
     let dist = decimalToNumber(tr.distanceKm);
     if (!dist && start && ende) dist = ende - start;
     touren.set(key, { car: String(tr.car.id), carName: tr.car.recName || null, user: String(t.user?.id ?? ""),
-      tag: ogTag(tr.begin) || ogTag(t.date), start, ende, dist, privat: tr.privateTour === true });
+      tag: ogTag(tr.begin) || ogTag(t.date), zeit: String(tr.begin?.$datetime || t.date?.$date || ""), start, ende, dist, privat: tr.privateTour === true });
   }
-  const eigene = [...touren.values()].filter((x) => x.user === kid && x.tag).sort((a, b) => a.tag.localeCompare(b.tag));
+  const eigene = [...touren.values()].filter((x) => x.user === kid && x.tag).sort((a, b) => a.zeit.localeCompare(b.zeit));
   if (!eigene.length) return { vorhanden: false, grund: "keine Fahrtenbuch-Einträge gefunden" };
 
   // Aktuelles Fahrzeug = Fahrzeug der jüngsten Fahrt; Übernahme = erste eigene Fahrt damit
   const car = eigene[eigene.length - 1].car;
   const mit = eigene.filter((x) => x.car === car);
+  // Privat-PKW (Kilometerabrechnung) führen keine km-Stände → kein Dienstwagen
+  if (!mit.some((x) => x.ende > 0)) return { vorhanden: false, grund: "kein Dienstwagen (Fahrten ohne km-Stand, z. B. Privat-PKW)" };
   const uebernahme = mit.find((x) => x.start > 0) || mit[0];
   const bisTag = mit[mit.length - 1].tag;
 
   // Letzter plausibler km-Stand: Tippfehler (z. B. 491.387) dürfen ihn nicht verfälschen
   let letzter = uebernahme.start || 0, verworfen = 0, unplausibel = 0;
   const imFenster = [...touren.values()].filter((x) => x.car === car && x.tag >= uebernahme.tag && x.tag <= bisTag)
-    .sort((a, b) => a.tag.localeCompare(b.tag));
+    .sort((a, b) => a.zeit.localeCompare(b.zeit));
   for (const x of imFenster) {
     if (!x.ende) continue;
-    if (x.ende >= letzter - 50 && x.ende <= letzter + 3000) letzter = Math.max(letzter, x.ende); else verworfen++;
+    // Nur echte Ausreißer zählen (Tippfehler wie 200.595 statt 20.595, falsches Fahrzeug gewählt);
+    // leicht niedrigere Stände sind nur Nachträge in anderer Reihenfolge.
+    if (x.ende > letzter + 3000 || x.ende < letzter - 1000) { verworfen++; continue; }
+    letzter = Math.max(letzter, x.ende);
   }
   let dienstlich = 0, dienstlichAndere = 0, privatMarkiert = 0, anzahl = 0;
   for (const x of imFenster) {
@@ -2037,7 +2043,7 @@ function ogKategorie(name) {
   return "klient";
 }
 function ogAnteil(rows, rosterIntern, namen, kid, von, bis) {
-  const sum = { klient: 0, fahrt: 0, doku: 0, medial: 0, intern: 0 };
+  const sum = { klient: 0, stationaer: 0, fahrt: 0, doku: 0, medial: 0, intern: 0 };
   const proLeistung = new Map();
   for (const t of rows) {
     if (String(t.user?.id) !== kid) continue;
@@ -2049,13 +2055,14 @@ function ogAnteil(rows, rosterIntern, namen, kid, von, bis) {
     sum.fahrt += kStunden(t.drivingTime);
     const e = proLeistung.get(name) || { name, kat, std: 0 }; e.std += h; proLeistung.set(name, e);
   }
-  sum.intern += rosterIntern || 0;
+  sum.intern += rosterIntern?.intern || 0;
+  sum.stationaer += rosterIntern?.stationaer || 0;
   const gesamt = Object.values(sum).reduce((a, b) => a + b, 0);
   if (!gesamt) return { vorhanden: false, grund: "keine Zeiterfassung im Zeitraum" };
   const pct = (x) => ogRund((x / gesamt) * 100, 0);
   return {
     vorhanden: true, von, bis, gesamtStd: ogRund(gesamt),
-    klientStd: ogRund(sum.klient), fahrtStd: ogRund(sum.fahrt), dokuStd: ogRund(sum.doku), medialStd: ogRund(sum.medial), internStd: ogRund(sum.intern),
+    klientStd: ogRund(sum.klient), stationaerStd: ogRund(sum.stationaer), stationaerPct: pct(sum.stationaer), fahrtStd: ogRund(sum.fahrt), dokuStd: ogRund(sum.doku), medialStd: ogRund(sum.medial), internStd: ogRund(sum.intern),
     klientPct: pct(sum.klient), fahrtPct: pct(sum.fahrt), dokuPct: pct(sum.doku), medialPct: pct(sum.medial), internPct: pct(sum.intern),
     dienstplanEinbezogen: rosterIntern != null,
     leistungen: [...proLeistung.values()].sort((a, b) => b.std - a.std).slice(0, 8).map((e) => ({ ...e, std: ogRund(e.std) })),
@@ -2063,30 +2070,39 @@ function ogAnteil(rows, rosterIntern, namen, kid, von, bis) {
 }
 
 async function ogRosterIntern(env, kid, von, bis, userFilter) {
-  const graph = { id: 1, date: 1, total: 1, totalDecimal: 1, user: { id: 1 }, clientTimeSheet: { id: 1 }, $limit: 1000,
+  const graph = { id: 1, date: 1, total: 1, totalDecimal: 1, user: { id: 1 }, clientTimeSheet: { id: 1 }, costCenter: { id: 1, name: 1, recName: 1 }, $limit: 1000,
     $filter: { date: { $gte: { $date: von } }, ...(userFilter || {}) } };
   const rows = await kilankaSeiten(env, "rosters/timeSheets", graph, 8);
-  let h = 0;
+  // Verifiziert 20.09.2026: Buchungen ohne Klientbezug tragen die Kostenstelle, z. B.
+  // "Nordstern  Erziehung und Betreuung" (Gruppendienst = Klientenarbeit), "Team", "Fachlicher Austausch".
+  const out = { intern: 0, stationaer: 0 };
   for (const r of rows) {
     if (String(r.user?.id) !== kid || r.clientTimeSheet?.id) continue;
     const tag = ogTag(r.date);
     if (!tag || tag < von || tag > bis) continue;
-    h += decimalToNumber(r.totalDecimal) || kStunden(r.total);
+    const kst = String(r.costCenter?.name || r.costCenter?.recName || "").toLowerCase();
+    const h = decimalToNumber(r.totalDecimal) || kStunden(r.total);
+    if (/nordstern|erziehung und betreuung|wohngruppe|jwg|twg/.test(kst)) out.stationaer += h; else out.intern += h;
   }
-  return h;
+  return out;
 }
 
+let ogKontenCache = { rows: null, fetchedAt: 0 };
 async function ogZeitkonten(env, kid) {
-  const rows = await kilankaSeiten(env, "rosters/accounts",
-    { id: 1, user: { id: 1 }, type: { id: 1, name: 1, recName: 1, salaryType: 1 }, totalHours: 1, totalQuantity: 1, totalEntitlement: 1, $limit: 1000 }, 5);
+  if (!ogKontenCache.rows || Date.now() - ogKontenCache.fetchedAt > CACHE_TTL_MIN * 60 * 1000) {
+    ogKontenCache = { fetchedAt: Date.now(), rows: await kilankaSeiten(env, "rosters/accounts",
+      { id: 1, user: { id: 1 }, type: { id: 1, name: 1, recName: 1, salaryType: 1 }, totalHours: 1, totalQuantity: 1, totalEntitlement: 1, $limit: 1000 }, 5) };
+  }
+  const rows = ogKontenCache.rows;
   if (rows.length && !rows.some((r) => r.user?.id != null)) {
     return { vorhanden: false, grund: "Konten ohne Mitarbeiter-Zuordnung geliefert", felder: Object.keys(rows[0] || {}) };
   }
-  const konten = rows.filter((r) => String(r.user?.id) === kid).map((r) => ({
-    typ: r.type?.name || r.type?.recName || "Konto",
-    stunden: ogRund(ogStundenSigniert(r.totalHours), 2),
-    anspruch: r.totalEntitlement != null ? ogRund(decimalToNumber(r.totalEntitlement), 2) : null,
-  }));
+  // Verifiziert 20.09.2026: je Person ~11 Konten (Krank, Urlaub, Geburtstag …) — fürs Gespräch zählt nur
+  // das Stundenkonto; dessen Saldo steht vorzeichenrichtig in totalQuantity (totalHours ist der Betrag).
+  const konten = rows.filter((r) => String(r.user?.id) === kid)
+    .map((r) => ({ typ: r.type?.name || r.type?.recName || "Konto",
+      stunden: ogRund(r.totalQuantity != null ? decimalToNumber(r.totalQuantity) : ogStundenSigniert(r.totalHours), 1) }))
+    .filter((k) => /stundenkonto|arbeitszeit|gleitzeit/i.test(k.typ) || (/überstunden|ueberstunden/i.test(k.typ) && k.stunden));
   if (!konten.length) return { vorhanden: false, grund: "kein Konto für diese Person" };
   return { vorhanden: true, konten };
 }
@@ -2100,7 +2116,18 @@ async function buildOgKennzahlen(env, upn, now) {
   let ts = null, fahrzeug, anteil;
   try { ts = await ogTimeSheets(env, kid); } catch (e) { fahrzeug = anteil = { vorhanden: false, fehler: e.message }; }
   if (ts) {
-    fahrzeug = await zweig(async () => ({ ...ogFahrzeug(ts.rows, kid, ts.alleFahrer), zeitraumVollstaendig: ts.vollstaendig, datenAb: ts.von }));
+    fahrzeug = await zweig(async () => {
+      let f = ogFahrzeug(ts.rows, kid, ts.alleFahrer);
+      if (f.vorhanden && !ts.alleFahrer) {
+        try {
+          const auto = await kilankaSeiten(env, "clients/timeSheets",
+            { ...OG_TS_GRAPH, $filter: { date: { $gte: { $date: f.uebernahmeDatum } }, tour: { car: { id: f.carId } } } }, 15);
+          const ids = new Set(ts.rows.map((r) => r.id));
+          f = ogFahrzeug([...ts.rows, ...auto.filter((r) => !ids.has(r.id))], kid, true);
+        } catch (e) { console.warn("Fahrten anderer Personen nicht ladbar —", e.message); }
+      }
+      return { ...f, zeitraumVollstaendig: ts.vollstaendig, datenAb: ts.von };
+    });
     anteil = await zweig(async () => {
       const ende = new Date(now.getFullYear(), now.getMonth(), 0);           // letzter Tag des Vormonats
       const start = new Date(ende.getFullYear(), ende.getMonth() - 2, 1);    // drei volle Monate
