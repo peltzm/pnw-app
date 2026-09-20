@@ -69,3 +69,23 @@ Button „📊 Kennzahlen" je Zeile zeigt alle Werte vorab — auch bevor die Pe
 
 `/api/og-kennzahlen`: eigene Sicht oder Geschäftsführung — bewusst **keine** Teamleitungs-Sicht.
 Jeder Zweig ist fail-soft (`{ vorhanden:false, fehler|grund }`); der Bogen zeigt dann das manuelle Feld.
+
+## Überarbeitung nach Prüfung durch GF und Teamleitungen (20.09.2026)
+
+- **Skala 1–5 + k. A.**, dazu je Zeile ein Kommentarfeld (`antworten.kommentar[id]`). Letzter Punkt in Teil 1 überall:
+  „Ich finde die Orientierungsgespräche hilfreich und wichtig" (`og_nutzen`).
+- **Versionen:** Struktur `sektionen: [[Überschrift, Items]]`. Teamleitung = A „Meine Fallarbeit" (Punkte des ambulanten
+  Bogens) + B „Meine Teamleitung"; Teil 2 und 3 um die ambulanten Punkte ergänzt. Ambulant + stationär: ASD-Austausch nach
+  Dienstplan, Themen „Gesund bleiben" und „Team & Austausch" ergänzt.
+- **Wochenstunden / Team:** Team = Name der Teamleitung (Vorgesetzte:r in Entra, `/me/manager` bzw. `/users/{upn}/manager`);
+  bei Teamleitungen der eigene Name, bei direkter GF-Unterstellung „Geschäftsführung".
+- **Leserkreis:** Sonja, Markus und die Teamleitung. Die Ablage bleibt auf „eigene Elemente + GF" beschränkt; die Teamleitung
+  erhält den Bogen bei der Abgabe als E-Mail aus dem Postfach der Person (`Mail.Send`, GF in Kopie). Der Hinweis steht im
+  Bogen, im Abgabe-Dialog und in der Einladung.
+- **Teil 4:** ohne Quelle-Spalte; Urlaub genommen / verplant / offen; Abwesenheitstage Krankheit / Weiterbildung
+  (`krankheit.fortbildungTage` neu im Cockpit-Response, Abwesenheitstyp „Fortbildung"); Arbeitszeitkonto als Saldo zum Tag
+  der Freigabe (Kennzahlen werden bei „Final abgeben" neu geladen); Zeile „gefahren seit Übernahme" entfällt.
+- **Rufbereitschaft:** über die API nicht abrufbar (geprüft: `onCallExternal` praktisch ungenutzt, keine Leistung/Kostenstelle,
+  Dienstplan-Schichten nicht im Graphen) → Feld der Leitung „eine Woche alle … Wochen (Soll: alle 8)".
+- **Papier-Option:** „Auf Papier ausfüllen" druckt ein leeres Formular mit Stammdaten und Zahlen & Fakten, Status `Papier`,
+  Abgabefrist zwei Tage vor dem Termin (wird aus dem Termin berechnet).

@@ -1487,7 +1487,7 @@ async function buildCockpit(env, upn, now) {
   let urlaub = null, krankheit = null, abwesenheiten = [];
   const abs = await fetchCockpitAbsences(env);
   if (abs.verfuegbar && person && person.kilankaId) {
-    let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null;
+    let uGenommen = 0, uGeplant = 0, kTage = 0, kindKrank = 0, letzte = null, fortbildung = 0;
     let regenH1 = null, regenH2 = null, anspruch = null, anspruchQuelle = null;
     let anspruchInklUebertrag = false;
     const abwesenheitenAktuell = []; // laufend krank / Urlaub jetzt + 6 Wochen
@@ -1543,6 +1543,8 @@ async function buildCockpit(env, upn, now) {
       }
       else if (art === "krank") { kTage += tage; if (!letzte || begin > letzte) letzte = begin; }
       else if (art === "kindkrank") { kindKrank += tage; }
+      // Abwesenheitstyp „Fortbildung" (verifiziert 20.09.2026) — für den Orientierungsgesprächs-Bogen
+      else if (art === "sonstig" && /fortbildung|weiterbildung/i.test(a.absenceType?.name || "")) { fortbildung += tage; }
       else if (art === "regeneration") {
         // TVöD SuE: je 1 Tag pro Halbjahr — frühesten Termin je Halbjahr merken
         if (begin.getUTCMonth() < 6) { if (!regenH1 || begin < regenH1) regenH1 = begin; }
@@ -1624,6 +1626,7 @@ async function buildCockpit(env, upn, now) {
       tage: Math.round(kTage * 2) / 2,
       vorjahrTage: null,
       kindKrankTage: Math.round(kindKrank * 2) / 2,
+      fortbildungTage: Math.round(fortbildung * 2) / 2,
       letzteAbwesenheit: letzte ? isoDate(letzte) : null,
     };
   }

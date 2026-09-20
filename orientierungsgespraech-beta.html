@@ -69,7 +69,11 @@ table.skala th:first-child{text-align:left;padding-left:10px}
 table.skala td{border:1px solid var(--r2);padding:6px 4px;text-align:center}
 table.skala td:first-child{text-align:left;padding-left:10px}
 table.skala tr:nth-child(odd) td{background:#FBF8F4}
-table.skala input{accent-color:var(--accent);width:17px;height:17px;cursor:pointer}
+table.skala input[type=radio]{accent-color:var(--accent);width:17px;height:17px;cursor:pointer}
+table.skala td.kom{padding:3px 6px;min-width:190px}
+table.skala td.kom input{width:100%;border:none;border-bottom:1px solid var(--r1);border-radius:0;background:transparent;padding:4px 2px;font-size:12.5px}
+table.skala tr.sektion td{background:var(--creme)!important;text-align:left;font-family:'Libre Baskerville',serif;font-weight:700;font-size:12.5px;color:var(--dunkelbraun);padding:8px 10px}
+.papier-hinweis{display:none;border:1.5pt solid var(--terra);border-radius:6px;padding:9px 14px;font-size:12.5px;margin-bottom:10px}
 .themen{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 18px}
 .themen label{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer}
 .themen input{accent-color:var(--accent);width:16px;height:16px}
@@ -91,6 +95,7 @@ table.daten td input{border:none;background:transparent;padding:4px 2px}
 .leiste .stand{margin-right:auto;font-size:12px;color:var(--text-muted)}
 .status{display:inline-block;font-size:11px;font-weight:600;border-radius:10px;padding:2px 10px}
 .status.offen{background:#eee;color:#666}.status.entwurf{background:var(--warn-bg);color:var(--warn)}
+.status.papier{background:#eef4fb;color:#1565c0}
 .status.abgegeben{background:var(--ok-bg);color:var(--ok)}.status.abgeschlossen{background:var(--accent-light);color:var(--accent)}
 table.admin{width:100%;border-collapse:collapse;font-size:13px}
 table.admin th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);padding:8px;border-bottom:1px solid var(--border-strong)}
@@ -117,6 +122,8 @@ dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
   table.skala tr,table.daten tr{break-inside:avoid}table.skala td,table.skala th{padding:3.5pt 3pt}
   textarea{min-height:48pt}
   .nur-druck{display:block}
+  body.papier .papier-hinweis{display:block}body.papier .hinweis{display:none}
+  table.skala td.kom{min-width:0;width:34%}
 }
 </style>
 </head>
@@ -155,7 +162,7 @@ const CFG = {
   listName: 'PNW-Orientierungsgespraeche',
   workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
-const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
+const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All'];   // ReadBasic: Teamleitung (Entra-Manager) wie in der Organisation-App
 const GF = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
 /* Standard-Version je Gruppe (Vorgabe GF 20.09.2026) — in der Übersicht je Person änderbar.
  * Abgleich über den Kilanka-Namen „Nachname, Vorname", weil UPNs nach Namensänderungen abweichen können.
@@ -189,36 +196,41 @@ const GEMEINSAM = [
   ['fahrzeug','Die Regeln zur Fahrzeugnutzung (dienstlich / privat) sind klar und fair'],
   ['motivation','Meine Motivation ist aktuell hoch'],
 ];
+const NUTZEN = ['og_nutzen','Ich finde die Orientierungsgespräche hilfreich und wichtig'];   // immer letzter Punkt in Teil 1
+const I_SICHER=['sicher','In meinen Fällen fühle ich mich handlungssicher – auch in Krisen'], I_ASD=['asd','Der Austausch mit ASD und Fachstellen funktioniert'],
+      I_TL=['tl','Meine Teamleitung ist erreichbar und unterstützt mich'], I_TEAM=['team','Ich habe genug Kontakt zu Kolleg:innen und fühle mich als Teil des Teams'];
 const THEMEN_FK = ['Arbeitsbelastung','Terminausfälle & Stundenkonto','Gesund bleiben','Kommunikation der Leitung','Wertschätzung','Bezahlung','Dienstfahrzeug','Team & Austausch','Entwicklung / Fortbildung'];
 const F_RUECK = ['rueckblick','Rückblick: Was lief gut – und was lässt dich den Kopf schütteln?'];
+const F_BELAST= ['belastung','Was belastet dich aktuell am meisten, und was würde am schnellsten entlasten (z. B. an Tagen, an denen Termine ausfallen)?'];
 const F_SSW   = ['ssw','Womit sollte die Leitung anfangen, womit aufhören, was beibehalten (Kommunikation, Wertschätzung)?'];
+/* sektionen: [[Überschrift, [[id, Aussage], …]], …] — IDs bleiben über Runden stabil */
 const VERSIONEN = {
-  A: { titel:'Teamleitung', skalaTitel:'Meine Rolle, mein Team, unsere Zusammenarbeit',
-    items:[['rolle','Meine Rolle und meine Entscheidungsbefugnisse sind klar'],['leitungszeit','Die Leitungszeit reicht – Leitung und Fallarbeit sind vereinbar'],
-      ['ueberblick','Ich habe den Überblick über Auslastung, Stunden und Ausfälle im Team'],['fehlzeiten','Mit Fehlzeiten im Team kann ich gut umgehen (Vertretung, Rückkehrgespräch)'],
-      ['gehoert','Meine Einschätzung wird gehört, bevor die Geschäftsführung entscheidet'],['vertreten','Entscheidungen der Geschäftsführung kann ich im Team vertreten'],
-      ['ton','Der Ton der Geschäftsführung mir gegenüber ist respektvoll'],['kritik','Ich kann Kritik äußern, ohne Nachteile zu befürchten'],
-      ['anerkennung','Meine Leitungsarbeit wird gesehen und anerkannt'],['verguetung','Mein Vergütungsmodell (Eingruppierung + Leitungszulage) ist nachvollziehbar und fair'],
-      ['gesund','Meine eigene Arbeitsbelastung ist dauerhaft tragbar'],['motivation','Meine Motivation ist aktuell hoch']],
-    themen:['Krankenstand im Team','Arbeitsbelastung (Team / ich)','Terminausfälle & Stundenlogik','Kommunikation der GF','Wertschätzung','Bezahlung (Team / ich)','Dienstfahrzeuge im Team','Meine Leitungsrolle','Entwicklung / Qualifizierung'],
-    fragen:[['rueckblick','Rückblick: Was lief in deiner Leitungsrolle gut – und was lässt dich den Kopf schütteln?'],
+  A: { titel:'Teamleitung',
+    sektionen:[
+      ['A · Meine Fallarbeit', [I_SICHER, I_ASD, I_TEAM, ...GEMEINSAM.filter(([id])=>id!=='verguetung')]],
+      ['B · Meine Teamleitung', [['rolle','Meine Rolle und meine Entscheidungsbefugnisse sind klar'],['leitungszeit','Die Leitungszeit reicht – Leitung und Fallarbeit sind vereinbar'],
+        ['ueberblick','Ich habe den Überblick über Auslastung, Stunden und Ausfälle im Team'],['fehlzeiten','Mit Fehlzeiten im Team kann ich gut umgehen (Vertretung, Rückkehrgespräch)'],
+        ['gehoert','Meine Einschätzung wird gehört, bevor die Geschäftsführung entscheidet'],['vertreten','Entscheidungen der Geschäftsführung kann ich im Team vertreten'],
+        ['anerkennung_tl','Meine Leitungsarbeit wird gesehen und anerkannt'],['verguetung','Mein Vergütungsmodell (Eingruppierung + Leitungszulage) ist nachvollziehbar und fair'], NUTZEN]]],
+    themen:['Krankenstand im Team','Arbeitsbelastung (Team / ich)','Terminausfälle & Stundenkonto','Gesund bleiben','Kommunikation der GF','Wertschätzung','Bezahlung (Team / ich)','Dienstfahrzeuge (Team / ich)','Team & Austausch','Meine Leitungsrolle','Entwicklung / Qualifizierung'],
+    fragen:[['rueckblick','Rückblick: Was lief gut – in deiner Fallarbeit und in deiner Leitungsrolle – und was lässt dich den Kopf schütteln?'], F_BELAST,
       ['team','Was nimmst du im Team wahr (Krankenstand, Belastung, Bezahlung, Fahrzeuge, Stimmung), das wir wissen sollten?'],
       ['ssw','Womit sollte die Geschäftsführung anfangen, womit aufhören, was beibehalten (Kommunikation, Wertschätzung)?']],
-    manuell:[['team_auslastung','Team: Auslastung (abrechenbare Std. Soll / Ist)'],['team_konten','Team: Arbeitszeitkonten und Abwesenheitsquote'],['team_kfz','Team: Fahrzeuge km gesamt / davon privat'],['leitungsstunden','Leitungsstunden Soll – Ist'],['zeitkonto','Eigenes Arbeitszeitkonto (Über- / Minusstunden)']] },
-  B: { titel:'Fachkraft ambulant', skalaTitel:'Meine Arbeit und unsere Zusammenarbeit',
-    items:[['sicher','In meinen Fällen fühle ich mich handlungssicher – auch in Krisen'],['asd','Der Austausch mit ASD und Fachstellen funktioniert'],
-      ['tl','Meine Teamleitung ist erreichbar und unterstützt mich'],['team','Ich habe genug Kontakt zu Kolleg:innen und fühle mich als Teil des Teams'],...GEMEINSAM],
-    themen:THEMEN_FK,
-    fragen:[F_RUECK,['belastung','Was belastet dich aktuell am meisten, und was würde am schnellsten entlasten (z. B. an Tagen, an denen Termine ausfallen)?'],F_SSW],
-    manuell:[['overhead','Anteil abrechenbar : Overhead (Fahrt, Doku, Team)'],['zeitkonto','Arbeitszeitkonto (Über- / Minusstunden)'],['kfz','Fahrzeug: km gesamt / davon privat / Leasinggrenze']] },
-  C: { titel:'Fachkraft ambulant + stationär', skalaTitel:'Meine Arbeit in beiden Bereichen',
-    items:[['sicher','Ambulant und im Gruppendienst fühle ich mich handlungssicher – auch in Krisen'],['aufteilung','Die Aufteilung meiner Stunden auf ambulant und Nordstern passt'],
-      ['dienstplan','Dienstplan, Rufbereitschaft und ambulante Termine sind vereinbar (inkl. Ruhezeiten)'],['zustaendig','Ich weiß, welche Leitung für welches Thema zuständig ist'],
-      ['team','Ich fühle mich in beiden Teams zugehörig'],...GEMEINSAM],
-    themen:['Wechsel ambulant / stationär','Dienstplan & Rufbereitschaft',...THEMEN_FK.filter(t=>t!=='Team & Austausch'&&t!=='Gesund bleiben')],
+    manuell:[['team_auslastung','Team: Auslastung (abrechenbare Std. Soll / Ist)'],['team_konten','Team: Arbeitszeitkonten und Abwesenheitsquote'],['team_kfz','Team: Fahrzeuge km gesamt / davon privat'],['leitungsstunden','Leitungsstunden Soll – Ist']] },
+  B: { titel:'Fachkraft ambulant',
+    sektionen:[['Meine Arbeit und unsere Zusammenarbeit', [I_SICHER, I_ASD, I_TL, I_TEAM, ...GEMEINSAM, NUTZEN]]],
+    themen:THEMEN_FK, fragen:[F_RUECK, F_BELAST, F_SSW], manuell:[] },
+  C: { titel:'Fachkraft ambulant + stationär',
+    sektionen:[['Meine Arbeit in beiden Bereichen', [['sicher','Ambulant und im Gruppendienst fühle ich mich handlungssicher – auch in Krisen'],['aufteilung','Die Aufteilung meiner Stunden auf ambulant und Nordstern passt'],
+      ['dienstplan','Dienstplan, Rufbereitschaft und ambulante Termine sind vereinbar (inkl. Ruhezeiten)'], I_ASD, ['zustaendig','Ich weiß, welche Leitung für welches Thema zuständig ist'],
+      ['team','Ich fühle mich in beiden Teams zugehörig'], ...GEMEINSAM, NUTZEN]]],
+    themen:['Wechsel ambulant / stationär','Dienstplan & Rufbereitschaft',...THEMEN_FK],
     fragen:[F_RUECK,['belastung','Wo reiben sich ambulant und stationär bei dir am meisten, was würde am schnellsten entlasten (auch an Tagen mit Terminausfällen) – und wo willst du in einem Jahr deinen Schwerpunkt haben?'],F_SSW],
-    manuell:[['stunden_as','Stunden ambulant / stationär (Soll / Ist)'],['dienste','Dienste & Rufbereitschaften (letzte 3 Monate)'],['zeitkonto','Arbeitszeitkonto (Über- / Minusstunden)'],['kfz','Fahrzeug: km gesamt / davon privat / Leasinggrenze']] }
+    /* Rufbereitschaften sind über die Kilanka-API nicht abrufbar (geprüft 20.09.2026) → Eintrag durch die Leitung */
+    manuell:[['rufbereitschaft','Rufbereitschaft: übernimmt eine Woche alle … Wochen (Soll: alle 8 Wochen)']] }
 };
+const alleItems = V => V.sektionen.flatMap(([,items])=>items);
+const SKALA = [1,2,3,4,5];
 
 /* SharePoint-Schema der zentralen Ablage */
 const SPALTEN = [
@@ -341,6 +353,14 @@ async function start(){
 /* ═══════════════════════════════════════════════════════════
  * KENNZAHLEN AUS KILANKA (über den Worker, Berechtigung serverseitig)
  * ═══════════════════════════════════════════════════════════ */
+/* Teamleitung = Vorgesetzte:r in Entra (dieselbe Hierarchie wie Organisation-App und Cockpit). Fail-soft. */
+async function holeTeamleitung(zielUpn){
+  try{
+    const pfad = (zielUpn && zielUpn!==upn) ? `/users/${encodeURIComponent(zielUpn)}/manager` : '/me/manager';
+    const m = await graph(pfad+'?$select=displayName,mail,userPrincipalName');
+    return m ? { name:m.displayName||'', mail:(m.mail||m.userPrincipalName||'').toLowerCase() } : null;
+  }catch(e){ console.warn('Teamleitung nicht ermittelbar —', e.message); return null; }
+}
 async function holeKennzahlen(zielUpn){
   const t = await tokens();
   const url = CFG.workerUrl+'/api/mitarbeiter-cockpit'+(zielUpn && zielUpn!==upn ? '?mitarbeiter='+encodeURIComponent(zielUpn) : '');
@@ -354,6 +374,8 @@ async function holeKennzahlen(zielUpn){
     faelle: kl.aktiv ?? null, faelleHb: kl.hb ?? null, faelleMb: kl.mb ?? null, faelleV: kl.v ?? null,
     flsIst: fls.istMonatsstunden ?? null, flsMonat: fls.istMonat || null, flsSoll64: fls.benchmark64 ?? null, flsSollWoche: fls.sollWochenstunden ?? null,
     urlaubRest: u.restTage ?? null, urlaubGenommen: u.genommenTage ?? null, urlaubGeplant: u.geplantTage ?? null,
+    teamleitung: await holeTeamleitung(zielUpn),
+    fortbildungTage: d.abwesenheitenVerfuegbar ? (k.fortbildungTage ?? null) : null,
     krankTage: d.abwesenheitenVerfuegbar ? (k.tage ?? null) : null, kindKrankTage: d.abwesenheitenVerfuegbar ? (k.kindKrankTage ?? null) : null, jahr: k.jahr || u.jahr || null,
     erweitert: await holeErweitert(zielUpn, t, d.person?.name),
     _mitarbeiterListe: d.sicht?.mitarbeiter || null
@@ -386,12 +408,13 @@ async function fuhrparkStamm(carName, personName){
 }
 const km = n => n==null ? '—' : Number(n).toLocaleString('de-DE')+' km';
 const std = n => n==null ? '—' : (n>0?'+':'')+String(n).replace('.',',')+' h';
-function erweitertZeilen(k, nachname){
+function erweitertZeilen(k, freigabe){
   const e=k?.erweitert, out=[], da={};
   if(!e) return {zeilen:out, da};
   const z=e.zeitkonto;
   if(z?.vorhanden){
-    da.zeitkonto=true; out.push(['Arbeitszeitkonto', z.konten.map(x=>`${x.typ}: ${x.stunden===0?'0 h':std(x.stunden)}`).join(' · '), '']);
+    const tag = new Date(freigabe||k.stand||Date.now()).toLocaleDateString('de-DE');
+    da.zeitkonto=true; out.push([`Arbeitszeitkonto: Saldo zum ${tag}`, z.konten.map(x=>(z.konten.length>1?x.typ+': ':'')+(x.stunden===0?'0 h':std(x.stunden))).join(' · '), freigabe?'Stand bei Abgabe des Bogens':'wird bei der Abgabe des Bogens aktualisiert']);
   } else if(z?.grund){ da.zeitkonto=true; out.push(['Arbeitszeitkonto','—',z.grund]); }
   const a=e.anteil;
   if(a?.vorhanden){
@@ -406,11 +429,9 @@ function erweitertZeilen(k, nachname){
   if(f?.vorhanden){
     da.kfz=true;
     const st=f.stamm, name=st?`${st.kennzeichen} (${st.fahrzeug})`:(f.carName||'Fahrzeug');
-    out.push([`${name}: gefahren seit Übernahme ${new Date(f.uebernahmeDatum).toLocaleDateString('de-DE')}`,
-      `${km(f.gefahrenKm)} (Stand ${km(f.uebernahmeKm)} → ${km(f.letzterKm)})`, '']);
-    out.push(['davon dienstlich laut Fahrtenbuch / privat',
+    out.push([`${name}: dienstlich laut Fahrtenbuch / privat`,
       `${km(f.dienstlichKm+(f.dienstlichAndereKm||0))} / ${km(f.privatKm)}${f.privatAnteil!=null?` = ${f.privatAnteil} % privat`:''}`,
-      (f.hinweise||[]).join(' · ')]);
+      [`seit Übernahme am ${new Date(f.uebernahmeDatum).toLocaleDateString('de-DE')}`, ...(f.hinweise||[])].join(' · ')]);
     if(st && /leasing|finanz/i.test(st.finanzierung||'') && st.ez){
       const proJahr = st.kmProJahr || (st.kmVertrag&&st.laufzeitMonate ? st.kmVertrag/(st.laufzeitMonate/12) : null);
       if(proJahr){
@@ -430,9 +451,29 @@ function kennzahlenZeilen(k){
     ['Aktive Fälle (HB / MB / Vertretung)', k.faelle==null?'—':`${k.faelle} (${num(k.faelleHb)} / ${num(k.faelleMb)} / ${num(k.faelleV)})`],
     [`Abrechenbare Stunden ${mon} (Ist / Soll 64 %)`, `${num(k.flsIst,' h')} / ${num(k.flsSoll64,' h')}`],
     ['Vertragliche Wochenstunden', num(k.wochenstunden,' h')],
-    [`Urlaub ${k.jahr||''}: genommen / geplant / Rest`, `${num(k.urlaubGenommen)} / ${num(k.urlaubGeplant)} / ${num(k.urlaubRest)} Tage`],
-    [`Abwesenheitstage Krankheit ${k.jahr||''} (davon Kind krank)`, k.krankTage==null?'—':`${num(k.krankTage)} (${num(k.kindKrankTage)}) Tage`],
+    [`Urlaub ${k.jahr||''}: genommen / verplant / offen`, `${num(k.urlaubGenommen)} / ${num(k.urlaubGeplant)} / ${num(k.urlaubRest)} Tage`],
+    [`Abwesenheitstage ${k.jahr||''}: Krankheit / Weiterbildung`, k.krankTage==null?'—':`${num(k.krankTage)} / ${num(k.fortbildungTage)} Tage`, k.kindKrankTage?`zusätzlich Kind krank: ${num(k.kindKrankTage)} Tage`:''],
   ];
+}
+/* Name der Teamleitung für „Wochenstunden / Team": bei Teamleitungen das eigene Team, sonst Vorgesetzte:r aus Entra */
+function teamName(){
+  const k=akt.kennzahlen||{};
+  if(akt.f.Version==='A') return (akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
+  if(k.teamleitung?.name) return GF.includes(k.teamleitung.mail) ? 'Geschäftsführung' : k.teamleitung.name;
+  return k.team||'';
+}
+function leserText(){
+  const t=teamleitungFuerHinweis();
+  return `Deinen Bogen bekommen Sonja und Markus Peltz${t?' sowie deine Teamleitung '+t.name:''} als Vorbereitung auf das Gespräch – sonst niemand.`;
+}
+function fristText(){
+  if(!akt.f.Termin) return 'spätestens zwei Tage vor dem Gesprächstermin';
+  const d=new Date(akt.f.Termin); d.setDate(d.getDate()-2);
+  return 'bis spätestens '+d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'})+' (zwei Tage vor dem Gespräch)';
+}
+function teamleitungFuerHinweis(){
+  const t=akt.kennzahlen?.teamleitung;
+  return (akt.f.Version!=='A' && t?.name && !GF.includes(t.mail)) ? t : null;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -440,7 +481,7 @@ function kennzahlenZeilen(k){
  * ═══════════════════════════════════════════════════════════ */
 function entpacke(i){
   const j = s => { try{ return s ? JSON.parse(s) : null }catch(e){ return null } };
-  return { spId:i.spId, f:i.f, antworten:j(i.f.AntwortenJSON)||{skala:{},themen:[],text:{}}, kennzahlen:j(i.f.KennzahlenJSON), leitung:j(i.f.LeitungJSON)||{manuell:{},vereinbarungen:[],naechster:''} };
+  return { spId:i.spId, f:i.f, antworten:{skala:{},themen:[],text:{},kommentar:{},...(j(i.f.AntwortenJSON)||{})}, kennzahlen:j(i.f.KennzahlenJSON), leitung:j(i.f.LeitungJSON)||{manuell:{},vereinbarungen:[],naechster:''} };
 }
 async function oeffneEigenen(){
   const runde=P.get('r'), v=P.get('v');
@@ -456,7 +497,7 @@ async function oeffneEigenen(){
   }
   akt = entpacke(i); gfSicht=false;
   leseModus = ['Abgegeben','Abgeschlossen'].includes(akt.f.OGStatus);
-  if(!leseModus && !akt.kennzahlen?.erweitert){
+  if(!leseModus && (!akt.kennzahlen?.erweitert || akt.kennzahlen.teamleitung===undefined)){
     try{
       lade('Kennzahlen werden aktualisiert …');
       const k=await holeKennzahlen(); delete k._mitarbeiterListe; akt.kennzahlen=k;
@@ -474,14 +515,17 @@ function renderBogen(){
   const roMA = leseModus || gfSicht;         // Teil 1–3: nur Mitarbeiter:in, solange nicht abgegeben
   const roGF = !gfSicht || akt.f.OGStatus==='Abgeschlossen';   // Teil 4 (manuell) + 5: nur GF
   const termin = akt.f.Termin ? fmtDT(akt.f.Termin) : '—';
-  const skala = V.items.map(([id,txt])=>`<tr><td>${esc(txt)}</td>${[1,2,3,4,5,6,7,8,9,10,'ka'].map(w=>
-    `<td><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${roMA?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></td>`).join('')}</tr>`).join('');
+  const mehrere = V.sektionen.length>1;
+  const skala = V.sektionen.map(([titel,items])=>(mehrere?`<tr class="sektion"><td colspan="8">${esc(titel)}</td></tr>`:'')+items.map(([id,txt])=>`<tr><td>${esc(txt)}</td>${[...SKALA,'ka'].map(w=>
+    `<td><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${roMA?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></td>`).join('')}
+    <td class="kom"><input type="text" ${roMA?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar"></td></tr>`).join('')).join('');
+  const skalaKopf = mehrere ? 'Aussage' : V.sektionen[0][0];
   const themen = V.themen.map(t=>`<label><input type="checkbox" value="${esc(t)}" ${a.themen.includes(t)?'checked':''} ${roMA?'disabled':''} onchange="setThema(this)">${esc(t)}</label>`).join('');
   const fragen = V.fragen.map(([id,q])=>`<div class="frage-block"><div class="frage">${esc(q)}</div><textarea ${roMA?'readonly':''} oninput="setText('${id}',this.value)">${esc(a.text[id]||'')}</textarea></div>`).join('');
-  const erw = erweitertZeilen(akt.kennzahlen);
-  const kz = [...kennzahlenZeilen(akt.kennzahlen).map(z=>[...z,'']), ...erw.zeilen].map(([l,w,h])=>`<tr><td>${esc(l)}${h?`<br><span class="quelle" style="text-transform:none;letter-spacing:0">${esc(h)}</span>`:''}</td><td><b>${esc(w)}</b></td><td><span class="quelle">Kilanka</span></td></tr>`).join('');
+  const erw = erweitertZeilen(akt.kennzahlen, akt.f.AbgegebenAm);
+  const kz = [...kennzahlenZeilen(akt.kennzahlen), ...erw.zeilen].map(([l,w,h])=>`<tr><td>${esc(l)}${h?`<br><span class="quelle" style="text-transform:none;letter-spacing:0">${esc(h)}</span>`:''}</td><td><b>${esc(w)}</b></td></tr>`).join('');
   /* Manuelle Zeile entfällt für Mitarbeitende, sobald der Wert automatisch vorliegt; die Leitung behält das Feld als Anmerkung/Korrektur. */
-  const man = V.manuell.filter(([id])=> gfSicht || !erw.da[id] || (L.manuell?.[id])).map(([id,l])=>`<tr><td>${esc(l)}</td><td colspan="2"><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'🔒 wird von der Leitung ergänzt':(erw.da[id]?'optional: Anmerkung / Korrektur':'eintragen …')}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
+  const man = V.manuell.filter(([id])=> gfSicht || !erw.da[id] || (L.manuell?.[id])).map(([id,l])=>`<tr><td>${esc(l)}</td><td><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'🔒 wird von der Leitung ergänzt':(erw.da[id]?'optional: Anmerkung / Korrektur':'eintragen …')}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
   const ver = [0,1,2,3].map(n=>{ const z=L.vereinbarungen?.[n]||{}; return `<tr>${['was','wer','bis'].map(k=>`<td><input type="text" ${roGF?'readonly':''} value="${esc(z[k]||'')}" oninput="setVer(${n},'${k}',this.value)"></td>`).join('')}</tr>`; }).join('');
 
   /* Teil 5: Mitarbeiter:in schlägt vor (eigenes Feld), die Leitung hält im Gespräch die Vereinbarungen fest.
@@ -509,13 +553,14 @@ function renderBogen(){
     <div class="stamm">
       <div><span class="eyebrow">Name</span><b>${esc(akt.f.MitarbeiterName)}</b></div>
       <div><span class="eyebrow">Gesprächstermin</span><b>${esc(termin)}</b></div>
-      <div><span class="eyebrow">Wochenstunden / Team</span><b>${esc(num(akt.kennzahlen?.wochenstunden,' h'))}${akt.kennzahlen?.team?' · '+esc(akt.kennzahlen.team):''}</b></div>
+      <div><span class="eyebrow">Wochenstunden / Team</span><b>${esc(num(akt.kennzahlen?.wochenstunden,' h'))}${teamName()?' · Team '+esc(teamName()):''}</b></div>
       <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div>
     </div>
-    ${gfSicht?'':`<div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 10 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Du kannst jederzeit zwischenspeichern und später weitermachen. Erst mit <b>„Final abgeben“</b> sehen wir deinen Bogen als fertig an. <b>Lesen können ihn nur du und die Geschäftsführung</b> (Sonja und Markus Peltz).</div>`}
+    ${gfSicht?'':`<div class="papier-hinweis"><b>Papier-Version.</b> Bitte fülle Teil 1 bis 3 (und gern deine Vorschläge in Teil 5) von Hand aus und gib den Bogen <b>${esc(fristText())}</b> persönlich bei Sonja oder Markus Peltz ab. ${esc(leserText())}</div>
+    <div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 5 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Im Kommentarfeld kannst du jede Zeile kurz erläutern. Du kannst jederzeit zwischenspeichern und später weitermachen; bitte gib den Bogen <b>${esc(fristText())}</b> final ab. <b>${esc(leserText())}</b> Lieber auf Papier? Unten findest du „Auf Papier ausfüllen“.</div>`}
 
     <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung</h2>
-    <div style="overflow-x:auto"><table class="skala"><tr><th>${esc(V.skalaTitel)}</th>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<th>${n}</th>`).join('')}<th>k. A.</th></tr>${skala}</table></div>
+    <div style="overflow-x:auto"><table class="skala"><tr><th>${esc(skalaKopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${skala}</table></div>
 
     <h2 class="teil"><span>Teil 2 ·</span> Meine 3 wichtigsten Themen für das Gespräch</h2>
     <div class="teil-hinweis">Bitte höchstens drei ankreuzen – darauf verwenden wir den Großteil der Stunde.</div>
@@ -526,8 +571,8 @@ function renderBogen(){
 
     <h2 class="teil umbruch"><span>Teil 4 ·</span> Zahlen &amp; Fakten</h2>
     <div class="teil-hinweis">Automatisch aus Kilanka übernommen${akt.kennzahlen?.stand?' (Stand '+esc(fmtDT(akt.kennzahlen.stand))+')':''}. Privat gefahrene km = gefahrene km seit Fahrzeugübernahme abzüglich aller Fahrtenbuch-Einträge (diese gelten als dienstlich). Stimmt etwas nicht? Sprich es im Gespräch an.</div>
-    <table class="daten"><tr><th>Kennzahl</th><th>Stand</th><th>Quelle</th></tr>
-      ${kz || '<tr><td colspan="3">Kennzahlen aus Kilanka derzeit nicht verfügbar.</td></tr>'}${man}</table>
+    <table class="daten"><tr><th style="width:46%">Kennzahl</th><th>Stand</th></tr>
+      ${kz || '<tr><td colspan="2">Kennzahlen aus Kilanka derzeit nicht verfügbar.</td></tr>'}${man}</table>
     ${gfSicht && !roGF ? `<div class="no-print" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="kennzahlenNeu()">↻ Kennzahlen aus Kilanka aktualisieren</button></div>`:''}
 
     <h2 class="teil"><span>Teil 5 ·</span> Ziele &amp; Vereinbarungen</h2>
@@ -547,8 +592,9 @@ function renderLeiste(){
       (akt.f.OGStatus!=='Entwurf'?`<button class="btn btn-ghost" onclick="setStatus('Entwurf')">Für Mitarbeiter:in wieder öffnen</button>`:'')+
       (zu?'':`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="setStatus('Abgeschlossen')">Gespräch abschließen</button>`);
   } else if(leseModus){ el.innerHTML = stand+druck; }
-  else { el.innerHTML = stand+druck+`<button class="btn btn-ghost" onclick="speichern(true)">Zwischenspeichern</button><button class="btn btn-primary" onclick="abgeben()">Final abgeben</button>`; }
+  else { el.innerHTML = stand+`<button class="btn btn-ghost" onclick="papier()">Auf Papier ausfüllen</button>`+druck+`<button class="btn btn-ghost" onclick="speichern(true)">Zwischenspeichern</button><button class="btn btn-primary" onclick="abgeben()">Final abgeben</button>`; }
 }
+function setKommentar(id,w){ (akt.antworten.kommentar ||= {})[id]=w; geaendert(); }
 function setSkala(id,w){ akt.antworten.skala[id] = w==='ka' ? 'ka' : Number(w); geaendert(); }
 function setThema(cb){
   const t=akt.antworten.themen;
@@ -584,12 +630,56 @@ async function speichern(manuell, extra={}){
   }
 }
 async function abgeben(){
-  const V=VERSIONEN[akt.f.Version], offen=V.items.filter(([id])=>akt.antworten.skala[id]==null).length;
-  let frage='Bogen jetzt final abgeben? Danach kannst du ihn nicht mehr ändern.';
+  const V=VERSIONEN[akt.f.Version], offen=alleItems(V).filter(([id])=>akt.antworten.skala[id]==null).length, t=teamleitungFuerHinweis();
+  let frage='Bogen jetzt final abgeben? Danach kannst du ihn nicht mehr ändern.\n\n'+leserText()+(t?'\nDeine Teamleitung erhält ihn per E-Mail aus deinem Postfach.':'');
   if(offen) frage=`In Teil 1 sind noch ${offen} Zeile(n) ohne Angabe.\n\n`+frage;
   if(!akt.antworten.themen.length) frage='Du hast in Teil 2 noch kein Thema gewählt.\n\n'+frage;
   if(!confirm(frage)) return;
-  if(await speichern(true,{OGStatus:'Abgegeben',AbgegebenAm:new Date().toISOString()})){ leseModus=true; renderBogen(); window.scrollTo(0,0); }
+  const s=document.getElementById('saveStand'); if(s) s.textContent='Kennzahlen werden zum heutigen Tag aktualisiert …';
+  const extra={OGStatus:'Abgegeben',AbgegebenAm:new Date().toISOString()};
+  try{ const k=await holeKennzahlen(); delete k._mitarbeiterListe; akt.kennzahlen=k; extra.KennzahlenJSON=JSON.stringify(k); }
+  catch(e){ console.warn('Kennzahlen bleiben auf dem bisherigen Stand —',e.message); }
+  if(!(await speichern(true,extra))) return;
+  leseModus=true; renderBogen(); window.scrollTo(0,0);
+  if(t){ try{ await sendeAnTeamleitung(t); const x=document.getElementById('saveStand'); if(x) x.textContent='Abgegeben. '+t.name+' wurde per E-Mail informiert.'; }
+         catch(e){ alert('Dein Bogen ist abgegeben. Die E-Mail an deine Teamleitung konnte aber nicht gesendet werden ('+e.message+'). Bitte gib Sonja oder Markus kurz Bescheid.'); } }
+}
+/* Die Teamleitung hat keinen Zugriff auf die geschützte Ablage — sie bekommt den Bogen deshalb als E-Mail
+ * aus dem Postfach der Person selbst (transparent, im „Gesendet"-Ordner nachvollziehbar). */
+function bogenAlsHtml(){
+  const V=VERSIONEN[akt.f.Version], a=akt.antworten, td='style="border:1px solid #E4DED2;padding:5px 8px;font-size:13px;vertical-align:top"';
+  const zeile=(l,w)=>`<tr><td ${td}>${esc(l)}</td><td ${td}><b>${esc(w)}</b></td></tr>`;
+  const teil1=V.sektionen.map(([t,items])=>(V.sektionen.length>1?`<tr><td colspan="3" ${td}><b>${esc(t)}</b></td></tr>`:'')+items.map(([id,txt])=>
+    `<tr><td ${td}>${esc(txt)}</td><td ${td} align="center"><b>${a.skala[id]==null?'–':(a.skala[id]==='ka'?'k. A.':a.skala[id])}</b></td><td ${td}>${esc(a.kommentar?.[id]||'')}</td></tr>`).join('')).join('');
+  const kz=[...kennzahlenZeilen(akt.kennzahlen), ...erweitertZeilen(akt.kennzahlen, akt.f.AbgegebenAm).zeilen];
+  const h=t=>`<h3 style="font-family:Georgia,serif;color:#5A2D15;margin:18px 0 6px">${t}</h3>`;
+  return `<div style="font-family:Kodchasan,Segoe UI,Arial,sans-serif;color:#211F1B;max-width:760px">
+    <p>Hallo,</p><p>hier ist mein Vorbereitungsbogen für das Orientierungsgespräch${akt.f.Termin?' am '+esc(fmtDT(akt.f.Termin)):''} (${esc(V.titel)}, Runde ${esc(akt.f.Runde)}).</p>
+    ${h('Teil 1 · Meine Einschätzung (1 = trifft gar nicht zu, 5 = trifft voll zu)')}<table style="border-collapse:collapse;width:100%">${teil1}</table>
+    ${h('Teil 2 · Meine wichtigsten Themen')}<p>${a.themen.length?a.themen.map(esc).join(' · '):'–'}</p>
+    ${h('Teil 3 · Kurz in Stichpunkten')}${V.fragen.map(([id,q])=>`<p style="margin:8px 0 2px;color:#6b6860">${esc(q)}</p><p style="margin:0;white-space:pre-wrap">${esc(a.text[id]||'–')}</p>`).join('')}
+    ${h('Teil 4 · Zahlen & Fakten')}<table style="border-collapse:collapse;width:100%">${kz.map(([l,w])=>zeile(l,w)).join('')}</table>
+    ${h('Teil 5 · Meine Vorschläge für Ziele und Vereinbarungen')}<p style="white-space:pre-wrap">${esc(a.text.ziele||'–')}</p>
+    <p style="color:#8A857B;font-size:12px;margin-top:20px">Vertraulich – Personalunterlage. Automatisch erstellt aus der App „Orientierungsgespräch“ (Praxis NeueWege GmbH).</p></div>`;
+}
+async function sendeAnTeamleitung(t){
+  const req={scopes:['Mail.Send'],account:currentAccount};
+  const tok=(await msalInstance.acquireTokenSilent(req).catch(()=>msalInstance.acquireTokenPopup(req))).accessToken;
+  const name=(akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
+  const r=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},
+    body:JSON.stringify({message:{subject:`Orientierungsgespräch ${akt.f.Runde} – Vorbereitungsbogen ${name}`,body:{contentType:'HTML',content:bogenAlsHtml()},
+      toRecipients:[{emailAddress:{address:t.mail}}], ccRecipients:GF.map(g=>({emailAddress:{address:g}}))},saveToSentItems:true})});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+}
+/* Papier statt online: leeres Formular mit Stammdaten und Zahlen & Fakten drucken */
+async function papier(){
+  if(!confirm('Du möchtest den Bogen lieber auf Papier ausfüllen?\n\nEs wird ein leeres Formular mit deinen Stammdaten und „Zahlen & Fakten“ gedruckt. Bitte gib es '+fristText()+' bei Sonja oder Markus Peltz ab.\n\nBereits online eingetragene Antworten bleiben gespeichert, werden aber nicht mitgedruckt.')) return;
+  await speichern(false,{OGStatus:'Papier'});
+  const merk=akt.antworten; akt.antworten={skala:{},themen:[],text:{},kommentar:{}};
+  renderBogen(); document.body.classList.add('papier');
+  const zurueck=()=>{ document.body.classList.remove('papier'); akt.antworten=merk; renderBogen(); window.removeEventListener('afterprint',zurueck); };
+  window.addEventListener('afterprint',zurueck);
+  setTimeout(()=>window.print(),150);
 }
 async function setStatus(neu){
   if(neu==='Abgeschlossen' && !confirm('Gespräch abschließen? Teil 4 und 5 werden danach gesperrt (über „wieder öffnen“ änderbar).')) return;
@@ -641,8 +731,8 @@ async function zeigeAdmin(){
   app().className='wrap wide';
   app().innerHTML=`<div class="card">
     <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
-      <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
-    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
+      <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
+    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. Bei der Abgabe geht der Bogen per E-Mail an die Teamleitung (Vorgesetzte:r laut Entra), ihr steht in Kopie. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Mitarbeiter:in</th><th>Version</th><th>Gesprächstermin</th><th>Status</th><th></th></tr>${zeilen}</table></div>
     <div class="msg" id="adminMsg"></div></div>`;
   document.getElementById('leiste').style.display='none';
@@ -666,7 +756,7 @@ async function zeigeKennzahlen(u, neu){
   try{
     if(neu || !kzCache[u]){ const k=await holeKennzahlen(u); delete k._mitarbeiterListe; kzCache[u]=k; }
     const k=kzCache[u], lst=k.erweitert?.anteil?.leistungen;
-    dlg.innerHTML = kopf(`Kennzahlen aus Kilanka · Stand ${fmtDT(k.stand)}${k.team?' · '+k.team:''}`)+`<div class="kz-body">${kennzahlenTabelle(k)}
+    dlg.innerHTML = kopf(`Kennzahlen aus Kilanka · Stand ${fmtDT(k.stand)}${k.teamleitung?.name?' · Team '+k.teamleitung.name:''}`)+`<div class="kz-body">${kennzahlenTabelle(k)}
       ${lst?.length?`<div class="teil-hinweis" style="margin-top:12px">Häufigste Leistungen im Zeitraum (zur Kontrolle der Einordnung): ${lst.map(l=>`${esc(l.name)} – ${String(l.std).replace('.',',')} h`).join(' · ')}</div>`:''}
       <div class="teil-hinweis" style="margin-top:8px">Nur für die Geschäftsführung sichtbar. Dieselben Werte erscheinen in Teil 4, sobald die Person ihren Bogen öffnet.</div></div>`;
   }catch(e){
@@ -688,7 +778,7 @@ async function kopiere(u){
 function mail(u){
   const m=mitarbeiter.find(x=>x.upn===u), p=plan[u]||{}, vor=(m.name.split(',')[1]||m.name).trim().split(' ')[0];
   const termin=p.t?' am '+fmtDT(p.t):'';
-  const text=`Hallo ${vor},\n\nunser Orientierungsgespräch steht an${termin}. Zur Vorbereitung haben wir einen kurzen Online-Bogen für dich (ca. 10 Minuten):\n\n${linkFuer(m,aktRunde())}\n\nDu meldest dich mit deinem Praxis-NeueWege-Konto an. Du kannst jederzeit zwischenspeichern und später weitermachen – bitte gib den Bogen spätestens zwei Tage vor dem Gespräch final ab. Lesen können ihn nur du und wir beide.\n\nWir freuen uns auf das Gespräch!\nSonja & Markus`;
+  const text=`Hallo ${vor},\n\nunser Orientierungsgespräch steht an${termin}. Zur Vorbereitung haben wir einen kurzen Online-Bogen für dich (ca. 10 Minuten):\n\n${linkFuer(m,aktRunde())}\n\nDu meldest dich mit deinem Praxis-NeueWege-Konto an. Du kannst jederzeit zwischenspeichern und später weitermachen – bitte gib den Bogen spätestens zwei Tage vor dem Gespräch final ab. Wer lieber auf Papier schreibt: Im Bogen gibt es unten „Auf Papier ausfüllen“ – dann bitte ebenfalls spätestens zwei Tage vorher bei uns abgeben. Den Bogen bekommen wir beide und deine Teamleitung als Vorbereitung auf das Gespräch.\n\nWir freuen uns auf das Gespräch!\nSonja & Markus`;
   location.href=`mailto:${encodeURIComponent(u)}?subject=${encodeURIComponent('Dein Orientierungsgespräch – Vorbereitungsbogen')}&body=${encodeURIComponent(text)}`;
 }
 
