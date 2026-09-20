@@ -98,6 +98,11 @@ table.admin td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-al
 table.admin select,table.admin input{padding:5px 8px;font-size:12.5px}
 .adminbar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px}
 .adminbar label{font-size:11px;color:var(--text-muted);display:block;margin-bottom:3px}
+dialog.kz{border:1px solid var(--border);border-radius:var(--radius-lg);padding:0;max-width:860px;width:calc(100% - 32px);box-shadow:0 12px 40px rgba(0,0,0,.18)}
+dialog.kz::backdrop{background:rgba(33,31,27,.45)}
+dialog.kz .kz-kopf{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 10px;border-bottom:1px solid var(--r1)}
+dialog.kz .kz-kopf h3{font-family:'Libre Baskerville',serif;font-size:17px;color:var(--dunkelbraun)}
+dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
 .footer-note{text-align:center;font-size:11px;color:var(--text-hint);margin-top:18px}
 
 /* ── Druck: DIN A4 ── */
@@ -612,7 +617,8 @@ async function zeigeAdmin(){
       <td><select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).map(([k,v])=>`<option value="${k}" ${(p.v||'B')===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select></td>
       <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)"></td>
       <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
-      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
+      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="zeigeKennzahlen('${esc(m.upn)}')" title="Kennzahlen aus Kilanka – auch bevor der Bogen angelegt ist">📊 Kennzahlen</button>
+        <button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
         <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">E-Mail</button>
         ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}</td></tr>`;
   }).join('');
@@ -621,10 +627,36 @@ async function zeigeAdmin(){
   app().innerHTML=`<div class="card">
     <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
       <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
-    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „Öffnen“ zeigt den Bogen; dort ergänzt ihr die manuellen Kennzahlen und im Gespräch Teil 5. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
+    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Mitarbeiter:in</th><th>Version</th><th>Gesprächstermin</th><th>Status</th><th></th></tr>${zeilen}</table></div>
     <div class="msg" id="adminMsg"></div></div>`;
   document.getElementById('leiste').style.display='none';
+}
+const kzCache = {};   // upn → Kennzahlen (pro Sitzung; schont das Kilanka-Rate-Limit)
+function kennzahlenTabelle(k){
+  const erw = erweitertZeilen(k);
+  const zeilen = [...kennzahlenZeilen(k).map(z=>[...z,'']), ...erw.zeilen];
+  return `<table class="daten"><tr><th>Kennzahl</th><th>Stand</th></tr>${zeilen.map(([l,w,h])=>
+    `<tr><td>${esc(l)}${h?`<br><span class="quelle" style="text-transform:none;letter-spacing:0">${esc(h)}</span>`:''}</td><td><b>${esc(w)}</b></td></tr>`).join('')}</table>`;
+}
+async function zeigeKennzahlen(u, neu){
+  const m = mitarbeiter.find(x=>x.upn===u);
+  let dlg = document.getElementById('kzDialog');
+  if(!dlg){ dlg=document.createElement('dialog'); dlg.id='kzDialog'; dlg.className='kz no-print'; document.body.appendChild(dlg);
+    dlg.addEventListener('click',e=>{ if(e.target===dlg) dlg.close(); }); }
+  const kopf = (unter)=>`<div class="kz-kopf"><div><h3>${esc(m.name)}</h3><div class="eyebrow">${esc(unter)}</div></div>
+    <div style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="zeigeKennzahlen('${esc(u)}',true)">↻ Neu laden</button> <button class="btn btn-ghost btn-sm" onclick="document.getElementById('kzDialog').close()">Schließen</button></div></div>`;
+  dlg.innerHTML = kopf('Kennzahlen aus Kilanka')+`<div class="kz-body"><span class="spinner"></span>Kennzahlen werden geladen …</div>`;
+  if(!dlg.open) dlg.showModal();
+  try{
+    if(neu || !kzCache[u]){ const k=await holeKennzahlen(u); delete k._mitarbeiterListe; kzCache[u]=k; }
+    const k=kzCache[u], lst=k.erweitert?.anteil?.leistungen;
+    dlg.innerHTML = kopf(`Kennzahlen aus Kilanka · Stand ${fmtDT(k.stand)}${k.team?' · '+k.team:''}`)+`<div class="kz-body">${kennzahlenTabelle(k)}
+      ${lst?.length?`<div class="teil-hinweis" style="margin-top:12px">Häufigste Leistungen im Zeitraum (zur Kontrolle der Einordnung): ${lst.map(l=>`${esc(l.name)} – ${String(l.std).replace('.',',')} h`).join(' · ')}</div>`:''}
+      <div class="teil-hinweis" style="margin-top:8px">Nur für die Geschäftsführung sichtbar. Dieselben Werte erscheinen in Teil 4, sobald die Person ihren Bogen öffnet.</div></div>`;
+  }catch(e){
+    dlg.innerHTML = kopf('Kennzahlen aus Kilanka')+`<div class="kz-body"><div class="msg err" style="margin:0">Kennzahlen konnten nicht geladen werden: ${esc(e.message)}</div></div>`;
+  }
 }
 async function setPlan(u,k,w){
   (plan[u] ||= {})[k]=w;

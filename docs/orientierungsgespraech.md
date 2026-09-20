@@ -42,13 +42,28 @@
   anderer Reihenfolge → Ausreißer nur bei > +3.000 km bzw. < −1.000 km gegenüber dem letzten akzeptierten Stand.
 - Abgleich: letzter km-Stand FS-NW 922 aus der API = 28.006 km = Wert der KFZ-Übersicht vom 18.09.2026.
 
-## Abruf-Strategie
+## Abruf-Strategie (gegen Prod verifiziert am 20.09.2026)
 
-Ob Kilanka nach `user` filtert, ist nicht dokumentiert; ein unwirksamer Filter liefert still alle
-oder keine Zeilen. Der Worker probt deshalb drei Filter-Varianten mit 50 Zeilen und nutzt nur eine
-nachweislich wirksame (dann Historie ab 2023). Sonst Fallback: alle Mitarbeitenden, letzte 12 Monate,
-10 Minuten gecacht — der Privatanteil wird dann konsistent innerhalb dieses Fensters berechnet und
-Fahrten anderer Personen mit demselben Fahrzeug werden abgezogen.
+- Kilanka-IDs sind **UUID-Strings**. `$filter: { user: { id: "<uuid>" } }` filtert serverseitig;
+  `{ user: "<uuid>" }` und `{ "user.id": … }` ergeben 400 „malformed $filter".
+- `$filter: { tour: { car: { id: "<uuid>" } } }` funktioniert ebenfalls → nach Ermittlung von Fahrzeug
+  und Übernahmedatum lädt der Worker **alle** Fahrten des Fahrzeugs (alle Fahrer:innen) nach.
+- Eine leere Probe heißt „keine Daten" (z. B. neue Mitarbeitende), nicht „Filter unwirksam" —
+  der 12-Monats-Vollabruf ist nur noch Fallback, falls der Filter fremde Zeilen liefert.
+- `clients/timeSheets.tour.car` liefert nur die `id` (kein `recName`) → Kennzeichen/Leasingdaten
+  kommen über den Nachnamen aus `data/fahrzeuge.json`.
+- Privat-PKW (Kilometerabrechnung) haben Fahrten ohne km-Stand → „kein Dienstwagen".
+- `rosters/accounts`: je Person ~11 Konten (Krank, Urlaub, Geburtstag …). Relevant ist das
+  **Stundenkonto**; der vorzeichenrichtige Saldo steht in `totalQuantity` (`totalHours` = Betrag).
+- `rosters/timeSheets` ohne `clientTimeSheet` tragen die Kostenstelle: „Nordstern  Erziehung und
+  Betreuung" = Gruppendienst (zählt als Klientenarbeit **stationär**), „Team"/„Fachlicher Austausch" = intern.
+- Typische Fahrtenbuch-Fehler: Ziffer zu viel (200.595 statt 20.595), falsches Fahrzeug gewählt.
+  Stände > +3.000 km oder < −1.000 km gegenüber dem letzten akzeptierten Stand werden ignoriert.
+
+## GF-Übersicht
+
+Button „📊 Kennzahlen" je Zeile zeigt alle Werte vorab — auch bevor die Person ihren Bogen angelegt hat
+(gleiche Endpunkte mit `?mitarbeiter=`; Berechtigung prüft der Worker). Ergebnis je Sitzung gecacht.
 
 ## Berechtigung
 
