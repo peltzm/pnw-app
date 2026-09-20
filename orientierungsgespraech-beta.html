@@ -414,7 +414,10 @@ function erweitertZeilen(k, freigabe){
   const z=e.zeitkonto;
   if(z?.vorhanden){
     const tag = new Date(freigabe||k.stand||Date.now()).toLocaleDateString('de-DE');
-    da.zeitkonto=true; out.push([`Arbeitszeitkonto: Saldo zum ${tag}`, z.konten.map(x=>(z.konten.length>1?x.typ+': ':'')+(x.stunden===0?'0 h':std(x.stunden))).join(' · '), freigabe?'Stand bei Abgabe des Bogens':'wird bei der Abgabe des Bogens aktualisiert']);
+    /* Nur der Gesamtsaldo des Stundenkontos (= „Saldo" im Kilanka-Panel). Ältere Snapshots enthielten alle Konten → hier herausfiltern. */
+    const sk = z.konten.find(x=>/stundenkonto/i.test(x.typ));
+    const wert = sk ? (sk.stunden===0 ? '0,00 h' : (sk.stunden>0?'+':'−')+Math.abs(sk.stunden).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' h') : '—';
+    da.zeitkonto=true; out.push([`Arbeitszeitkonto: Saldo zum ${tag}`, wert, freigabe?'Stand bei Abgabe des Bogens':'wird bei der Abgabe des Bogens aktualisiert']);
   } else if(z?.grund){ da.zeitkonto=true; out.push(['Arbeitszeitkonto','—',z.grund]); }
   const a=e.anteil;
   if(a?.vorhanden){
@@ -685,9 +688,9 @@ async function setStatus(neu){
   if(neu==='Abgeschlossen' && !confirm('Gespräch abschließen? Teil 4 und 5 werden danach gesperrt (über „wieder öffnen“ änderbar).')) return;
   if(await speichern(true,{OGStatus:neu})) { leseModus = neu!=='Entwurf'; renderBogen(); }
 }
-async function kennzahlenNeu(){
+async function kennzahlenNeu(still){
   try{ const k=await holeKennzahlen(akt.f.MitarbeiterUpn); delete k._mitarbeiterListe; akt.kennzahlen=k; await speichern(true); renderBogen(); }
-  catch(e){ alert('Kennzahlen konnten nicht geladen werden: '+e.message); }
+  catch(e){ if(!still) alert('Kennzahlen konnten nicht geladen werden: '+e.message); else console.warn('Kennzahlen-Aktualisierung übersprungen —',e.message); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -700,6 +703,8 @@ function oeffneFuerGF(zielUpn){
   const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===zielUpn && x.f.Runde===runde);
   if(!i) return meldung('warn',esc(zielUpn)+' hat den Bogen für die Runde '+esc(runde)+' noch nicht geöffnet. <a href="'+location.pathname+'?r='+esc(runde)+'">Zur Übersicht</a>');
   akt=entpacke(i); gfSicht=true; leseModus=true; renderBogen(); window.scrollTo(0,0);
+  const alt = !akt.kennzahlen?.stand || new Date(akt.kennzahlen.stand).toDateString() !== new Date().toDateString() || akt.kennzahlen.teamleitung===undefined;
+  if(['Entwurf','Papier'].includes(akt.f.OGStatus) && alt) kennzahlenNeu(true);
 }
 function zurueckAdmin(){ if(dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return; dirty=false; akt=null; zeigeAdmin(); }
 function linkFuer(m,runde){

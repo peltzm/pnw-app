@@ -2104,8 +2104,10 @@ async function ogZeitkonten(env, kid) {
   // das Stundenkonto; dessen Saldo steht vorzeichenrichtig in totalQuantity (totalHours ist der Betrag).
   const konten = rows.filter((r) => String(r.user?.id) === kid)
     .map((r) => ({ typ: r.type?.name || r.type?.recName || "Konto",
-      stunden: ogRund(r.totalQuantity != null ? decimalToNumber(r.totalQuantity) : ogStundenSigniert(r.totalHours), 1) }))
-    .filter((k) => /stundenkonto|arbeitszeit|gleitzeit/i.test(k.typ) || (/überstunden|ueberstunden/i.test(k.typ) && k.stunden));
+      stunden: ogRund(r.totalQuantity != null ? decimalToNumber(r.totalQuantity) : ogStundenSigniert(r.totalHours), 2) }))
+    // Nur der Gesamtsaldo des Stundenkontos — entspricht dem Feld „Saldo" im Kilanka-Panel STUNDENKONTO
+    // (verifiziert 20.09.2026: API 20,9333 = Kilanka 20,93).
+    .filter((k) => /stundenkonto/i.test(k.typ));
   if (!konten.length) return { vorhanden: false, grund: "kein Konto für diese Person" };
   return { vorhanden: true, konten };
 }
