@@ -109,6 +109,15 @@ dialog.kz::backdrop{background:rgba(33,31,27,.45)}
 dialog.kz .kz-kopf{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 10px;border-bottom:1px solid var(--r1)}
 dialog.kz .kz-kopf h3{font-family:'Libre Baskerville',serif;font-size:17px;color:var(--dunkelbraun)}
 dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
+table.skala.mitfremd tr:nth-child(odd) td{background:transparent}
+table.skala.mitfremd tr.fremd td{background:var(--accent-light);border-top:none;padding-top:4px;padding-bottom:4px}
+table.skala.mitfremd tr.fremd.abw td{background:var(--warn-bg)}
+table.skala tr.fremd td:first-child{font-size:12px;color:var(--accent);padding-left:22px}
+table.skala tr.fremd td.kom{font-size:12.5px;color:var(--accent);text-align:left}
+.pkt,table.skala tr.fremd td{-webkit-print-color-adjust:exact;print-color-adjust:exact}   /* Punkte und Hinterlegung auch im Ausdruck */
+.pkt{display:inline-block;width:15px;height:15px;border-radius:50%;border:1.5px solid var(--r1);background:#fff;vertical-align:middle}
+.pkt.an{border-color:var(--accent);background:radial-gradient(circle,var(--accent) 0 45%,#fff 50%)}
+.pkt.selbst.an{border-color:var(--ink);background:radial-gradient(circle,var(--ink) 0 45%,#fff 50%)}
 .tl-wert{display:block;margin-top:4px;font-size:12px;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:3px 8px;font-weight:400}
 .tl-wert.abw{background:var(--warn-bg);color:var(--warn);border:1px solid #fcd34d}
 .skala-legende{font-size:11.5px;color:var(--meta);margin:2px 0 8px}
@@ -135,11 +144,15 @@ dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
   table.skala tr td:first-child{grid-column:1/-1;text-align:left;padding:0 0 4px;font-size:15px;line-height:1.4;font-weight:500}
   table.skala td.r label{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:54px;border:1px solid var(--r1);border-radius:10px;background:#fff;cursor:pointer}
   table.skala td.r label::before{content:attr(data-l);font-size:12px;font-weight:600;color:var(--text-muted)}
-  table.skala td.r label:has(input:checked){border-color:var(--accent);background:var(--accent-light)}
+  table.skala td.r label:has(input:checked),table.skala td.r label.gewaehlt{border-color:var(--accent);background:var(--accent-light)}
   table.skala td.r label:has(input:checked)::before{color:var(--accent)}
   table.skala input[type=radio]{width:20px;height:20px}
   table.skala td.kom{grid-column:1/-1;min-width:0;padding-top:2px}
   table.skala td.kom input{font-size:15px;padding:8px 2px}
+  table.skala tr.fremd{padding:8px 10px;margin-top:-6px;border-radius:0 0 10px 10px;background:var(--accent-light)}
+  table.skala tr.fremd.abw{background:var(--warn-bg)}
+  table.skala tr.fremd td.r{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--text-muted)}
+  table.skala tr.fremd td.r::before{content:attr(data-l)}
   table.skala tr.sektion{display:block;padding:0;border:none;margin-top:14px}
   table.skala tr.sektion td{display:block;background:var(--creme)!important;padding:9px 12px;border-radius:8px;font-size:14px}
   /* Teil 2: eine Spalte, große Tippflächen */
@@ -160,7 +173,7 @@ dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
   .leiste{padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));gap:8px}
   .leiste .stand{flex-basis:100%;margin:0;font-size:11.5px;min-height:0}
   .leiste .stand:empty{display:none}
-  .leiste .btn{flex:1 1 0;min-width:0;min-height:46px;padding:8px 6px;font-size:14px;white-space:nowrap}
+  .leiste .btn{flex:1 1 0;min-width:0;min-height:46px;padding:6px 6px;font-size:13.5px;line-height:1.2;white-space:normal}
   .leiste .mehr-btn{display:inline-flex;flex:0 0 auto}
   .leiste .sek{display:none;flex-basis:100%;order:-1}
   .leiste.offen .sek{display:inline-flex}
@@ -662,15 +675,17 @@ function skalaTabelle(V, a, ro, fremd){
     if(fremd?.abgegeben){
       const w=fremd.skala[id], k=fremd.kommentar?.[id], e=a.skala[id];
       const abw = typeof w==='number' && typeof e==='number' && Math.abs(w-e)>=2;
-      if(w!=null || k) tl=`<span class="tl-wert ${abw?'abw':''}">${esc(fremd.tlName)}: <b>${w==null?'–':(w==='ka'?'k. A.':w)}</b>${k?' · '+esc(k):''}${abw?' · weicht ab':''}</span>`;
+      if(w!=null || k) tl=`<tr class="fremd${abw?' abw':''}"><td>${esc(fremd.tlName)}</td>${[...SKALA,'ka'].map(x=>
+        `<td class="r" data-l="${x==='ka'?'k. A.':x}"><span class="pkt${String(w)===String(x)?' an':''}" title="${esc(fremd.tlName)}: ${x==='ka'?'k. A.':x}"></span></td>`).join('')}<td class="kom">${esc(k||'')}</td></tr>`;
     }
-    return `<tr><td>${esc(txt)}${tl}</td>${[...SKALA,'ka'].map(w=>
-    `<td class="r"><label data-l="${w==='ka'?'k. A.':w}"><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${ro?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></label></td>`).join('')}
-    <td class="kom"><input type="text" ${ro?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar" placeholder="Kommentar (optional)"></td></tr>`;}).join('')).join('');
+    return `<tr><td>${esc(txt)}</td>${[...SKALA,'ka'].map(w=>
+    ro ? `<td class="r"><label data-l="${w==='ka'?'k. A.':w}" class="${String(a.skala[id]??'')===String(w)?'gewaehlt':''}"><span class="pkt selbst${String(a.skala[id]??'')===String(w)?' an':''}"></span></label></td>`
+       : `<td class="r"><label data-l="${w==='ka'?'k. A.':w}"><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></label></td>`).join('')}
+    <td class="kom"><input type="text" ${ro?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar" placeholder="${ro?'':'Kommentar (optional)'}"></td></tr>${tl}`;}).join('')).join('');
   const kopf = mehrere ? 'Aussage' : V.sektionen[0][0];
-  const fremdInfo = fremd ? `<div class="teil-hinweis">${fremd.abgegeben?`Die Einschätzung von ${esc(fremd.tlName)} steht unter der jeweiligen Aussage; Abweichungen ab 2 Punkten sind markiert. Die Person selbst sieht diese Werte nicht.`:`${esc(fremd.tlName)} hat die Einschätzung noch nicht abgegeben.`}</div>` : '';
+  const fremdInfo = fremd ? `<div class="teil-hinweis">${fremd.abgegeben?`Unter jeder Aussage steht in einer zweiten Zeile die Einschätzung von ${esc(fremd.tlName)} – gleiche Skala, dunkler Punkt = Selbsteinschätzung, brauner Punkt = ${esc(fremd.tlName)}; Abweichungen ab 2 Punkten sind gelb hinterlegt. Die Person selbst sieht diese Werte nicht.`:`${esc(fremd.tlName)} hat die Einschätzung noch nicht abgegeben.`}</div>` : '';
   return `<div class="skala-legende">1 = trifft gar nicht zu · 5 = trifft voll zu · k. A. = keine Angabe</div>${fremdInfo}
-    <div class="skala-wrap"><table class="skala"><tr><th>${esc(kopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${zeilen}</table></div>`;
+    <div class="skala-wrap"><table class="skala${fremd?.abgegeben?' mitfremd':''}"><tr><th>${esc(kopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${zeilen}</table></div>`;
 }
 /* GF: Einschätzung der Teamleitung zu einer Person in dieser Runde (falls vorhanden) */
 function tlEinschaetzungFuer(maUpn, runde){
