@@ -986,7 +986,8 @@ async function zeigeAdmin(){
         ${gesperrt?'':`<button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
         <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">${p.mailAm?'Erneut einladen':'Einladung senden'}</button>`}
         ${(upn===TL_EINSCHAETZUNG_DURCH && istTeamleitung(m.upn))?`<button class="btn btn-ghost btn-sm" onclick="oeffneTL('${esc(m.upn)}')">✍ Einschätzen (Teil 1)</button>`:''}
-        ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}</td></tr>`;
+        ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}
+        ${vorgangTeile(m.upn,runde).length?`<button class="btn btn-danger btn-sm" onclick="vorgangZuruecksetzen('${esc(m.upn)}')" title="Bogen, Einschätzung und Einladungsvermerk dieser Person für die Runde löschen">Zurücksetzen</button>`:''}</td></tr>`;
   }).join('');
   const zahl = s => items.filter(x=>x.f.Runde===runde && x.f.OGStatus===s && !(x.f.MitarbeiterUpn||'').startsWith('__')).length;
   app().className='wrap wide';
@@ -1051,12 +1052,39 @@ async function freigeben(){
   await zeigeAdmin();
   const e2=document.getElementById('adminMsg'); e2.className='msg '+(ok===offen.length?'ok':'err'); e2.textContent=`${ok} von ${offen.length} Selbsteinschätzung(en) an die Teamleitung gesendet.`;
 }
+/* Vorgang einer Person für die Runde komplett zurücksetzen: Bogen, Einschätzung(en) der Teamleitung/Sonja, Einladungsvermerk.
+ * Version und Termin bleiben erhalten. Gelöschte Elemente liegen im SharePoint-Papierkorb (ca. 93 Tage wiederherstellbar). */
+function vorgangTeile(u, runde){
+  const teile=[];
+  const bogen=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===u && x.f.Runde===runde);
+  if(bogen) teile.push({art:'bogen', item:bogen, text:`Bogen (Status „${bogen.f.OGStatus}“)`});
+  items.filter(x=>{ const k=(x.f.MitarbeiterUpn||'').toLowerCase(); return k.startsWith(TL_PRAEFIX) && k.endsWith(':'+u) && x.f.Runde===runde; })
+    .forEach(x=>{ const t=(x.f.MitarbeiterUpn||'').slice(TL_PRAEFIX.length).split(':')[0]; teile.push({art:'tl', item:x, text:`Einschätzung von ${GF_NAMEN[t]||((mitarbeiter||[]).find(m=>m.upn===t)?.name||t)} (Status „${x.f.OGStatus}“)`}); });
+  if(plan[u]?.mailAm) teile.push({art:'mail', text:`Einladungsvermerk (gesendet ${fmtDT(plan[u].mailAm)})`});
+  return teile;
+}
+async function vorgangZuruecksetzen(u){
+  const runde=aktRunde(), m=mitarbeiter.find(x=>x.upn===u), teile=vorgangTeile(u,runde), el=document.getElementById('adminMsg');
+  if(!teile.length) return;
+  const abgegeben=teile.some(t=>t.item && ['Abgegeben','Abgeschlossen'].includes(t.item.f.OGStatus));
+  if(!confirm(`Vorgang für ${m.name} (Runde ${runde}) zurücksetzen?\n\nGelöscht wird:\n`+teile.map(t=>'• '+t.text).join('\n')+
+    `\n\nVersion und Termin bleiben erhalten. Bereits versendete E-Mails lassen sich nicht zurückholen.`+(abgegeben?'\n\nACHTUNG: Es sind bereits abgegebene Inhalte dabei.':''))) return;
+  let fehler=0;
+  for(const t of teile.filter(t=>t.item)){
+    try{ await graph(`${LISTE()}/items/${t.item.spId}`,{method:'DELETE'}); items=items.filter(i=>i.spId!==t.item.spId); }
+    catch(e){ fehler++; console.warn('Löschen fehlgeschlagen —',t.text,e.message); }
+  }
+  if(plan[u]?.mailAm){ delete plan[u].mailAm; await setPlan(u,'mailAm',undefined); }
+  await zeigeAdmin();
+  const e2=document.getElementById('adminMsg'); e2.className='msg '+(fehler?'err':'ok');
+  e2.textContent = fehler ? `Zurücksetzen nur teilweise gelungen (${fehler} Element(e) konnten nicht gelöscht werden).` : `Vorgang für ${m.name} zurückgesetzt – die Person steht wieder auf „Offen“ und kann neu eingeladen werden.`;
+}
 async function gruppenFreigeben(){ const k=await teamKarte(true); if(k) zeigeAdmin(); else alert('Freigabe nicht erfolgt: '+(gruppenFehler||'unbekannt')); }
 async function setPlan(u,k,w){
   (plan[u] ||= {})[k]=w;
   const runde=aktRunde(), body={AntwortenJSON:JSON.stringify(plan)};
   try{
-    if(planItem) await graph(`${LISTE()}/items/${planItem.spId}/fields`,{method:'PATCH',body:JSON.stringify(body)});
+    if(planItem){ await graph(`${LISTE()}/items/${planItem.spId}/fields`,{method:'PATCH',body:JSON.stringify(body)}); planItem.f.AntwortenJSON=body.AntwortenJSON; }   // lokalen Stand mitführen, sonst geht er beim Neuaufbau der Übersicht verloren
     else { const neu=await graph(LISTE()+'/items',{method:'POST',body:JSON.stringify({fields:{Title:'Planung '+runde,MitarbeiterUpn:planKey(runde),Runde:runde,...body}})}); planItem={spId:neu.id,f:{MitarbeiterUpn:planKey(runde),Runde:runde,...body}}; items.push(planItem); }
   }catch(e){ const m=document.getElementById('adminMsg'); m.className='msg err'; m.textContent='Planung konnte nicht gespeichert werden: '+e.message; }
 }
