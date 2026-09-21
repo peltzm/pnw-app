@@ -109,6 +109,65 @@ dialog.kz::backdrop{background:rgba(33,31,27,.45)}
 dialog.kz .kz-kopf{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 10px;border-bottom:1px solid var(--r1)}
 dialog.kz .kz-kopf h3{font-family:'Libre Baskerville',serif;font-size:17px;color:var(--dunkelbraun)}
 dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
+.skala-legende{font-size:11.5px;color:var(--meta);margin:2px 0 8px}
+.skala-wrap{overflow-x:auto}
+.mehr-btn{display:none}
+/* ── Smartphone im Hochformat (z. B. Samsung S24, 360 px): Karten statt Tabellen, große Tippflächen ── */
+@media (max-width:700px){
+  body{font-size:15px}
+  .header{padding:0 10px}.header-brand{gap:7px;min-width:0}.header-brand img{height:24px}.header-brand span:not(.beta-badge){font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .user-badge{display:none!important}.header-right .btn{padding:4px 9px;min-height:28px;font-size:11.5px}
+  .wrap{padding:10px 8px 150px}.card{padding:16px 14px;border-radius:10px}
+  .bogen-kopf{flex-direction:column-reverse;align-items:flex-start;gap:10px}.bogen-kopf h1{font-size:22px}.bogen-kopf img{height:36px}
+  .stamm{grid-template-columns:1fr 1fr;gap:10px 14px}
+  .hinweis{font-size:13px;padding:10px 12px}
+  h2.teil{font-size:15.5px;margin-top:24px}
+  textarea,input[type=text],input[type=datetime-local],select{font-size:16px}   /* ≥16 px: kein Auto-Zoom beim Antippen */
+  textarea{min-height:110px}
+  /* Teil 1: je Aussage eine Karte — Text, darunter 6 Tippflächen, darunter Kommentar */
+  .skala-wrap{overflow:visible}
+  table.skala,table.skala tbody{display:block;width:100%}
+  table.skala tr:first-child{display:none}
+  table.skala tr{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:14px 0 12px;border-bottom:1px solid var(--r2)}
+  table.skala tr td{background:transparent!important;border:none;padding:0}
+  table.skala tr td:first-child{grid-column:1/-1;text-align:left;padding:0 0 4px;font-size:15px;line-height:1.4;font-weight:500}
+  table.skala td.r label{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:54px;border:1px solid var(--r1);border-radius:10px;background:#fff;cursor:pointer}
+  table.skala td.r label::before{content:attr(data-l);font-size:12px;font-weight:600;color:var(--text-muted)}
+  table.skala td.r label:has(input:checked){border-color:var(--accent);background:var(--accent-light)}
+  table.skala td.r label:has(input:checked)::before{color:var(--accent)}
+  table.skala input[type=radio]{width:20px;height:20px}
+  table.skala td.kom{grid-column:1/-1;min-width:0;padding-top:2px}
+  table.skala td.kom input{font-size:15px;padding:8px 2px}
+  table.skala tr.sektion{display:block;padding:0;border:none;margin-top:14px}
+  table.skala tr.sektion td{display:block;background:var(--creme)!important;padding:9px 12px;border-radius:8px;font-size:14px}
+  /* Teil 2: eine Spalte, große Tippflächen */
+  .themen{grid-template-columns:1fr;gap:0}
+  .themen label{padding:11px 2px;border-bottom:1px solid var(--r2);font-size:15px}
+  .themen input{width:20px;height:20px}
+  /* Teil 4/5: Zeilen stapeln (Bezeichnung klein, Wert darunter) */
+  table.daten,table.daten tbody{display:block;width:100%}
+  table.daten tr:first-child{display:none}
+  table.daten tr{display:block;padding:10px 0;border-bottom:1px solid var(--r2)}
+  table.daten td{display:block;border:none;background:transparent!important;padding:0;width:100%!important}
+  table.daten td:first-child{font-size:12.5px;color:var(--text-muted);margin-bottom:2px}
+  table.daten td b{font-size:15px;line-height:1.45}
+  table.daten td input{border:1px solid var(--r1);border-radius:6px;background:#fff;padding:8px 10px;margin-top:4px}
+  table.daten td input[readonly]{background:#FBF8F4}
+  .bogen-fuss{font-size:10px}
+  /* Leiste: zwei Hauptaktionen nebeneinander, Rest unter „Mehr" */
+  .leiste{padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));gap:8px}
+  .leiste .stand{flex-basis:100%;margin:0;font-size:11.5px;min-height:0}
+  .leiste .stand:empty{display:none}
+  .leiste .btn{flex:1 1 0;min-width:0;min-height:46px;padding:8px 6px;font-size:14px;white-space:nowrap}
+  .leiste .mehr-btn{display:inline-flex;flex:0 0 auto}
+  .leiste .sek{display:none;flex-basis:100%;order:-1}
+  .leiste.offen .sek{display:inline-flex}
+  /* GF-Übersicht: Tabellenzeilen als Karten */
+  table.admin,table.admin tbody{display:block}table.admin tr:first-child{display:none}
+  table.admin tr{display:block;padding:12px 0;border-bottom:1px solid var(--border)}
+  table.admin td{display:block;border:none;padding:4px 0;white-space:normal!important}
+  dialog.kz .kz-kopf{flex-direction:column}
+}
 .footer-note{text-align:center;font-size:11px;color:var(--text-hint);margin-top:18px}
 
 /* ── Druck: DIN A4 ── */
@@ -123,6 +182,7 @@ dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
   table.skala tr,table.daten tr{break-inside:avoid}table.skala td,table.skala th{padding:3.5pt 3pt}
   textarea{min-height:48pt}
   .nur-druck{display:block}
+  .skala-legende{margin-bottom:4pt}input::placeholder{color:transparent}
   body.papier .papier-hinweis{display:block}body.papier .hinweis{display:none}
   table.skala td.kom{min-width:0;width:34%}
 }
@@ -230,6 +290,9 @@ const VERSIONEN = {
     /* Rufbereitschaften sind über die Kilanka-API nicht abrufbar (geprüft 20.09.2026) → Eintrag durch die Leitung */
     manuell:[['rufbereitschaft','Rufbereitschaft: übernimmt eine Woche alle … Wochen (Soll: alle 8 Wochen)']] }
 };
+/* Freigegebene Versionen. Der Teamleitungs-Bogen (A) ist vorerst NICHT wählbar (Vorgabe GF 21.09.2026) —
+ * zum Freischalten 'A' wieder aufnehmen. Bereits angelegte A-Bögen bleiben für die GF lesbar. */
+const AKTIVE_VERSIONEN = ['B','C'];
 const alleItems = V => V.sektionen.flatMap(([,items])=>items);
 const SKALA = [1,2,3,4,5];
 
@@ -348,6 +411,7 @@ async function start(){
   if (istGF && !(ma && ma===upn && P.get('selbst'))) return ma ? oeffneFuerGF(ma) : zeigeAdmin();
   if (ma && ma !== upn) return meldung('warn','Dieser Link ist für ein anderes Konto bestimmt ('+esc(ma)+'). Du bist angemeldet als '+esc(upn)+'.');
   if (!P.get('r') || !VERSIONEN[P.get('v')]) return meldung('warn','Der Link ist unvollständig. Bitte verwende den Link aus deiner Einladung.');
+  if (!AKTIVE_VERSIONEN.includes(P.get('v'))) return meldung('warn','Dieser Bogen ist noch nicht freigegeben. Du bekommst eine neue Einladung, sobald es so weit ist.');
   await oeffneEigenen();
 }
 
@@ -521,8 +585,8 @@ function renderBogen(){
   const termin = akt.f.Termin ? fmtDT(akt.f.Termin) : '—';
   const mehrere = V.sektionen.length>1;
   const skala = V.sektionen.map(([titel,items])=>(mehrere?`<tr class="sektion"><td colspan="8">${esc(titel)}</td></tr>`:'')+items.map(([id,txt])=>`<tr><td>${esc(txt)}</td>${[...SKALA,'ka'].map(w=>
-    `<td><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${roMA?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></td>`).join('')}
-    <td class="kom"><input type="text" ${roMA?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar"></td></tr>`).join('')).join('');
+    `<td class="r"><label data-l="${w==='ka'?'k. A.':w}"><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${roMA?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></label></td>`).join('')}
+    <td class="kom"><input type="text" ${roMA?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar" placeholder="Kommentar (optional)"></td></tr>`).join('')).join('');
   const skalaKopf = mehrere ? 'Aussage' : V.sektionen[0][0];
   const themen = V.themen.map(t=>`<label><input type="checkbox" value="${esc(t)}" ${a.themen.includes(t)?'checked':''} ${roMA?'disabled':''} onchange="setThema(this)">${esc(t)}</label>`).join('');
   const fragen = V.fragen.map(([id,q])=>`<div class="frage-block"><div class="frage">${esc(q)}</div><textarea ${roMA?'readonly':''} oninput="setText('${id}',this.value)">${esc(a.text[id]||'')}</textarea></div>`).join('');
@@ -530,7 +594,7 @@ function renderBogen(){
   const kz = [...kennzahlenZeilen(akt.kennzahlen), ...erw.zeilen].map(([l,w,h])=>`<tr><td>${esc(l)}${h?`<br><span class="quelle" style="text-transform:none;letter-spacing:0">${esc(h)}</span>`:''}</td><td><b>${esc(w)}</b></td></tr>`).join('');
   /* Manuelle Zeile entfällt für Mitarbeitende, sobald der Wert automatisch vorliegt; die Leitung behält das Feld als Anmerkung/Korrektur. */
   const man = V.manuell.filter(([id])=> gfSicht || !erw.da[id] || (L.manuell?.[id])).map(([id,l])=>`<tr><td>${esc(l)}</td><td><input type="text" ${roGF?'readonly':''} value="${esc(L.manuell?.[id]||'')}" placeholder="${roGF?'🔒 wird von der Leitung ergänzt':(erw.da[id]?'optional: Anmerkung / Korrektur':'eintragen …')}" oninput="setManuell('${id}',this.value)"></td></tr>`).join('');
-  const ver = [0,1,2,3].map(n=>{ const z=L.vereinbarungen?.[n]||{}; return `<tr>${['was','wer','bis'].map(k=>`<td><input type="text" ${roGF?'readonly':''} value="${esc(z[k]||'')}" oninput="setVer(${n},'${k}',this.value)"></td>`).join('')}</tr>`; }).join('');
+  const ver = [0,1,2,3].map(n=>{ const z=L.vereinbarungen?.[n]||{}; return `<tr>${[['was','Was nehmen wir uns vor?'],['wer','Wer'],['bis','Bis wann']].map(([k,ph])=>`<td><input type="text" ${roGF?'readonly':''} value="${esc(z[k]||'')}" placeholder="${roGF?'':ph}" oninput="setVer(${n},'${k}',this.value)"></td>`).join('')}</tr>`; }).join('');
 
   /* Teil 5: Mitarbeiter:in schlägt vor (eigenes Feld), die Leitung hält im Gespräch die Vereinbarungen fest.
    * In der Mitarbeiter-Sicht gibt es bewusst KEINE leeren, gesperrten Eingabefelder — das wirkte wie ein Fehler. */
@@ -564,7 +628,8 @@ function renderBogen(){
     <div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 5 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Im Kommentarfeld kannst du jede Zeile kurz erläutern. Du kannst jederzeit zwischenspeichern und später weitermachen; bitte gib den Bogen <b>${esc(fristText())}</b> final ab. <b>${esc(leserText())}</b> Lieber auf Papier? Unten findest du „Auf Papier ausfüllen“.</div>`}
 
     <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung</h2>
-    <div style="overflow-x:auto"><table class="skala"><tr><th>${esc(skalaKopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${skala}</table></div>
+    <div class="skala-legende">1 = trifft gar nicht zu · 5 = trifft voll zu · k. A. = keine Angabe</div>
+    <div class="skala-wrap"><table class="skala"><tr><th>${esc(skalaKopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${skala}</table></div>
 
     <h2 class="teil"><span>Teil 2 ·</span> Meine 3 wichtigsten Themen für das Gespräch</h2>
     <div class="teil-hinweis">Bitte höchstens drei ankreuzen – darauf verwenden wir den Großteil der Stunde.</div>
@@ -589,14 +654,17 @@ function renderBogen(){
 function renderLeiste(){
   const el=document.getElementById('leiste'); el.style.display='flex';
   const stand=`<span class="stand" id="saveStand">${leseModus&&!gfSicht?'Dein Bogen ist abgegeben und kann nicht mehr geändert werden.':''}</span>`;
-  const druck=`<button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`;
+  const druck=`<button class="btn btn-ghost sek" onclick="window.print()">Drucken / PDF (A4)</button>`;
+  const mehr=`<button class="btn btn-ghost mehr-btn" onclick="document.getElementById('leiste').classList.toggle('offen')" aria-label="Weitere Aktionen">Mehr ⋯</button>`;
   if(gfSicht){
     const zu = akt.f.OGStatus==='Abgeschlossen';
-    el.innerHTML = stand+`<button class="btn btn-danger" onclick="loeschen()">Bogen löschen</button>`+druck+
-      (akt.f.OGStatus!=='Entwurf'?`<button class="btn btn-ghost" onclick="setStatus('Entwurf')">Für Mitarbeiter:in wieder öffnen</button>`:'')+
+    el.innerHTML = stand+`<button class="btn btn-danger sek" onclick="loeschen()">Bogen löschen</button>`+druck+
+      (akt.f.OGStatus!=='Entwurf'?`<button class="btn btn-ghost sek" onclick="setStatus('Entwurf')">Für Mitarbeiter:in wieder öffnen</button>`:'')+mehr+
       (zu?'':`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="setStatus('Abgeschlossen')">Gespräch abschließen</button>`);
-  } else if(leseModus){ el.innerHTML = stand+druck; }
-  else { el.innerHTML = stand+`<button class="btn btn-danger" onclick="loeschen()">Löschen</button><button class="btn btn-ghost" onclick="papier()">Auf Papier ausfüllen</button>`+druck+`<button class="btn btn-ghost" onclick="speichern(true)">Zwischenspeichern</button><button class="btn btn-primary" onclick="abgeben()">Final abgeben</button>`; }
+  } else if(leseModus){ el.innerHTML = stand+`<button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`; }
+  else { el.innerHTML = stand+`<button class="btn btn-danger sek" onclick="loeschen()">Löschen</button><button class="btn btn-ghost sek" onclick="papier()">Auf Papier ausfüllen</button>`+druck+mehr+
+    `<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="abgeben()">Final abgeben</button>`; }
+  el.classList.remove('offen');
 }
 function setKommentar(id,w){ (akt.antworten.kommentar ||= {})[id]=w; geaendert(); }
 function setSkala(id,w){ akt.antworten.skala[id] = w==='ka' ? 'ka' : Number(w); geaendert(); }
@@ -740,14 +808,15 @@ async function zeigeAdmin(){
   try{ plan = planItem ? JSON.parse(planItem.f.AntwortenJSON||'{}') : {}; }catch(e){ plan={}; }
   const zeilen = mitarbeiter.map(m=>{
     const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===m.upn && x.f.Runde===runde), st=i?.f.OGStatus||'Offen', p=plan[m.upn]||{};
-    const grp=GRUPPEN[standardVersion(m)]?.label;
+    const grp=GRUPPEN[standardVersion(m)]?.label, ver=p.v||standardVersion(m), gesperrt=!AKTIVE_VERSIONEN.includes(ver);
     return `<tr><td><b>${esc(m.name)}</b>${grp?` <span class="status abgeschlossen" style="font-weight:500">${esc(grp)}</span>`:''}<br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
-      <td><select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).map(([k,v])=>`<option value="${k}" ${(p.v||standardVersion(m))===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select></td>
+      <td>${gesperrt?`<span style="font-size:12.5px;color:var(--text-muted)">Bogen „${esc(VERSIONEN[ver].titel)}“ folgt – vorerst nicht freigegeben</span>`
+        :`<select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).filter(([k])=>AKTIVE_VERSIONEN.includes(k)).map(([k,v])=>`<option value="${k}" ${ver===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select>`}</td>
       <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)"></td>
       <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
       <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="zeigeKennzahlen('${esc(m.upn)}')" title="Kennzahlen aus Kilanka – auch bevor der Bogen angelegt ist">📊 Kennzahlen</button>
-        <button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
-        <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">E-Mail</button>
+        ${gesperrt?'':`<button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
+        <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">E-Mail</button>`}
         ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}</td></tr>`;
   }).join('');
   const zahl = s => items.filter(x=>x.f.Runde===runde && x.f.OGStatus===s).length;
