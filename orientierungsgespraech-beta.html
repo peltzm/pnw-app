@@ -205,7 +205,7 @@ table.skala tr.fremd td.kom{font-size:12.5px;color:var(--accent);text-align:left
 </head>
 <body>
 <div class="header">
-  <div class="header-brand"><img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege"><span>Orientierungsgespräch</span><span class="beta-badge">BETA</span></div>
+  <div class="header-brand"><img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege"><span>Orientierungsgespräch</span></div>
   <div class="header-right">
     <div class="user-badge" id="userBadge"><span class="user-dot"></span><span id="userName"></span></div>
     <button class="btn btn-ghost btn-sm" id="logoutBtn" style="display:none" onclick="logout()">Abmelden</button>
@@ -271,6 +271,8 @@ function standardVersion(m){
  * Durch „nur eigene Elemente" sehen es nur die Teamleitung selbst und die GF — nicht die eingeschätzte Person. */
 /* Personen ohne Orientierungsgespräch in dieser Runde (Vorgabe GF) — in der Übersicht je Person umschaltbar, hier nur die Voreinstellung */
 const OHNE_GESPRAECH = ['tischoff, silvia'];
+const ANLEITUNG = { ma:'https://apps.praxisneuewege.de/anleitungen/orientierungsgespraech-mitarbeitende.pdf',
+                    tl:'https://apps.praxisneuewege.de/anleitungen/orientierungsgespraech-teamleitung.pdf' };
 const TL_PRAEFIX = '__tl__:';
 /* Die drei Teamleitungen werden von Sonja eingeschätzt (Vorgabe GF 22.09.2026) — gleiche Mechanik, Einstieg über die GF-Übersicht. */
 const TL_EINSCHAETZUNG_DURCH = 'sonja.peltz@praxisneuewege.de';
@@ -745,7 +747,7 @@ function renderBogen(){
       <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div>
     </div>
     ${gfSicht?'':`<div class="papier-hinweis"><b>Papier-Version.</b> Bitte fülle Teil 1 bis 3 (und gern deine Vorschläge in Teil 5) von Hand aus und gib den Bogen <b>${esc(fristText())}</b> persönlich bei Sonja oder Markus Peltz ab. ${esc(leserText())}</div>
-    <div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 5 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Im Kommentarfeld kannst du jede Zeile kurz erläutern. Du kannst jederzeit zwischenspeichern und später weitermachen; bitte gib den Bogen <b>${esc(fristText())}</b> final ab. <b>${esc(leserText())}</b>${teamleitungFuerHinweis()?' Deine Teamleitung gibt zu Teil 1 ebenfalls eine Einschätzung ab – beide Sichten besprechen wir im Gespräch.':(istTeamleitung(akt.f.MitarbeiterUpn)?' Sonja gibt zu Teil 1 ebenfalls eine Einschätzung zu dir ab – beide Sichten besprechen wir im Gespräch.':'')} Lieber auf Papier? Unten findest du „Auf Papier ausfüllen“.</div>`}
+    <div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 5 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Im Kommentarfeld kannst du jede Zeile kurz erläutern. Du kannst jederzeit zwischenspeichern und später weitermachen; bitte gib den Bogen <b>${esc(fristText())}</b> final ab. <b>${esc(leserText())}</b>${teamleitungFuerHinweis()?' Deine Teamleitung gibt zu Teil 1 ebenfalls eine Einschätzung ab – beide Sichten besprechen wir im Gespräch.':(istTeamleitung(akt.f.MitarbeiterUpn)?' Sonja gibt zu Teil 1 ebenfalls eine Einschätzung zu dir ab – beide Sichten besprechen wir im Gespräch.':'')} Lieber auf Papier? Unten findest du „Auf Papier ausfüllen“. <a href="${ANLEITUNG.ma}" target="_blank" rel="noopener" class="no-print" style="color:var(--terra);font-weight:600;white-space:nowrap">📄 Kurzanleitung</a></div>`}
 
     <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung</h2>
     ${skalaHtml}
@@ -877,7 +879,8 @@ async function sendeAnTeamleitung(t){
     <p>Hallo ${esc(t.name.split(' ')[0])},</p>
     <p>${esc(name)} hat den Vorbereitungsbogen für das Orientierungsgespräch${akt.f.Termin?' am <b>'+esc(fmtDT(akt.f.Termin))+'</b>':''} abgegeben.</p>
     <p>Bitte gib jetzt – falls noch nicht geschehen – <b>deine eigene Einschätzung zu Teil 1</b> ab. Die Selbsteinschätzung von ${esc(name)} erhältst du erst danach, damit deine Sicht unabhängig bleibt.</p>
-    ${mailKnopf(link,'Mein Team einschätzen')}`), GF);
+    ${mailKnopf(link,'Mein Team einschätzen')}
+    <p>Wie es geht, steht auf einer Seite: <a href="${ANLEITUNG.tl}" style="color:#A15F38;font-weight:600">Kurzanleitung für Teamleitungen (PDF)</a></p>`), GF);
 }
 /* Papier statt online: leeres Formular mit Stammdaten und Zahlen & Fakten drucken */
 async function papier(){
@@ -940,7 +943,7 @@ async function zeigeTeamleitung(){
   app().className='wrap';
   app().innerHTML=`<div class="card">
     <div class="bogen-kopf"><div><h1>Mein Team einschätzen</h1><div class="unter">Einschätzung der Teamleitung zu Teil 1</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräche · Runde ${esc(runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
-    <div class="hinweis" style="margin-bottom:14px"><b>So geht’s:</b> Für jedes Teammitglied schätzt du dieselben Aussagen ein, die die Person in Teil 1 für sich selbst beantwortet – aus deiner Sicht als Teamleitung. Was du nicht beurteilen kannst: „k. A.“. Im Kommentarfeld kannst du Beispiele notieren. <b>Deine Einschätzung sehen nur du sowie Sonja und Markus Peltz</b>; sie wird im Gespräch neben die Selbsteinschätzung gelegt. <b>Die Selbsteinschätzung der Person bekommst du erst zu sehen, nachdem du deine eigene abgegeben hast</b> – danach ist deine Einschätzung nicht mehr änderbar. Bitte spätestens zwei Tage vor dem jeweiligen Gespräch abgeben.</div>
+    <div class="hinweis" style="margin-bottom:14px"><b>So geht’s:</b> Für jedes Teammitglied schätzt du dieselben Aussagen ein, die die Person in Teil 1 für sich selbst beantwortet – aus deiner Sicht als Teamleitung. Was du nicht beurteilen kannst: „k. A.“. Im Kommentarfeld kannst du Beispiele notieren. <b>Deine Einschätzung sehen nur du sowie Sonja und Markus Peltz</b>; sie wird im Gespräch neben die Selbsteinschätzung gelegt. <b>Die Selbsteinschätzung der Person bekommst du erst zu sehen, nachdem du deine eigene abgegeben hast</b> – danach ist deine Einschätzung nicht mehr änderbar. Bitte spätestens zwei Tage vor dem jeweiligen Gespräch abgeben. <a href="${ANLEITUNG.tl}" target="_blank" rel="noopener" style="color:var(--terra);font-weight:600;white-space:nowrap">📄 Kurzanleitung für Teamleitungen</a></div>
     <div class="adminbar no-print"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?tl=1&r='+this.value" style="width:170px"></div></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Teammitglied</th><th>Meine Einschätzung</th><th></th></tr>${zeilen}</table></div></div>`;
   document.getElementById('leiste').style.display='none';
@@ -1055,6 +1058,7 @@ async function zeigeAdmin(){
   app().className='wrap wide';
   app().innerHTML=`<div class="card">
     <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
+      <div style="font-size:12.5px"><label>Anleitungen</label><a href="${ANLEITUNG.ma}" target="_blank" rel="noopener" style="color:var(--terra)">Mitarbeitende</a> · <a href="${ANLEITUNG.tl}" target="_blank" rel="noopener" style="color:var(--terra)">Teamleitung</a></div>
       <div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(CFG.redirectUri+'?tl=1&r='+aktRunde()).then(()=>{const e=document.getElementById('adminMsg');e.className='msg ok';e.textContent='Link für Teamleitungen kopiert.';})">Link für Teamleitungen kopieren</button></div>
       <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${dabei.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
     ${(n=>n?`<div class="msg warn" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span><b>${n} Selbsteinschätzung(en) können an die Teamleitung freigegeben werden</b> – Person und Teamleitung haben beide abgegeben.</span><button class="btn btn-primary btn-sm" onclick="freigeben()">Jetzt an Teamleitung senden</button></div>`:'')(offeneFreigaben(runde).length)}
@@ -1170,6 +1174,7 @@ function einladungHtml(m, link, termin){
     <p>Du meldest dich mit deinem Praxis-NeueWege-Konto an. Du kannst jederzeit zwischenspeichern und später weitermachen – bitte gib den Bogen <b>spätestens zwei Tage vor dem Gespräch</b> final ab.</p>
     <p>Wer lieber auf Papier schreibt: Im Bogen gibt es unten „Auf Papier ausfüllen“ – dann bitte ebenfalls spätestens zwei Tage vorher bei uns abgeben.</p>
     <p>Den Bogen bekommen wir beide als Vorbereitung auf das Gespräch. Deine Teamleitung gibt zu Teil 1 unabhängig davon eine eigene Einschätzung ab und erhält deinen Bogen erst danach.</p>
+    <p>Wie es geht, steht auf einer Seite: <a href="${ANLEITUNG.ma}" style="color:#A15F38;font-weight:600">Kurzanleitung (PDF)</a></p>
     <p>Wir freuen uns auf das Gespräch!<br>Sonja &amp; Markus</p>
     <p style="font-size:12px;color:#8A857B;border-top:1px solid #E4DED2;padding-top:10px;margin-top:24px">Falls der Button nicht funktioniert, nutze diesen Link: <a href="${esc(link)}" style="color:#A15F38">Vorbereitungsbogen öffnen</a></p></div>`;
 }
