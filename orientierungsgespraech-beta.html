@@ -109,6 +109,8 @@ dialog.kz::backdrop{background:rgba(33,31,27,.45)}
 dialog.kz .kz-kopf{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 22px 10px;border-bottom:1px solid var(--r1)}
 dialog.kz .kz-kopf h3{font-family:'Libre Baskerville',serif;font-size:17px;color:var(--dunkelbraun)}
 dialog.kz .kz-body{padding:14px 22px 20px;max-height:70vh;overflow:auto}
+.tl-wert{display:block;margin-top:4px;font-size:12px;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:3px 8px;font-weight:400}
+.tl-wert.abw{background:var(--warn-bg);color:var(--warn);border:1px solid #fcd34d}
 .skala-legende{font-size:11.5px;color:var(--meta);margin:2px 0 8px}
 .skala-wrap{overflow-x:auto}
 .mehr-btn{display:none}
@@ -238,6 +240,10 @@ function standardVersion(m){
   for(const [v,g] of Object.entries(GRUPPEN)) if(g.namen.some(x=>n.startsWith(x))) return AKTIVE_VERSIONEN.includes(v) ? v : 'B';
   return 'B';
 }
+/* Einschätzung durch die Teamleitung: eigenes Listenelement der Teamleitung, Schlüssel __tl__:<tl-upn>:<ma-upn>.
+ * Durch „nur eigene Elemente" sehen es nur die Teamleitung selbst und die GF — nicht die eingeschätzte Person. */
+const TL_PRAEFIX = '__tl__:';
+const tlKey = (tl,ma) => TL_PRAEFIX+tl+':'+ma;
 const SENTINEL = '__sentinel__';           // GF-Element: darf für Mitarbeitende NIE sichtbar sein
 const APP_VERSION = 'BETA-905181d'; // auto-updated on deploy
 document.getElementById('versionBadge').textContent = APP_VERSION;
@@ -405,11 +411,12 @@ async function start(){
 
   /* Fail-closed: Sieht ein:e Mitarbeiter:in fremde Elemente (oder das GF-Sentinel),
    * sind die Listenberechtigungen falsch — dann wird NICHT gespeichert. */
-  if (!istGF && items.some(i => (i.f.MitarbeiterUpn||'').toLowerCase() !== upn)){
+  if (!istGF && items.some(i => { const u=(i.f.MitarbeiterUpn||'').toLowerCase(); return u !== upn && !u.startsWith(TL_PRAEFIX+upn+':'); })){
     return meldung('err','<b>Sicherheitsprüfung fehlgeschlagen.</b> Die Ablage ist nicht korrekt abgesichert – aus Datenschutzgründen ist das Ausfüllen gesperrt. Bitte gib der Verwaltung Bescheid (Markus Peltz).');
   }
   const ma = (P.get('ma')||'').toLowerCase();
   if (istGF && !(ma && ma===upn && P.get('selbst'))) return ma ? oeffneFuerGF(ma) : zeigeAdmin();
+  if (P.get('tl') || (!ma && !P.get('v'))) return zeigeTeamleitung();      // Teamleitungs-Sicht: Einschätzung des eigenen Teams
   if (ma && ma !== upn) return meldung('warn','Dieser Link ist für ein anderes Konto bestimmt ('+esc(ma)+'). Du bist angemeldet als '+esc(upn)+'.');
   if (!P.get('r') || !VERSIONEN[P.get('v')]) return meldung('warn','Der Link ist unvollständig. Bitte verwende den Link aus deiner Einladung.');
   if (!AKTIVE_VERSIONEN.includes(P.get('v'))) return meldung('warn','Dieser Bogen ist noch nicht freigegeben. Du bekommst eine neue Einladung, sobald es so weit ist.');
@@ -444,6 +451,7 @@ async function holeKennzahlen(zielUpn){
     fortbildungTage: d.abwesenheitenVerfuegbar ? (k.fortbildungTage ?? null) : null,
     krankTage: d.abwesenheitenVerfuegbar ? (k.tage ?? null) : null, kindKrankTage: d.abwesenheitenVerfuegbar ? (k.kindKrankTage ?? null) : null, jahr: k.jahr || u.jahr || null,
     erweitert: await holeErweitert(zielUpn, t, d.person?.name),
+    rolle: d.sicht?.rolle || null,
     _mitarbeiterListe: d.sicht?.mitarbeiter || null
   };
 }
@@ -579,16 +587,37 @@ async function oeffneEigenen(){
 /* ═══════════════════════════════════════════════════════════
  * BOGEN RENDERN (beide Sichten)
  * ═══════════════════════════════════════════════════════════ */
+function skalaTabelle(V, a, ro, fremd){
+  const mehrere = V.sektionen.length>1;
+  const zeilen = V.sektionen.map(([titel,items])=>(mehrere?`<tr class="sektion"><td colspan="8">${esc(titel)}</td></tr>`:'')+items.map(([id,txt])=>{
+    let tl='';
+    if(fremd?.abgegeben){
+      const w=fremd.skala[id], k=fremd.kommentar?.[id], e=a.skala[id];
+      const abw = typeof w==='number' && typeof e==='number' && Math.abs(w-e)>=2;
+      if(w!=null || k) tl=`<span class="tl-wert ${abw?'abw':''}">Teamleitung: <b>${w==null?'–':(w==='ka'?'k. A.':w)}</b>${k?' · '+esc(k):''}${abw?' · weicht ab':''}</span>`;
+    }
+    return `<tr><td>${esc(txt)}${tl}</td>${[...SKALA,'ka'].map(w=>
+    `<td class="r"><label data-l="${w==='ka'?'k. A.':w}"><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${ro?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></label></td>`).join('')}
+    <td class="kom"><input type="text" ${ro?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar" placeholder="Kommentar (optional)"></td></tr>`;}).join('')).join('');
+  const kopf = mehrere ? 'Aussage' : V.sektionen[0][0];
+  const fremdInfo = fremd ? `<div class="teil-hinweis">${fremd.abgegeben?`Einschätzung der Teamleitung (${esc(fremd.tlName)}) steht unter der jeweiligen Aussage; Abweichungen ab 2 Punkten sind markiert. Die Person selbst sieht diese Werte nicht.`:`Die Teamleitung (${esc(fremd.tlName)}) hat ihre Einschätzung noch nicht abgegeben.`}</div>` : '';
+  return `<div class="skala-legende">1 = trifft gar nicht zu · 5 = trifft voll zu · k. A. = keine Angabe</div>${fremdInfo}
+    <div class="skala-wrap"><table class="skala"><tr><th>${esc(kopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${zeilen}</table></div>`;
+}
+/* GF: Einschätzung der Teamleitung zu einer Person in dieser Runde (falls vorhanden) */
+function tlEinschaetzungFuer(maUpn, runde){
+  const i = items.find(x => { const u=(x.f.MitarbeiterUpn||'').toLowerCase(); return u.startsWith(TL_PRAEFIX) && u.endsWith(':'+(maUpn||'').toLowerCase()) && x.f.Runde===runde; });
+  if(!i) return null;
+  const e=entpacke(i), tlUpn=(i.f.MitarbeiterUpn||'').slice(TL_PRAEFIX.length).split(':')[0];
+  const tlName=((mitarbeiter||[]).find(m=>m.upn===tlUpn)?.name||tlUpn).split(',').reverse().join(' ').trim();
+  return { abgegeben:i.f.OGStatus==='Abgegeben', status:i.f.OGStatus, skala:e.antworten.skala, kommentar:e.antworten.kommentar, tlName };
+}
 function renderBogen(){
   const V = VERSIONEN[akt.f.Version] || VERSIONEN.B, a=akt.antworten, L=akt.leitung;
   const roMA = leseModus || gfSicht;         // Teil 1–3: nur Mitarbeiter:in, solange nicht abgegeben
   const roGF = !gfSicht || akt.f.OGStatus==='Abgeschlossen';   // Teil 4 (manuell) + 5: nur GF
   const termin = akt.f.Termin ? fmtDT(akt.f.Termin) : '—';
-  const mehrere = V.sektionen.length>1;
-  const skala = V.sektionen.map(([titel,items])=>(mehrere?`<tr class="sektion"><td colspan="8">${esc(titel)}</td></tr>`:'')+items.map(([id,txt])=>`<tr><td>${esc(txt)}</td>${[...SKALA,'ka'].map(w=>
-    `<td class="r"><label data-l="${w==='ka'?'k. A.':w}"><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} ${roMA?'disabled':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></label></td>`).join('')}
-    <td class="kom"><input type="text" ${roMA?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar" placeholder="Kommentar (optional)"></td></tr>`).join('')).join('');
-  const skalaKopf = mehrere ? 'Aussage' : V.sektionen[0][0];
+  const skalaHtml = skalaTabelle(V, a, roMA, gfSicht ? tlEinschaetzungFuer(akt.f.MitarbeiterUpn, akt.f.Runde) : null);
   const themen = V.themen.map(t=>`<label><input type="checkbox" value="${esc(t)}" ${a.themen.includes(t)?'checked':''} ${roMA?'disabled':''} onchange="setThema(this)">${esc(t)}</label>`).join('');
   const fragen = V.fragen.map(([id,q])=>`<div class="frage-block"><div class="frage">${esc(q)}</div><textarea ${roMA?'readonly':''} oninput="setText('${id}',this.value)">${esc(a.text[id]||'')}</textarea></div>`).join('');
   const erw = erweitertZeilen(akt.kennzahlen, akt.f.AbgegebenAm);
@@ -616,7 +645,8 @@ function renderBogen(){
 
   app().className='wrap';
   app().innerHTML = `
-  ${gfSicht?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zurueckAdmin()">← Übersicht</button></div>`:''}
+  ${gfSicht?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zurueckAdmin()">← Übersicht</button></div>`
+    :(akt.kennzahlen?.rolle==='tl'?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zuTeam()">👥 Mein Team einschätzen (Teil 1)</button></div>`:'')}
   <div class="card">
     <div class="bogen-kopf"><div><h1>Orientierungsgespräch</h1><div class="unter">${esc(V.titel)}</div><div class="eyebrow">Praxis NeueWege · Vorbereitungsbogen · Runde ${esc(akt.f.Runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt="Praxis NeueWege"></div>
     <div class="stamm">
@@ -626,11 +656,10 @@ function renderBogen(){
       <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div>
     </div>
     ${gfSicht?'':`<div class="papier-hinweis"><b>Papier-Version.</b> Bitte fülle Teil 1 bis 3 (und gern deine Vorschläge in Teil 5) von Hand aus und gib den Bogen <b>${esc(fristText())}</b> persönlich bei Sonja oder Markus Peltz ab. ${esc(leserText())}</div>
-    <div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 5 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Im Kommentarfeld kannst du jede Zeile kurz erläutern. Du kannst jederzeit zwischenspeichern und später weitermachen; bitte gib den Bogen <b>${esc(fristText())}</b> final ab. <b>${esc(leserText())}</b> Lieber auf Papier? Unten findest du „Auf Papier ausfüllen“.</div>`}
+    <div class="hinweis"><b>Vorbereitung in 10 Minuten:</b> Teil 1 bis 3 füllst du vorher aus (in Teil 5 kannst du Ziel-Vorschläge ergänzen) – Stichpunkte genügen, es gibt kein Richtig oder Falsch. Skala: 1 = trifft gar nicht zu, 5 = trifft voll zu; „k. A.“, wenn du etwas nicht beurteilen kannst oder willst. Im Kommentarfeld kannst du jede Zeile kurz erläutern. Du kannst jederzeit zwischenspeichern und später weitermachen; bitte gib den Bogen <b>${esc(fristText())}</b> final ab. <b>${esc(leserText())}</b>${teamleitungFuerHinweis()?' Deine Teamleitung gibt zu Teil 1 ebenfalls eine Einschätzung ab – beide Sichten besprechen wir im Gespräch.':''} Lieber auf Papier? Unten findest du „Auf Papier ausfüllen“.</div>`}
 
     <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung</h2>
-    <div class="skala-legende">1 = trifft gar nicht zu · 5 = trifft voll zu · k. A. = keine Angabe</div>
-    <div class="skala-wrap"><table class="skala"><tr><th>${esc(skalaKopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${skala}</table></div>
+    ${skalaHtml}
 
     <h2 class="teil"><span>Teil 2 ·</span> Meine 3 wichtigsten Themen für das Gespräch</h2>
     <div class="teil-hinweis">Bitte höchstens drei ankreuzen – darauf verwenden wir den Großteil der Stunde.</div>
@@ -727,7 +756,7 @@ function bogenAlsHtml(){
   const kz=[...kennzahlenZeilen(akt.kennzahlen), ...erweitertZeilen(akt.kennzahlen, akt.f.AbgegebenAm).zeilen];
   const h=t=>`<h3 style="font-family:Georgia,serif;color:#5A2D15;margin:18px 0 6px">${t}</h3>`;
   return `<div style="font-family:Kodchasan,Segoe UI,Arial,sans-serif;color:#211F1B;max-width:760px">
-    <p>Hallo,</p><p>hier ist mein Vorbereitungsbogen für das Orientierungsgespräch${akt.f.Termin?' am '+esc(fmtDT(akt.f.Termin)):''} (${esc(V.titel)}, Runde ${esc(akt.f.Runde)}).</p>
+    <p>Hallo,</p><p style="background:#F5F0EA;padding:8px 12px;border-left:3px solid #A15F38">Für die Teamleitung: Deine eigene Einschätzung zu Teil 1 gibst du hier ab: <a href="${CFG.redirectUri}?tl=1&r=${esc(akt.f.Runde)}">${CFG.redirectUri}?tl=1&amp;r=${esc(akt.f.Runde)}</a></p><p>hier ist mein Vorbereitungsbogen für das Orientierungsgespräch${akt.f.Termin?' am '+esc(fmtDT(akt.f.Termin)):''} (${esc(V.titel)}, Runde ${esc(akt.f.Runde)}).</p>
     ${h('Teil 1 · Meine Einschätzung (1 = trifft gar nicht zu, 5 = trifft voll zu)')}<table style="border-collapse:collapse;width:100%">${teil1}</table>
     ${h('Teil 2 · Meine wichtigsten Themen')}<p>${a.themen.length?a.themen.map(esc).join(' · '):'–'}</p>
     ${h('Teil 3 · Kurz in Stichpunkten')}${V.fragen.map(([id,q])=>`<p style="margin:8px 0 2px;color:#6b6860">${esc(q)}</p><p style="margin:0;white-space:pre-wrap">${esc(a.text[id]||'–')}</p>`).join('')}
@@ -781,6 +810,74 @@ async function kennzahlenNeu(still){
 }
 
 /* ═══════════════════════════════════════════════════════════
+ * TEAMLEITUNGS-SICHT: Einschätzung der Teammitglieder im jeweiligen Teil 1
+ * ═══════════════════════════════════════════════════════════ */
+let tlTeam=null, tlModus=false;
+function zuTeam(){ if(dirty && !confirm('Ungespeicherte Änderungen gehen verloren. Trotzdem wechseln?')) return; dirty=false; zeigeTeamleitung(); }
+async function zeigeTeamleitung(){
+  const runde=aktRunde(); tlModus=false; akt=null;
+  lade('Dein Team wird geladen …');
+  if(!tlTeam){
+    try{ const k=await holeKennzahlen(); tlTeam = k.rolle==='tl' ? (k._mitarbeiterListe||[]).filter(m=>m.upn!==upn).sort((a,b)=>a.name.localeCompare(b.name,'de')) : []; }
+    catch(e){ return meldung('err','Dein Team konnte nicht geladen werden: '+esc(e.message)); }
+  }
+  if(!tlTeam.length) return meldung('warn','Der Link ist unvollständig. Bitte verwende den Link aus deiner Einladung.');
+  const zeilen = tlTeam.map(m=>{
+    const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===tlKey(upn,m.upn) && x.f.Runde===runde), st=i?.f.OGStatus||'Offen';
+    return `<tr><td><b>${esc(m.name)}</b><br><span style="font-size:11px;color:var(--text-hint)">Bogen: ${esc(VERSIONEN[standardVersion(m)].titel)}</span></td>
+      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span></td>
+      <td style="text-align:right"><button class="btn btn-primary btn-sm" onclick="oeffneTL('${esc(m.upn)}')">${st==='Abgegeben'?'Ansehen':(i?'Weiter einschätzen':'Einschätzen')}</button></td></tr>`;
+  }).join('');
+  app().className='wrap';
+  app().innerHTML=`<div class="card">
+    <div class="bogen-kopf"><div><h1>Mein Team einschätzen</h1><div class="unter">Einschätzung der Teamleitung zu Teil 1</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräche · Runde ${esc(runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
+    <div class="hinweis" style="margin-bottom:14px"><b>So geht’s:</b> Für jedes Teammitglied schätzt du dieselben Aussagen ein, die die Person in Teil 1 für sich selbst beantwortet – aus deiner Sicht als Teamleitung. Was du nicht beurteilen kannst: „k. A.“. Im Kommentarfeld kannst du Beispiele notieren. <b>Deine Einschätzung sehen nur du sowie Sonja und Markus Peltz</b>; sie wird im Gespräch neben die Selbsteinschätzung gelegt. Bitte spätestens zwei Tage vor dem jeweiligen Gespräch abgeben.</div>
+    <div class="adminbar no-print"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?tl=1&r='+this.value" style="width:170px"></div></div>
+    <div style="overflow-x:auto"><table class="admin"><tr><th>Teammitglied</th><th>Meine Einschätzung</th><th></th></tr>${zeilen}</table></div></div>`;
+  document.getElementById('leiste').style.display='none';
+}
+async function oeffneTL(maUpn){
+  const runde=aktRunde(), m=tlTeam.find(x=>x.upn===maUpn), key=tlKey(upn,maUpn);
+  let i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===key && x.f.Runde===runde);
+  if(!i){
+    lade('Einschätzung wird angelegt …');
+    const fields={ Title:`TL-Einschätzung ${m.name} – ${runde}`, MitarbeiterUpn:key, MitarbeiterName:m.name, Runde:runde, Version:standardVersion(m), OGStatus:'Entwurf',
+      AntwortenJSON:JSON.stringify({skala:{},kommentar:{}}), KennzahlenJSON:'', LeitungJSON:'' };
+    try{ const neu=await graph(LISTE()+'/items',{method:'POST',body:JSON.stringify({fields})}); i={spId:neu.id,f:{...fields}}; items.push(i); }
+    catch(e){ return meldung('err','Die Einschätzung konnte nicht angelegt werden: '+esc(e.message)); }
+  }
+  akt=entpacke(i); gfSicht=false; tlModus=true; leseModus = akt.f.OGStatus==='Abgegeben';
+  renderTL(); window.scrollTo(0,0);
+}
+/* Für die Fremdeinschätzung entfällt die Abschlussfrage zum Nutzen der Gespräche (nur die Person selbst kann sie beantworten). */
+function tlVersion(){ const V=VERSIONEN[akt.f.Version]||VERSIONEN.B; return {...V, sektionen:V.sektionen.map(([t,it])=>[t,it.filter(([id])=>id!=='og_nutzen')])}; }
+function renderTL(){
+  const V=tlVersion(), name=(akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
+  app().className='wrap';
+  app().innerHTML=`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zuTeam()">← Mein Team</button></div>
+  <div class="card">
+    <div class="bogen-kopf"><div><h1>Einschätzung der Teamleitung</h1><div class="unter">zu ${esc(name)} · ${esc(V.titel)}</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräch · Runde ${esc(akt.f.Runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
+    <div class="stamm"><div><span class="eyebrow">Teammitglied</span><b>${esc(akt.f.MitarbeiterName)}</b></div>
+      <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div></div>
+    <div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>
+    <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung als Teamleitung</h2>
+    ${skalaTabelle(V, akt.antworten, leseModus, null)}
+    <div class="bogen-fuss">Praxis NeueWege GmbH · vertraulich – Personalunterlage · sichtbar nur für die Teamleitung und die Geschäftsführung</div>
+  </div>`;
+  const el=document.getElementById('leiste'); el.style.display='flex'; el.classList.remove('offen');
+  el.innerHTML=`<span class="stand" id="saveStand">${leseModus?'Einschätzung abgegeben.':''}</span>`+
+    (leseModus?`<button class="btn btn-ghost" onclick="tlStatus('Entwurf')">Wieder bearbeiten</button>`
+              :`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="tlStatus('Abgegeben')">Einschätzung abgeben</button>`);
+}
+async function tlStatus(neu){
+  if(neu==='Abgegeben'){
+    const offen=alleItems(tlVersion()).filter(([id])=>akt.antworten.skala[id]==null).length;
+    if(!confirm((offen?`Es sind noch ${offen} Zeile(n) ohne Angabe.\n\n`:'')+'Einschätzung jetzt abgeben? Sonja und Markus Peltz sehen sie dann im Bogen neben der Selbsteinschätzung.')) return;
+  }
+  if(await speichern(true,{OGStatus:neu, AbgegebenAm: neu==='Abgegeben'?new Date().toISOString():null})){ leseModus = neu==='Abgegeben'; renderTL(); }
+}
+
+/* ═══════════════════════════════════════════════════════════
  * GF-SICHT: Runde planen, Links verteilen, Status, Gespräch führen
  * ═══════════════════════════════════════════════════════════ */
 let mitarbeiter=null, plan={}, planItem=null;
@@ -815,18 +912,19 @@ async function zeigeAdmin(){
       <td>${gesperrt?`<span style="font-size:12.5px;color:var(--text-muted)">Bogen „${esc(VERSIONEN[ver].titel)}“ folgt – vorerst nicht freigegeben</span>`
         :`<select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).filter(([k])=>AKTIVE_VERSIONEN.includes(k)).map(([k,v])=>`<option value="${k}" ${ver===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select>`}</td>
       <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)"></td>
-      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
+      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${(t=>t?` <span class="status ${t.abgegeben?'abgegeben':'entwurf'}" title="Einschätzung der Teamleitung (${esc(t.tlName)})">TL ${t.abgegeben?'✓':'…'}</span>`:'')(tlEinschaetzungFuer(m.upn,runde))}${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
       <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="zeigeKennzahlen('${esc(m.upn)}')" title="Kennzahlen aus Kilanka – auch bevor der Bogen angelegt ist">📊 Kennzahlen</button>
         ${gesperrt?'':`<button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
         <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">E-Mail</button>`}
         ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}</td></tr>`;
   }).join('');
-  const zahl = s => items.filter(x=>x.f.Runde===runde && x.f.OGStatus===s).length;
+  const zahl = s => items.filter(x=>x.f.Runde===runde && x.f.OGStatus===s && !(x.f.MitarbeiterUpn||'').startsWith('__')).length;
   app().className='wrap wide';
   app().innerHTML=`<div class="card">
     <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
+      <div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(CFG.redirectUri+'?tl=1&r='+aktRunde()).then(()=>{const e=document.getElementById('adminMsg');e.className='msg ok';e.textContent='Link für Teamleitungen kopiert.';})">Link für Teamleitungen kopieren</button></div>
       <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
-    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. Bei der Abgabe geht der Bogen per E-Mail an die Teamleitung (Vorgesetzte:r laut Entra), ihr steht in Kopie. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
+    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. Teamleitungen schätzen ihr Team in Teil 1 zusätzlich selbst ein („Link für Teamleitungen“; Status „TL ✓“) – ihr seht beide Sichten nebeneinander, die Person nicht. Bei der Abgabe geht der Bogen per E-Mail an die Teamleitung (Vorgesetzte:r laut Entra), ihr steht in Kopie. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Mitarbeiter:in</th><th>Version</th><th>Gesprächstermin</th><th>Status</th><th></th></tr>${zeilen}</table></div>
     <div class="msg" id="adminMsg"></div></div>`;
   document.getElementById('leiste').style.display='none';

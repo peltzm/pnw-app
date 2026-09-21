@@ -89,3 +89,14 @@ Jeder Zweig ist fail-soft (`{ vorhanden:false, fehler|grund }`); der Bogen zeigt
   Dienstplan-Schichten nicht im Graphen) → Feld der Leitung „eine Woche alle … Wochen (Soll: alle 8)".
 - **Papier-Option:** „Auf Papier ausfüllen" druckt ein leeres Formular mit Stammdaten und Zahlen & Fakten, Status `Papier`,
   Abgabefrist zwei Tage vor dem Termin (wird aus dem Termin berechnet).
+
+## Einschätzung durch die Teamleitung (21.09.2026)
+
+- Teamleitungen (Rolle `tl` laut Worker = Personen mit Direct Reports in Entra) schätzen jedes Teammitglied im jeweiligen
+  Teil 1 ein (ohne die Abschlussfrage `og_nutzen`). Einstieg: App ohne Parameter bzw. `?tl=1&r=<Runde>` („Link für
+  Teamleitungen" in der GF-Übersicht), Button „Mein Team einschätzen" im eigenen Bogen, Link in der Abgabe-Mail.
+- Ablage: eigenes Listenelement der Teamleitung, `MitarbeiterUpn = __tl__:<tl-upn>:<ma-upn>`. Durch „nur eigene Elemente"
+  sehen es nur die Teamleitung und die GF — **nicht** die eingeschätzte Person. Die Fail-closed-Prüfung lässt genau diese
+  eigenen Elemente zu; fremde `__tl__`-Elemente sperren weiterhin.
+- GF-Sicht: Wert und Kommentar der Teamleitung stehen unter der jeweiligen Aussage, Abweichungen ≥ 2 Punkte sind markiert;
+  Übersicht zeigt „TL ✓ / TL …". Im Druck der GF-Sicht enthalten, in Mitarbeiter-Sicht und Papierformular nie.
