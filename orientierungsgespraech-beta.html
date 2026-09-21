@@ -406,6 +406,32 @@ async function graphAlle(pfad){
 const LISTE = () => `/sites/${CFG.spHost}/lists/${CFG.listName}`;
 
 /* ═══════════════════════════════════════════════════════════
+ * VERSIONSWÄCHTER — verhindert, dass ein länger geöffneter Tab (oder der 10-Minuten-Cache von GitHub Pages)
+ * mit veralteter Logik Mails versendet oder Bögen abgibt. Anlass 21.09.2026: Eine Abgabe 5 Minuten nach dem
+ * Deploy lief noch mit der alten Version und schickte der Teamleitung die Inhalte.
+ * ═══════════════════════════════════════════════════════════ */
+async function aktuelleVersion(){
+  try{
+    const r = await fetch(location.pathname+'?_v='+Date.now(), {cache:'no-store'});   // eindeutige Adresse → am CDN-Cache vorbei
+    if(!r.ok) return null;
+    return ((await r.text()).match(/const APP_VERSION = '([^']+)'/)||[])[1] || null;
+  }catch(e){ return null; }
+}
+/* true = aktuell (oder nicht prüfbar, z. B. offline → dann nicht blockieren). Bei veraltetem Stand: sichern, Hinweis, neu laden. */
+async function versionOk(){
+  const live = await aktuelleVersion();
+  if(!live || live === APP_VERSION || APP_VERSION === 'BETA-dev') return true;
+  if(akt && dirty) await speichern(false);
+  if(P.get('_v')){   // wurde gerade erst neu geladen und ist trotzdem alt → keine Endlosschleife, aber auch keine Aktion mit altem Stand
+    alert('Die App ist noch nicht auf dem neuesten Stand ('+APP_VERSION+' statt '+live+'). Bitte in ein paar Minuten erneut versuchen oder Strg+F5 drücken.');
+    return false;
+  }
+  alert('Die App wurde inzwischen aktualisiert ('+APP_VERSION+' → '+live+').\n\nDeine Eingaben sind gespeichert. Die Seite wird jetzt neu geladen – bitte wiederhole danach den letzten Schritt.');
+  location.replace(location.pathname + location.search + (location.search?'&':'?') + '_v=' + Date.now());
+  return false;
+}
+
+/* ═══════════════════════════════════════════════════════════
  * START
  * ═══════════════════════════════════════════════════════════ */
 const app = () => document.getElementById('appScreen');
@@ -413,6 +439,7 @@ function lade(text){ app().className='wrap'; app().innerHTML=`<div class="card">
 function meldung(art,html){ app().className='wrap'; app().innerHTML=`<div class="card"><div class="msg ${art}" style="margin:0">${html}</div></div>`; document.getElementById('leiste').style.display='none'; }
 
 async function start(){
+  if(!(await versionOk())) return;
   lade('Daten werden geladen …');
   let roh;
   try{ roh = await graphAlle(LISTE()+'/items?$expand=fields&$top=200'); }
@@ -773,6 +800,7 @@ async function speichern(manuell, extra={}){
   }
 }
 async function abgeben(){
+  if(!(await versionOk())) return;
   const V=VERSIONEN[akt.f.Version], offen=alleItems(V).filter(([id])=>akt.antworten.skala[id]==null).length, t=teamleitungFuerHinweis();
   let frage='Bogen jetzt final abgeben? Danach kannst du ihn nicht mehr ändern.\n\n'+leserText()+(t?'\n'+t.name+' wird per E-Mail informiert, dass du abgegeben hast – ohne Inhalt.':'');
   if(offen) frage=`In Teil 1 sind noch ${offen} Zeile(n) ohne Angabe.\n\n`+frage;
@@ -927,6 +955,7 @@ function renderTL(){
               :`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="tlStatus('Abgegeben')">Einschätzung abgeben</button>`);
 }
 async function tlStatus(neu){
+  if(!(await versionOk())) return;
   if(neu==='Abgegeben'){
     const offen=alleItems(tlVersion()).filter(([id])=>akt.antworten.skala[id]==null).length;
     if(!confirm((offen?`Es sind noch ${offen} Zeile(n) ohne Angabe.\n\n`:'')+'Einschätzung jetzt abgeben? Danach kannst du sie nicht mehr ändern – erst dann bekommst du die Selbsteinschätzung der Person zu sehen.')) return;
@@ -1035,6 +1064,7 @@ function offeneFreigaben(runde){
     .filter(x => x.t?.abgegeben && !GF.includes(x.t.tlUpn) && !x.e.leitung.freigabeTL);
 }
 async function freigeben(){
+  if(!(await versionOk())) return;
   const runde=aktRunde(), offen=offeneFreigaben(runde), el=document.getElementById('adminMsg');
   if(!offen.length) return;
   if(!confirm('Selbsteinschätzung jetzt an die Teamleitung senden?\n\n'+offen.map(x=>'• '+x.i.f.MitarbeiterName+' → '+x.t.tlName).join('\n')+'\n\nDie Teamleitungen haben ihre eigene Einschätzung bereits abgegeben.')) return;
@@ -1107,6 +1137,7 @@ function einladungHtml(m, link, termin){
     <p style="font-size:12px;color:#8A857B;border-top:1px solid #E4DED2;padding-top:10px;margin-top:24px">Falls der Button nicht funktioniert, nutze diesen Link: <a href="${esc(link)}" style="color:#A15F38">Vorbereitungsbogen öffnen</a></p></div>`;
 }
 async function mail(u){
+  if(!(await versionOk())) return;
   const m=mitarbeiter.find(x=>x.upn===u), p=plan[u]||{}, link=linkFuer(m,aktRunde()), termin=p.t?fmtDT(p.t):'';
   const name=(m.name||'').split(',').reverse().join(' ').trim(), el=document.getElementById('adminMsg');
   if(!confirm(`Einladung jetzt an ${name} (${u}) senden?\n\nSie geht als E-Mail mit klickbarem Link aus deinem Postfach${termin?' – Termin: '+termin:' – es ist noch kein Termin eingetragen'}.`)) return;
