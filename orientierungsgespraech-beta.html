@@ -957,11 +957,11 @@ async function zeigeAdmin(){
     return `<tr><td><b>${esc(m.name)}</b>${grp?` <span class="status abgeschlossen" style="font-weight:500">${esc(grp)}</span>`:''}${karte?.[m.upn]?` <span class="status offen" style="font-weight:500">Team ${esc(karte[m.upn].name)}</span>`:''}<br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
       <td>${gesperrt?`<span style="font-size:12.5px;color:var(--text-muted)">Bogen „${esc(VERSIONEN[ver].titel)}“ folgt – vorerst nicht freigegeben</span>`
         :`<select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).filter(([k])=>AKTIVE_VERSIONEN.includes(k)).map(([k,v])=>`<option value="${k}" ${ver===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select>`}</td>
-      <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)"></td>
+      <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)">${p.mailAm?`<br><span style="font-size:11px;color:var(--text-hint)">Einladung gesendet ${esc(fmtDT(p.mailAm))}</span>`:''}</td>
       <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${(t=>t?` <span class="status ${t.abgegeben?'abgegeben':'entwurf'}" title="Einschätzung durch ${esc(t.tlName)}">${istTeamleitung(m.upn)?'Sonja':'TL'} ${t.abgegeben?'✓':'…'}</span>`:'')(tlEinschaetzungFuer(m.upn,runde))}${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
       <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="zeigeKennzahlen('${esc(m.upn)}')" title="Kennzahlen aus Kilanka – auch bevor der Bogen angelegt ist">📊 Kennzahlen</button>
         ${gesperrt?'':`<button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
-        <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">E-Mail</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">${p.mailAm?'Erneut einladen':'Einladung senden'}</button>`}
         ${(upn===TL_EINSCHAETZUNG_DURCH && istTeamleitung(m.upn))?`<button class="btn btn-ghost btn-sm" onclick="oeffneTL('${esc(m.upn)}')">✍ Einschätzen (Teil 1)</button>`:''}
         ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}</td></tr>`;
   }).join('');
@@ -1015,11 +1015,36 @@ async function kopiere(u){
   const m=mitarbeiter.find(x=>x.upn===u); await navigator.clipboard.writeText(linkFuer(m,aktRunde()));
   const el=document.getElementById('adminMsg'); el.className='msg ok'; el.textContent='Link für '+m.name+' kopiert.';
 }
-function mail(u){
-  const m=mitarbeiter.find(x=>x.upn===u), p=plan[u]||{}, vor=(m.name.split(',')[1]||m.name).trim().split(' ')[0];
-  const termin=p.t?' am '+fmtDT(p.t):'';
-  const text=`Hallo ${vor},\n\nunser Orientierungsgespräch steht an${termin}. Zur Vorbereitung haben wir einen kurzen Online-Bogen für dich (ca. 10 Minuten):\n\n${linkFuer(m,aktRunde())}\n\nDu meldest dich mit deinem Praxis-NeueWege-Konto an. Du kannst jederzeit zwischenspeichern und später weitermachen – bitte gib den Bogen spätestens zwei Tage vor dem Gespräch final ab. Wer lieber auf Papier schreibt: Im Bogen gibt es unten „Auf Papier ausfüllen“ – dann bitte ebenfalls spätestens zwei Tage vorher bei uns abgeben. Den Bogen bekommen wir beide und deine Teamleitung als Vorbereitung auf das Gespräch.\n\nWir freuen uns auf das Gespräch!\nSonja & Markus`;
-  location.href=`mailto:${encodeURIComponent(u)}?subject=${encodeURIComponent('Dein Orientierungsgespräch – Vorbereitungsbogen')}&body=${encodeURIComponent(text)}`;
+/* Einladung als HTML-Mail über Graph (Mail.Send) aus dem Postfach der angemeldeten GF — mit echtem, klickbarem Link.
+ * Ein mailto:-Entwurf kann nur reinen Text; Outlook bricht die lange Adresse dann um und sie ist nicht mehr anklickbar. */
+function einladungHtml(m, link, termin){
+  const vor=(m.name.split(',')[1]||m.name).trim().split(' ')[0];
+  return `<div style="font-family:Kodchasan,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.55;color:#211F1B;max-width:640px">
+    <p>Hallo ${esc(vor)},</p>
+    <p>unser Orientierungsgespräch steht an${termin?' am <b>'+esc(termin)+'</b>':''}. Zur Vorbereitung haben wir einen kurzen Online-Bogen für dich (ca. 10 Minuten):</p>
+    <p style="margin:22px 0"><a href="${esc(link)}" style="background:#7B3F1E;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;display:inline-block">Zum Vorbereitungsbogen</a></p>
+    <p>Du meldest dich mit deinem Praxis-NeueWege-Konto an. Du kannst jederzeit zwischenspeichern und später weitermachen – bitte gib den Bogen <b>spätestens zwei Tage vor dem Gespräch</b> final ab.</p>
+    <p>Wer lieber auf Papier schreibt: Im Bogen gibt es unten „Auf Papier ausfüllen“ – dann bitte ebenfalls spätestens zwei Tage vorher bei uns abgeben.</p>
+    <p>Den Bogen bekommen wir beide und deine Teamleitung als Vorbereitung auf das Gespräch.</p>
+    <p>Wir freuen uns auf das Gespräch!<br>Sonja &amp; Markus</p>
+    <p style="font-size:12px;color:#8A857B;border-top:1px solid #E4DED2;padding-top:10px;margin-top:24px">Falls der Button nicht funktioniert, nutze diesen Link: <a href="${esc(link)}" style="color:#A15F38">Vorbereitungsbogen öffnen</a></p></div>`;
+}
+async function mail(u){
+  const m=mitarbeiter.find(x=>x.upn===u), p=plan[u]||{}, link=linkFuer(m,aktRunde()), termin=p.t?fmtDT(p.t):'';
+  const name=(m.name||'').split(',').reverse().join(' ').trim(), el=document.getElementById('adminMsg');
+  if(!confirm(`Einladung jetzt an ${name} (${u}) senden?\n\nSie geht als E-Mail mit klickbarem Link aus deinem Postfach${termin?' – Termin: '+termin:' – es ist noch kein Termin eingetragen'}.`)) return;
+  try{
+    el.className='msg warn'; el.textContent='Einladung wird gesendet …';
+    const req={scopes:['Mail.Send'],account:currentAccount};
+    const tok=(await msalInstance.acquireTokenSilent(req).catch(()=>msalInstance.acquireTokenPopup(req))).accessToken;
+    const r=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},
+      body:JSON.stringify({message:{subject:'Dein Orientierungsgespräch – Vorbereitungsbogen',body:{contentType:'HTML',content:einladungHtml(m,link,termin)},
+        toRecipients:[{emailAddress:{address:u}}]},saveToSentItems:true})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    await setPlan(u,'mailAm',new Date().toISOString());
+    await zeigeAdmin();
+    const e2=document.getElementById('adminMsg'); e2.className='msg ok'; e2.textContent='Einladung an '+name+' gesendet (liegt in deinen „Gesendeten Elementen“).';
+  }catch(e){ el.className='msg err'; el.textContent='Einladung konnte nicht gesendet werden: '+e.message+' – du kannst den Link stattdessen kopieren.'; }
 }
 
 /* ═══════════════════════════════════════════════════════════
