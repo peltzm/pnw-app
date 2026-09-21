@@ -234,7 +234,8 @@ const GRUPPEN = {
 };
 function standardVersion(m){
   const n=(m.name||'').trim().toLowerCase();
-  for(const [v,g] of Object.entries(GRUPPEN)) if(g.namen.some(x=>n.startsWith(x))) return v;
+  // Solange der Teamleitungs-Bogen (A) nicht freigegeben ist, bekommen die Teamleitungen den ambulanten Bogen (Vorgabe GF 21.09.2026)
+  for(const [v,g] of Object.entries(GRUPPEN)) if(g.namen.some(x=>n.startsWith(x))) return AKTIVE_VERSIONEN.includes(v) ? v : 'B';
   return 'B';
 }
 const SENTINEL = '__sentinel__';           // GF-Element: darf für Mitarbeitende NIE sichtbar sein
@@ -794,7 +795,7 @@ function oeffneFuerGF(zielUpn){
 }
 function zurueckAdmin(){ if(dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return; dirty=false; akt=null; zeigeAdmin(); }
 function linkFuer(m,runde){
-  const p=plan[m.upn]||{}; const q=new URLSearchParams({r:runde,v:p.v||standardVersion(m),ma:m.upn}); if(p.t) q.set('t',p.t);
+  const p=plan[m.upn]||{}; const q=new URLSearchParams({r:runde,v:AKTIVE_VERSIONEN.includes(p.v)?p.v:standardVersion(m),ma:m.upn}); if(p.t) q.set('t',p.t);
   return CFG.redirectUri+'?'+q.toString();
 }
 async function zeigeAdmin(){
@@ -808,7 +809,8 @@ async function zeigeAdmin(){
   try{ plan = planItem ? JSON.parse(planItem.f.AntwortenJSON||'{}') : {}; }catch(e){ plan={}; }
   const zeilen = mitarbeiter.map(m=>{
     const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===m.upn && x.f.Runde===runde), st=i?.f.OGStatus||'Offen', p=plan[m.upn]||{};
-    const grp=GRUPPEN[standardVersion(m)]?.label, ver=p.v||standardVersion(m), gesperrt=!AKTIVE_VERSIONEN.includes(ver);
+    const nm=(m.name||'').trim().toLowerCase(), grp=Object.values(GRUPPEN).find(g=>g.namen.some(x=>nm.startsWith(x)))?.label;
+    const ver=AKTIVE_VERSIONEN.includes(p.v)?p.v:standardVersion(m), gesperrt=false;   // eine früher gespeicherte Auswahl „A" fällt auf den Standard zurück
     return `<tr><td><b>${esc(m.name)}</b>${grp?` <span class="status abgeschlossen" style="font-weight:500">${esc(grp)}</span>`:''}<br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
       <td>${gesperrt?`<span style="font-size:12.5px;color:var(--text-muted)">Bogen „${esc(VERSIONEN[ver].titel)}“ folgt – vorerst nicht freigegeben</span>`
         :`<select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).filter(([k])=>AKTIVE_VERSIONEN.includes(k)).map(([k,v])=>`<option value="${k}" ${ver===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select>`}</td>
