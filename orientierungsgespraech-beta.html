@@ -817,16 +817,20 @@ async function abgeben(){
 }
 /* Die Teamleitung hat keinen Zugriff auf die geschützte Ablage — sie bekommt den Bogen deshalb als E-Mail
  * aus dem Postfach der Person selbst (transparent, im „Gesendet"-Ordner nachvollziehbar). */
-function bogenAlsHtml(akt, einleitung){
+function bogenAlsHtml(akt, einleitung, fremd){   // fremd = Einschätzung der Teamleitung → eigene Spalten neben der Selbsteinschätzung
   const V=VERSIONEN[akt.f.Version]||VERSIONEN.B, a=akt.antworten, td='style="border:1px solid #E4DED2;padding:5px 8px;font-size:13px;vertical-align:top"';
   const zeile=(l,w)=>`<tr><td ${td}>${esc(l)}</td><td ${td}><b>${esc(w)}</b></td></tr>`;
-  const teil1=V.sektionen.map(([t,items])=>(V.sektionen.length>1?`<tr><td colspan="3" ${td}><b>${esc(t)}</b></td></tr>`:'')+items.map(([id,txt])=>
-    `<tr><td ${td}>${esc(txt)}</td><td ${td} align="center"><b>${a.skala[id]==null?'–':(a.skala[id]==='ka'?'k. A.':a.skala[id])}</b></td><td ${td}>${esc(a.kommentar?.[id]||'')}</td></tr>`).join('')).join('');
+  const th='style="border:1px solid #E4DED2;padding:6px 8px;font-size:11px;letter-spacing:.4px;text-transform:uppercase;background:#F5F0EA;text-align:left"';
+  const wert=w=>w==null?'–':(w==='ka'?'k. A.':w), spalten=fremd?5:3;
+  const kopf=`<tr><th ${th}>Aussage</th><th ${th} style="text-align:center">Selbst</th>${fremd?`<th ${th} style="text-align:center">${esc(fremd.kurz||'TL')}</th>`:''}<th ${th}>Kommentar ${fremd?'(selbst)':''}</th>${fremd?`<th ${th}>Kommentar (${esc(fremd.kurz||'TL')})</th>`:''}</tr>`;
+  const teil1=kopf+V.sektionen.map(([t,items])=>(V.sektionen.length>1?`<tr><td colspan="${spalten}" ${td}><b>${esc(t)}</b></td></tr>`:'')+items.map(([id,txt])=>{
+    const e=a.skala[id], f=fremd?.skala?.[id], abw=typeof e==='number' && typeof f==='number' && Math.abs(e-f)>=2, gelb=abw?' bgcolor="#FEF7EC"':'';
+    return `<tr><td ${td}${gelb}>${esc(txt)}</td><td ${td}${gelb} align="center"><b>${wert(e)}</b></td>${fremd?`<td ${td}${gelb} align="center"><b>${wert(f)}</b></td>`:''}<td ${td}${gelb}>${esc(a.kommentar?.[id]||'')}</td>${fremd?`<td ${td}${gelb}>${esc(fremd.kommentar?.[id]||'')}</td>`:''}</tr>`;}).join('')).join('');
   const kz=[...kennzahlenZeilen(akt.kennzahlen), ...erweitertZeilen(akt.kennzahlen, akt.f.AbgegebenAm).zeilen];
   const h=t=>`<h3 style="font-family:Georgia,serif;color:#5A2D15;margin:18px 0 6px">${t}</h3>`;
   return `<div style="font-family:Kodchasan,Segoe UI,Arial,sans-serif;color:#211F1B;max-width:760px">
     ${einleitung}
-    ${h('Teil 1 · Meine Einschätzung (1 = trifft gar nicht zu, 5 = trifft voll zu)')}<table style="border-collapse:collapse;width:100%">${teil1}</table>
+    ${h(fremd?'Teil 1 · Selbsteinschätzung und deine Einschätzung im Vergleich (1 = trifft gar nicht zu, 5 = trifft voll zu)':'Teil 1 · Meine Einschätzung (1 = trifft gar nicht zu, 5 = trifft voll zu)')}${fremd?'<p style="font-size:12.5px;color:#6b6860;margin:0 0 6px">Gelb markiert: Abweichung von 2 Punkten oder mehr. Die Frage zum Nutzen der Gespräche hat nur die Person selbst beantwortet.</p>':''}<table style="border-collapse:collapse;width:100%">${teil1}</table>
     ${h('Teil 2 · Meine wichtigsten Themen')}<p>${a.themen.length?a.themen.map(esc).join(' · '):'–'}</p>
     ${h('Teil 3 · Kurz in Stichpunkten')}${V.fragen.map(([id,q])=>`<p style="margin:8px 0 2px;color:#6b6860">${esc(q)}</p><p style="margin:0;white-space:pre-wrap">${esc(a.text[id]||'–')}</p>`).join('')}
     ${h('Teil 4 · Zahlen & Fakten')}<table style="border-collapse:collapse;width:100%">${kz.map(([l,w])=>zeile(l,w)).join('')}</table>
@@ -1073,7 +1077,7 @@ async function freigeben(){
     const name=(x.i.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
     try{
       await sendeMail(x.t.tlUpn, `Orientierungsgespräch ${runde} – Selbsteinschätzung ${name}`, bogenAlsHtml(x.e,
-        `<p>Hallo ${esc(x.t.tlName.split(' ')[0])},</p><p>du hast deine Einschätzung zu <b>${esc(name)}</b> abgegeben – hier ist nun die Selbsteinschätzung als Vorbereitung auf das Gespräch${x.i.f.Termin?' am '+esc(fmtDT(x.i.f.Termin)):''}. Bitte behandle sie vertraulich.</p>`));
+        `<p>Hallo ${esc(x.t.tlName.split(' ')[0])},</p><p>du hast deine Einschätzung zu <b>${esc(name)}</b> abgegeben – hier ist nun die Selbsteinschätzung als Vorbereitung auf das Gespräch${x.i.f.Termin?' am '+esc(fmtDT(x.i.f.Termin)):''}. Daneben steht deine eigene Einschätzung zum direkten Vergleich. Bitte behandle sie vertraulich.</p>`, {...x.t, kurz:'Du'}));
       x.e.leitung.freigabeTL=new Date().toISOString();
       await graph(`${LISTE()}/items/${x.i.spId}/fields`,{method:'PATCH',body:JSON.stringify({LeitungJSON:JSON.stringify(x.e.leitung)})});
       x.i.f.LeitungJSON=JSON.stringify(x.e.leitung); ok++;
