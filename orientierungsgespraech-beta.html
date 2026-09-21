@@ -256,6 +256,10 @@ const GRUPPEN = {
   A: { label:'Teamleitung', namen:['schneider, jörg','grund, nadine','meier, laura'] },
   C: { label:'Nordstern',   namen:['hermann, jessica','edler, franziska','freundl, kilian','kerschenlohr, nadine','kraus, martina','tischoff, silvia','schütze, danielle','dietrich, saskia'] }
 };
+function ohneGespraech(m){
+  const p=plan[m.upn]; if(p && typeof p.aus==='boolean') return p.aus;
+  const t=new Set((m.name||'').toLowerCase().split(/[\s,]+/)); return OHNE_GESPRAECH.some(x=>x.split(/[\s,]+/).every(w=>t.has(w)));
+}
 function standardVersion(m){
   const tok = x => new Set(String(x||'').toLowerCase().split(/[\s,]+/).filter(Boolean));
   const n = { startsWith: x => { const t=tok(m.name); return [...tok(x)].every(w=>t.has(w)); } };
@@ -265,6 +269,8 @@ function standardVersion(m){
 }
 /* Einschätzung durch die Teamleitung: eigenes Listenelement der Teamleitung, Schlüssel __tl__:<tl-upn>:<ma-upn>.
  * Durch „nur eigene Elemente" sehen es nur die Teamleitung selbst und die GF — nicht die eingeschätzte Person. */
+/* Personen ohne Orientierungsgespräch in dieser Runde (Vorgabe GF) — in der Übersicht je Person umschaltbar, hier nur die Voreinstellung */
+const OHNE_GESPRAECH = ['tischoff, silvia'];
 const TL_PRAEFIX = '__tl__:';
 /* Die drei Teamleitungen werden von Sonja eingeschätzt (Vorgabe GF 22.09.2026) — gleiche Mechanik, Einstieg über die GF-Übersicht. */
 const TL_EINSCHAETZUNG_DURCH = 'sonja.peltz@praxisneuewege.de';
@@ -1022,10 +1028,13 @@ async function zeigeAdmin(){
   /* Wer in keiner Team-Gruppe ist: Vorgesetzte:n aus Entra nachschlagen (einmal je Sitzung), damit Lücken VOR dem Einladen auffallen */
   tlInfo ||= {};
   await Promise.all(mitarbeiter.filter(m=>!(m.upn in tlInfo)).map(async m=>{ tlInfo[m.upn] = await holeTeamleitung(m.upn); }));
-  const ohneTL = mitarbeiter.filter(m=>!tlInfo[m.upn]);
   planItem = items.find(x=>x.f.MitarbeiterUpn===planKey(runde)) || null;
   try{ plan = planItem ? JSON.parse(planItem.f.AntwortenJSON||'{}') : {}; }catch(e){ plan={}; }
-  const zeilen = mitarbeiter.map(m=>{
+  const dabei = mitarbeiter.filter(m=>!ohneGespraech(m)), pausiert = mitarbeiter.filter(m=>ohneGespraech(m));
+  const ohneTL = dabei.filter(m=>!tlInfo[m.upn]);
+  /* Mitglieder der Team-Gruppen, die in der Kilanka-Liste nicht vorkommen → meist weicht der Anmeldename ab (Worker: UPN_OVERRIDES) */
+  const unbekannt = TEAMS.flatMap(t=>(t.mitglieder||[]).filter(g=>g.upn!==t.tl && !GF.includes(g.upn) && !mitarbeiter.some(m=>m.upn===g.upn)).map(g=>`${g.name} (${g.upn}, ${t.gruppe.split('@')[0]})`));
+  const zeilen = dabei.map(m=>{
     const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===m.upn && x.f.Runde===runde), st=i?.f.OGStatus||'Offen', p=plan[m.upn]||{};
     const nmTok=new Set((m.name||'').toLowerCase().split(/[\s,]+/)), grp=Object.values(GRUPPEN).find(g=>g.namen.some(x=>x.split(/[\s,]+/).every(w=>nmTok.has(w))))?.label;
     const ver=AKTIVE_VERSIONEN.includes(p.v)?p.v:standardVersion(m), gesperrt=false;   // eine früher gespeicherte Auswahl „A" fällt auf den Standard zurück
@@ -1039,6 +1048,7 @@ async function zeigeAdmin(){
         <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">${p.mailAm?'Erneut einladen':'Einladung senden'}</button>`}
         ${(upn===TL_EINSCHAETZUNG_DURCH && istTeamleitung(m.upn))?`<button class="btn btn-ghost btn-sm" onclick="oeffneTL('${esc(m.upn)}')">✍ Einschätzen (Teil 1)</button>`:''}
         ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="setzeAus('${esc(m.upn)}',true)" title="Diese Person führt in dieser Runde kein Orientierungsgespräch">Kein Gespräch</button>
         ${vorgangTeile(m.upn,runde).length?`<button class="btn btn-danger btn-sm" onclick="vorgangZuruecksetzen('${esc(m.upn)}')" title="Bogen, Einschätzung und Einladungsvermerk dieser Person für die Runde löschen">Zurücksetzen</button>`:''}</td></tr>`;
   }).join('');
   const zahl = s => items.filter(x=>x.f.Runde===runde && x.f.OGStatus===s && !(x.f.MitarbeiterUpn||'').startsWith('__')).length;
@@ -1046,11 +1056,13 @@ async function zeigeAdmin(){
   app().innerHTML=`<div class="card">
     <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
       <div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(CFG.redirectUri+'?tl=1&r='+aktRunde()).then(()=>{const e=document.getElementById('adminMsg');e.className='msg ok';e.textContent='Link für Teamleitungen kopiert.';})">Link für Teamleitungen kopieren</button></div>
-      <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
+      <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${dabei.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
     ${(n=>n?`<div class="msg warn" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span><b>${n} Selbsteinschätzung(en) können an die Teamleitung freigegeben werden</b> – Person und Teamleitung haben beide abgegeben.</span><button class="btn btn-primary btn-sm" onclick="freigeben()">Jetzt an Teamleitung senden</button></div>`:'')(offeneFreigaben(runde).length)}
     ${ohneTL.length?`<div class="msg err" style="display:block"><b>Ohne Teamleitung:</b> ${ohneTL.map(m=>esc(m.name)).join(' · ')}. Diese Personen sind in keiner der Entra-Gruppen (Team-Joerg, Team-Laura, Team-Nadine) und haben in Entra auch keine:n Vorgesetzte:n. Folge: kein Teamname im Bogen, keine Benachrichtigung, niemand schätzt ein. Abhilfe: Person in Entra in die richtige Team-Gruppe aufnehmen (oder Vorgesetzte:n eintragen) – der Bogen übernimmt das beim nächsten Öffnen automatisch.</div>`:''}
     <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. Teamleitungen schätzen ihr Team in Teil 1 zusätzlich selbst ein („Link für Teamleitungen“; Status „TL ✓“) – ihr seht beide Sichten nebeneinander, die Person nicht. Bei der Abgabe bekommt die Teamleitung nur eine Benachrichtigung ohne Inhalt. Die Selbsteinschätzung erhält sie erst, wenn sie selbst eingeschätzt hat – dafür erscheint hier oben ein Freigabe-Hinweis. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Mitarbeiter:in</th><th>Version</th><th>Gesprächstermin</th><th>Status</th><th></th></tr>${zeilen}</table></div>
+    ${unbekannt.length?`<div class="msg warn" style="display:block;margin-top:12px"><b>In einer Team-Gruppe, aber nicht in der Mitarbeiterliste gefunden:</b> ${unbekannt.map(esc).join(' · ')}. Meist weicht der Anmeldename vom Kilanka-Namen ab (oder die Person ist in Kilanka nicht aktiv) – bitte melden, dann wird die Zuordnung im Worker hinterlegt.</div>`:''}
+    ${pausiert.length?`<div style="margin-top:14px;font-size:12.5px;color:var(--text-muted)"><b>Ohne Orientierungsgespräch in dieser Runde:</b> ${pausiert.map(m=>`${esc(m.name)} <button class="btn btn-ghost btn-sm" style="min-height:24px;padding:2px 8px" onclick="setzeAus('${esc(m.upn)}',false)">wieder aufnehmen</button>`).join(' · ')}</div>`:''}
     <div class="msg ${karte?'':'warn'}" id="adminMsg">${karte?'':`Die Entra-Gruppen (Team-Joerg, Team-Laura, Team-Nadine) konnten nicht gelesen werden – die Teamzuordnung fällt deshalb auf die Vorgesetzten in Entra zurück. <button class="btn btn-ghost btn-sm" onclick="gruppenFreigeben()">Zugriff auf Gruppen freigeben</button><br><span style="font-size:11.5px">Im Microsoft-Fenster bitte „Zustimmung im Namen Ihrer Organisation“ ankreuzen – dann gilt die Freigabe für alle Mitarbeitenden.</span>`}</div></div>`;
   document.getElementById('leiste').style.display='none';
 }
@@ -1133,6 +1145,7 @@ async function vorgangZuruecksetzen(u){
   const e2=document.getElementById('adminMsg'); e2.className='msg '+(fehler?'err':'ok');
   e2.textContent = fehler ? `Zurücksetzen nur teilweise gelungen (${fehler} Element(e) konnten nicht gelöscht werden).` : `Vorgang für ${m.name} zurückgesetzt – die Person steht wieder auf „Offen“ und kann neu eingeladen werden.`;
 }
+async function setzeAus(u,aus){ await setPlan(u,'aus',aus); zeigeAdmin(); }
 async function gruppenFreigeben(){ const k=await teamKarte(true); if(k) zeigeAdmin(); else alert('Freigabe nicht erfolgt: '+(gruppenFehler||'unbekannt')); }
 async function setPlan(u,k,w){
   (plan[u] ||= {})[k]=w;

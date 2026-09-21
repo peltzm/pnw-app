@@ -106,7 +106,8 @@ const OP_STICHTAG = "2026-01-01";
 // Kilanka user.id (String!) → Entra-UPN (lowercase).
 // Befüllen nach dem Abgleich-Script (Spalte KilankaId der PRUEFEN-Zeilen).
 const UPN_OVERRIDES = {
-  // "1234": "lena.blumoser@praxisneuewege.de", // Blumoser, Lena Marie
+  // Kilanka führt „Lena Marie", der Entra-Anmeldename lautet lena.blumoser@… (verifiziert 22.09.2026 im M365 Admin Center)
+  "d2c5db84-09d8-4f9b-9466-2f2939af5710": "lena.blumoser@praxisneuewege.de", // Blumoser, Lena Marie
 };
 
 // timeBase (Kilanka) → Kontingenttyp-Dropdown der App
