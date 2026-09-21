@@ -582,7 +582,7 @@ function teamName(){
 }
 function leserText(){
   const t=teamleitungFuerHinweis();
-  return `Deinen Bogen bekommen Sonja und Markus Peltz${t?' sowie deine Teamleitung '+t.name:''} als Vorbereitung auf das Gespräch – sonst niemand.`;
+  return `Deinen Bogen bekommen Sonja und Markus Peltz als Vorbereitung auf das Gespräch${t?'; deine Teamleitung '+t.name+' erhält ihn erst, nachdem sie ihre eigene Einschätzung zu Teil 1 abgegeben hat':''} – sonst niemand.`;
 }
 function fristText(){
   if(!akt.f.Termin) return 'spätestens zwei Tage vor dem Gesprächstermin';
@@ -651,7 +651,7 @@ function tlEinschaetzungFuer(maUpn, runde){
   if(!i) return null;
   const e=entpacke(i), tlUpn=(i.f.MitarbeiterUpn||'').slice(TL_PRAEFIX.length).split(':')[0];
   const tlName=GF_NAMEN[tlUpn] || ((mitarbeiter||[]).find(m=>m.upn===tlUpn)?.name||tlUpn).split(',').reverse().join(' ').trim();
-  return { abgegeben:i.f.OGStatus==='Abgegeben', status:i.f.OGStatus, skala:e.antworten.skala, kommentar:e.antworten.kommentar, tlName };
+  return { abgegeben:i.f.OGStatus==='Abgegeben', status:i.f.OGStatus, skala:e.antworten.skala, kommentar:e.antworten.kommentar, tlName, tlUpn };
 }
 function renderBogen(){
   const V = VERSIONEN[akt.f.Version] || VERSIONEN.B, a=akt.antworten, L=akt.leitung;
@@ -774,7 +774,7 @@ async function speichern(manuell, extra={}){
 }
 async function abgeben(){
   const V=VERSIONEN[akt.f.Version], offen=alleItems(V).filter(([id])=>akt.antworten.skala[id]==null).length, t=teamleitungFuerHinweis();
-  let frage='Bogen jetzt final abgeben? Danach kannst du ihn nicht mehr ändern.\n\n'+leserText()+(t?'\nDeine Teamleitung erhält ihn per E-Mail aus deinem Postfach.':'');
+  let frage='Bogen jetzt final abgeben? Danach kannst du ihn nicht mehr ändern.\n\n'+leserText()+(t?'\n'+t.name+' wird per E-Mail informiert, dass du abgegeben hast – ohne Inhalt.':'');
   if(offen) frage=`In Teil 1 sind noch ${offen} Zeile(n) ohne Angabe.\n\n`+frage;
   if(!akt.antworten.themen.length) frage='Du hast in Teil 2 noch kein Thema gewählt.\n\n'+frage;
   if(!confirm(frage)) return;
@@ -789,15 +789,15 @@ async function abgeben(){
 }
 /* Die Teamleitung hat keinen Zugriff auf die geschützte Ablage — sie bekommt den Bogen deshalb als E-Mail
  * aus dem Postfach der Person selbst (transparent, im „Gesendet"-Ordner nachvollziehbar). */
-function bogenAlsHtml(){
-  const V=VERSIONEN[akt.f.Version], a=akt.antworten, td='style="border:1px solid #E4DED2;padding:5px 8px;font-size:13px;vertical-align:top"';
+function bogenAlsHtml(akt, einleitung){
+  const V=VERSIONEN[akt.f.Version]||VERSIONEN.B, a=akt.antworten, td='style="border:1px solid #E4DED2;padding:5px 8px;font-size:13px;vertical-align:top"';
   const zeile=(l,w)=>`<tr><td ${td}>${esc(l)}</td><td ${td}><b>${esc(w)}</b></td></tr>`;
   const teil1=V.sektionen.map(([t,items])=>(V.sektionen.length>1?`<tr><td colspan="3" ${td}><b>${esc(t)}</b></td></tr>`:'')+items.map(([id,txt])=>
     `<tr><td ${td}>${esc(txt)}</td><td ${td} align="center"><b>${a.skala[id]==null?'–':(a.skala[id]==='ka'?'k. A.':a.skala[id])}</b></td><td ${td}>${esc(a.kommentar?.[id]||'')}</td></tr>`).join('')).join('');
   const kz=[...kennzahlenZeilen(akt.kennzahlen), ...erweitertZeilen(akt.kennzahlen, akt.f.AbgegebenAm).zeilen];
   const h=t=>`<h3 style="font-family:Georgia,serif;color:#5A2D15;margin:18px 0 6px">${t}</h3>`;
   return `<div style="font-family:Kodchasan,Segoe UI,Arial,sans-serif;color:#211F1B;max-width:760px">
-    <p>Hallo,</p><p style="background:#F5F0EA;padding:8px 12px;border-left:3px solid #A15F38">Für die Teamleitung: Deine eigene Einschätzung zu Teil 1 gibst du hier ab: <a href="${CFG.redirectUri}?tl=1&r=${esc(akt.f.Runde)}">${CFG.redirectUri}?tl=1&amp;r=${esc(akt.f.Runde)}</a></p><p>hier ist mein Vorbereitungsbogen für das Orientierungsgespräch${akt.f.Termin?' am '+esc(fmtDT(akt.f.Termin)):''} (${esc(V.titel)}, Runde ${esc(akt.f.Runde)}).</p>
+    ${einleitung}
     ${h('Teil 1 · Meine Einschätzung (1 = trifft gar nicht zu, 5 = trifft voll zu)')}<table style="border-collapse:collapse;width:100%">${teil1}</table>
     ${h('Teil 2 · Meine wichtigsten Themen')}<p>${a.themen.length?a.themen.map(esc).join(' · '):'–'}</p>
     ${h('Teil 3 · Kurz in Stichpunkten')}${V.fragen.map(([id,q])=>`<p style="margin:8px 0 2px;color:#6b6860">${esc(q)}</p><p style="margin:0;white-space:pre-wrap">${esc(a.text[id]||'–')}</p>`).join('')}
@@ -805,14 +805,26 @@ function bogenAlsHtml(){
     ${h('Teil 5 · Meine Vorschläge für Ziele und Vereinbarungen')}<p style="white-space:pre-wrap">${esc(a.text.ziele||'–')}</p>
     <p style="color:#8A857B;font-size:12px;margin-top:20px">Vertraulich – Personalunterlage. Automatisch erstellt aus der App „Orientierungsgespräch“ (Praxis NeueWege GmbH).</p></div>`;
 }
-async function sendeAnTeamleitung(t){
+async function sendeMail(an, betreff, html, cc){
   const req={scopes:['Mail.Send'],account:currentAccount};
   const tok=(await msalInstance.acquireTokenSilent(req).catch(()=>msalInstance.acquireTokenPopup(req))).accessToken;
-  const name=(akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
   const r=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},
-    body:JSON.stringify({message:{subject:`Orientierungsgespräch ${akt.f.Runde} – Vorbereitungsbogen ${name}`,body:{contentType:'HTML',content:bogenAlsHtml()},
-      toRecipients:[{emailAddress:{address:t.mail}}], ccRecipients:GF.map(g=>({emailAddress:{address:g}}))},saveToSentItems:true})});
+    body:JSON.stringify({message:{subject:betreff,body:{contentType:'HTML',content:html},toRecipients:[].concat(an).map(a=>({emailAddress:{address:a}})),
+      ccRecipients:(cc||[]).map(a=>({emailAddress:{address:a}}))},saveToSentItems:true})});
   if(!r.ok) throw new Error('HTTP '+r.status);
+}
+const mailRahmen = inhalt => `<div style="font-family:Kodchasan,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.55;color:#211F1B;max-width:640px">${inhalt}
+  <p style="color:#8A857B;font-size:12px;margin-top:20px">Vertraulich – Personalunterlage. Automatisch erstellt aus der App „Orientierungsgespräch“ (Praxis NeueWege GmbH).</p></div>`;
+const mailKnopf = (href,text) => `<p style="margin:20px 0"><a href="${esc(href)}" style="background:#7B3F1E;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;display:inline-block">${esc(text)}</a></p>`;
+/* Vorgabe GF 22.09.2026: Die Teamleitung bekommt bei der Abgabe NUR die Information, dass abgegeben wurde —
+ * keine Inhalte. Die Selbsteinschätzung erhält sie erst, nachdem sie selbst eingeschätzt hat (Freigabe in der GF-Übersicht). */
+async function sendeAnTeamleitung(t){
+  const name=(akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim(), link=CFG.redirectUri+'?tl=1&r='+akt.f.Runde;
+  await sendeMail(t.mail, `Orientierungsgespräch ${akt.f.Runde} – ${name} hat den Vorbereitungsbogen abgegeben`, mailRahmen(`
+    <p>Hallo ${esc(t.name.split(' ')[0])},</p>
+    <p>${esc(name)} hat den Vorbereitungsbogen für das Orientierungsgespräch${akt.f.Termin?' am <b>'+esc(fmtDT(akt.f.Termin))+'</b>':''} abgegeben.</p>
+    <p>Bitte gib jetzt – falls noch nicht geschehen – <b>deine eigene Einschätzung zu Teil 1</b> ab. Die Selbsteinschätzung von ${esc(name)} erhältst du erst danach, damit deine Sicht unabhängig bleibt.</p>
+    ${mailKnopf(link,'Mein Team einschätzen')}`), GF);
 }
 /* Papier statt online: leeres Formular mit Stammdaten und Zahlen & Fakten drucken */
 async function papier(){
@@ -875,7 +887,7 @@ async function zeigeTeamleitung(){
   app().className='wrap';
   app().innerHTML=`<div class="card">
     <div class="bogen-kopf"><div><h1>Mein Team einschätzen</h1><div class="unter">Einschätzung der Teamleitung zu Teil 1</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräche · Runde ${esc(runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
-    <div class="hinweis" style="margin-bottom:14px"><b>So geht’s:</b> Für jedes Teammitglied schätzt du dieselben Aussagen ein, die die Person in Teil 1 für sich selbst beantwortet – aus deiner Sicht als Teamleitung. Was du nicht beurteilen kannst: „k. A.“. Im Kommentarfeld kannst du Beispiele notieren. <b>Deine Einschätzung sehen nur du sowie Sonja und Markus Peltz</b>; sie wird im Gespräch neben die Selbsteinschätzung gelegt. Bitte spätestens zwei Tage vor dem jeweiligen Gespräch abgeben.</div>
+    <div class="hinweis" style="margin-bottom:14px"><b>So geht’s:</b> Für jedes Teammitglied schätzt du dieselben Aussagen ein, die die Person in Teil 1 für sich selbst beantwortet – aus deiner Sicht als Teamleitung. Was du nicht beurteilen kannst: „k. A.“. Im Kommentarfeld kannst du Beispiele notieren. <b>Deine Einschätzung sehen nur du sowie Sonja und Markus Peltz</b>; sie wird im Gespräch neben die Selbsteinschätzung gelegt. <b>Die Selbsteinschätzung der Person bekommst du erst zu sehen, nachdem du deine eigene abgegeben hast</b> – danach ist deine Einschätzung nicht mehr änderbar. Bitte spätestens zwei Tage vor dem jeweiligen Gespräch abgeben.</div>
     <div class="adminbar no-print"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?tl=1&r='+this.value" style="width:170px"></div></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Teammitglied</th><th>Meine Einschätzung</th><th></th></tr>${zeilen}</table></div></div>`;
   document.getElementById('leiste').style.display='none';
@@ -910,16 +922,24 @@ function renderTL(){
     <div class="bogen-fuss">Praxis NeueWege GmbH · vertraulich – Personalunterlage · sichtbar nur für ${istGF?'die Geschäftsführung':'die Teamleitung und die Geschäftsführung'}</div>
   </div>`;
   const el=document.getElementById('leiste'); el.style.display='flex'; el.classList.remove('offen');
-  el.innerHTML=`<span class="stand" id="saveStand">${leseModus?'Einschätzung abgegeben.':''}</span>`+
-    (leseModus?`<button class="btn btn-ghost" onclick="tlStatus('Entwurf')">Wieder bearbeiten</button>`
+  el.innerHTML=`<span class="stand" id="saveStand">${leseModus?(istGF?'Einschätzung abgegeben – nicht mehr änderbar.':'Einschätzung abgegeben – nicht mehr änderbar. Die Selbsteinschätzung erhältst du per E-Mail, sobald die Person abgegeben hat und die Geschäftsführung sie freigibt.'):''}</span>`+
+    (leseModus?''
               :`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="tlStatus('Abgegeben')">Einschätzung abgeben</button>`);
 }
 async function tlStatus(neu){
   if(neu==='Abgegeben'){
     const offen=alleItems(tlVersion()).filter(([id])=>akt.antworten.skala[id]==null).length;
-    if(!confirm((offen?`Es sind noch ${offen} Zeile(n) ohne Angabe.\n\n`:'')+'Einschätzung jetzt abgeben? Sie erscheint dann im Bogen neben der Selbsteinschätzung – sichtbar nur für die Geschäftsführung'+(istGF?'.':' und dich.'))) return;
+    if(!confirm((offen?`Es sind noch ${offen} Zeile(n) ohne Angabe.\n\n`:'')+'Einschätzung jetzt abgeben? Danach kannst du sie nicht mehr ändern – erst dann bekommst du die Selbsteinschätzung der Person zu sehen.')) return;
   }
-  if(await speichern(true,{OGStatus:neu, AbgegebenAm: neu==='Abgegeben'?new Date().toISOString():null})){ leseModus = neu==='Abgegeben'; renderTL(); }
+  if(await speichern(true,{OGStatus:neu, AbgegebenAm: neu==='Abgegeben'?new Date().toISOString():null})){
+    leseModus = neu==='Abgegeben'; renderTL();
+    if(neu==='Abgegeben' && !istGF){   // GF informieren, damit sie die Selbsteinschätzung freigeben kann
+      const name=(akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
+      sendeMail(GF, `Orientierungsgespräch ${akt.f.Runde} – Einschätzung der Teamleitung zu ${name} liegt vor`, mailRahmen(`<p>Hallo Sonja, hallo Markus,</p>
+        <p>${esc(currentAccount?.name||upn)} hat die Einschätzung zu <b>${esc(name)}</b> abgegeben. Sobald auch ${esc(name)} abgegeben hat, könnt ihr die Selbsteinschätzung in der Übersicht an die Teamleitung freigeben.</p>
+        ${mailKnopf(CFG.redirectUri+'?r='+akt.f.Runde,'Zur Übersicht')}`)).catch(e=>console.warn('GF-Benachrichtigung nicht gesendet —',e.message));
+    }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -931,6 +951,9 @@ function oeffneFuerGF(zielUpn){
   const runde=aktRunde();
   const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===zielUpn && x.f.Runde===runde);
   if(!i) return meldung('warn',esc(zielUpn)+' hat den Bogen für die Runde '+esc(runde)+' noch nicht geöffnet. <a href="'+location.pathname+'?r='+esc(runde)+'">Zur Übersicht</a>');
+  if(upn===TL_EINSCHAETZUNG_DURCH && istTeamleitung(zielUpn) && !tlEinschaetzungFuer(zielUpn,runde)?.abgegeben){
+    return meldung('warn','Bitte gib zuerst deine eigene Einschätzung zu Teil 1 ab – danach siehst du die Selbsteinschätzung. <button class="btn btn-primary btn-sm" onclick="oeffneTL(\''+esc(zielUpn)+'\')">Jetzt einschätzen</button> <button class="btn btn-ghost btn-sm" onclick="zeigeAdmin()">Zur Übersicht</button>');
+  }
   akt=entpacke(i); gfSicht=true; leseModus=true; renderBogen(); window.scrollTo(0,0);
   const alt = !akt.kennzahlen?.stand || new Date(akt.kennzahlen.stand).toDateString() !== new Date().toDateString() || akt.kennzahlen.teamleitung===undefined || (akt.kennzahlen.teamleitung && !akt.kennzahlen.teamleitung.quelle);
   if(['Entwurf','Papier'].includes(akt.f.OGStatus) && alt) kennzahlenNeu(true);
@@ -958,7 +981,7 @@ async function zeigeAdmin(){
       <td>${gesperrt?`<span style="font-size:12.5px;color:var(--text-muted)">Bogen „${esc(VERSIONEN[ver].titel)}“ folgt – vorerst nicht freigegeben</span>`
         :`<select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).filter(([k])=>AKTIVE_VERSIONEN.includes(k)).map(([k,v])=>`<option value="${k}" ${ver===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select>`}</td>
       <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)">${p.mailAm?`<br><span style="font-size:11px;color:var(--text-hint)">Einladung gesendet ${esc(fmtDT(p.mailAm))}</span>`:''}</td>
-      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${(t=>t?` <span class="status ${t.abgegeben?'abgegeben':'entwurf'}" title="Einschätzung durch ${esc(t.tlName)}">${istTeamleitung(m.upn)?'Sonja':'TL'} ${t.abgegeben?'✓':'…'}</span>`:'')(tlEinschaetzungFuer(m.upn,runde))}${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
+      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${(t=>t?` <span class="status ${t.abgegeben?'abgegeben':'entwurf'}" title="Einschätzung durch ${esc(t.tlName)}">${istTeamleitung(m.upn)?'Sonja':'TL'} ${t.abgegeben?'✓':'…'}</span>`:'')(tlEinschaetzungFuer(m.upn,runde))}${(i && entpacke(i).leitung.freigabeTL)?` <span class="status offen" title="Selbsteinschätzung an die Teamleitung gesendet ${esc(fmtDT(entpacke(i).leitung.freigabeTL))}">freigegeben</span>`:''}${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
       <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="zeigeKennzahlen('${esc(m.upn)}')" title="Kennzahlen aus Kilanka – auch bevor der Bogen angelegt ist">📊 Kennzahlen</button>
         ${gesperrt?'':`<button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
         <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">${p.mailAm?'Erneut einladen':'Einladung senden'}</button>`}
@@ -971,7 +994,8 @@ async function zeigeAdmin(){
     <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
       <div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(CFG.redirectUri+'?tl=1&r='+aktRunde()).then(()=>{const e=document.getElementById('adminMsg');e.className='msg ok';e.textContent='Link für Teamleitungen kopiert.';})">Link für Teamleitungen kopieren</button></div>
       <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
-    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. Teamleitungen schätzen ihr Team in Teil 1 zusätzlich selbst ein („Link für Teamleitungen“; Status „TL ✓“) – ihr seht beide Sichten nebeneinander, die Person nicht. Bei der Abgabe geht der Bogen per E-Mail an die Teamleitung (Vorgesetzte:r laut Entra), ihr steht in Kopie. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
+    ${(n=>n?`<div class="msg warn" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span><b>${n} Selbsteinschätzung(en) können an die Teamleitung freigegeben werden</b> – Person und Teamleitung haben beide abgegeben.</span><button class="btn btn-primary btn-sm" onclick="freigeben()">Jetzt an Teamleitung senden</button></div>`:'')(offeneFreigaben(runde).length)}
+    <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. Teamleitungen schätzen ihr Team in Teil 1 zusätzlich selbst ein („Link für Teamleitungen“; Status „TL ✓“) – ihr seht beide Sichten nebeneinander, die Person nicht. Bei der Abgabe bekommt die Teamleitung nur eine Benachrichtigung ohne Inhalt. Die Selbsteinschätzung erhält sie erst, wenn sie selbst eingeschätzt hat – dafür erscheint hier oben ein Freigabe-Hinweis. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Mitarbeiter:in</th><th>Version</th><th>Gesprächstermin</th><th>Status</th><th></th></tr>${zeilen}</table></div>
     <div class="msg ${karte?'':'warn'}" id="adminMsg">${karte?'':`Die Entra-Gruppen (Team-Joerg, Team-Laura, Team-Nadine) konnten nicht gelesen werden – die Teamzuordnung fällt deshalb auf die Vorgesetzten in Entra zurück. <button class="btn btn-ghost btn-sm" onclick="gruppenFreigeben()">Zugriff auf Gruppen freigeben</button><br><span style="font-size:11.5px">Im Microsoft-Fenster bitte „Zustimmung im Namen Ihrer Organisation“ ankreuzen – dann gilt die Freigabe für alle Mitarbeitenden.</span>`}</div></div>`;
   document.getElementById('leiste').style.display='none';
@@ -1002,6 +1026,31 @@ async function zeigeKennzahlen(u, neu){
     dlg.innerHTML = kopf('Kennzahlen aus Kilanka')+`<div class="kz-body"><div class="msg err" style="margin:0">Kennzahlen konnten nicht geladen werden: ${esc(e.message)}</div></div>`;
   }
 }
+/* Freigabe = Selbsteinschätzung per E-Mail an genau die Teamleitung, die ihre Einschätzung abgegeben hat.
+ * Bedingung: Person UND Teamleitung haben abgegeben, noch nicht freigegeben. Die Ablage selbst bleibt für Teamleitungen gesperrt. */
+function offeneFreigaben(runde){
+  return items.filter(i => i.f.Runde===runde && !(i.f.MitarbeiterUpn||'').startsWith('__') && ['Abgegeben','Abgeschlossen'].includes(i.f.OGStatus))
+    .map(i => ({ i, e:entpacke(i), t:tlEinschaetzungFuer((i.f.MitarbeiterUpn||'').toLowerCase(), runde) }))
+    .filter(x => x.t?.abgegeben && !GF.includes(x.t.tlUpn) && !x.e.leitung.freigabeTL);
+}
+async function freigeben(){
+  const runde=aktRunde(), offen=offeneFreigaben(runde), el=document.getElementById('adminMsg');
+  if(!offen.length) return;
+  if(!confirm('Selbsteinschätzung jetzt an die Teamleitung senden?\n\n'+offen.map(x=>'• '+x.i.f.MitarbeiterName+' → '+x.t.tlName).join('\n')+'\n\nDie Teamleitungen haben ihre eigene Einschätzung bereits abgegeben.')) return;
+  let ok=0;
+  for(const x of offen){
+    const name=(x.i.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
+    try{
+      await sendeMail(x.t.tlUpn, `Orientierungsgespräch ${runde} – Selbsteinschätzung ${name}`, bogenAlsHtml(x.e,
+        `<p>Hallo ${esc(x.t.tlName.split(' ')[0])},</p><p>du hast deine Einschätzung zu <b>${esc(name)}</b> abgegeben – hier ist nun die Selbsteinschätzung als Vorbereitung auf das Gespräch${x.i.f.Termin?' am '+esc(fmtDT(x.i.f.Termin)):''}. Bitte behandle sie vertraulich.</p>`));
+      x.e.leitung.freigabeTL=new Date().toISOString();
+      await graph(`${LISTE()}/items/${x.i.spId}/fields`,{method:'PATCH',body:JSON.stringify({LeitungJSON:JSON.stringify(x.e.leitung)})});
+      x.i.f.LeitungJSON=JSON.stringify(x.e.leitung); ok++;
+    }catch(e){ console.warn('Freigabe fehlgeschlagen —',name,e.message); }
+  }
+  await zeigeAdmin();
+  const e2=document.getElementById('adminMsg'); e2.className='msg '+(ok===offen.length?'ok':'err'); e2.textContent=`${ok} von ${offen.length} Selbsteinschätzung(en) an die Teamleitung gesendet.`;
+}
 async function gruppenFreigeben(){ const k=await teamKarte(true); if(k) zeigeAdmin(); else alert('Freigabe nicht erfolgt: '+(gruppenFehler||'unbekannt')); }
 async function setPlan(u,k,w){
   (plan[u] ||= {})[k]=w;
@@ -1025,7 +1074,7 @@ function einladungHtml(m, link, termin){
     <p style="margin:22px 0"><a href="${esc(link)}" style="background:#7B3F1E;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;display:inline-block">Zum Vorbereitungsbogen</a></p>
     <p>Du meldest dich mit deinem Praxis-NeueWege-Konto an. Du kannst jederzeit zwischenspeichern und später weitermachen – bitte gib den Bogen <b>spätestens zwei Tage vor dem Gespräch</b> final ab.</p>
     <p>Wer lieber auf Papier schreibt: Im Bogen gibt es unten „Auf Papier ausfüllen“ – dann bitte ebenfalls spätestens zwei Tage vorher bei uns abgeben.</p>
-    <p>Den Bogen bekommen wir beide und deine Teamleitung als Vorbereitung auf das Gespräch.</p>
+    <p>Den Bogen bekommen wir beide als Vorbereitung auf das Gespräch. Deine Teamleitung gibt zu Teil 1 unabhängig davon eine eigene Einschätzung ab und erhält deinen Bogen erst danach.</p>
     <p>Wir freuen uns auf das Gespräch!<br>Sonja &amp; Markus</p>
     <p style="font-size:12px;color:#8A857B;border-top:1px solid #E4DED2;padding-top:10px;margin-top:24px">Falls der Button nicht funktioniert, nutze diesen Link: <a href="${esc(link)}" style="color:#A15F38">Vorbereitungsbogen öffnen</a></p></div>`;
 }

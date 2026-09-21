@@ -110,3 +110,13 @@ Jeder Zweig ist fail-soft (`{ vorhanden:false, fehler|grund }`); der Bogen zeigt
 - Benötigt die delegierte Berechtigung **GroupMember.Read.All mit Admin-Zustimmung**. Sie steht bewusst nicht in `SCOPES`
   (sonst wäre ohne Zustimmung keine Anmeldung möglich), sondern wird separat und still angefordert; ohne Zustimmung greift
   der Rückfall. Die GF-Übersicht zeigt dann einen Hinweis mit dem Button „Zugriff auf Gruppen freigeben".
+
+## Erst einschätzen, dann ansehen (22.09.2026)
+
+- Bei „Final abgeben" bekommt die Teamleitung **nur eine Benachrichtigung ohne Inhalt** (GF in Kopie) mit Link zur eigenen Einschätzung.
+- Die Einschätzung der Teamleitung ist nach der Abgabe **nicht mehr änderbar**; die GF wird per Mail informiert.
+- Haben Person **und** Teamleitung abgegeben, zeigt die GF-Übersicht einen Freigabe-Hinweis. „Jetzt an Teamleitung senden" schickt
+  die Selbsteinschätzung als HTML-Mail aus dem GF-Postfach an genau die Teamleitung, die eingeschätzt hat, und vermerkt
+  `leitung.freigabeTL` im Bogen (Chip „freigegeben"). Hintergrund: Die Ablage ist für Teamleitungen nicht lesbar
+  (nur eigene Elemente) — E-Mail ist der einzige Kanal, und nur die GF kann beide Seiten sehen.
+- Gleiche Regel für Sonja bei den drei Teamleitungen: Deren Bogen öffnet sich für sie erst nach ihrer eigenen Einschätzung.
