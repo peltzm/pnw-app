@@ -100,3 +100,13 @@ Jeder Zweig ist fail-soft (`{ vorhanden:false, fehler|grund }`); der Bogen zeigt
   eigenen Elemente zu; fremde `__tl__`-Elemente sperren weiterhin.
 - GF-Sicht: Wert und Kommentar der Teamleitung stehen unter der jeweiligen Aussage, Abweichungen ≥ 2 Punkte sind markiert;
   Übersicht zeigt „TL ✓ / TL …". Im Druck der GF-Sicht enthalten, in Mitarbeiter-Sicht und Papierformular nie.
+
+## Teamzugehörigkeit aus Entra-Gruppen (22.09.2026)
+
+- Quelle sind die Gruppen `Team-Joerg`, `Team-Laura`, `Team-Nadine` (Konstante `TEAMS`: Gruppe → Teamleitung). Daraus kommen:
+  Teamname im Bogen, Leserkreis/Abgabe-Mail, Teamliste in der Teamleitungs-Sicht, Team-Markierung in der GF-Übersicht.
+- Wer in keiner Team-Gruppe ist (z. B. Nordstern), fällt auf die Vorgesetzten-Zuordnung in Entra zurück; Teamleitungen selbst
+  sind der Geschäftsführung zugeordnet.
+- Benötigt die delegierte Berechtigung **GroupMember.Read.All mit Admin-Zustimmung**. Sie steht bewusst nicht in `SCOPES`
+  (sonst wäre ohne Zustimmung keine Anmeldung möglich), sondern wird separat und still angefordert; ohne Zustimmung greift
+  der Rückfall. Die GF-Übersicht zeigt dann einen Hinweis mit dem Button „Zugriff auf Gruppen freigeben".

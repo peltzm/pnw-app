@@ -227,6 +227,15 @@ const CFG = {
 };
 const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All'];   // ReadBasic: Teamleitung (Entra-Manager) wie in der Organisation-App
 const GF = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+/* Team-Zugehörigkeit kommt aus den Entra-Gruppen (Vorgabe GF 22.09.2026). Gruppe → Teamleitung.
+ * Wer in keiner dieser Gruppen ist (z. B. Nordstern), fällt auf die Vorgesetzten-Zuordnung in Entra zurück.
+ * Benötigt die delegierte Berechtigung GroupMember.Read.All mit Admin-Zustimmung — bewusst NICHT in SCOPES,
+ * damit die Anmeldung auch ohne diese Zustimmung funktioniert (dann greift der Rückfall). */
+const TEAMS = [
+  { gruppe:'team-joerg@praxisneuewege.de',  tl:'joerg.schneider@praxisneuewege.de', name:'Jörg Schneider' },
+  { gruppe:'team-laura@praxisneuewege.de',  tl:'laura.meier@praxisneuewege.de',     name:'Laura Meier' },
+  { gruppe:'team-nadine@praxisneuewege.de', tl:'nadine.grund@praxisneuewege.de',    name:'Nadine Grund' }
+];
 /* Standard-Version je Gruppe (Vorgabe GF 20.09.2026) — in der Übersicht je Person änderbar.
  * Abgleich über den Kilanka-Namen „Nachname, Vorname", weil UPNs nach Namensänderungen abweichen können.
  * Nordstern-Team datenbasiert geprüft: Gruppendienst-Buchungen (Kostenstelle Nordstern) 06–09/2026. */
@@ -235,7 +244,8 @@ const GRUPPEN = {
   C: { label:'Nordstern',   namen:['hermann, jessica','edler, franziska','freundl, kilian','kerschenlohr, nadine','kraus, martina','tischoff, silvia','schütze, danielle','dietrich, saskia'] }
 };
 function standardVersion(m){
-  const n=(m.name||'').trim().toLowerCase();
+  const tok = x => new Set(String(x||'').toLowerCase().split(/[\s,]+/).filter(Boolean));
+  const n = { startsWith: x => { const t=tok(m.name); return [...tok(x)].every(w=>t.has(w)); } };
   // Solange der Teamleitungs-Bogen (A) nicht freigegeben ist, bekommen die Teamleitungen den ambulanten Bogen (Vorgabe GF 21.09.2026)
   for(const [v,g] of Object.entries(GRUPPEN)) if(g.namen.some(x=>n.startsWith(x))) return AKTIVE_VERSIONEN.includes(v) ? v : 'B';
   return 'B';
@@ -426,12 +436,39 @@ async function start(){
 /* ═══════════════════════════════════════════════════════════
  * KENNZAHLEN AUS KILANKA (über den Worker, Berechtigung serverseitig)
  * ═══════════════════════════════════════════════════════════ */
+/* ── Entra-Gruppen: Mitglieder der Team-Gruppen (einmal je Sitzung) ── */
+let teamKartePromise=null, gruppenFehler=null;
+async function gruppenToken(interaktiv){
+  const req={scopes:['GroupMember.Read.All'],account:currentAccount};
+  try{ return (await msalInstance.acquireTokenSilent(req)).accessToken; }
+  catch(e){ if(!interaktiv) throw e; return (await msalInstance.acquireTokenPopup(req)).accessToken; }
+}
+function teamKarte(interaktiv){
+  if(interaktiv) teamKartePromise=null;
+  return teamKartePromise ||= (async()=>{
+    try{
+      const tok=await gruppenToken(interaktiv), karte={};   // upn → Team
+      const hole=async url=>{ const r=await fetch(url,{headers:{Authorization:'Bearer '+tok,ConsistencyLevel:'eventual'}}); if(!r.ok) throw new Error('Graph '+r.status); return r.json(); };
+      for(const t of TEAMS){
+        const g=(await hole('https://graph.microsoft.com/v1.0/groups?$filter='+encodeURIComponent(`mail eq '${t.gruppe}'`)+'&$select=id,displayName')).value?.[0];
+        if(!g){ console.warn('Entra-Gruppe nicht gefunden:',t.gruppe); continue; }
+        t.mitglieder=[]; let url=`https://graph.microsoft.com/v1.0/groups/${g.id}/members/microsoft.graph.user?$select=displayName,userPrincipalName,mail&$top=200`;
+        while(url){ const d=await hole(url); for(const u of d.value||[]){ const x=(u.userPrincipalName||u.mail||'').toLowerCase(); if(!x) continue; t.mitglieder.push({upn:x,name:u.displayName||x}); if(x!==t.tl) karte[x]=t; } url=d['@odata.nextLink']||null; }
+      }
+      gruppenFehler=null; return karte;
+    }catch(e){ gruppenFehler=e.message; console.warn('Entra-Gruppen nicht lesbar —',e.message); return null; }
+  })();
+}
 /* Teamleitung = Vorgesetzte:r in Entra (dieselbe Hierarchie wie Organisation-App und Cockpit). Fail-soft. */
 async function holeTeamleitung(zielUpn){
+  const ziel=(zielUpn||upn).toLowerCase();
+  const karte=await teamKarte(false);
+  if(karte?.[ziel]) return { name:karte[ziel].name, mail:karte[ziel].tl, quelle:'gruppe' };
+  if(TEAMS.some(t=>t.tl===ziel)) return { name:'Geschäftsführung', mail:GF[1], quelle:'gruppe' };   // Teamleitungen sind der GF unterstellt
   try{
     const pfad = (zielUpn && zielUpn!==upn) ? `/users/${encodeURIComponent(zielUpn)}/manager` : '/me/manager';
     const m = await graph(pfad+'?$select=displayName,mail,userPrincipalName');
-    return m ? { name:m.displayName||'', mail:(m.mail||m.userPrincipalName||'').toLowerCase() } : null;
+    return m ? { name:m.displayName||'', mail:(m.mail||m.userPrincipalName||'').toLowerCase(), quelle:'manager' } : null;
   }catch(e){ console.warn('Teamleitung nicht ermittelbar —', e.message); return null; }
 }
 async function holeKennzahlen(zielUpn){
@@ -574,7 +611,7 @@ async function oeffneEigenen(){
   }
   akt = entpacke(i); gfSicht=false;
   leseModus = ['Abgegeben','Abgeschlossen'].includes(akt.f.OGStatus);
-  if(!leseModus && (!akt.kennzahlen?.erweitert || akt.kennzahlen.teamleitung===undefined)){
+  if(!leseModus && (!akt.kennzahlen?.erweitert || akt.kennzahlen.teamleitung===undefined || (akt.kennzahlen.teamleitung && !akt.kennzahlen.teamleitung.quelle))){
     try{
       lade('Kennzahlen werden aktualisiert …');
       const k=await holeKennzahlen(); delete k._mitarbeiterListe; akt.kennzahlen=k;
@@ -646,7 +683,7 @@ function renderBogen(){
   app().className='wrap';
   app().innerHTML = `
   ${gfSicht?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zurueckAdmin()">← Übersicht</button></div>`
-    :(akt.kennzahlen?.rolle==='tl'?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zuTeam()">👥 Mein Team einschätzen (Teil 1)</button></div>`:'')}
+    :((akt.kennzahlen?.rolle==='tl' || TEAMS.some(t=>t.tl===upn))?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zuTeam()">👥 Mein Team einschätzen (Teil 1)</button></div>`:'')}
   <div class="card">
     <div class="bogen-kopf"><div><h1>Orientierungsgespräch</h1><div class="unter">${esc(V.titel)}</div><div class="eyebrow">Praxis NeueWege · Vorbereitungsbogen · Runde ${esc(akt.f.Runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt="Praxis NeueWege"></div>
     <div class="stamm">
@@ -818,9 +855,12 @@ async function zeigeTeamleitung(){
   const runde=aktRunde(); tlModus=false; akt=null;
   lade('Dein Team wird geladen …');
   if(!tlTeam){
-    try{ const k=await holeKennzahlen(); tlTeam = k.rolle==='tl' ? (k._mitarbeiterListe||[]).filter(m=>m.upn!==upn).sort((a,b)=>a.name.localeCompare(b.name,'de')) : []; }
+    const eigenes = TEAMS.find(t=>t.tl===upn);
+    if(eigenes){ await teamKarte(false); if(eigenes.mitglieder) tlTeam = eigenes.mitglieder.filter(m=>m.upn!==upn && !GF.includes(m.upn)); }
+    if(!tlTeam) try{ const k=await holeKennzahlen(); tlTeam = k.rolle==='tl' ? (k._mitarbeiterListe||[]).filter(m=>m.upn!==upn) : []; }
     catch(e){ return meldung('err','Dein Team konnte nicht geladen werden: '+esc(e.message)); }
   }
+  tlTeam.sort((a,b)=>a.name.localeCompare(b.name,'de'));
   if(!tlTeam.length) return meldung('warn','Der Link ist unvollständig. Bitte verwende den Link aus deiner Einladung.');
   const zeilen = tlTeam.map(m=>{
     const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===tlKey(upn,m.upn) && x.f.Runde===runde), st=i?.f.OGStatus||'Offen';
@@ -887,7 +927,7 @@ function oeffneFuerGF(zielUpn){
   const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===zielUpn && x.f.Runde===runde);
   if(!i) return meldung('warn',esc(zielUpn)+' hat den Bogen für die Runde '+esc(runde)+' noch nicht geöffnet. <a href="'+location.pathname+'?r='+esc(runde)+'">Zur Übersicht</a>');
   akt=entpacke(i); gfSicht=true; leseModus=true; renderBogen(); window.scrollTo(0,0);
-  const alt = !akt.kennzahlen?.stand || new Date(akt.kennzahlen.stand).toDateString() !== new Date().toDateString() || akt.kennzahlen.teamleitung===undefined;
+  const alt = !akt.kennzahlen?.stand || new Date(akt.kennzahlen.stand).toDateString() !== new Date().toDateString() || akt.kennzahlen.teamleitung===undefined || (akt.kennzahlen.teamleitung && !akt.kennzahlen.teamleitung.quelle);
   if(['Entwurf','Papier'].includes(akt.f.OGStatus) && alt) kennzahlenNeu(true);
 }
 function zurueckAdmin(){ if(dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return; dirty=false; akt=null; zeigeAdmin(); }
@@ -902,13 +942,14 @@ async function zeigeAdmin(){
     try{ const k=await holeKennzahlen(); mitarbeiter=(k._mitarbeiterListe||[]).filter(m=>!GF.includes(m.upn)).sort((a,b)=>a.name.localeCompare(b.name,'de')); }
     catch(e){ return meldung('err','Mitarbeiterliste nicht verfügbar: '+esc(e.message)); }
   }
+  const karte = await teamKarte(false);
   planItem = items.find(x=>x.f.MitarbeiterUpn===planKey(runde)) || null;
   try{ plan = planItem ? JSON.parse(planItem.f.AntwortenJSON||'{}') : {}; }catch(e){ plan={}; }
   const zeilen = mitarbeiter.map(m=>{
     const i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===m.upn && x.f.Runde===runde), st=i?.f.OGStatus||'Offen', p=plan[m.upn]||{};
-    const nm=(m.name||'').trim().toLowerCase(), grp=Object.values(GRUPPEN).find(g=>g.namen.some(x=>nm.startsWith(x)))?.label;
+    const nmTok=new Set((m.name||'').toLowerCase().split(/[\s,]+/)), grp=Object.values(GRUPPEN).find(g=>g.namen.some(x=>x.split(/[\s,]+/).every(w=>nmTok.has(w))))?.label;
     const ver=AKTIVE_VERSIONEN.includes(p.v)?p.v:standardVersion(m), gesperrt=false;   // eine früher gespeicherte Auswahl „A" fällt auf den Standard zurück
-    return `<tr><td><b>${esc(m.name)}</b>${grp?` <span class="status abgeschlossen" style="font-weight:500">${esc(grp)}</span>`:''}<br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
+    return `<tr><td><b>${esc(m.name)}</b>${grp?` <span class="status abgeschlossen" style="font-weight:500">${esc(grp)}</span>`:''}${karte?.[m.upn]?` <span class="status offen" style="font-weight:500">Team ${esc(karte[m.upn].name)}</span>`:''}<br><span style="font-size:11px;color:var(--text-hint)">${esc(m.upn)}</span></td>
       <td>${gesperrt?`<span style="font-size:12.5px;color:var(--text-muted)">Bogen „${esc(VERSIONEN[ver].titel)}“ folgt – vorerst nicht freigegeben</span>`
         :`<select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).filter(([k])=>AKTIVE_VERSIONEN.includes(k)).map(([k,v])=>`<option value="${k}" ${ver===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select>`}</td>
       <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)"></td>
@@ -926,7 +967,7 @@ async function zeigeAdmin(){
       <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${mitarbeiter.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
     <div class="hinweis" style="margin-bottom:14px"><b>Ablauf:</b> Version und Termin je Person wählen → Link per E-Mail senden. Beim ersten Öffnen legt die Person ihren Bogen selbst an; Teil 4 wird dabei mit ihren Kilanka-Kennzahlen befüllt. „📊 Kennzahlen“ zeigt euch die Werte jederzeit vorab – auch bevor der Bogen angelegt ist. „Öffnen“ zeigt den Bogen; dort tragt ihr im Gespräch Teil 5 ein. Teamleitungen schätzen ihr Team in Teil 1 zusätzlich selbst ein („Link für Teamleitungen“; Status „TL ✓“) – ihr seht beide Sichten nebeneinander, die Person nicht. Bei der Abgabe geht der Bogen per E-Mail an die Teamleitung (Vorgesetzte:r laut Entra), ihr steht in Kopie. <b>Alles, was ihr eintragt, sieht die Person auch.</b></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Mitarbeiter:in</th><th>Version</th><th>Gesprächstermin</th><th>Status</th><th></th></tr>${zeilen}</table></div>
-    <div class="msg" id="adminMsg"></div></div>`;
+    <div class="msg ${karte?'':'warn'}" id="adminMsg">${karte?'':`Die Entra-Gruppen (Team-Joerg, Team-Laura, Team-Nadine) konnten nicht gelesen werden – die Teamzuordnung fällt deshalb auf die Vorgesetzten in Entra zurück. <button class="btn btn-ghost btn-sm" onclick="gruppenFreigeben()">Zugriff auf Gruppen freigeben</button><br><span style="font-size:11.5px">Im Microsoft-Fenster bitte „Zustimmung im Namen Ihrer Organisation“ ankreuzen – dann gilt die Freigabe für alle Mitarbeitenden.</span>`}</div></div>`;
   document.getElementById('leiste').style.display='none';
 }
 const kzCache = {};   // upn → Kennzahlen (pro Sitzung; schont das Kilanka-Rate-Limit)
@@ -955,6 +996,7 @@ async function zeigeKennzahlen(u, neu){
     dlg.innerHTML = kopf('Kennzahlen aus Kilanka')+`<div class="kz-body"><div class="msg err" style="margin:0">Kennzahlen konnten nicht geladen werden: ${esc(e.message)}</div></div>`;
   }
 }
+async function gruppenFreigeben(){ const k=await teamKarte(true); if(k) zeigeAdmin(); else alert('Freigabe nicht erfolgt: '+(gruppenFehler||'unbekannt')); }
 async function setPlan(u,k,w){
   (plan[u] ||= {})[k]=w;
   const runde=aktRunde(), body={AntwortenJSON:JSON.stringify(plan)};
