@@ -334,6 +334,10 @@ async function diagnose() {
   } catch(_) { /* Diagnose ist Beiwerk — Fehler hier nicht weiter melden */ }
 }
 
+function istDAH(leistung) {
+  return /\bDAH\b/i.test(String(leistung || ''));
+}
+
 function verteileDaten() {
   const meineUpn = (daten.nutzer || '').toLowerCase();
   const rolleText = { gf: 'Geschäftsführung — alle Mitarbeitenden', tl: 'Teamleitung — eigenes Team', fk: 'Eigene Ansicht' };
@@ -346,7 +350,12 @@ function verteileDaten() {
       `<div class="alert-warn">Die Teamzugeh&ouml;rigkeit konnte gerade nicht aus Entra ID gelesen werden. Falls du eine Teamleitung bist, fehlt dein Team in dieser Ansicht &mdash; bitte in einer Minute aktualisieren.</div>`;
   }
 
-  const alle = daten.gruppen || [];
+  // DAH ausblenden: hier unterschreibt die Fachkraft gesammelt, es gibt
+  // keine Klientenunterschrift je Leistung — die Zeilen sind also nie "offen".
+  const alle = (daten.gruppen || []).map(g => {
+    const rows = (g.rows || []).filter(r => !istDAH(r.leistung));
+    return { ...g, rows, count: rows.length };
+  }).filter(g => g.count > 0);
   eigenGruppe = alle.find(g => (g.upn || '').toLowerCase() === meineUpn) || null;
   const team = alle.filter(g => (g.upn || '').toLowerCase() !== meineUpn);
 
