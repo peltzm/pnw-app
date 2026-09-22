@@ -165,7 +165,7 @@ const CLIENT_GRAPH = {
     validFrom: 1, validUntil: 1,
     legalBasis: { name: 1 },
     department: { id: 1, name: 1, shortName: 1 }, // shortName = Kurzname (Probe; Fallback: contacts-Map)
-    departmentResponsible: { recName: 1, email: 1 }, // email = Mailadresse der ASD-Sachbearbeitung (Berichtsversand)
+    departmentResponsible: { id: 1, recName: 1 }, // E-Mail der Sachbearbeitung kommt ueber die Kontakt-ID aus dem Adressbuch (contacts)
     fileReference: 1, reportDueDate: 1, nextMeeting: 1,
     attendants: {
       validFrom: 1, validUntil: 1, amount: 1, // amount = Verteilungsgewicht (z. B. 50/50 bei Tandem)
@@ -525,7 +525,7 @@ function bewilligteWochenstunden(action, now) {
   return null;
 }
 
-function buildClientProfile(client, action, role, now, qualiMap) {
+function buildClientProfile(client, action, role, now, qualiMap, kontaktMails) {
   // Kontingent: mit timeBase gültige Bewilligung suchen; Mengen-Kontingente
   // (timeBase quantity) für Fachleistungsstunden ignorieren
   let stunden = null, stundenTyp = "", kontingentHinweis = "", bewVon = null, bewBis = null;
@@ -600,7 +600,7 @@ function buildClientProfile(client, action, role, now, qualiMap) {
     Jugendamt: action.department?.name || "",
     Hilfeart: action.legalBasis?.name || "",
     Sachbearbeitung_JA: action.departmentResponsible?.recName || "",
-    Sachbearbeitung_JA_Mail: (action.departmentResponsible?.email || "").trim().toLowerCase(),
+    Sachbearbeitung_JA_Mail: (kontaktMails && kontaktMails.get(String(action.departmentResponsible?.id ?? ""))) || "",
     Hilfebeginn: isoDate(kDate(action.validFrom)),
     Hilfe_Ende: isoDate(kDate(action.validUntil)),
     Naechstes_HPG: isoDate(kDate(action.nextMeeting)),
@@ -657,7 +657,7 @@ function clientsForUser(allClients, upn, now, qualiMap, ansprechpartnerMap, amtK
       if (!prev || ROLE_RANK[m.role] > ROLE_RANK[prev.role]) perAction.set(key, m);
     }
     for (const m of perAction.values()) {
-      const profil = buildClientProfile(client, m.action, m.role, now, qualiMap);
+      const profil = buildClientProfile(client, m.action, m.role, now, qualiMap, amtKurz && amtKurz.mails);
       profil.aktiv = isCurrent(m.action.validFrom, m.action.validUntil, now);
       profil.Ansprechpartner_JA = (ansprechpartnerMap && ansprechpartnerMap.get(String(m.action.department?.id ?? ""))) || [];
       profil.Ansprechpartner_JA_Mails = (ansprechpartnerMap && ansprechpartnerMap.mails && ansprechpartnerMap.mails.get(String(m.action.department?.id ?? ""))) || {};
@@ -704,7 +704,7 @@ function aemterListe(allClients, amtKurz) {
   return [...map].map(([lang, kurz]) => ({ lang, kurz })).sort((a, b) => a.kurz.localeCompare(b.kurz, "de"));
 }
 
-function ansprechpartnerJeAmt(allClients) {
+function ansprechpartnerJeAmt(allClients, kontaktMails) {
   const map = new Map();
   for (const client of allClients) {
     if (kDate(client.deletedAt)) continue;
@@ -714,7 +714,7 @@ function ansprechpartnerJeAmt(allClients) {
       const name = action.departmentResponsible?.recName;
       if (!amt || !name) continue;
       if (!map.has(amt)) map.set(amt, new Map());
-      const mail = (action.departmentResponsible?.email || "").trim().toLowerCase();
+      const mail = (kontaktMails && kontaktMails.get(String(action.departmentResponsible?.id ?? ""))) || "";
       if (!map.get(amt).get(name)) map.get(amt).set(name, mail);   // Name -> Mailadresse (erste gefundene)
     }
   }
@@ -1187,14 +1187,18 @@ async function fetchAmtKurznamen(env) {
     return amtKurznameCache.map;
   }
   const map = new Map();
+  map.mails = new Map();   // Kontakt-ID -> E-Mail
   try {
     for (let offset = 0; ; offset += 1000) {
       const page = await kilankaPost(env, "contacts", {
-        id: 1, shortName: 1, deletedAt: 1, $limit: 1000, $offset: offset,
+        id: 1, shortName: 1, email: 1, deletedAt: 1, $limit: 1000, $offset: offset,
       });
       if (!Array.isArray(page)) break;
       for (const k of page) {
         if (k?.shortName) map.set(String(k.id), k.shortName);
+        // E-Mail je Kontakt-ID (fuer den Berichtsversand an die ASD-Sachbearbeitung)
+        const mail = String(k?.email || "").trim().toLowerCase();
+        if (mail && !kDate(k.deletedAt)) map.mails.set(String(k.id), mail);
       }
       if (page.length < 1000) break;
     }
@@ -2378,7 +2382,7 @@ export default {
           fetchQualiMap(env, now),
           fetchAmtKurznamen(env),
         ]);
-        const klienten = clientsForUser(all, auth.upn, now, qualiMap, ansprechpartnerJeAmt(all), amtKurz);
+        const klienten = clientsForUser(all, auth.upn, now, qualiMap, ansprechpartnerJeAmt(all, amtKurz && amtKurz.mails), amtKurz);
         // Alle vergebenen Qualifikationen als Auswahlliste (ohne "NICHT verwenden"-Alteintraege)
         const qualifikationen = [...new Set(Object.values(qualiMap))]
           .filter((q) => !/^\s*nicht\s/i.test(q))

@@ -454,9 +454,9 @@
             <div id="asdVersandBlock" style="border-top:1px solid #e8c4a8; margin:12px 0 14px; padding-top:12px;">
               <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Versand an das Jugendamt</div>
               <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Mit der finalen Freigabe wird das PDF in SharePoint abgelegt und an die Sachbearbeitung (ASD) gesendet – kennwortgeschützt, das Kennwort folgt in einer zweiten E-Mail aus Ihrem Postfach.</div>
-              <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt</label><input type="text" id="ASD_Name" readonly style="background:#f6f6f4;"></div>
+              <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Name für die Anrede, änderbar)</span></label><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:8px;"><label>E-Mail der ASD-Sachbearbeitung <span style="font-weight:normal; color:var(--text-muted);">(aus Kilanka, änderbar)</span></label><input type="email" id="ASD_Mail" placeholder="vorname.nachname@landkreis-xy.de" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
-              <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(mit dem Amt vereinbart, wird nicht gespeichert)</span></label><input type="text" id="ASD_Kennwort" autocomplete="off" placeholder="Kennwort"></div>
+              <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(mit dem Amt vereinbart, wird nicht gespeichert)</span></label><div style="display:flex; gap:6px; align-items:center;"><input type="password" id="ASD_Kennwort" autocomplete="new-password" placeholder="Kennwort" style="flex:1;"><button type="button" id="btnKennwortAuge" onclick="kennwortAnzeigen()" title="Kennwort anzeigen" aria-label="Kennwort anzeigen" style="min-height:36px; padding:0 10px; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; font-size:16px; line-height:1;">&#128065;</button></div></div>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
               <button class="btn" id="btnTlFreigeben" onclick="tlFinalFreigeben()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
@@ -841,9 +841,17 @@ function merkeAsdMails(k) {
 // Versandblock im TL-Freigabe-Modus befuellen: Name aus S1, Mail aus dem Entwurf, sonst aus Kilanka
 function fuelleAsdVersandBlock() {
   const name = document.getElementById('Sachbearbeitung_JA')?.value || '';
-  const nameEl = document.getElementById('ASD_Name'); if (nameEl) nameEl.value = (name === '__custom__' ? '' : name) || '– keine Sachbearbeitung im Bericht –';
+  const nameEl = document.getElementById('ASD_Name'); if (nameEl && !nameEl.value.trim()) nameEl.value = (name === '__custom__' ? '' : name);
   const mailEl = document.getElementById('ASD_Mail');
   if (mailEl && !mailEl.value.trim() && _asdMailMap[name]) mailEl.value = _asdMailMap[name];
+}
+// Auge-Schalter: Kennwort im Klartext zeigen/verbergen
+function kennwortAnzeigen() {
+  const el = document.getElementById('ASD_Kennwort'); const b = document.getElementById('btnKennwortAuge');
+  if (!el) return;
+  const zeigen = el.type === 'password';
+  el.type = zeigen ? 'text' : 'password';
+  if (b) { b.innerHTML = zeigen ? '&#128064;' : '&#128065;'; b.title = b.ariaLabel = zeigen ? 'Kennwort verbergen' : 'Kennwort anzeigen'; }
 }
 
 function setzeSachbearbeitungListe(aktuellKilanka, weitere) {
@@ -1450,6 +1458,7 @@ function collectData() {
   // PDF-Anhang (Clearingbericht) mitpersistieren — nur Metadaten, kein Base64 (zu groß für SharePoint-Liste)
   data._anhangName = _anhangPDF ? _anhangPDF.name : null;
   { const am = document.getElementById('ASD_Mail'); data._asdMail = am ? am.value.trim().toLowerCase() : (data._asdMail || ''); }
+  { const an = document.getElementById('ASD_Name'); data._asdName = an ? an.value.trim() : (data._asdName || ''); }
   if (_asdVersandInfo) data._asdVersand = _asdVersandInfo;
   data._anhangTitel = _anhangPDF ? (_anhangPDF.titel || '') : null;
   // Unterschrift-Fachkräfte: Name + Qualifikationen als flache Tokens
@@ -2382,6 +2391,7 @@ async function loadDraft(id) {
     syncKind1Addr();
     toggleBesprochenDatum();
     { const am = document.getElementById('ASD_Mail'); if (am) am.value = data._asdMail || ''; }
+    { const an = document.getElementById('ASD_Name'); if (an) an.value = data._asdName || ''; }
     _asdVersandInfo = data._asdVersand || null;
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
@@ -3869,7 +3879,7 @@ async function tlFinalFreigeben() {
   if (!currentListId) return;
   const mail = (document.getElementById('ASD_Mail')?.value || '').trim().toLowerCase();
   const kennwort = (document.getElementById('ASD_Kennwort')?.value || '').trim();
-  const sb = document.getElementById('Sachbearbeitung_JA')?.value || '';
+  const sb = (document.getElementById('ASD_Name')?.value || '').trim() || document.getElementById('Sachbearbeitung_JA')?.value || '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { alert('Bitte eine gültige E-Mail-Adresse der ASD-Sachbearbeitung eintragen.'); document.getElementById('ASD_Mail')?.focus(); return; }
   if (kennwort.length < 6) { alert('Bitte das mit dem Jugendamt vereinbarte Kennwort eintragen (mindestens 6 Zeichen).'); document.getElementById('ASD_Kennwort')?.focus(); return; }
   const data = collectData();
