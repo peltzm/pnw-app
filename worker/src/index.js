@@ -165,7 +165,7 @@ const CLIENT_GRAPH = {
     validFrom: 1, validUntil: 1,
     legalBasis: { name: 1 },
     department: { id: 1, name: 1, shortName: 1 }, // shortName = Kurzname (Probe; Fallback: contacts-Map)
-    departmentResponsible: { recName: 1 },
+    departmentResponsible: { recName: 1, email: 1 }, // email = Mailadresse der ASD-Sachbearbeitung (Berichtsversand)
     fileReference: 1, reportDueDate: 1, nextMeeting: 1,
     attendants: {
       validFrom: 1, validUntil: 1, amount: 1, // amount = Verteilungsgewicht (z. B. 50/50 bei Tandem)
@@ -600,6 +600,7 @@ function buildClientProfile(client, action, role, now, qualiMap) {
     Jugendamt: action.department?.name || "",
     Hilfeart: action.legalBasis?.name || "",
     Sachbearbeitung_JA: action.departmentResponsible?.recName || "",
+    Sachbearbeitung_JA_Mail: (action.departmentResponsible?.email || "").trim().toLowerCase(),
     Hilfebeginn: isoDate(kDate(action.validFrom)),
     Hilfe_Ende: isoDate(kDate(action.validUntil)),
     Naechstes_HPG: isoDate(kDate(action.nextMeeting)),
@@ -659,6 +660,7 @@ function clientsForUser(allClients, upn, now, qualiMap, ansprechpartnerMap, amtK
       const profil = buildClientProfile(client, m.action, m.role, now, qualiMap);
       profil.aktiv = isCurrent(m.action.validFrom, m.action.validUntil, now);
       profil.Ansprechpartner_JA = (ansprechpartnerMap && ansprechpartnerMap.get(String(m.action.department?.id ?? ""))) || [];
+      profil.Ansprechpartner_JA_Mails = (ansprechpartnerMap && ansprechpartnerMap.mails && ansprechpartnerMap.mails.get(String(m.action.department?.id ?? ""))) || {};
       // Jugendamt: Kurzname aus Kilanka (Behörden-Stammdaten), Langname als Referenz mitliefern
       profil.Jugendamt_Lang = m.action.department?.name || "";
       profil.Jugendamt = m.action.department?.shortName
@@ -711,12 +713,17 @@ function ansprechpartnerJeAmt(allClients) {
       const amt = String(action.department?.id ?? "");
       const name = action.departmentResponsible?.recName;
       if (!amt || !name) continue;
-      if (!map.has(amt)) map.set(amt, new Set());
-      map.get(amt).add(name);
+      if (!map.has(amt)) map.set(amt, new Map());
+      const mail = (action.departmentResponsible?.email || "").trim().toLowerCase();
+      if (!map.get(amt).get(name)) map.get(amt).set(name, mail);   // Name -> Mailadresse (erste gefundene)
     }
   }
   const out = new Map();
-  for (const [amt, set] of map) out.set(amt, [...set].sort((a, b) => a.localeCompare(b, "de")));
+  for (const [amt, m] of map) out.set(amt, [...m.keys()].sort((a, b) => a.localeCompare(b, "de")));
+  // Mailadressen je Amt als Objekt Name -> Mail (fuer den Berichtsversand an die ASD)
+  const mails = new Map();
+  for (const [amt, m] of map) mails.set(amt, Object.fromEntries(m));
+  out.mails = mails;
   return out;
 }
 
