@@ -922,7 +922,7 @@ async function kennzahlenNeu(still){
  * TEAMLEITUNGS-SICHT: Einschätzung der Teammitglieder im jeweiligen Teil 1
  * ═══════════════════════════════════════════════════════════ */
 let tlTeam=null, tlModus=false;
-function zuTeam(){ if(dirty && !confirm('Ungespeicherte Änderungen gehen verloren. Trotzdem wechseln?')) return; dirty=false; tlModus=false; akt=null; istGF ? zeigeAdmin() : zeigeTeamleitung(); }
+function zuTeam(){ if(dirty && !confirm('Ungespeicherte Änderungen gehen verloren. Trotzdem wechseln?')) return; dirty=false; tlModus=false; tlAnsicht=false; akt=null; istGF ? zeigeAdmin() : zeigeTeamleitung(); }
 async function zeigeTeamleitung(){
   const runde=aktRunde(); tlModus=false; akt=null;
   lade('Dein Team wird geladen …');
@@ -948,7 +948,20 @@ async function zeigeTeamleitung(){
     <div style="overflow-x:auto"><table class="admin"><tr><th>Teammitglied</th><th>Meine Einschätzung</th><th></th></tr>${zeilen}</table></div></div>`;
   document.getElementById('leiste').style.display='none';
 }
+/* GF: abgegebene Einschätzung der Teamleitung ansehen — unabhängig davon, ob die Person ihren Bogen schon angelegt hat. Nur Anzeige. */
+let tlAnsicht=false;
+function zeigeTLEinschaetzung(maUpn){
+  const runde=aktRunde();
+  const i=items.find(x=>{ const u=(x.f.MitarbeiterUpn||'').toLowerCase(); return u.startsWith(TL_PRAEFIX) && u.endsWith(':'+maUpn) && x.f.Runde===runde && x.f.OGStatus==='Abgegeben'; });
+  if(!i) return;
+  const t=tlEinschaetzungFuer(maUpn,runde);
+  akt=entpacke(i); akt.f.MitarbeiterName=akt.f.MitarbeiterName||(mitarbeiter.find(m=>m.upn===maUpn)?.name||maUpn);
+  gfSicht=false; tlModus=true; leseModus=true; tlAnsicht=true; tlAnsichtVon=t?.tlName||'Teamleitung'; dirty=false;
+  renderTL(); window.scrollTo(0,0);
+}
+let tlAnsichtVon='';
 async function oeffneTL(maUpn){
+  tlAnsicht=false;
   if(istGF) tlTeam=(mitarbeiter||[]).filter(x=>istTeamleitung(x.upn));   // Sonja schätzt die Teamleitungen ein
   const runde=aktRunde(), m=tlTeam.find(x=>x.upn===maUpn), key=tlKey(upn,maUpn);
   let i=items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===key && x.f.Runde===runde);
@@ -969,15 +982,16 @@ function renderTL(){
   app().className='wrap';
   app().innerHTML=`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zuTeam()">← ${istGF?'Übersicht':'Mein Team'}</button></div>
   <div class="card">
-    <div class="bogen-kopf"><div><h1>${istGF?'Einschätzung der Geschäftsführung':'Einschätzung der Teamleitung'}</h1><div class="unter">zu ${esc(name)} · ${esc(V.titel)}</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräch · Runde ${esc(akt.f.Runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
+    <div class="bogen-kopf"><div><h1>${tlAnsicht?'Einschätzung der Teamleitung':(istGF?'Einschätzung der Geschäftsführung':'Einschätzung der Teamleitung')}</h1><div class="unter">zu ${esc(name)} · ${esc(V.titel)}</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräch · Runde ${esc(akt.f.Runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
     <div class="stamm"><div><span class="eyebrow">Teammitglied</span><b>${esc(akt.f.MitarbeiterName)}</b></div>
       <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div></div>
-    <div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>
-    <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung ${istGF?'als Vorgesetzte':'als Teamleitung'}</h2>
+    ${tlAnsicht?`<div class="hinweis"><b>Nur-Lese-Ansicht für die Geschäftsführung.</b> Abgegebene Einschätzung von <b>${esc(tlAnsichtVon)}</b> zu ${esc(name)}. Sobald ${esc(name)} den eigenen Bogen abgegeben hat, seht ihr beide Sichten nebeneinander über „Öffnen“.</div>`:`<div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>`}
+    <h2 class="teil"><span>Teil 1 ·</span> ${tlAnsicht?'Einschätzung von '+esc(tlAnsichtVon):'Meine Einschätzung '+(istGF?'als Vorgesetzte':'als Teamleitung')}</h2>
     ${skalaTabelle(V, akt.antworten, leseModus, null)}
     <div class="bogen-fuss">Praxis NeueWege GmbH · vertraulich – Personalunterlage · sichtbar nur für ${istGF?'die Geschäftsführung':'die Teamleitung und die Geschäftsführung'}</div>
   </div>`;
   const el=document.getElementById('leiste'); el.style.display='flex'; el.classList.remove('offen');
+  if(tlAnsicht){ el.innerHTML=`<span class="stand" id="saveStand">Abgegeben${akt.f.AbgegebenAm?' am '+esc(fmtDT(akt.f.AbgegebenAm)):''} – nur Anzeige.</span><button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`; return; }
   el.innerHTML=`<span class="stand" id="saveStand">${leseModus?(istGF?'Einschätzung abgegeben – nicht mehr änderbar.':'Einschätzung abgegeben – nicht mehr änderbar. Die Selbsteinschätzung erhältst du per E-Mail, sobald die Person abgegeben hat und die Geschäftsführung sie freigibt.'):''}</span>`+
     (leseModus?''
               :`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="tlStatus('Abgegeben')">Einschätzung abgeben</button>`);
@@ -1050,6 +1064,7 @@ async function zeigeAdmin(){
         ${gesperrt?'':`<button class="btn btn-ghost btn-sm" onclick="kopiere('${esc(m.upn)}')">Link kopieren</button>
         <button class="btn btn-ghost btn-sm" onclick="mail('${esc(m.upn)}')">${p.mailAm?'Erneut einladen':'Einladung senden'}</button>`}
         ${(upn===TL_EINSCHAETZUNG_DURCH && istTeamleitung(m.upn))?`<button class="btn btn-ghost btn-sm" onclick="oeffneTL('${esc(m.upn)}')">✍ Einschätzen (Teil 1)</button>`:''}
+        ${(t=>t?.abgegeben?`<button class="btn btn-ghost btn-sm" onclick="zeigeTLEinschaetzung('${esc(m.upn)}')" title="Abgegebene Einschätzung von ${esc(t.tlName)} ansehen">👁 ${esc(istTeamleitung(m.upn)?'Sonja':'TL')}-Einschätzung</button>`:'')(tlEinschaetzungFuer(m.upn,runde))}
         ${i?`<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="setzeAus('${esc(m.upn)}',true)" title="Diese Person führt in dieser Runde kein Orientierungsgespräch">Kein Gespräch</button>
         ${vorgangTeile(m.upn,runde).length?`<button class="btn btn-danger btn-sm" onclick="vorgangZuruecksetzen('${esc(m.upn)}')" title="Bogen, Einschätzung und Einladungsvermerk dieser Person für die Runde löschen">Zurücksetzen</button>`:''}</td></tr>`;
