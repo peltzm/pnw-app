@@ -583,7 +583,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 'v0689125'; // auto-updated on deploy
+const APP_VERSION = 'v3dede8f'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -2771,7 +2771,7 @@ async function loadMyDrafts() {
   await ladeMeineAliase();
   const { siteId, listId } = await getGraphListIds();
   // Check if user is TL member (safe even if not loaded yet)
-  const isTL = _tlMembers.length > 0 && _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name);
+  const isTL = isAdmin() || (_tlMembers.length > 0 && _tlMembers.some(m => m.mail === currentAccount?.username || m.displayName === currentAccount?.name));
   // Load all items, filter client-side (avoids OData filter issues with missing columns)
   // Alle Seiten laden: Graph liefert max. $top Items pro Antwort und paginiert
   // über @odata.nextLink — ohne die Schleife verschwinden ältere Berichte
@@ -4895,7 +4895,8 @@ async function buildUebersicht() {
 
 // ─── ADMIN / DEBUG ───────────────────────────────────────────────────────────
 
-const ADMIN_EMAILS = ['markus.peltz@praxisneuewege.de', 'markus peltz'];
+// Geschäftsführung: voller Zugriff unabhängig von der TL-Gruppe
+const ADMIN_EMAILS = ['markus.peltz@praxisneuewege.de', 'markus peltz', 'sonja.peltz@praxisneuewege.de', 'sonja peltz'];
 
 function isAdmin() {
   const user = (currentAccount?.username || '').toLowerCase();
