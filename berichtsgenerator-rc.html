@@ -479,7 +479,7 @@
         </div>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; margin-top:10px;">
           <button class="btn btn-secondary" onclick="navGoTo(currentBerichtstyp==='monat'?3:5)">← Zurück</button>
-          <button class="btn btn-secondary" onclick="document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
+          <button class="btn btn-secondary" onclick="bearbeitungBeenden(); document.getElementById('startScreen').style.display='flex'; document.getElementById('mainLayout').style.display='none';">⌂ Startseite</button>
         </div>
       </div>
 
@@ -1076,6 +1076,7 @@ function showApp() {
   if (_siteEl) _siteEl.textContent = CONFIG.siteUrl;
   // Load M365 group members (Promise merken, damit Review-Link darauf warten kann)
   _groupLoadPromise = loadGroupMembers();
+  ensureBearbeitungSpalte();
   loadKilankaKlienten();
   _groupLoadPromise.catch(e => { console.warn('Group load failed:', e); });
   // Nach Gruppenladen: Status Berichte Nav-Item für TL einblenden
@@ -1158,6 +1159,7 @@ async function autoSaveDraft() {
   // Neuer Bericht: kein Listeneintrag, solange die Stammdaten-Seite nicht per "Weiter" verlassen wurde —
   // sonst tauchen halbfertige Entwürfe sofort in der Statusübersicht auf
   if (!currentListId && !_entwurfFreigegeben) return;
+  if (_lockNurAnsehen) return;   // Bericht ist bei einer anderen Person in Bearbeitung
   _autoSaving = true;
   try {
     const data = collectData();
@@ -1807,6 +1809,7 @@ async function uploadToSharePoint() {
     const { token, driveId } = await getSiteAndDrive();
     await pdfHochladen(driveId, token, name, bytes);
     currentVersion = newVersion;
+    bearbeitungBeenden();   // Bericht liegt jetzt bei der Teamleitung
     // Anhang-PDF hochladen (alle Berichtstypen, falls vorhanden)
     if (_anhangPDF) {
       try {
@@ -2288,6 +2291,13 @@ async function loadDraft(id) {
     if (!isTLUser() && !isUserInvolvedInItem(item)) {
       throw new Error('Keine Berechtigung — dieser Bericht ist Ihnen nicht zugeordnet.');
     }
+    // Bearbeitungssperre: wer den Bericht gerade offen hat, behält ihn; andere sehen nur
+    bearbeitungBeenden();
+    const sperre = await bearbeitungStarten(id);
+    if (sperre.belegt) {
+      const l = sperre.belegt;
+      if (!confirm(`Dieser Bericht wird gerade von ${l.name || 'einer anderen Person'} bearbeitet (seit ${_lockZeit(l.seit)}).\n\nSie können ihn nur ansehen. Änderungen sind erst möglich, wenn ${l.name || 'die Person'} ihn geschlossen hat.\n\nNur ansehen?`)) return;
+    }
     const data = JSON.parse(item.FormularDaten || '{}');
     data._eingereichtVon = item.Eingereicht_Von || '';
     currentOwnerOid = data._ownerOid || '';   // darf beim Speichern durch TL nicht wechseln
@@ -2364,6 +2374,7 @@ async function loadDraft(id) {
       try { el.value = value; } catch(e) { console.warn('Feld konnte nicht gesetzt werden:', key, e.message); }
     });
     ergaenzeAusKilanka(data);
+    if (_lockNurAnsehen) activateViewOnlyMode(`Wird gerade bearbeitet von ${_lockNurAnsehen.name || 'einer anderen Person'} — nur Ansicht`);
     // Restore ziele
     if (data._ziele && Array.isArray(data._ziele)) {
       _zieleSnapshot = data._ziele.length ? data._ziele.slice() : null;
@@ -2564,6 +2575,7 @@ function resetForm() {
   renderUnterschriftFachkraefte();
   setzeSachbearbeitungListe('', []);
   _entwurfFreigegeben = false;
+  if (typeof bearbeitungBeenden === 'function') bearbeitungBeenden();
   const btnFk = document.getElementById('btnAddFachkraft');
   if (btnFk) { btnFk.style.opacity = '1'; btnFk.disabled = false; }
   // Reset list ID for new bericht
@@ -2941,7 +2953,7 @@ async function loadMyDrafts() {
   // Alle Seiten laden: Graph liefert max. $top Items pro Antwort und paginiert
   // über @odata.nextLink — ohne die Schleife verschwinden ältere Berichte
   // stillschweigend (gleiche Bug-Klasse wie der Fahrtenbuch-Pagination-Bug).
-  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified,Eingereicht_Von,Assigned_Reviewer,Assigned_Reviewer_Mail,FormularDaten)&$orderby=fields/Modified desc&$top=100`;
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields(select=id,Title,Status,Kind_Vorname,Kind_Familienname,Jugendamt,Berichtsdatum,Modified,Eingereicht_Von,Assigned_Reviewer,Assigned_Reviewer_Mail,FormularDaten${_lockSpalteOk ? ',Bearbeitung' : ''})&$orderby=fields/Modified desc&$top=100`;
   const rawItems = [];
   let pageGuard = 0;
   while (url && pageGuard < 50) { // Sicherheitslimit: max. 5000 Items
@@ -2970,6 +2982,98 @@ async function loadMyDrafts() {
   };
   return sichtbar;
 }
+
+// ─── BEARBEITUNGSSPERRE ──────────────────────────────────────────────────────
+// Ein Bericht kann von mehreren Fachkräften bearbeitet werden (Tandem-Fälle),
+// aber nicht gleichzeitig: der Autosave des einen würde die Eingaben des anderen
+// überschreiben. Beim Öffnen wird der Bericht für die angemeldete Person
+// markiert (Spalte "Bearbeitung" in der Liste), alle 60 s per Herzschlag
+// erneuert und beim Verlassen freigegeben. Eine Markierung, die älter als
+// 10 Minuten ist, gilt als verwaist (Tab abgestürzt) und wird überschrieben.
+// Wer einen belegten Bericht öffnet, bekommt ihn nur zur Ansicht.
+const LOCK_TIMEOUT_MIN = 10;
+const LOCK_HEARTBEAT_MS = 60 * 1000;
+let _lockSpalteOk = false;     // Spalte vorhanden / anlegbar?
+let _lockTimer = null;
+let _lockItemId = null;
+let _lockNurAnsehen = null;    // Sperre einer anderen Person → Ansichtsmodus
+
+// Spalte "Bearbeitung" sicherstellen (einmalig; legt sie an, wenn sie fehlt)
+async function ensureBearbeitungSpalte() {
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const h = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/columns?$filter=name eq 'Bearbeitung'`, { headers: h });
+    const d = r.ok ? await r.json() : { value: [] };
+    if (d.value && d.value.length) { _lockSpalteOk = true; return; }
+    const c = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/columns`, {
+      method: 'POST', headers: h,
+      body: JSON.stringify({ name: 'Bearbeitung', displayName: 'Bearbeitung', description: 'Bearbeitungssperre des Berichtsgenerators (automatisch)', text: { allowMultipleLines: false, maxLength: 255 } }),
+    });
+    _lockSpalteOk = c.ok;
+    if (!c.ok) console.warn('Bearbeitungsspalte konnte nicht angelegt werden:', c.status);
+  } catch(e) { console.warn('Bearbeitungssperre nicht verfügbar:', e.message); }
+}
+
+function _lockParse(v) { try { return v ? JSON.parse(v) : null; } catch(e) { return null; } }
+function _lockAktiv(l) { return !!(l && l.zuletzt && (Date.now() - new Date(l.zuletzt).getTime()) < LOCK_TIMEOUT_MIN * 60 * 1000); }
+function _lockIstMeins(l) {
+  if (!l) return false;
+  const oid = meineOid(); const mail = (currentAccount?.username || '').toLowerCase();
+  return (oid && l.oid === oid) || (!!l.mail && l.mail === mail);
+}
+function _lockZeit(iso) { try { return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'; } catch(e) { return ''; } }
+
+async function _lockSchreiben(id, wert, keepalive) {
+  if (!_lockSpalteOk || !id) return;
+  const token = await getToken();
+  const { siteId, listId } = await getGraphListIds();
+  await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}/fields`, {
+    method: 'PATCH', keepalive: !!keepalive,
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Bearbeitung: wert }),
+  });
+}
+
+async function bearbeitungLesen(id) {
+  if (!_lockSpalteOk || !id) return null;
+  try {
+    const token = await getToken();
+    const { siteId, listId } = await getGraphListIds();
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${id}?expand=fields(select=Bearbeitung)`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return null;
+    return _lockParse((await r.json()).fields?.Bearbeitung);
+  } catch(e) { return null; }
+}
+
+// Beim Öffnen: Sperre übernehmen oder Ansichtsmodus. Liefert { ok } oder { belegt: lock }.
+async function bearbeitungStarten(id) {
+  _lockNurAnsehen = null;
+  if (!_lockSpalteOk) return { ok: true };
+  const vorhanden = await bearbeitungLesen(id);
+  if (_lockAktiv(vorhanden) && !_lockIstMeins(vorhanden)) { _lockNurAnsehen = vorhanden; return { belegt: vorhanden }; }
+  const lock = {
+    name: currentAccount?.name || '', mail: (currentAccount?.username || '').toLowerCase(), oid: meineOid() || '',
+    seit: (_lockIstMeins(vorhanden) && vorhanden.seit) || new Date().toISOString(), zuletzt: new Date().toISOString(),
+  };
+  try { await _lockSchreiben(id, JSON.stringify(lock)); } catch(e) { console.warn('Sperre setzen fehlgeschlagen:', e.message); return { ok: true }; }
+  _lockItemId = id;
+  clearInterval(_lockTimer);
+  _lockTimer = setInterval(async () => {
+    if (!_lockItemId) return;
+    try { lock.zuletzt = new Date().toISOString(); await _lockSchreiben(_lockItemId, JSON.stringify(lock)); } catch(e) {}
+  }, LOCK_HEARTBEAT_MS);
+  return { ok: true };
+}
+
+// Beim Verlassen / Einreichen / Neuanlegen freigeben
+function bearbeitungBeenden(keepalive) {
+  clearInterval(_lockTimer); _lockTimer = null;
+  const id = _lockItemId; _lockItemId = null; _lockNurAnsehen = null;
+  if (id) _lockSchreiben(id, '', keepalive).catch(() => {});
+}
+window.addEventListener('pagehide', () => bearbeitungBeenden(true));
 
 async function loadItemById(id) {
   const token = await getToken();
@@ -3691,6 +3795,7 @@ function renderStatusBerichte() {
       hpg.btnBg = 'var(--accent)';
       hpg.btnColor = 'white';
     }
+    const lockInfo = (() => { const l = _lockParse(item.Bearbeitung); return _lockAktiv(l) ? `<div style="font-size:11px; color:var(--accent); margin-top:2px;">✎ in Bearbeitung: ${escHtml(l.name || '')} (seit ${_lockZeit(l.seit)})</div>` : ''; })();
     const assigned = item.Assigned_Reviewer
       ? `<div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Prüfer: ${item.Assigned_Reviewer.replace(/</g,'&lt;')}</div>` : '';
     const fkHtml = fachkraft
@@ -3719,7 +3824,7 @@ function renderStatusBerichte() {
           &nbsp;·&nbsp;
           Nächstes HPG: <strong style="color:${hpg.color};">${hpg.label}</strong>
         </div>
-        ${fkHtml}${assigned}${kommentarHtml}${ablehnungHtml}
+        ${fkHtml}${assigned}${lockInfo}${kommentarHtml}${ablehnungHtml}
       </div>
       <div style="display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap;">
         ${archiviert ? '<span style="font-size:11px; font-weight:600; color:#6b7280; background:#f3f4f6; padding:3px 10px; border-radius:999px; white-space:nowrap;">🗄 Archiviert</span>' : ''}
