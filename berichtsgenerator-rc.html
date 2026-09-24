@@ -1137,7 +1137,7 @@ function showApp() {
     }
   }).catch(() => {});
   // Check if opened via review link
-  setTimeout(() => { if (pruefeSetupAufruf() || pruefeExportAufruf()) return; if (!handleReviewLink()) { /* normal flow */ } }, 500);
+  setTimeout(() => { if (pruefeSetupAufruf() || pruefeExportAufruf() || pruefePositionenAufruf()) return; if (!handleReviewLink()) { /* normal flow */ } }, 500);
 }
 
 // ─── NAVIGATION ───────────────────────────────────────────────────────────────
@@ -1706,6 +1706,39 @@ async function berichteExportieren() {
   const blob = new Blob([JSON.stringify({ liste: CONFIG.listName, stand: stand.toISOString(), anzahl: items.length, items }, null, 1)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
   return { name, anzahl: items.length };
+}
+
+// Prüfansicht (nur GF): Positionen aller Gruppenmitglieder in Entra — fehlende Positionen
+// bedeuten leere Qualifikation im Unterschriftenblock. Aufruf über ?positionen=1
+async function zeigePositionsPruefung() {
+  try { await _groupLoadPromise; } catch(e) {}
+  const alle = new Map();
+  [..._teamMembers, ..._tlMembers, ..._stationaerFreigeber].forEach(m => {
+    const key = (m.mail || m.userPrincipalName || m.displayName || '').toLowerCase();
+    if (key && !alle.has(key)) alle.set(key, m);
+  });
+  const rows = [...alle.values()].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'de'));
+  const fehlt = rows.filter(m => !(m.jobTitle || '').trim());
+  const esc = v => escHtml(String(v || ''));
+  const html = `
+    <div style="max-width:720px; margin:40px auto; font-family:inherit;">
+      <h2 style="margin:0 0 4px;">Positionen in M365 (Entra)</h2>
+      <div style="color:var(--text-muted); margin-bottom:16px;">${rows.length} Konten aus den Gruppen Team, Teamleitung, Stationär-Freigabe — <strong>${fehlt.length} ohne Position</strong>. Die Position wird als Qualifikation in die Unterschrift übernommen.</div>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <tr style="text-align:left; color:var(--text-muted);"><th style="padding:6px 8px; border-bottom:1px solid var(--border);">Name</th><th style="padding:6px 8px; border-bottom:1px solid var(--border);">Position (jobTitle)</th></tr>
+        ${rows.map(m => `<tr style="${(m.jobTitle || '').trim() ? '' : 'background:#fff4f2;'}"><td style="padding:6px 8px; border-bottom:1px solid var(--border);">${esc(m.displayName)}</td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">${(m.jobTitle || '').trim() ? esc(m.jobTitle) : '<span style="color:var(--error); font-weight:600;">— fehlt —</span>'}</td></tr>`).join('')}
+      </table>
+      <div style="margin-top:14px;"><button class="btn btn-secondary" onclick="location.href=location.pathname">Zurück</button></div>
+    </div>`;
+  const start = document.getElementById('startScreen'); if (start) start.style.display = 'none';
+  const main = document.getElementById('mainLayout'); if (main) main.style.display = 'none';
+  const box = document.createElement('div'); box.innerHTML = html; document.body.appendChild(box);
+}
+function pruefePositionenAufruf() {
+  if (new URLSearchParams(window.location.search).get('positionen') !== '1') return false;
+  if (!isAdmin()) { alert('Diese Prüfansicht ist der Geschäftsführung vorbehalten.'); return false; }
+  zeigePositionsPruefung();
+  return true;
 }
 
 function pruefeExportAufruf() {

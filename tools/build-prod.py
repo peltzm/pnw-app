@@ -41,7 +41,7 @@ src = src[:a] + src[b:]
 a = src.index("// Einrichtung ueber ?setup=1 anstossen\nfunction pruefeSetupAufruf() {")
 b = src.index("\n}\n", a) + len("\n}\n")
 src = src[:a] + src[b:]
-ersetze("if (pruefeSetupAufruf() || pruefeExportAufruf()) return;", "if (pruefeExportAufruf()) return;", name='setup-aufruf')
+ersetze("if (pruefeSetupAufruf() || pruefeExportAufruf() || pruefePositionenAufruf()) return;", "if (pruefeExportAufruf() || pruefePositionenAufruf()) return;", name='setup-aufruf')
 
 # 4) Fehlermeldung ohne Beta-Hinweis
 ersetze(' Das Beta-Backend ist noch nicht eingerichtet — die Seite einmalig mit ?setup=1 aufrufen.', '', name='beta-hinweis')
