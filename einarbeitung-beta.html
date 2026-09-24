@@ -147,6 +147,10 @@ table.ea-tbl td{padding:9px 10px;border-top:1px solid var(--border);vertical-ali
 .ea-mv:hover:not(:disabled){border-color:var(--accent-mid);color:var(--accent)}
 .ea-mv:disabled{opacity:.3;cursor:default}
 .ea-phase-sel{border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-family:inherit;font-size:11px;background:var(--surface);color:var(--text-muted);max-width:120px;height:26px}
+.ea-pdf-aktuell{font-size:12.5px;margin-bottom:6px}
+.ea-pdf-aktuell:empty{display:none}
+.ea-res{display:inline-flex;align-items:center;gap:5px;font-size:12px;margin-top:4px;color:var(--accent);text-decoration:none;border:1px solid var(--border);border-radius:14px;padding:2px 10px;background:var(--surface);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ea-res:hover{border-color:var(--accent-mid);background:var(--accent-light)}
 .ea-group{font-size:11.5px;font-weight:700;color:var(--accent-mid);margin:14px 0 2px;padding-bottom:3px;border-bottom:1px solid var(--border)}
 .ea-group:first-child{margin-top:4px}
 .ea-auswahl{margin:8px 0 10px}
@@ -265,8 +269,18 @@ label.chk input{width:auto}
       <div class="feld feld-voll"><label for="dlgGruppe">Gruppe / Zwischenüberschrift</label><input id="dlgGruppe" list="dlgGruppenListe" placeholder="z. B. Deine Arbeitsmittel"><datalist id="dlgGruppenListe"></datalist></div>
       <div class="feld feld-voll" id="dlgOptWrap"><label for="dlgOptionen">Antwortmöglichkeiten</label><input id="dlgOptionen" placeholder="Ja|Teilweise|Noch nicht">
         <div class="hint">Mit senkrechtem Strich | trennen.</div></div>
+      <div class="feld feld-voll"><label>Ressource zu diesem Punkt</label>
+        <div class="ea-optionen" id="dlgResWahl" role="radiogroup">
+          <label class="ea-opt"><input type="radio" name="dlgResArt" value=""> Keine</label>
+          <label class="ea-opt"><input type="radio" name="dlgResArt" value="link"> 🔗 Link</label>
+          <label class="ea-opt"><input type="radio" name="dlgResArt" value="pdf"> 📄 PDF-Dokument</label>
+        </div></div>
       <div class="feld feld-voll" id="dlgUrlWrap"><label for="dlgUrl">Link (URL)</label><input id="dlgUrl" type="url" placeholder="https://…">
         <div class="hint">SharePoint-, OneDrive- oder Web-Adresse. Muss mit https:// beginnen.</div></div>
+      <div class="feld feld-voll" id="dlgPdfWrap"><label for="dlgPdfDatei">PDF-Dokument</label>
+        <div id="dlgPdfAktuell" class="ea-pdf-aktuell"></div>
+        <input id="dlgPdfDatei" type="file" accept="application/pdf,.pdf">
+        <div class="hint">Wird in SharePoint im Ordner „Einarbeitung-Ressourcen" abgelegt (max. 50 MB).</div></div>
       <div class="feld feld-voll" id="dlgPflichtWrap"><label class="chk"><input type="checkbox" id="dlgPflicht"> Pflicht — muss gelesen werden (sonst optional)</label></div>
       <div class="feld feld-voll"><label for="dlgBeschreibung">Beschreibung</label><textarea id="dlgBeschreibung" rows="3" placeholder="Worum geht es, warum ist es wichtig?"></textarea></div>
       <div class="feld"><label for="dlgFrist">Frist (Tage zum Start)</label><input id="dlgFrist" type="number" step="1" placeholder="z. B. -7">
@@ -294,7 +308,8 @@ const CFG = {
   listMitarbeiter: 'PNW-Einarbeitung-Mitarbeiter',
   listFahrplan: 'PNW-Einarbeitung-Fahrplan',
   listFortschritt: 'PNW-Einarbeitung-Fortschritt',
-  listReflexion: 'PNW-Einarbeitung-Reflexionen'
+  listReflexion: 'PNW-Einarbeitung-Reflexionen',
+  ressourcenOrdner: 'Einarbeitung-Ressourcen' // Ordner in der Dokumentbibliothek der Site für hochgeladene PDFs
 };
 const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
 const GF_ERLAUBT = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
@@ -327,7 +342,10 @@ const SCHEMA_FAHRPLAN = [
   {sp:'FristTageZumStart', key:'fristTage', typ:'zahl'},
   {sp:'Reihenfolge', key:'reihenfolge', typ:'zahl'},
   {sp:'Gruppe', key:'gruppe', typ:'text'},
-  {sp:'Optionen', key:'optionen', typ:'text'}
+  {sp:'Optionen', key:'optionen', typ:'text'},
+  {sp:'RessourceTyp', key:'ressourceTyp', typ:'text'},   // '' | 'link' | 'pdf'
+  {sp:'RessourceName', key:'ressourceName', typ:'text'}, // Dateiname bei PDF
+  {sp:'RessourceId', key:'ressourceId', typ:'text'}      // DriveItem-ID bei PDF
 ];
 const SCHEMA_FORTSCHRITT = [
   {sp:'Title', key:'kombi', typ:'text'},
@@ -848,7 +866,9 @@ async function pruefeHeftStand(){
   const bar = document.getElementById('heftBar');
   bar.style.display = heftAbgleichNoetig ? 'flex' : 'none';
   if (heftAbgleichNoetig) document.getElementById('heftInfo').textContent =
-    plan.neu.length+' Einzelpunkte aus dem Einarbeitungsheft fehlen, '+plan.entfallen.length+' alte Sammelpunkte werden ersetzt.';
+    (plan.neu.length || plan.entfallen.length)
+      ? plan.neu.length+' Einzelpunkte aus dem Einarbeitungsheft fehlen, '+plan.entfallen.length+' alte Sammelpunkte werden ersetzt.'
+      : 'Neue Datenfelder (Gruppe, Ressourcen) müssen in der SharePoint-Liste ergänzt werden.';
 }
 async function heftStandUebernehmen(){
   const status = document.getElementById('heftStatus');
@@ -995,7 +1015,53 @@ async function speicherReihenfolge(items, okText){
 /* ═══════════════════════════════════════════════════════════
  * FAHRPLAN-PUNKTE BEARBEITEN / ANLEGEN / LÖSCHEN (Dialog)
  * ═══════════════════════════════════════════════════════════ */
-function sichereUrl(u){ return typeof u==='string' && /^https?:\/\//i.test(u.trim()); }
+function sichereUrl(u){ return typeof u==='string' && (/^https?:\/\//i.test(u.trim()) || (demoMode && /^blob:/i.test(u.trim()))); }
+function ressourceArt(it){ return it.ressourceTyp || (sichereUrl(it.url) ? 'link' : ''); }
+function ressourceHtml(it){
+  if (!sichereUrl(it.url)) return '';
+  const pdf = ressourceArt(it)==='pdf';
+  const text = pdf ? (it.ressourceName || 'PDF öffnen') : (it.typ==='link' ? 'Öffnen' : kurzUrl(it.url));
+  return '<div><a class="ea-res" href="'+esc(it.url)+'" target="_blank" rel="noopener" title="'+esc(pdf ? (it.ressourceName||'PDF') : it.url)+'">'+(pdf?'📄':'🔗')+' '+esc(text)+' ↗</a></div>';
+}
+let spaltenGesichert = false;
+async function spaltenSichern(){ if (spaltenGesichert || demoMode) return; await ergaenzeFahrplanSpalten(); spaltenGesichert = true; }
+function dateinameSaeubern(n){ return String(n||'dokument.pdf').replace(/["*:<>?\/\\|#%{}~&]/g,'_').replace(/\s+/g,' ').trim(); }
+async function ladePdfHoch(file, fortschritt){
+  if (!(file.type==='application/pdf' || /\.pdf$/i.test(file.name))) throw new Error('Bitte eine PDF-Datei auswählen.');
+  if (file.size > 50*1024*1024) throw new Error('Die Datei ist größer als 50 MB.');
+  if (demoMode) return {url: URL.createObjectURL(file), name: file.name, id: ''};
+  const t = await token();
+  const pfad = 'https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/drive/root:/'+encodeURIComponent(CFG.ressourcenOrdner)+'/'+encodeURIComponent(dateinameSaeubern(file.name));
+  let item;
+  if (file.size <= 4*1024*1024){
+    // Einfacher Upload bis 4 MB; bei gleichem Namen wird automatisch umbenannt
+    const r = await fetch(pfad+':/content?@microsoft.graph.conflictBehavior=rename', {method:'PUT', headers:{Authorization:'Bearer '+t, 'Content-Type':'application/pdf'}, body:file});
+    if (!r.ok) throw new Error('Upload fehlgeschlagen ('+r.status+'): '+await r.text());
+    item = await r.json();
+  } else {
+    // Große Dateien: Upload-Session in 5-MB-Blöcken (Vielfaches von 320 KiB)
+    const s = await fetch(pfad+':/createUploadSession', {method:'POST', headers:{Authorization:'Bearer '+t, 'Content-Type':'application/json'}, body:JSON.stringify({item:{'@microsoft.graph.conflictBehavior':'rename'}})});
+    if (!s.ok) throw new Error('Upload-Session fehlgeschlagen ('+s.status+'): '+await s.text());
+    const {uploadUrl} = await s.json();
+    const BLOCK = 320*1024*16;
+    for (let start=0; start<file.size; start+=BLOCK){
+      const ende = Math.min(start+BLOCK, file.size);
+      const r = await fetch(uploadUrl, {method:'PUT', headers:{'Content-Range':'bytes '+start+'-'+(ende-1)+'/'+file.size}, body:file.slice(start, ende)});
+      if (!r.ok) throw new Error('Upload abgebrochen ('+r.status+'): '+await r.text());
+      if (fortschritt) fortschritt(Math.round(100*ende/file.size));
+      if (r.status===200 || r.status===201) item = await r.json();
+    }
+  }
+  if (!item || !item.webUrl) throw new Error('Upload ohne Rückmeldung von SharePoint.');
+  return {url:item.webUrl, name:item.name, id:item.id};
+}
+let dlgPdfBestand = null;
+function aktualisiereResFelder(){
+  const art = (document.querySelector('input[name="dlgResArt"]:checked')||{}).value || '';
+  byId('dlgUrlWrap').style.display = art==='link' ? '' : 'none';
+  byId('dlgPdfWrap').style.display = art==='pdf' ? '' : 'none';
+  document.querySelectorAll('#dlgResWahl .ea-opt').forEach(l=>l.classList.toggle('aktiv', l.querySelector('input').checked));
+}
 function kurzUrl(u){ try{ const x=new URL(u); const pfad=decodeURIComponent(x.pathname); return x.hostname.replace(/^www\./,'')+(pfad.length>1 ? (pfad.length>40 ? pfad.slice(0,40)+'…' : pfad) : ''); }catch(e){ return u; } }
 function naechsteReihenfolge(phase, ohne){
   const max = fahrplanListe.filter(x=>x.phase===phase && x!==ohne).reduce((m,x)=>Math.max(m, Number(x.reihenfolge||x.order||0)), 0);
@@ -1007,6 +1073,7 @@ function initItemDialog(){
   byId('dlgPhase').innerHTML = PHASEN.map(p=>'<option value="'+p.key+'">'+esc(p.label)+'</option>').join('');
   byId('dlgOwner').innerHTML = Object.keys(OWNER_LABEL).map(k=>'<option value="'+k+'">'+OWNER_LABEL[k]+'</option>').join('');
   byId('dlgTyp').onchange = aktualisiereDlgFelder;
+  document.querySelectorAll('input[name="dlgResArt"]').forEach(r=>r.addEventListener('change', aktualisiereResFelder));
   byId('dlgSpeichern').onclick = speichereItemDialog;
   byId('dlgAbbrechen').onclick = schliesseItemDialog;
   byId('dlgLoeschen').onclick = loescheItemDialog;
@@ -1015,8 +1082,11 @@ function initItemDialog(){
 }
 function aktualisiereDlgFelder(){
   const link = byId('dlgTyp').value==='link';
-  byId('dlgUrlWrap').style.display = link ? '' : 'none';
   byId('dlgPflichtWrap').style.display = link ? '' : 'none';
+  if (link && !(document.querySelector('input[name="dlgResArt"]:checked')||{}).value){
+    document.querySelector('input[name="dlgResArt"][value="link"]').checked = true;
+  }
+  aktualisiereResFelder();
   const auswahl = byId('dlgTyp').value==='auswahl';
   byId('dlgOptWrap').style.display = auswahl ? '' : 'none';
   if (auswahl && !byId('dlgOptionen').value) byId('dlgOptionen').value = 'Ja|Teilweise|Noch nicht';
@@ -1031,7 +1101,13 @@ function oeffneItemDialog(id, vorgaben){
   byId('dlgTyp').value = v.typ || 'task';
   byId('dlgPhase').value = v.phase || 'woche1';
   byId('dlgOwner').value = v.owner || 'mitarbeiter';
-  byId('dlgUrl').value = v.url || '';
+  const art = ressourceArt(v);
+  document.querySelectorAll('input[name="dlgResArt"]').forEach(r=>{ r.checked = (r.value===art); });
+  byId('dlgUrl').value = art==='link' ? (v.url || '') : '';
+  byId('dlgPdfDatei').value = '';
+  dlgPdfBestand = art==='pdf' && sichereUrl(v.url) ? {url:v.url, name:v.ressourceName||'Dokument.pdf', id:v.ressourceId||''} : null;
+  byId('dlgPdfAktuell').innerHTML = dlgPdfBestand
+    ? 'Aktuell: <a href="'+esc(dlgPdfBestand.url)+'" target="_blank" rel="noopener">📄 '+esc(dlgPdfBestand.name)+'</a> — neue Datei wählen, um sie zu ersetzen.' : '';
   byId('dlgPflicht').checked = !!v.pflicht;
   byId('dlgBeschreibung').value = v.beschreibung || '';
   byId('dlgFrist').value = (v.fristTage==null || v.fristTage==='') ? '' : v.fristTage;
@@ -1060,20 +1136,39 @@ async function speichereItemDialog(){
     d.optionen = opts.join('|');
   } else d.optionen = '';
   if (!d.titel) return fehler('Bitte einen Titel eingeben.');
-  if (d.typ==='link'){
+  if (d.typ!=='link') d.pflicht = false;
+  const resArt = (document.querySelector('input[name="dlgResArt"]:checked')||{}).value || '';
+  const pdfDatei = byId('dlgPdfDatei').files && byId('dlgPdfDatei').files[0];
+  if (d.typ==='link' && !resArt) return fehler('Für einen Punkt der Art „Link / Ressource" bitte einen Link oder ein PDF hinterlegen.');
+  if (resArt==='link'){
     if (!d.url) return fehler('Bitte einen Link eintragen.');
     if (!sichereUrl(d.url)) return fehler('Der Link muss mit https:// beginnen.');
-  } else { d.url = ''; d.pflicht = false; }
+  }
+  if (resArt==='pdf' && !pdfDatei && !dlgPdfBestand) return fehler('Bitte eine PDF-Datei auswählen.');
   let frist = null;
   const fristRoh = byId('dlgFrist').value.trim();
   if (fristRoh !== ''){
     frist = parseInt(fristRoh, 10); // ganze Tage, kein Dezimalformat
     if (isNaN(frist)) return fehler('Frist bitte als ganze Zahl eingeben (z. B. -7).');
   }
-  const felder = {Title:d.titel, Art:d.typ, Zustaendig:d.owner, Phase:d.phase, Beschreibung:d.beschreibung, Link:d.url, Pflicht:d.pflicht, FristTageZumStart:frist, Gruppe:d.gruppe, Optionen:d.optionen};
   const basis = '/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan;
   const btn = byId('dlgSpeichern'); btn.disabled = true;
   try{
+    await spaltenSichern();
+    // Ressource bestimmen (ggf. PDF hochladen)
+    let res = {url:'', ressourceTyp:'', ressourceName:'', ressourceId:''};
+    if (resArt==='link') res = {url:d.url, ressourceTyp:'link', ressourceName:'', ressourceId:''};
+    if (resArt==='pdf'){
+      if (pdfDatei){
+        fehler('');
+        btn.textContent = 'PDF wird hochgeladen …';
+        const up = await ladePdfHoch(pdfDatei, pct=>{ btn.textContent = 'PDF wird hochgeladen … '+pct+' %'; });
+        res = {url:up.url, ressourceTyp:'pdf', ressourceName:up.name, ressourceId:up.id};
+      } else res = {url:dlgPdfBestand.url, ressourceTyp:'pdf', ressourceName:dlgPdfBestand.name, ressourceId:dlgPdfBestand.id};
+    }
+    Object.assign(d, res);
+    const felder = {Title:d.titel, Art:d.typ, Zustaendig:d.owner, Phase:d.phase, Beschreibung:d.beschreibung, Link:d.url, Pflicht:d.pflicht, FristTageZumStart:frist, Gruppe:d.gruppe, Optionen:d.optionen,
+                    RessourceTyp:d.ressourceTyp, RessourceName:d.ressourceName, RessourceId:d.ressourceId};
     if (dlgItemId){
       const it = fahrplanListe.find(x=>String(x.id)===String(dlgItemId));
       const phaseWechsel = it.phase !== d.phase;
@@ -1097,7 +1192,7 @@ async function speichereItemDialog(){
     zeigeToast('Gespeichert ✓'+(demoMode?' (Demo)':''));
   }catch(e){
     fehler('Speichern fehlgeschlagen: '+e.message);
-  }finally{ btn.disabled = false; }
+  }finally{ btn.disabled = false; btn.textContent = 'Speichern'; }
 }
 async function loescheItemDialog(){
   const it = fahrplanListe.find(x=>String(x.id)===String(dlgItemId));
@@ -1113,21 +1208,25 @@ async function loescheItemDialog(){
 }
 
 function gfLinks(){
-  const alle = fahrplanListe.filter(it=>it.typ==='link');
-  const pflicht = alle.filter(it=>it.pflicht).length;
+  const alle = fahrplanListe.filter(it=>it.typ==='link' || sichereUrl(it.url));
+  const pdfs = alle.filter(it=>ressourceArt(it)==='pdf').length;
+  const ohne = alle.filter(it=>!sichereUrl(it.url)).length;
   let h = '<div class="ea-card ea-card-head"><div><h3>Links &amp; Ressourcen</h3>'
-    + '<p class="ea-item-desc">Dokumente, Anleitungen und Webseiten für neue Mitarbeitende — '+alle.length+' insgesamt, davon '+pflicht+' Pflicht. Sie erscheinen im Fahrplan in der gewählten Phase.</p></div>'
-    + '<button class="btn btn-sm btn-solid" data-new-item="link">+ Neuer Link</button></div>';
-  if (!alle.length) return h + '<div class="ea-card"><p class="ea-item-desc">Noch keine Links hinterlegt.</p></div>';
+    + '<p class="ea-item-desc">Alle Fahrplan-Punkte mit hinterlegtem Link oder PDF — '+alle.length+' insgesamt, davon '+pdfs+' PDF'+(ohne?', <b style="color:var(--error)">'+ohne+' ohne Ressource</b>':'')+'. '
+    + 'Eine Ressource lässt sich an jedem Punkt über ✎ ergänzen, auch unter „Fahrplan verwalten".</p></div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-solid" data-new-item="link">+ Neue Ressource</button></div></div>';
+  if (!alle.length) return h + '<div class="ea-card"><p class="ea-item-desc">Noch keine Ressourcen hinterlegt.</p></div>';
   PHASEN.forEach(p=>{
-    const liste = itemsFuerPhase(p.key).filter(it=>it.typ==='link');
+    const liste = itemsFuerPhase(p.key).filter(it=>alle.includes(it));
     if (!liste.length) return;
     h += '<div class="ea-card"><h3>'+esc(p.label)+'</h3>';
     liste.forEach(it=>{
       h += '<div class="ea-item" style="align-items:center"><div style="flex:1;min-width:0">';
-      h += '<span class="ea-item-title">'+esc(it.titel)+'</span><span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
-      if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
-      h += sichereUrl(it.url) ? '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(kurzUrl(it.url))+' ↗</a>' : '<div class="ea-item-desc" style="color:var(--error)">Kein Link hinterlegt</div>';
+      h += '<span class="ea-item-title">'+esc(it.titel)+'</span>';
+      if (it.typ==='link') h += '<span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
+      else h += '<span class="ea-badge optional">'+({task:'Aufgabe',milestone:'Meilenstein',reflection:'Reflexion',auswahl:'Selbsteinschätzung'}[it.typ]||it.typ)+'</span>';
+      if (it.gruppe) h += '<div class="ea-item-desc">'+esc(it.gruppe)+'</div>';
+      h += sichereUrl(it.url) ? ressourceHtml(it) : '<div class="ea-item-desc" style="color:var(--error)">Keine Ressource hinterlegt</div>';
       h += '</div><div class="ea-move"><button class="ea-mv" data-edit-item="'+esc(it.id)+'" title="Bearbeiten">✎</button></div></div>';
     });
     h += '</div>';
@@ -1265,7 +1364,7 @@ function itemRow(mitarbeiterId, it, editable){
   h += '<div class="ea-check '+(erledigt?'checked ':'')+(editable?'editable':'readonly')+'" '+(editable?'data-toggle-item="'+mitarbeiterId+'|'+it.schluessel+'"':'')+'>'+(erledigt?'✓':'')+'</div>';
   h += '<div style="flex:1"><span class="ea-item-title '+(erledigt?'checked':'')+'">'+esc(it.titel)+'</span>'+badges;
   if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
-  if (it.typ==='link' && sichereUrl(it.url)) h += '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">Öffnen ↗</a>';
+  h += ressourceHtml(it);
   h += '</div></div>';
   return h;
 }
@@ -1273,6 +1372,7 @@ function reflexionRow(mitarbeiterId, it){
   const val = (reflexionMap[mitarbeiterId+'__'+it.schluessel] || {}).text || '';
   let h = '<div style="margin:8px 0 10px"><div class="ea-item-title">'+esc(it.titel)+'</div>';
   if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
+  h += ressourceHtml(it);
   h += '<textarea class="ea-refl" data-refl-key="'+mitarbeiterId+'|'+it.schluessel+'" placeholder="Deine Notizen …">'+esc(val)+'</textarea>';
   h += '<div class="ea-lock">🔒 Nur für dich sichtbar</div></div>';
   return h;
@@ -1281,7 +1381,7 @@ function auswahlRow(mitarbeiterId, it){
   const kombi = mitarbeiterId+'__'+it.schluessel;
   const val = (reflexionMap[kombi] || {}).text || '';
   const optionen = String(it.optionen||'Ja|Teilweise|Noch nicht').split('|').map(s=>s.trim()).filter(Boolean);
-  let h = '<div class="ea-auswahl"><div class="ea-item-title">'+esc(it.titel)+'</div><div class="ea-optionen" role="radiogroup">';
+  let h = '<div class="ea-auswahl"><div class="ea-item-title">'+esc(it.titel)+'</div>'+ressourceHtml(it)+'<div class="ea-optionen" role="radiogroup">';
   optionen.forEach(o=>{
     h += '<label class="ea-opt'+(o===val?' aktiv':'')+'"><input type="radio" name="opt-'+esc(kombi)+'" value="'+esc(o)+'" '+(o===val?'checked':'')+' data-auswahl-key="'+mitarbeiterId+'|'+it.schluessel+'"> '+esc(o)+'</label>';
   });
@@ -1419,7 +1519,8 @@ function gfFahrplan(){
       if (it.typ==='link') h += '<span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
       if (it.fristTage!=null && it.fristTage!=='') h += '<span class="ea-badge owner">Start '+(Number(it.fristTage)>=0?'+':'')+it.fristTage+' Tg.</span>';
       if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
-      if (it.typ==='link') h += sichereUrl(it.url) ? '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(kurzUrl(it.url))+' ↗</a>' : '<div class="ea-item-desc" style="color:var(--error)">Kein Link hinterlegt</div>';
+      h += ressourceHtml(it);
+      if (it.typ==='link' && !sichereUrl(it.url)) h += '<div class="ea-item-desc" style="color:var(--error)">Keine Ressource hinterlegt</div>';
       h += '</div><div class="ea-move">';
       h += '<button class="ea-mv" data-edit-item="'+esc(it.id)+'" title="Bearbeiten">✎</button>';
       h += '<button class="ea-mv" data-mv="'+esc(it.id)+'|-1" '+(idx===0?'disabled':'')+' title="Nach oben">↑</button>';
