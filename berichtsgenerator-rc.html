@@ -456,7 +456,7 @@
               <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Mit der finalen Freigabe wird das PDF in SharePoint abgelegt und an die Sachbearbeitung (ASD) gesendet – kennwortgeschützt, das Kennwort folgt in einer zweiten E-Mail aus Ihrem Postfach.</div>
               <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Name für die Anrede, änderbar)</span></label><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:8px;"><label>E-Mail der ASD-Sachbearbeitung <span style="font-weight:normal; color:var(--text-muted);">(aus Kilanka, änderbar)</span></label><input type="email" id="ASD_Mail" placeholder="vorname.nachname@landkreis-xy.de" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
-              <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(mit dem Amt vereinbart, wird nicht gespeichert)</span></label><div style="display:flex; gap:6px; align-items:center;"><input type="password" id="ASD_Kennwort" autocomplete="new-password" placeholder="Kennwort" style="flex:1;"><button type="button" id="btnKennwortAuge" onclick="kennwortAnzeigen()" title="Kennwort anzeigen" aria-label="Kennwort anzeigen" style="min-height:36px; padding:0 10px; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; font-size:16px; line-height:1;">&#128065;</button></div></div>
+              <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(Vorschlag nach Schema PNW-NaVo*JJ_MM, änderbar — wird nicht gespeichert)</span></label><div style="display:flex; gap:6px; align-items:center;"><input type="password" id="ASD_Kennwort" autocomplete="new-password" placeholder="Kennwort" style="flex:1;"><button type="button" id="btnKennwortAuge" onclick="kennwortAnzeigen()" title="Kennwort anzeigen" aria-label="Kennwort anzeigen" style="min-height:36px; padding:0 10px; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; font-size:16px; line-height:1;">&#128065;</button></div></div>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
               <button class="btn" id="btnTlFreigeben" onclick="tlFinalFreigeben()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
@@ -844,6 +844,26 @@ function fuelleAsdVersandBlock() {
   const nameEl = document.getElementById('ASD_Name'); if (nameEl && !nameEl.value.trim()) nameEl.value = (name === '__custom__' ? '' : name);
   const mailEl = document.getElementById('ASD_Mail');
   if (mailEl && !mailEl.value.trim() && _asdMailMap[name]) mailEl.value = _asdMailMap[name];
+  // Kennwort vorschlagen (überschreibbar): PNW-<Nachname 2 Buchstaben><Vorname 2 Buchstaben>*<JJ>_<MM>
+  const kwEl = document.getElementById('ASD_Kennwort');
+  if (kwEl && !kwEl.value.trim()) { const v = kennwortVorschlag(); if (v) { kwEl.value = v; kwEl.placeholder = v; } }
+}
+
+// Vorschlag nach dem mit den Ämtern vereinbarten Schema, z. B. PNW-EmMa*26_09 (Emadi, Marwa, 09/2026).
+// Nur ASCII-Buchstaben: Umlaute werden umgeschrieben, Sonderzeichen entfernt, Groß-/Kleinschreibung normiert.
+function kennwortVorschlag() {
+  const teil = v => {
+    const t = String(v || '').trim()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z]/g, '');
+    return t ? t.charAt(0).toUpperCase() + t.slice(1, 2).toLowerCase() : '';
+  };
+  const nach = teil(document.getElementById('Kind_Familienname')?.value);
+  const vor = teil(document.getElementById('Kind_Vorname')?.value);
+  if (!nach || !vor) return '';
+  const d = new Date();
+  return `PNW-${nach}${vor}*${String(d.getFullYear()).slice(2)}_${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 // Auge-Schalter: Kennwort im Klartext zeigen/verbergen
 function kennwortAnzeigen() {
