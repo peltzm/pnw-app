@@ -1738,7 +1738,8 @@ async function erzeugePdfBytes(data, opts) {
     // Teamleitung im Unterschriftenblock: explizit übergeben, sonst ab dem Status "TL freigegeben"
     // bzw. in der GF-Prüfung die zugewiesene Teamleitung — vor der TL-Freigabe steht "Entwurf"
     freigabeLeitung: opts.freigabeLeitung
-      || ((['TL freigegeben', 'GF-Prüfung', 'Genehmigt'].includes(currentItemStatus) && (currentAssignedReviewer || data._assignedReviewer)) || ''),
+      || ((['TL freigegeben', 'GF-Prüfung', 'Genehmigt'].includes(currentItemStatus)
+            && (currentAssignedReviewer || data._assignedReviewer || (typeof isTLUser === 'function' && isTLUser() ? (currentAccount?.name || '') : ''))) || ''),
     anhang: _anhangPDF ? { titel: _anhangPDF.titel || '', name: _anhangPDF.name } : null,
   });
   // Kennwortschutz (pdfmake/pdfkit): ein geschuetztes PDF laesst sich danach nicht mehr per pdf-lib um den
@@ -4098,6 +4099,9 @@ async function tlFreigebenAnSonja() {
   try {
     const data = collectData();
     data._status = 'TL freigegeben'; data._statusExplicit = true;
+    // Freigebende Teamleitung festhalten — auch wenn der Bericht vorher nicht förmlich angenommen wurde
+    currentAssignedReviewer = currentAssignedReviewer || currentAccount?.name || '';
+    currentAssignedReviewerMail = currentAssignedReviewerMail || currentAccount?.username || '';
     data._assignedReviewer = currentAssignedReviewer;
     data._assignedReviewerMail = currentAssignedReviewerMail;
     currentItemStatus = 'TL freigegeben';
@@ -4108,7 +4112,7 @@ async function tlFreigebenAnSonja() {
       setStatus('uploading', 'PDF wird aktualisiert...');
       const { driveId: _d } = await getSiteAndDrive();
       const _t = await getToken();
-      const _bytes = await erzeugePdfBytes(data, { freigabeLeitung: currentAssignedReviewer || '' });
+      const _bytes = await erzeugePdfBytes(data, { freigabeLeitung: currentAssignedReviewer || currentAccount?.name || '' });
       await pdfHochladen(_d, _t, berichtsDateiname(data, currentVersion || 1), _bytes);
     } catch(e) { console.warn('PDF-Aktualisierung bei TL-Freigabe fehlgeschlagen:', e.message); }
 
