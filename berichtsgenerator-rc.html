@@ -5276,6 +5276,7 @@ function syncUnterschriftNamen() {
     if (istLeitung && !istEinreicher && !istStammFachkraft) {
       if (!Array.from(el.options).some(o => o.value === vorgabe)) el.add(new Option(vorgabe, vorgabe));
       el.value = vorgabe;
+      qualiAusPosition(1, true);   // Qualifikation der Leitungsperson nicht stehen lassen: Position der Fachkraft, sonst leer
       if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
     }
   }
