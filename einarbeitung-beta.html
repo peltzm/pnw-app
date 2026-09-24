@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Einarbeitung (Beta) — Praxis NeueWege</title>
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
+.btn-outline:hover{background:var(--accent-light)}
+.btn-solid{background:var(--accent);color:#fff}
+.btn-solid:hover{background:#68351a}
+.btn-sm{padding:5px 12px;font-size:12px;min-height:30px}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text-muted);font-size:11px;padding:3px 10px;min-height:28px;border-radius:4px;cursor:pointer;font-family:inherit}
+.btn-ghost:hover{border-color:var(--accent-mid);color:var(--accent)}
+.btn-text{background:none;border:none;color:var(--text-muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit;margin-top:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:calc(100dvh - var(--hdr-h));padding:24px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem 1.75rem;max-width:420px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.login-card img{height:64px;width:auto;margin-bottom:1.25rem}
+.login-title{font-size:18px;font-weight:600;margin-bottom:6px}
+.login-desc{font-size:13px;color:var(--text-muted);margin-bottom:1.5rem;line-height:1.6}
+.login-note{font-size:11.5px;color:var(--text-hint);margin-top:14px;line-height:1.5;border-top:1px solid var(--border);padding-top:12px}
+.alert{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:1rem}
+.alert-error{background:var(--error-bg);color:var(--error);border:1px solid #fecaca}
+
+#appScreen{display:none;flex-direction:column;min-height:calc(100dvh - var(--hdr-h))}
+.page-header{padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid var(--border);background:var(--surface)}
+.page-header-left h2{font-size:17px;font-weight:600;color:var(--text)}
+.page-header-left p{font-size:12px;color:var(--text-muted);margin-top:1px}
+
+.demo-bar{display:none;align-items:center;gap:10px;background:var(--warn-bg);border-bottom:1px solid #f3dcb8;color:var(--warn);font-size:12px;padding:7px 20px;flex-wrap:wrap}
+.demo-bar strong{font-weight:700}
+.setup-bar{display:none;align-items:center;gap:10px;background:var(--blue-bg);border-bottom:1px solid #cfe0f5;color:var(--blue);font-size:12px;padding:8px 20px;flex-wrap:wrap}
+.seed-bar{display:none;align-items:center;gap:10px;background:var(--ok-bg);border-bottom:1px solid #cde8cf;color:var(--ok);font-size:12px;padding:8px 20px;flex-wrap:wrap}
+.denied-bar{display:none;align-items:center;gap:10px;background:var(--error-bg);border-bottom:1px solid #fecaca;color:var(--error);font-size:12px;padding:10px 20px;flex-wrap:wrap}
+
+.viewbar{padding:10px 20px;display:flex;align-items:center;gap:10px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.pill-group{display:flex;gap:6px;flex-wrap:wrap}
+.pill{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:4px 13px;font-size:12px;font-family:inherit;cursor:pointer;color:var(--text-muted);transition:all .12s}
+.pill:hover{border-color:var(--accent-mid);color:var(--accent)}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+select.ea-select{border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-family:inherit;font-size:12.5px;background:var(--surface);color:var(--text)}
+
+.ea-wrap{max-width:900px;margin:0 auto;width:100%;padding:18px 20px 48px}
+.ea-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:16px}
+.ea-card h3{font-size:15px;font-weight:600;margin-bottom:2px}
+.ea-meta{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px 20px;margin-top:12px}
+.ea-meta .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-hint)}
+.ea-meta .v{font-size:13px;color:var(--text);font-weight:500}
+.ea-pct{display:inline-flex;background:var(--accent-light);color:var(--accent);border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:700}
+.ea-profile-row{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start}
+
+.ea-path{position:relative;padding-left:28px}
+.ea-path::before{content:"";position:absolute;left:10px;top:4px;bottom:4px;width:2px;background:var(--border-strong)}
+.ea-wp{position:relative;margin-bottom:12px}
+.ea-dot{position:absolute;left:-28px;top:2px;width:22px;height:22px;border-radius:50%;background:var(--surface);border:2px solid var(--border-strong);color:var(--text-hint);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700}
+.ea-wp.done .ea-dot{background:var(--ok);border-color:var(--ok);color:#fff}
+.ea-wp.current .ea-dot{background:var(--accent-mid);border-color:var(--accent-mid);color:#fff}
+.ea-wp-head{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;padding:4px 0}
+.ea-wp-head h4{font-size:13.5px;font-weight:600}
+.ea-wp-head .pct{font-size:11.5px;color:var(--text-muted);font-weight:500;flex-shrink:0}
+.ea-wp-body{display:none;padding:4px 2px 6px}
+.ea-wp.open .ea-wp-body{display:block}
+.ea-tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 8px;border-radius:20px;background:var(--accent-light);color:var(--accent-mid);margin-left:8px}
+
+.ea-item{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-top:1px solid var(--border)}
+.ea-item:first-child{border-top:none}
+.ea-check{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border-strong);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;background:var(--surface);font-size:11px;color:#fff}
+.ea-check.checked{background:var(--ok);border-color:var(--ok)}
+.ea-check.editable{cursor:pointer}
+.ea-check.readonly{opacity:.75}
+.ea-item-title{font-size:13px;color:var(--text)}
+.ea-item-title.checked{color:var(--text-muted);text-decoration:line-through;text-decoration-color:var(--border-strong)}
+.ea-item-desc{font-size:11.5px;color:var(--text-muted);margin-top:2px}
+.ea-item-link{font-size:11.5px;margin-top:3px;display:inline-block;color:var(--accent)}
+.ea-badge{font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px;letter-spacing:.2px}
+.ea-badge.pflicht{background:var(--error-bg);color:var(--error)}
+.ea-badge.optional{background:var(--bg);color:var(--text-hint);border:1px solid var(--border)}
+.ea-badge.owner{background:var(--accent-light);color:var(--accent-mid)}
+.ea-note{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+.ea-note .l{font-size:10.5px;color:var(--text-hint);margin-bottom:3px}
+.ea-note ul{margin:0;padding-left:16px}
+.ea-note li{font-size:12px;color:var(--text-muted);margin-bottom:2px}
+textarea.ea-refl{width:100%;min-height:64px;border:1px solid var(--border);border-radius:var(--radius);padding:9px;background:var(--bg);color:var(--text);resize:vertical;margin-top:6px;font-family:inherit;font-size:12.5px}
+.ea-lock{font-size:10.5px;color:var(--text-hint);margin-top:4px}
+
+.ea-due-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
+.ea-due-row:first-child{border-top:none}
+.ea-status{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.ea-status.overdue{background:var(--error-bg);color:var(--error)}
+.ea-status.soon{background:var(--warn-bg);color:var(--warn)}
+.ea-status.later{background:var(--bg);color:var(--text-hint);border:1px solid var(--border)}
+
+table.ea-tbl{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+table.ea-tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-hint);font-weight:600;padding:8px 10px;background:var(--bg);border-bottom:1px solid var(--border)}
+table.ea-tbl td{padding:9px 10px;border-top:1px solid var(--border);vertical-align:middle}
+.ea-namebtn{font-weight:600;color:var(--text);background:none;border:none;padding:0;font-size:12.5px;cursor:pointer;text-align:left}
+.ea-namebtn:hover{color:var(--accent)}
+
+.ea-form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin:12px 0}
+.ea-form-grid label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-hint);margin-bottom:4px;font-weight:600}
+.ea-form-grid input,.ea-form-grid select{width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:8px 9px;background:var(--bg);color:var(--text);font-family:inherit;font-size:12.5px}
+.ea-link-copy{display:flex;gap:8px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin-top:8px}
+.ea-link-copy code{flex:1;font-size:11px;overflow-x:auto;white-space:nowrap;color:var(--text-muted)}
+.loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:60px 20px;font-size:13px}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.footer-note{max-width:900px;margin:0 auto;padding:0 20px 40px;font-size:11px;color:var(--text-hint);line-height:1.7}
+.footer-note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand" onclick="location.href='apps.html'">
+    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <span>Einarbeitung</span>
+    <span class="beta-badge" id="versionBadge">BETA</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge"><div class="user-dot"></div><span id="userName"></span></div>
+    <button class="btn-ghost" onclick="logout()" id="logoutBtn" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
+    <div class="login-title">Einarbeitung <span class="beta-badge">BETA</span></div>
+    <div class="login-desc">Dein Fahrplan für die ersten drei Monate — mit Aufgaben für dich, deine Mentor:in, Teamleitung und die Geschäftsführung.</div>
+    <button class="btn btn-solid" style="width:100%" onclick="login()">Mit Microsoft anmelden</button>
+    <button class="btn-text" onclick="startDemo()">Demo ansehen (Beispieldaten)</button>
+    <div class="alert alert-error" id="loginError" style="display:none"></div>
+    <div class="login-note">Noch ohne Microsoft-Konto, weil dein erster Arbeitstag noch bevorsteht? Der Zugang vor deinem Start per persönlichem Link folgt in Kürze — bis dahin bekommst du die wichtigsten Infos vorab per E-Mail.</div>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="demo-bar" id="demoBar">
+    <strong>Demo-Modus</strong> — fiktive Beispieldaten, nichts wird gespeichert.
+    <span class="pill-group" id="demoRoleSwitch" style="margin-left:6px"></span>
+  </div>
+  <div class="setup-bar" id="setupBar">
+    <strong>Ersteinrichtung:</strong> Eine oder mehrere SharePoint-Listen fehlen noch.
+    <button class="btn btn-sm btn-solid" onclick="setupListen()">Listen jetzt anlegen</button>
+    <span id="setupStatus"></span>
+  </div>
+  <div class="seed-bar" id="seedBar">
+    <strong>Fahrplan leer.</strong> Standardinhalte aus dem Einarbeitungsheft einspielen?
+    <button class="btn btn-sm btn-solid" onclick="seedFahrplan()">Fahrplan befüllen</button>
+    <span id="seedStatus"></span>
+  </div>
+  <div class="denied-bar" id="deniedBar">
+    Für dieses Konto ist kein Einarbeitungsplan hinterlegt. Bitte wende dich an die Verwaltung, falls das nicht stimmt.
+  </div>
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2>Einarbeitung</h2>
+      <p id="pageSub"></p>
+    </div>
+  </div>
+
+  <div class="viewbar" id="viewbar" style="display:none"></div>
+
+  <div class="ea-wrap" id="content"><div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div></div>
+
+  <div class="footer-note">
+    Datenbasis: SharePoint-Listen <code>PNW-Einarbeitung-Mitarbeiter</code>, <code>PNW-Einarbeitung-Fahrplan</code>,
+    <code>PNW-Einarbeitung-Fortschritt</code>, <code>PNW-Einarbeitung-Reflexionen</code>. Reflexionen sind nur für die
+    jeweilige Person selbst sichtbar — Mentor:in, Teamleitung und Geschäftsführung sehen ausschließlich den Haken-Fortschritt.
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zu Fuhrpark / Mobilfunk / Mitarbeiter-Cockpit
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/einarbeitung-beta.html',
+  spHost: 'praxisneuewegesonjapeltz978.sharepoint.com',
+  listMitarbeiter: 'PNW-Einarbeitung-Mitarbeiter',
+  listFahrplan: 'PNW-Einarbeitung-Fahrplan',
+  listFortschritt: 'PNW-Einarbeitung-Fortschritt',
+  listReflexion: 'PNW-Einarbeitung-Reflexionen'
+};
+const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
+const GF_ERLAUBT = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+const APP_VERSION = 'BETA-init'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+
+/* ═══════════════════════════════════════════════════════════
+ * FELD-SCHEMATA — SharePoint-Spalten
+ * ═══════════════════════════════════════════════════════════ */
+const SCHEMA_MITARBEITER = [
+  {sp:'Title', key:'name', typ:'text'},
+  {sp:'Bereich', key:'bereich', typ:'text'},
+  {sp:'UPN', key:'upn', typ:'text'},
+  {sp:'StartDatum', key:'startDatum', typ:'datum'},
+  {sp:'MentorName', key:'mentorName', typ:'text'},
+  {sp:'MentorUPN', key:'mentorUpn', typ:'text'},
+  {sp:'TeamleitungName', key:'tlName', typ:'text'},
+  {sp:'TeamleitungUPN', key:'tlUpn', typ:'text'}
+];
+const SCHEMA_FAHRPLAN = [
+  {sp:'Title', key:'titel', typ:'text'},
+  {sp:'Schluessel', key:'schluessel', typ:'text'},
+  {sp:'Phase', key:'phase', typ:'text'},
+  {sp:'Zustaendig', key:'owner', typ:'text'},
+  {sp:'Art', key:'typ', typ:'text'},
+  {sp:'Beschreibung', key:'beschreibung', typ:'lang'},
+  {sp:'Link', key:'url', typ:'text'},
+  {sp:'Pflicht', key:'pflicht', typ:'bool'},
+  {sp:'FristTageZumStart', key:'fristTage', typ:'zahl'},
+  {sp:'Reihenfolge', key:'reihenfolge', typ:'zahl'}
+];
+const SCHEMA_FORTSCHRITT = [
+  {sp:'Title', key:'kombi', typ:'text'},
+  {sp:'MitarbeiterId', key:'mitarbeiterId', typ:'text'},
+  {sp:'ItemSchluessel', key:'itemSchluessel', typ:'text'},
+  {sp:'Erledigt', key:'erledigt', typ:'bool'},
+  {sp:'ErledigtAm', key:'erledigtAm', typ:'text'}
+];
+const SCHEMA_REFLEXION = [
+  {sp:'Title', key:'kombi', typ:'text'},
+  {sp:'MitarbeiterId', key:'mitarbeiterId', typ:'text'},
+  {sp:'ItemSchluessel', key:'itemSchluessel', typ:'text'},
+  {sp:'Text', key:'text', typ:'lang'},
+  {sp:'AktualisiertAm', key:'aktualisiertAm', typ:'text'}
+];
+
+const PHASEN = [
+  {key:'vorab',  label:'Vor deinem ersten Tag',                      dayStart:-999, dayEnd:-1},
+  {key:'tag1',   label:'Erster Arbeitstag',                          dayStart:0,    dayEnd:0},
+  {key:'woche1', label:'Woche 1 · Ankommen & Kennenlernen',          dayStart:1,    dayEnd:6},
+  {key:'woche2', label:'Woche 2 · Mitmachen & Ausprobieren',         dayStart:7,    dayEnd:13},
+  {key:'woche3', label:'Woche 3 · Deine ersten eigenen Fälle',       dayStart:14,   dayEnd:20},
+  {key:'woche4', label:'Woche 4 · Festigen & Selbstständiger werden',dayStart:21,   dayEnd:27},
+  {key:'monat2', label:'Monat 2 · Vertiefen',                        dayStart:28,   dayEnd:59},
+  {key:'monat3', label:'Monat 3 · Ankommen im Alltag',                dayStart:60,   dayEnd:999}
+];
+const OWNER_LABEL = {mitarbeiter:'Mitarbeiter:in', mentor:'Mentor:in', tl:'Teamleitung', gf:'Geschäftsführung'};
+
+/* Standard-Fahrplan aus dem Einarbeitungsheft — Grundlage für die Ersteinrichtung */
+const DEFAULT_FAHRPLAN = [
+{schluessel:'vorab-gf-vertrag',order:1,owner:'gf',phase:'vorab',typ:'task',titel:'Arbeitsvertrag erstellen und versenden',fristTage:-21},
+{schluessel:'vorab-gf-konten',order:2,owner:'gf',phase:'vorab',typ:'task',titel:'IT-Konten anlegen (E-Mail, Kilanka, OneDrive)',fristTage:-7},
+{schluessel:'vorab-gf-hardware',order:3,owner:'gf',phase:'vorab',typ:'task',titel:'Hardware bereitstellen (Tablet, ggf. Diensthandy)',fristTage:-7},
+{schluessel:'vorab-gf-ausweis',order:4,owner:'gf',phase:'vorab',typ:'task',titel:'Mitarbeiterausweis vorbereiten',fristTage:-5},
+{schluessel:'vorab-gf-willkommen',order:5,owner:'gf',phase:'vorab',typ:'task',titel:'Willkommens-Mail mit Zugangslink, Mentor- & TL-Infos versenden',fristTage:-10},
+{schluessel:'vorab-mentor-vorstellen',order:6,owner:'mentor',phase:'vorab',typ:'task',titel:'Sich beim neuen Mitarbeiter kurz vorstellen (Anruf oder Mail)',fristTage:-5},
+{schluessel:'vorab-res-vorstellung',order:7,owner:'mitarbeiter',phase:'vorab',typ:'link',titel:'Kurzvorstellung Praxis NeueWege',url:'https://praxisneuewege.de/ueber-uns',pflicht:true},
+{schluessel:'vorab-res-anfahrt',order:8,owner:'mitarbeiter',phase:'vorab',typ:'link',titel:'Anfahrt & erster Ansprechpartner am Standort',url:'https://praxisneuewege.de/kontakt',pflicht:false},
+{schluessel:'tag1-kennenlernen',order:1,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Team, Mentor:in, Teamleitung, Arbeitsplatz und Räumlichkeiten kennenlernen',beschreibung:'Groß- & Kleinteam, dein Arbeitsplatz und die Räumlichkeiten vor Ort'},
+{schluessel:'tag1-rahmen',order:2,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Arbeitszeiten, Dienstfahrzeug-Nutzung und Plus-Bausteine erklärt bekommen'},
+{schluessel:'tag1-ansprechpartner',order:3,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Wichtigste Ansprechpartner kennen',beschreibung:'TL: Nadine Grund (Pfaffenhofen & Dachau), Jörg Schneider (Ingolstadt, Eichstätt, Regensburg & Neuburg-Schrobenhausen), Laura Meier (Kelheim & Freising). IT/Verwaltung/Personal: Markus Peltz.'},
+{schluessel:'tag1-arbeitsmittel',order:4,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Arbeitsmittel erhalten',beschreibung:'Tablet, Kilanka-Zugang, OneDrive, Outlook, Mitarbeiterausweis, PNW-App, DATEV'},
+{schluessel:'tag1-grundfunktionen',order:5,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Grundfunktionen kennenlernen',beschreibung:'Tablet nutzen, Kilanka-Anmeldung inkl. Notfallkontakt, Dokumentation, technischer Support, Berichte, Krankmeldung, Urlaub, Zeiterfassung, Fortbildungen eintragen'},
+{schluessel:'tag1-reflexion',order:6,owner:'mitarbeiter',phase:'tag1',typ:'reflection',titel:'Deine erste Hausaufgabe',beschreibung:'Was nimmst du dir für deinen ersten Arbeitstag mit? Was ist noch unklar? Welche Frage möchtest du stellen?'},
+{schluessel:'woche1-konzept',order:1,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Arbeitsweise & pädagogisches Konzept der Einrichtung kennenlernen'},
+{schluessel:'woche1-aufgaben',order:2,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Aufgaben, Zuständigkeiten und Teamstruktur verstehen'},
+{schluessel:'woche1-kommunikation',order:3,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Kommunikationswege und Teambesprechungen kennenlernen'},
+{schluessel:'woche1-doku',order:4,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Wichtigste Dokumentationsregeln kennenlernen'},
+{schluessel:'woche1-sgb',order:5,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Gesetzliche Grundlagen SGB VIII durchgehen',beschreibung:'§27, §30, §31, §34, §35, §35a, §41, §8a, §8b'},
+{schluessel:'woche1-erstefaelle',order:6,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Erste Fälle mit Mentor:in anschauen',beschreibung:'Hilfeplanung lesen, Ziele der Familie kennen, wichtige Ansprechpartner kennen, bisherige Dokumentation anschauen'},
+{schluessel:'woche1-hausbesuch',order:7,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Ersten Hausbesuch begleiten (beobachtend)'},
+{schluessel:'woche1-reflexion',order:8,owner:'mitarbeiter',phase:'woche1',typ:'reflection',titel:'Deine Hausbesuch-Reflexion',beschreibung:'Was ist dir aufgefallen? Was möchtest du fragen?'},
+{schluessel:'woche2-uebung',order:1,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Tablet, Kilanka, Terminorganisation und Zeitplanung üben'},
+{schluessel:'woche2-doku',order:2,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Dokumentationen erstellen und Gespräche vorbereiten'},
+{schluessel:'woche2-hilfeplan',order:3,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Informationen aus Hilfeplänen nutzen, dich im Team austauschen'},
+{schluessel:'woche2-hausbesuch',order:4,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Bei Hausbesuchen aktiv mitmachen',beschreibung:'Begrüßung, Fragen stellen, aktiv zuhören, Gesprächsteile übernehmen'},
+{schluessel:'woche2-reflexion',order:5,owner:'mitarbeiter',phase:'woche2',typ:'reflection',titel:'Deine Reflexion',beschreibung:'Was ist gut gelungen? Was fiel schwer?'},
+{schluessel:'woche3-eigenefaelle',order:1,owner:'mitarbeiter',phase:'woche3',typ:'task',titel:'Erste eigene Fälle übernehmen',beschreibung:'Fall 1 & Fall 2 mit Zielen und Ansprechpartnern dokumentieren'},
+{schluessel:'woche3-sorgfalt',order:2,owner:'mitarbeiter',phase:'woche3',typ:'task',titel:'Bei eigenen Fällen achtgeben',beschreibung:'Hilfeplanung, Termine, Kontakte, Stammdaten, Absprachen, Fristen, Datenschutz, Rücksprache mit der TL'},
+{schluessel:'woche3-hausbesuch',order:3,owner:'mitarbeiter',phase:'woche3',typ:'task',titel:'Eigene Gesprächsanteile bei Hausbesuchen übernehmen'},
+{schluessel:'woche3-reflexion',order:4,owner:'mitarbeiter',phase:'woche3',typ:'reflection',titel:'Deine Reflexion',beschreibung:'Was gelingt bereits gut? Wo bist du unsicher?'},
+{schluessel:'woche4-selbstcheck',order:1,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Selbstcheck: Termine, Fallvorbereitung, Kilanka, Dokumentation'},
+{schluessel:'woche4-gespraeche',order:2,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Gespräche selbstständig vorbereiten & führen, Aufgaben priorisieren'},
+{schluessel:'woche4-unterstuetzung',order:3,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Wissen, wann und bei wem du Unterstützung holst'},
+{schluessel:'woche4-hausbesuch',order:4,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Hausbesuche zunehmend selbstständig durchführen',beschreibung:'Von der Vorbereitung bis zur Nachbereitung'},
+{schluessel:'woche4-reflexion',order:5,owner:'mitarbeiter',phase:'woche4',typ:'reflection',titel:'Rückblick auf deine ersten vier Wochen',beschreibung:'Das kannst du bereits gut. Das möchtest du noch lernen. Dabei brauchst du noch Unterstützung.'},
+{schluessel:'woche4-abschlusscheck',order:6,owner:'mitarbeiter',phase:'woche4',typ:'reflection',titel:'Dein persönlicher Einarbeitungs-Check',beschreibung:'Fühlst du dich im Team, bei Aufgaben, Hausbesuchen und eigenen Fällen sicher?'},
+{schluessel:'woche4-abschlussgespraech',order:7,owner:'tl',phase:'woche4',typ:'milestone',titel:'Abschlussgespräch nach 4 Wochen mit TL und Mentor:in führen'},
+{schluessel:'monat2-fallzahl',order:1,owner:'mitarbeiter',phase:'monat2',typ:'task',titel:'Fallzahl schrittweise erhöhen (in Absprache mit der Teamleitung)'},
+{schluessel:'monat2-hilfeplan',order:2,owner:'mitarbeiter',phase:'monat2',typ:'task',titel:'Erste eigenständige Hilfeplanfortschreibung erstellen'},
+{schluessel:'monat2-fortbildung',order:3,owner:'mitarbeiter',phase:'monat2',typ:'link',titel:'An einer Fortbildung oder einem Fachtag teilnehmen',url:'https://praxisneuewege.de/fortbildungen',pflicht:false},
+{schluessel:'monat2-feedback',order:4,owner:'tl',phase:'monat2',typ:'milestone',titel:'Zwischen-Feedback-Gespräch nach 2 Monaten'},
+{schluessel:'monat3-verantwortung',order:1,owner:'mitarbeiter',phase:'monat3',typ:'task',titel:'Volle Fallverantwortung im vereinbarten Rahmen übernehmen'},
+{schluessel:'monat3-abschluss',order:2,owner:'tl',phase:'monat3',typ:'milestone',titel:'Abschlussgespräch nach 3 Monaten – Einarbeitung offiziell abschließen'},
+{schluessel:'monat3-reflexion',order:3,owner:'mitarbeiter',phase:'monat3',typ:'reflection',titel:'3-Monats-Rückblick',beschreibung:'Was ist dir in den ersten drei Monaten gelungen? Wo stehst du heute?'},
+{schluessel:'monat3-rueckmeldung',order:4,owner:'mitarbeiter',phase:'monat3',typ:'task',titel:'Rückmeldung zum Einarbeitungs-Fahrplan geben',beschreibung:'Was hat gefehlt, was war hilfreich? Fließt in den nächsten Fahrplan ein.'}
+];
+
+/* Demo-Daten (fiktiv) für den Modus ohne Anmeldung */
+const DEMO_MITARBEITER = [
+  {id:'demo-lena', name:'Lena Brunner', bereich:'ambulant', upn:'', startDatum:addTageISO(todayISO(),14), mentorName:'Nadine Grund', tlName:'Nadine Grund'},
+  {id:'demo-tobias', name:'Tobias Wagner', bereich:'ambulant', upn:'', startDatum:addTageISO(todayISO(),-14), mentorName:'Jörg Schneider', tlName:'Jörg Schneider'},
+  {id:'demo-julia', name:'Julia Ferber', bereich:'ambulant', upn:'', startDatum:addTageISO(todayISO(),-93), mentorName:'Laura Meier', tlName:'Laura Meier'}
+];
+
+/* ═══════════════════════════════════════════════════════════
+ * ZUSTAND & MSAL
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance, currentAccount, currentUpn = '';
+let demoMode = false;
+let mitarbeiterListe = [], fahrplanListe = [];
+let fortschrittMap = {}, reflexionMap = {}; // kombi -> {...}
+let rolle = null, sichtbareIds = [], aktiverMitarbeiterId = null;
+let gfTab = 'faelligkeiten';
+let listenVorhanden = {mitarbeiter:true, fahrplan:true, fortschritt:true, reflexion:true};
+let reflSaveTimer = {};
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function addTageISO(iso, n){ const d = new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function tageZwischen(vonISO, bisISO){ const a=new Date(vonISO+'T00:00:00'), b=new Date(bisISO+'T00:00:00'); return Math.round((b-a)/86400000); }
+function fmtDatum(iso){ if(!iso) return '–'; const d=new Date(iso+'T00:00:00'); if(isNaN(d)) return iso; return d.toLocaleDateString('de-DE'); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function vorname(n){ return (n||'').split(' ')[0]; }
+function aktuellePhase(startISO){ const d=tageZwischen(startISO, todayISO()); for(const p of PHASEN){ if(d>=p.dayStart && d<=p.dayEnd) return p.key; } return d<0?'vorab':'monat3'; }
+
+function initMsal(){
+  msalInstance = msalInstance || new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'sessionStorage' }
+  });
+}
+async function login(){
+  try{
+    initMsal();
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account;
+    msalInstance.setActiveAccount(currentAccount);
+    currentUpn = (currentAccount.username||'').toLowerCase();
+    demoMode = false;
+    zeigeApp();
+    document.getElementById('userName').textContent = currentAccount.name || currentAccount.username;
+    document.getElementById('userBadge').style.display = 'flex';
+    document.getElementById('logoutBtn').style.display = '';
+    await ladeAllesUndStarte();
+  }catch(e){
+    const err = document.getElementById('loginError');
+    err.textContent = 'Anmeldung fehlgeschlagen: '+e.message;
+    err.style.display = 'block';
+  }
+}
+function logout(){ if(msalInstance) msalInstance.logoutPopup({account:currentAccount}).catch(()=>{}); location.reload(); }
+
+function startDemo(){
+  demoMode = true;
+  mitarbeiterListe = DEMO_MITARBEITER.map(m=>({...m}));
+  fahrplanListe = DEFAULT_FAHRPLAN.map((it,i)=>({...it, id:'demo-item-'+i}));
+  fortschrittMap = demoFortschritt();
+  reflexionMap = demoReflexionen();
+  zeigeApp();
+  document.getElementById('demoBar').style.display = 'flex';
+  rolle = 'mitarbeiter';
+  aktiverMitarbeiterId = 'demo-lena';
+  renderDemoRoleSwitch();
+  render();
+}
+function demoFortschritt(){
+  const map = {};
+  const setDone = (empId, schluessel, tage) => { map[empId+'__'+schluessel] = {erledigt:true, erledigtAm:addTageISO(todayISO(),-tage)}; };
+  const vorTag1 = ['vorab-gf-vertrag','vorab-gf-konten','vorab-gf-hardware','vorab-gf-ausweis','vorab-gf-willkommen','vorab-mentor-vorstellen','vorab-res-vorstellung','vorab-res-anfahrt'];
+  const tag1 = ['tag1-kennenlernen','tag1-rahmen','tag1-ansprechpartner','tag1-arbeitsmittel','tag1-grundfunktionen'];
+  const w1 = ['woche1-konzept','woche1-aufgaben','woche1-kommunikation','woche1-doku','woche1-sgb','woche1-erstefaelle','woche1-hausbesuch'];
+  const w2 = ['woche2-uebung','woche2-doku','woche2-hilfeplan','woche2-hausbesuch'];
+  const w3 = ['woche3-eigenefaelle','woche3-sorgfalt'];
+  [...vorTag1,...tag1,...w1,...w2,...w3].forEach(s=>setDone('demo-tobias', s, 1));
+  const w3b = ['woche3-hausbesuch'];
+  const w4 = ['woche4-selbstcheck','woche4-gespraeche','woche4-unterstuetzung','woche4-hausbesuch','woche4-abschlussgespraech'];
+  const m2 = ['monat2-fallzahl','monat2-hilfeplan','monat2-fortbildung','monat2-feedback'];
+  const m3 = ['monat3-verantwortung'];
+  [...vorTag1,...tag1,...w1,...w2,...w3,...w3b,...w4,...m2,...m3].forEach(s=>setDone('demo-julia', s, 1));
+  return map;
+}
+function demoReflexionen(){
+  return {
+    'demo-tobias__tag1-reflexion': 'Ich nehme mit, dass ich mir am Anfang keinen Druck machen muss.',
+    'demo-tobias__woche1-reflexion': 'Der erste Hausbesuch war spannend. Die ruhige Gesprächsführung hat mir gut gefallen.',
+    'demo-julia__monat3-reflexion': 'Ich fühle mich mittlerweile sicher in der eigenen Fallführung, hole mir bei komplexen Fällen noch bewusst eine zweite Meinung.'
+  };
+}
+function renderDemoRoleSwitch(){
+  const el = document.getElementById('demoRoleSwitch');
+  const roles = [['mitarbeiter','Mitarbeiter:in'],['mentor_tl','Mentor & TL'],['gf','Geschäftsführung']];
+  el.innerHTML = roles.map(r=>'<button class="pill '+(rolle===r[0]?'active':'')+'" onclick="demoSwitchRolle(\''+r[0]+'\')" style="padding:2px 10px;font-size:11px">'+r[1]+'</button>').join('');
+}
+function demoSwitchRolle(r){ rolle = r; sichtbareIds = mitarbeiterListe.map(m=>m.id); if(!aktiverMitarbeiterId) aktiverMitarbeiterId = sichtbareIds[0]; renderDemoRoleSwitch(); render(); }
+
+function zeigeApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'flex';
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * GRAPH API
+ * ═══════════════════════════════════════════════════════════ */
+async function token(scopes){
+  const req = {scopes:scopes||SCOPES, account:currentAccount};
+  try{ return (await msalInstance.acquireTokenSilent(req)).accessToken; }
+  catch(e){ return (await msalInstance.acquireTokenPopup(req)).accessToken; }
+}
+async function graph(pfad, opt={}){
+  const t = await token();
+  const r = await fetch('https://graph.microsoft.com/v1.0'+pfad, {...opt, headers:{Authorization:'Bearer '+t,'Content-Type':'application/json',...(opt.headers||{})}});
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error('Graph '+r.status+': '+await r.text());
+  return r.status===204 ? true : r.json();
+}
+async function graphAlle(pfad){
+  const alle=[]; let url='https://graph.microsoft.com/v1.0'+pfad;
+  for(let seite=0; url && seite<50; seite++){
+    const t=await token();
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}});
+    if(r.status===404) return alle;
+    if(!r.ok) throw new Error('Graph '+r.status+': '+await r.text());
+    const d=await r.json();
+    alle.push(...(d.value||[]));
+    url=d['@odata.nextLink']||null;
+  }
+  return alle;
+}
+function zuFeldern(f, schema){
+  const felder={};
+  for(const s of schema){
+    const v=f[s.key];
+    if(v===undefined||v===null||v==='') continue;
+    felder[s.sp] = (s.typ==='datum') ? (v+'T00:00:00Z') : v;
+  }
+  return felder;
+}
+function ausFeldern(item, schema){
+  const f={id:item.id};
+  for(const s of schema){
+    let v=item.fields[s.sp];
+    if(v===undefined||v===null) continue;
+    if(s.typ==='datum' && typeof v==='string') v=v.slice(0,10);
+    f[s.key]=v;
+  }
+  return f;
+}
+async function ladeListe(listName, schema){
+  const basis = '/sites/'+CFG.spHost+'/lists/'+listName;
+  const l = await graph(basis+'?$select=id');
+  if(!l) return null; // Liste fehlt
+  const items = await graphAlle(basis+'/items?expand=fields&$top=200');
+  return items.map(it=>ausFeldern(it, schema));
+}
+async function schreibeItem(listName, schema, f){
+  const basis = '/sites/'+CFG.spHost+'/lists/'+listName;
+  if(f.id && !String(f.id).startsWith('demo')){
+    await graph(basis+'/items/'+f.id+'/fields', {method:'PATCH', body:JSON.stringify(zuFeldern(f, schema))});
+    return f.id;
+  }
+  const res = await graph(basis+'/items', {method:'POST', body:JSON.stringify({fields:zuFeldern(f, schema)})});
+  return res.id;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * LADEN & ROLLE BESTIMMEN
+ * ═══════════════════════════════════════════════════════════ */
+async function ladeAllesUndStarte(){
+  document.getElementById('content').innerHTML = '<div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div>';
+  const [mit, fp, fs, rf] = await Promise.all([
+    ladeListe(CFG.listMitarbeiter, SCHEMA_MITARBEITER),
+    ladeListe(CFG.listFahrplan, SCHEMA_FAHRPLAN),
+    ladeListe(CFG.listFortschritt, SCHEMA_FORTSCHRITT),
+    ladeListe(CFG.listReflexion, SCHEMA_REFLEXION)
+  ]);
+  listenVorhanden = {mitarbeiter: mit!==null, fahrplan: fp!==null, fortschritt: fs!==null, reflexion: rf!==null};
+  mitarbeiterListe = mit || [];
+  fahrplanListe = fp || [];
+  fortschrittMap = {}; (fs||[]).forEach(x=>{ fortschrittMap[x.kombi] = x; });
+  reflexionMap = {}; (rf||[]).forEach(x=>{ reflexionMap[x.kombi] = x; });
+
+  const gfKonto = GF_ERLAUBT.includes(currentUpn);
+  document.getElementById('setupBar').style.display = Object.values(listenVorhanden).some(v=>!v) ? (gfKonto ? 'flex' : 'none') : 'none';
+  document.getElementById('seedBar').style.display = (listenVorhanden.fahrplan && fahrplanListe.length===0 && gfKonto) ? 'flex' : 'none';
+
+  bestimmeRolle(gfKonto);
+  render();
+}
+function bestimmeRolle(gfKonto){
+  if (gfKonto){
+    rolle = 'gf'; sichtbareIds = mitarbeiterListe.map(m=>m.id);
+    if (!aktiverMitarbeiterId && sichtbareIds.length) aktiverMitarbeiterId = sichtbareIds[0];
+    return;
+  }
+  const mentorTl = mitarbeiterListe.filter(m => (m.mentorUpn||'').toLowerCase()===currentUpn || (m.tlUpn||'').toLowerCase()===currentUpn);
+  if (mentorTl.length){
+    rolle = 'mentor_tl'; sichtbareIds = mentorTl.map(m=>m.id); aktiverMitarbeiterId = sichtbareIds[0];
+    return;
+  }
+  const eigene = mitarbeiterListe.find(m => (m.upn||'').toLowerCase()===currentUpn);
+  if (eigene){
+    rolle = 'mitarbeiter'; sichtbareIds = [eigene.id]; aktiverMitarbeiterId = eigene.id;
+    return;
+  }
+  rolle = null;
+  document.getElementById('deniedBar').style.display = 'flex';
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * ERSTEINRICHTUNG
+ * ═══════════════════════════════════════════════════════════ */
+async function legeListeAn(name, schema){
+  const t = await token(['Sites.Manage.All']);
+  const columns = schema.filter(s=>s.sp!=='Title').map(s=>{
+    if(s.typ==='zahl')  return {name:s.sp, number:{decimalPlaces:'automatic'}};
+    if(s.typ==='datum') return {name:s.sp, dateTime:{format:'dateOnly'}};
+    if(s.typ==='bool')  return {name:s.sp, boolean:{}};
+    if(s.typ==='lang')  return {name:s.sp, text:{allowMultipleLines:true}};
+    return {name:s.sp, text:{}};
+  });
+  const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/lists', {
+    method:'POST', headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+    body:JSON.stringify({displayName:name, columns, list:{template:'genericList'}})
+  });
+  if(!r.ok) throw new Error(name+' konnte nicht angelegt werden ('+r.status+'): '+await r.text());
+}
+async function setupListen(){
+  const status = document.getElementById('setupStatus');
+  try{
+    if(!listenVorhanden.mitarbeiter){ status.textContent='Lege '+CFG.listMitarbeiter+' an …'; await legeListeAn(CFG.listMitarbeiter, SCHEMA_MITARBEITER); }
+    if(!listenVorhanden.fahrplan){ status.textContent='Lege '+CFG.listFahrplan+' an …'; await legeListeAn(CFG.listFahrplan, SCHEMA_FAHRPLAN); }
+    if(!listenVorhanden.fortschritt){ status.textContent='Lege '+CFG.listFortschritt+' an …'; await legeListeAn(CFG.listFortschritt, SCHEMA_FORTSCHRITT); }
+    if(!listenVorhanden.reflexion){ status.textContent='Lege '+CFG.listReflexion+' an …'; await legeListeAn(CFG.listReflexion, SCHEMA_REFLEXION); }
+    status.textContent = 'Fertig — bitte in SharePoint die Berechtigungen der Listen auf die jeweils berechtigten Personen einschränken.';
+    document.getElementById('setupBar').style.display = 'none';
+    await ladeAllesUndStarte();
+  }catch(e){ status.textContent = 'Fehler: '+e.message; }
+}
+async function seedFahrplan(){
+  const status = document.getElementById('seedStatus');
+  status.textContent = 'Fahrplan wird befüllt …';
+  try{
+    for(const it of DEFAULT_FAHRPLAN){
+      await schreibeItem(CFG.listFahrplan, SCHEMA_FAHRPLAN, {titel:it.titel, schluessel:it.schluessel, phase:it.phase, owner:it.owner, typ:it.typ, beschreibung:it.beschreibung||'', url:it.url||'', pflicht:!!it.pflicht, fristTage:it.fristTage!=null?it.fristTage:'', reihenfolge:it.order});
+    }
+    status.textContent = 'Fertig.';
+    document.getElementById('seedBar').style.display = 'none';
+    await ladeAllesUndStarte();
+  }catch(e){ status.textContent = 'Fehler: '+e.message; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * SCHREIBEN — Fortschritt / Reflexion / neue Mitarbeitende / neue Fahrplan-Punkte
+ * ═══════════════════════════════════════════════════════════ */
+async function toggleItem(mitarbeiterId, schluessel){
+  const kombi = mitarbeiterId+'__'+schluessel;
+  const bisher = fortschrittMap[kombi];
+  const neu = !(bisher && bisher.erledigt);
+  fortschrittMap[kombi] = {...(bisher||{}), kombi, mitarbeiterId, itemSchluessel:schluessel, erledigt:neu, erledigtAm: neu?new Date().toISOString():''};
+  render();
+  if (demoMode) return;
+  try{
+    await schreibeItem(CFG.listFortschritt, SCHEMA_FORTSCHRITT, {id:bisher&&bisher.id, kombi, mitarbeiterId, itemSchluessel:schluessel, erledigt:neu, erledigtAm: neu?new Date().toISOString():''});
+  }catch(e){ console.error('toggle fehlgeschlagen', e); }
+}
+function speicherReflexion(mitarbeiterId, schluessel, text){
+  const kombi = mitarbeiterId+'__'+schluessel;
+  reflexionMap[kombi] = {...(reflexionMap[kombi]||{}), kombi, mitarbeiterId, itemSchluessel:schluessel, text};
+  if (demoMode) return;
+  if (reflSaveTimer[kombi]) clearTimeout(reflSaveTimer[kombi]);
+  reflSaveTimer[kombi] = setTimeout(async ()=>{
+    try{
+      const bisher = reflexionMap[kombi];
+      await schreibeItem(CFG.listReflexion, SCHEMA_REFLEXION, {id:bisher.id, kombi, mitarbeiterId, itemSchluessel:schluessel, text, aktualisiertAm:new Date().toISOString()});
+    }catch(e){ console.error('reflexion speichern fehlgeschlagen', e); }
+  }, 600);
+}
+let letzterLink = null;
+async function neuerMitarbeiter(daten){
+  const f = {name:daten.name, bereich:daten.bereich||'ambulant', startDatum:daten.startDatum, mentorName:daten.mentorName, tlName:daten.tlName};
+  if (demoMode){
+    const id = 'demo-'+Date.now();
+    mitarbeiterListe.push({...f, id, upn:''});
+    aktiverMitarbeiterId = id;
+    letzterLink = 'https://apps.praxisneuewege.de/einarbeitung/?demo=1';
+    return;
+  }
+  const id = await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, f);
+  mitarbeiterListe.push({...f, id});
+  sichtbareIds.push(id);
+  aktiverMitarbeiterId = id;
+  letzterLink = 'https://apps.praxisneuewege.de/einarbeitung/?e=' + id;
+}
+async function neuerFahrplanPunkt(daten){
+  const f = {titel:daten.titel, schluessel:'custom-'+Date.now(), phase:daten.phase, owner:daten.owner, typ:daten.typ, reihenfolge:Date.now()};
+  if (demoMode){ fahrplanListe.push({...f, id:'demo-item-'+Date.now()}); return; }
+  const id = await schreibeItem(CFG.listFahrplan, SCHEMA_FAHRPLAN, f);
+  fahrplanListe.push({...f, id});
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * RENDERING
+ * ═══════════════════════════════════════════════════════════ */
+function mitarbeiter(id){ return mitarbeiterListe.find(m=>m.id===id) || null; }
+function itemsFuerPhase(phaseKey){ return fahrplanListe.filter(it=>it.phase===phaseKey).sort((a,b)=>(a.reihenfolge||a.order||0)-(b.reihenfolge||b.order||0)); }
+function fortschrittFuer(mitarbeiterId, items){
+  const relevant = items.filter(it=>it.typ!=='reflection');
+  if (!relevant.length) return null;
+  const done = relevant.filter(it=>{ const e=fortschrittMap[mitarbeiterId+'__'+it.schluessel]; return e && e.erledigt; }).length;
+  return {done, total:relevant.length, pct: Math.round(100*done/relevant.length)};
+}
+
+function render(){
+  const vb = document.getElementById('viewbar');
+  const sub = document.getElementById('pageSub');
+  if (rolle === null){
+    document.getElementById('content').innerHTML = '';
+    vb.style.display = 'none';
+    return;
+  }
+  if (rolle === 'gf'){
+    vb.style.display = 'flex';
+    vb.innerHTML = '<div class="pill-group">' + [['faelligkeiten','Fälligkeiten'],['mitarbeitende','Mitarbeitende'],['fahrplan','Fahrplan verwalten'],['einzelansicht','Einzelansicht']]
+      .map(t=>'<button class="pill '+(gfTab===t[0]?'active':'')+'" data-gftab="'+t[0]+'">'+t[1]+'</button>').join('') + '</div>';
+    Array.from(vb.querySelectorAll('[data-gftab]')).forEach(b=>b.onclick=()=>{ gfTab=b.getAttribute('data-gftab'); render(); });
+    sub.textContent = 'Geschäftsführung';
+  } else if (rolle === 'mentor_tl'){
+    vb.style.display = sichtbareIds.length>1 ? 'flex' : 'none';
+    if (sichtbareIds.length>1){
+      vb.innerHTML = '<select class="ea-select" id="empSelect">' + sichtbareIds.map(id=>{ const m=mitarbeiter(id); return '<option value="'+id+'" '+(id===aktiverMitarbeiterId?'selected':'')+'>'+esc(m.name)+'</option>'; }).join('') + '</select>';
+      document.getElementById('empSelect').onchange = function(){ aktiverMitarbeiterId=this.value; render(); };
+    }
+    sub.textContent = 'Mentor:in / Teamleitung';
+  } else {
+    vb.style.display = 'none';
+    const m = mitarbeiter(aktiverMitarbeiterId);
+    sub.textContent = m ? m.name : '';
+  }
+
+  const content = document.getElementById('content');
+  if (rolle === 'mitarbeiter') content.innerHTML = viewMitarbeiter();
+  else if (rolle === 'mentor_tl') content.innerHTML = viewMentorTl();
+  else content.innerHTML = viewGf();
+  bindContentEvents();
+}
+
+function metaItem(l, v){ return '<div><div class="l">'+esc(l)+'</div><div class="v">'+esc(v||'–')+'</div></div>'; }
+
+function viewMitarbeiter(){
+  const m = mitarbeiter(aktiverMitarbeiterId);
+  if (!m) return '<div class="ea-card">Kein Mitarbeiter-Datensatz gefunden.</div>';
+  const d = tageZwischen(m.startDatum, todayISO());
+  if (d < 0) return mitarbeiterVorab(m, -d);
+  return mitarbeiterFahrplan(m, d);
+}
+function mitarbeiterVorab(m, tageNoch){
+  const vorabItems = itemsFuerPhase('vorab').filter(it=>it.owner==='mitarbeiter');
+  let h = '<div class="ea-card"><h3>Willkommen bei Praxis NeueWege, '+esc(vorname(m.name))+'! 🌱</h3>';
+  h += '<p class="ea-item-desc" style="margin-top:8px">Noch <b style="color:var(--text)">'+tageNoch+' Tag'+(tageNoch===1?'':'e')+'</b> bis zu deinem ersten Arbeitstag am '+fmtDatum(m.startDatum)+'.</p>';
+  h += '<div class="ea-meta">'+metaItem('Bereich',m.bereich)+metaItem('Mentor:in',m.mentorName)+metaItem('Teamleitung',m.tlName)+'</div></div>';
+  if (vorabItems.length){
+    h += '<div class="ea-card"><h3>Zum Reinlesen vor deinem Start</h3>';
+    vorabItems.forEach(it=>h+=itemRow(m.id, it, true));
+    h += '</div>';
+  }
+  h += '<div class="ea-card"><h3>Das erwartet dich danach</h3><div class="ea-path" style="margin-top:12px">';
+  PHASEN.filter(p=>p.key!=='vorab').forEach((p,i)=>{
+    h += '<div class="ea-wp"><div class="ea-dot">'+(i+1)+'</div><div class="ea-wp-head" style="cursor:default"><h4 style="color:var(--text-muted)">'+esc(p.label)+'</h4></div></div>';
+  });
+  h += '</div></div>';
+  return h;
+}
+function mitarbeiterFahrplan(m, tageSeit){
+  const curPhase = aktuellePhase(m.startDatum);
+  const overall = fortschrittFuer(m.id, fahrplanListe.filter(it=>it.phase!=='vorab'));
+  let h = '<div class="ea-card ea-profile-row"><div><h3>Hallo '+esc(vorname(m.name))+' 👋</h3>';
+  h += '<p class="ea-item-desc" style="margin-top:4px">Tag '+tageSeit+' bei Praxis NeueWege · Start am '+fmtDatum(m.startDatum)+'</p>';
+  h += '<div class="ea-meta">'+metaItem('Bereich',m.bereich)+metaItem('Mentor:in',m.mentorName)+metaItem('Teamleitung',m.tlName)+'</div></div>';
+  if (overall) h += '<div class="ea-pct">'+overall.pct+' % geschafft</div>';
+  h += '</div><div class="ea-path">';
+  PHASEN.filter(p=>p.key!=='vorab').forEach((p,i)=>h+=renderWaypoint(p, i+1, curPhase, m, 'mitarbeiter'));
+  h += '</div>';
+  return h;
+}
+function renderWaypoint(phase, idx, curPhaseKey, m, ansicht){
+  const items = itemsFuerPhase(phase.key);
+  const prog = fortschrittFuer(m.id, items);
+  const istAktuell = phase.key===curPhaseKey, istFertig = prog && prog.pct===100;
+  const klasse = (istFertig?'done ':'')+(istAktuell?'current ':'')+(istAktuell?'open':'');
+  let h = '<div class="ea-wp '+klasse+'" data-phase="'+phase.key+'">';
+  h += '<div class="ea-dot">'+(istFertig?'✓':idx)+'</div>';
+  h += '<div class="ea-wp-head" data-toggle-phase="1"><h4>'+esc(phase.label)+(istAktuell?'<span class="ea-tag">aktuell</span>':'')+'</h4><span class="pct">'+(prog?prog.done+'/'+prog.total:'—')+'</span></div>';
+  h += '<div class="ea-wp-body">';
+  if (ansicht==='mitarbeiter'){
+    const eigene = items.filter(it=>it.owner==='mitarbeiter');
+    const andere = items.filter(it=>it.owner==='mentor'||it.owner==='tl');
+    const refl = items.filter(it=>it.typ==='reflection');
+    if (!eigene.length && !andere.length && !refl.length) h += '<p class="ea-item-desc">Für diese Phase sind noch keine Punkte hinterlegt.</p>';
+    eigene.forEach(it=>h+=itemRow(m.id, it, true));
+    if (andere.length){
+      h += '<div class="ea-note"><div class="l">Darum kümmern sich in dieser Zeit Mentor:in / Teamleitung:</div><ul>'+andere.map(it=>'<li>'+esc(it.titel)+'</li>').join('')+'</ul></div>';
+    }
+    refl.forEach(it=>h+=reflexionRow(m.id, it));
+  } else {
+    const relevante = items.filter(it=>it.typ!=='reflection');
+    if (!relevante.length) h += '<p class="ea-item-desc">Für diese Phase sind noch keine Punkte hinterlegt.</p>';
+    relevante.forEach(it=>{
+      const mine = (ansicht==='mentor_tl' && (it.owner==='mentor'||it.owner==='tl')) || (ansicht==='gf' && it.owner==='gf');
+      h += itemRow(m.id, it, mine);
+    });
+  }
+  h += '</div></div>';
+  return h;
+}
+function itemRow(mitarbeiterId, it, editable){
+  const e = fortschrittMap[mitarbeiterId+'__'+it.schluessel];
+  const erledigt = !!(e && e.erledigt);
+  let badges = '';
+  if (it.typ==='link') badges += '<span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
+  if (it.owner!=='mitarbeiter') badges += '<span class="ea-badge owner">'+OWNER_LABEL[it.owner]+'</span>';
+  let h = '<div class="ea-item">';
+  h += '<div class="ea-check '+(erledigt?'checked ':'')+(editable?'editable':'readonly')+'" '+(editable?'data-toggle-item="'+mitarbeiterId+'|'+it.schluessel+'"':'')+'>'+(erledigt?'✓':'')+'</div>';
+  h += '<div style="flex:1"><span class="ea-item-title '+(erledigt?'checked':'')+'">'+esc(it.titel)+'</span>'+badges;
+  if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
+  if (it.typ==='link' && it.url) h += '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">Öffnen ↗</a>';
+  h += '</div></div>';
+  return h;
+}
+function reflexionRow(mitarbeiterId, it){
+  const val = (reflexionMap[mitarbeiterId+'__'+it.schluessel] || {}).text || '';
+  let h = '<div style="margin:10px 0"><div class="ea-item-title">'+esc(it.titel)+'</div>';
+  if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
+  h += '<textarea class="ea-refl" data-refl-key="'+mitarbeiterId+'|'+it.schluessel+'" placeholder="Deine Notizen …">'+esc(val)+'</textarea>';
+  h += '<div class="ea-lock">🔒 Nur für dich sichtbar — Mentor:in, Teamleitung und Geschäftsführung sehen diese Notiz nicht.</div></div>';
+  return h;
+}
+
+function viewMentorTl(){
+  const m = mitarbeiter(aktiverMitarbeiterId);
+  if (!m) return '<div class="ea-card">Keine Mitarbeitenden zugeordnet.</div>';
+  const d = tageZwischen(m.startDatum, todayISO());
+  const curPhase = aktuellePhase(m.startDatum);
+  const overall = fortschrittFuer(m.id, fahrplanListe.filter(it=>it.phase!=='vorab'));
+  let h = '<div class="ea-card ea-profile-row"><div><h3>'+esc(m.name)+'</h3>';
+  h += '<p class="ea-item-desc" style="margin-top:4px">'+(d<0?('Start in '+(-d)+' Tagen'):('Tag '+d+' seit Start'))+' · '+fmtDatum(m.startDatum)+'</p>';
+  h += '<div class="ea-meta">'+metaItem('Bereich',m.bereich)+metaItem('Mentor:in',m.mentorName)+metaItem('Teamleitung',m.tlName)+'</div></div>';
+  if (overall) h += '<div class="ea-pct">'+overall.pct+' % Fortschritt</div>';
+  h += '</div>';
+  if (d < 0){
+    h += '<div class="ea-card"><p class="ea-item-desc">Noch keine Aktivität — Start am '+fmtDatum(m.startDatum)+'.</p></div>';
+  } else {
+    h += '<div class="ea-path">';
+    PHASEN.filter(p=>p.key!=='vorab').forEach((p,i)=>h+=renderWaypoint(p, i+1, curPhase, m, 'mentor_tl'));
+    h += '</div>';
+  }
+  h += addFahrplanForm(['mentor','tl']);
+  return h;
+}
+
+function viewGf(){
+  if (gfTab==='faelligkeiten') return gfFaelligkeiten();
+  if (gfTab==='mitarbeitende') return gfMitarbeitende();
+  if (gfTab==='fahrplan') return gfFahrplan();
+  return gfEinzelansicht();
+}
+function gfEinzelansicht(){
+  let h = '<div class="ea-card"><label style="font-size:11px;color:var(--text-hint);display:block;margin-bottom:6px">Mitarbeiter:in ansehen</label>';
+  h += '<select class="ea-select" id="gfEmpSelect">' + mitarbeiterListe.map(m=>'<option value="'+m.id+'" '+(m.id===aktiverMitarbeiterId?'selected':'')+'>'+esc(m.name)+' · Start '+fmtDatum(m.startDatum)+'</option>').join('') + '</select></div>';
+  h += viewMentorTl();
+  return h;
+}
+function gfFaelligkeiten(){
+  const gfItems = fahrplanListe.filter(it=>it.owner==='gf' && it.fristTage!=null && it.fristTage!=='');
+  const rows = [];
+  mitarbeiterListe.forEach(m=>gfItems.forEach(it=>rows.push({m, it, faellig: addTageISO(m.startDatum, Number(it.fristTage))})));
+  rows.sort((a,b)=> a.faellig < b.faellig ? -1 : 1);
+  if (!rows.length) return '<div class="ea-card"><p class="ea-item-desc">Keine GF-Aufgaben mit Fristen hinterlegt.</p></div>';
+  let h = '<div class="ea-card"><h3>Fälligkeiten über alle Mitarbeitenden</h3><p class="ea-item-desc" style="margin-top:6px">Automatisch aus dem Startdatum berechnet.</p><div style="margin-top:10px">';
+  rows.forEach(r=>{
+    const off = tageZwischen(todayISO(), r.faellig);
+    const e = fortschrittMap[r.m.id+'__'+r.it.schluessel];
+    const erledigt = e && e.erledigt;
+    let status='later', label='fällig '+fmtDatum(r.faellig);
+    if (erledigt){ status='soon'; label='erledigt'; }
+    else if (off<0){ status='overdue'; label='überfällig ('+fmtDatum(r.faellig)+')'; }
+    else if (off<=7){ status='soon'; label='fällig '+fmtDatum(r.faellig); }
+    h += '<div class="ea-due-row"><div><div style="font-size:13px">'+esc(r.it.titel)+'</div><div class="ea-item-desc">'+esc(r.m.name)+'</div></div>';
+    h += '<div style="display:flex;align-items:center;gap:8px"><span class="ea-status '+status+'">'+label+'</span>';
+    h += '<button class="btn btn-sm btn-ghost" data-gf-toggle="'+r.m.id+'|'+r.it.schluessel+'">'+(erledigt?'Zurücksetzen':'Erledigt?')+'</button></div></div>';
+  });
+  h += '</div></div>';
+  return h;
+}
+function gfMitarbeitende(){
+  let h = '<div class="ea-card"><h3>Mitarbeitende</h3>';
+  if (!mitarbeiterListe.length) h += '<p class="ea-item-desc" style="margin-top:8px">Noch niemand angelegt.</p>';
+  else {
+    h += '<table class="ea-tbl" style="margin-top:10px"><thead><tr><th>Name</th><th>Bereich</th><th>Start</th><th>Mentor:in</th><th>Teamleitung</th><th>Status</th></tr></thead><tbody>';
+    mitarbeiterListe.forEach(m=>{
+      const d = tageZwischen(m.startDatum, todayISO());
+      h += '<tr><td><button class="ea-namebtn" data-open-emp="'+m.id+'">'+esc(m.name)+'</button></td><td>'+esc(m.bereich)+'</td><td>'+fmtDatum(m.startDatum)+'</td><td>'+esc(m.mentorName)+'</td><td>'+esc(m.tlName)+'</td><td class="ea-item-desc">'+(d<0?('startet in '+(-d)+' Tg.'):('Tag '+d))+'</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  h += '</div><div class="ea-card"><h3>Neue:n Mitarbeiter:in anlegen</h3><form id="addEmpForm"><div class="ea-form-grid">';
+  h += '<div><label>Name</label><input name="name" required placeholder="Vorname Nachname"></div>';
+  h += '<div><label>Bereich</label><input name="bereich" value="ambulant"></div>';
+  h += '<div><label>Startdatum</label><input name="startDatum" type="date" required></div>';
+  h += '<div><label>Mentor:in</label><input name="mentorName" required></div>';
+  h += '<div><label>Teamleitung</label><input name="tlName" required></div>';
+  h += '</div><button class="btn btn-solid btn-sm" type="submit">Anlegen</button></form>';
+  if (letzterLink){
+    h += '<div class="ea-link-copy"><code id="lastLinkCode">'+esc(letzterLink)+'</code><button class="btn btn-sm btn-outline" id="copyLinkBtn">Kopieren</button></div>';
+    h += '<p class="ea-item-desc" style="margin-top:6px">Sobald der Zugang vor Start per Magic-Link steht, wird hier automatisch der persönliche Link erzeugt — aktuell bitte UPN nachtragen, sobald das M365-Konto steht.</p>';
+  }
+  h += '</div>';
+  return h;
+}
+function gfFahrplan(){
+  let h = '';
+  PHASEN.forEach(p=>{
+    const items = itemsFuerPhase(p.key);
+    h += '<div class="ea-card"><h3>'+esc(p.label)+'</h3>';
+    if (!items.length) h += '<p class="ea-item-desc" style="margin-top:6px">Keine Punkte.</p>';
+    else items.forEach(it=>{
+      h += '<div class="ea-item"><div style="flex:1"><span class="ea-item-title">'+esc(it.titel)+'</span>';
+      h += '<span class="ea-badge owner">'+OWNER_LABEL[it.owner]+'</span>';
+      if (it.typ==='link') h += '<span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
+      if (it.fristTage!=null && it.fristTage!=='') h += '<span class="ea-badge owner">Start '+(Number(it.fristTage)>=0?'+':'')+it.fristTage+' Tg.</span>';
+      if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
+      h += '</div></div>';
+    });
+    h += '</div>';
+  });
+  h += addFahrplanForm(['mitarbeiter','mentor','tl','gf']);
+  return h;
+}
+function addFahrplanForm(ownerOptions){
+  let h = '<div class="ea-card"><h3>Neuen Fahrplan-Punkt hinzufügen</h3><p class="ea-item-desc" style="margin-top:6px">Erscheint sofort bei allen Mitarbeitenden in der passenden Phase.</p>';
+  h += '<form class="addItemForm"><div class="ea-form-grid">';
+  h += '<div><label>Phase</label><select name="phase">' + PHASEN.filter(p=>p.key!=='vorab').map(p=>'<option value="'+p.key+'">'+esc(p.label)+'</option>').join('') + '</select></div>';
+  h += '<div><label>Zuständig</label><select name="owner">' + ownerOptions.map(o=>'<option value="'+o+'">'+OWNER_LABEL[o]+'</option>').join('') + '</select></div>';
+  h += '<div><label>Art</label><select name="typ"><option value="task">Aufgabe</option><option value="link">Link / Ressource</option><option value="milestone">Meilenstein</option></select></div>';
+  h += '<div><label>Titel</label><input name="titel" required placeholder="z. B. Neue Arbeitsanweisung lesen"></div>';
+  h += '</div><button class="btn btn-outline btn-sm" type="submit">Punkt hinzufügen</button></form></div>';
+  return h;
+}
+
+function bindContentEvents(){
+  Array.from(document.querySelectorAll('[data-toggle-item]')).forEach(el=>{
+    el.onclick = ()=>{ const [empId, schluessel] = el.getAttribute('data-toggle-item').split('|'); toggleItem(empId, schluessel); };
+  });
+  Array.from(document.querySelectorAll('[data-toggle-phase]')).forEach(el=>{
+    el.onclick = ()=>{ el.closest('.ea-wp').classList.toggle('open'); };
+  });
+  Array.from(document.querySelectorAll('[data-refl-key]')).forEach(el=>{
+    el.onblur = ()=>{ const [empId, schluessel] = el.getAttribute('data-refl-key').split('|'); speicherReflexion(empId, schluessel, el.value); };
+  });
+  Array.from(document.querySelectorAll('[data-open-emp]')).forEach(b=>{
+    b.onclick = ()=>{ aktiverMitarbeiterId = b.getAttribute('data-open-emp'); gfTab='einzelansicht'; render(); };
+  });
+  Array.from(document.querySelectorAll('[data-gf-toggle]')).forEach(b=>{
+    b.onclick = ()=>{ const [empId, schluessel] = b.getAttribute('data-gf-toggle').split('|'); toggleItem(empId, schluessel); };
+  });
+  const gfEmpSelect = document.getElementById('gfEmpSelect');
+  if (gfEmpSelect) gfEmpSelect.onchange = function(){ aktiverMitarbeiterId = this.value; render(); };
+  const addEmpForm = document.getElementById('addEmpForm');
+  if (addEmpForm) addEmpForm.onsubmit = async (ev)=>{
+    ev.preventDefault();
+    const f = ev.target;
+    await neuerMitarbeiter({name:f.name.value.trim(), bereich:f.bereich.value.trim(), startDatum:f.startDatum.value, mentorName:f.mentorName.value.trim(), tlName:f.tlName.value.trim()});
+    render();
+  };
+  const copyBtn = document.getElementById('copyLinkBtn');
+  if (copyBtn) copyBtn.onclick = ()=>{
+    const code = document.getElementById('lastLinkCode').textContent;
+    if (navigator.clipboard) navigator.clipboard.writeText(code).catch(()=>{});
+    copyBtn.textContent = 'Kopiert ✓'; setTimeout(()=>copyBtn.textContent='Kopieren', 1500);
+  };
+  Array.from(document.querySelectorAll('.addItemForm')).forEach(f=>{
+    f.onsubmit = async (ev)=>{
+      ev.preventDefault();
+      await neuerFahrplanPunkt({phase:f.phase.value, owner:f.owner.value, typ:f.typ.value, titel:f.titel.value.trim()});
+      render();
+    };
+  });
+}
+</script>
+</body>
+</html>
