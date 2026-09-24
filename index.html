@@ -590,7 +590,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 'v69da859'; // auto-updated on deploy
+const APP_VERSION = 'v79c0c76'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -5171,6 +5171,20 @@ function syncUnterschriftNamen() {
   if (el && !el.value && vorgabe) {
     if (!Array.from(el.options).some(o => o.value === vorgabe)) el.add(new Option(vorgabe, vorgabe));
     el.value = vorgabe;
+  }
+  // Reparatur: Steht in Zeile 1 eine Leitungsperson, die weder die Stammdaten-Fachkraft noch die
+  // Einreicherin ist (Folge der früheren Vorbelegung in der Prüfansicht), auf die Fachkraft zurücksetzen.
+  if (el && el.value && vorgabe && el.value !== vorgabe) {
+    const n = el.value.trim().toLowerCase();
+    const istLeitung = [...(_tlMembers || []), ...(_stationaerFreigeber || [])].some(m => String(m.displayName || '').trim().toLowerCase() === n)
+      || ADMIN_EMAILS.some(e => n === e.toLowerCase());
+    const istEinreicher = n === nameZuMail(currentEingereichtVon).trim().toLowerCase();
+    const istStammFachkraft = n === (document.getElementById('Fachkraft_NeueWege')?.value || '').trim().toLowerCase();
+    if (istLeitung && !istEinreicher && !istStammFachkraft) {
+      if (!Array.from(el.options).some(o => o.value === vorgabe)) el.add(new Option(vorgabe, vorgabe));
+      el.value = vorgabe;
+      if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+    }
   }
   // Qualifikation 1 immer aus der M365-Position der gewählten Person übernehmen;
   // nur wenn dort keine Position gepflegt ist, bleibt ein vorhandener Wert stehen
