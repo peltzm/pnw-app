@@ -149,6 +149,22 @@ table.ea-tbl td{padding:9px 10px;border-top:1px solid var(--border);vertical-ali
 .ea-toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:#fff;font-size:12.5px;padding:8px 16px;border-radius:20px;z-index:300;display:none}
 .ea-toast.err{background:var(--error)}
 @media(max-width:600px){.ea-drag{flex-wrap:wrap}.ea-move{width:100%;justify-content:flex-end;padding-left:0}.ea-handle{display:none}}
+/* Dialog Fahrplan-Punkt */
+.overlay{position:fixed;inset:0;background:rgba(26,25,22,.45);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:200}
+.overlay.open{display:flex}
+.dialog{background:var(--surface);border-radius:var(--radius-lg);max-width:640px;width:100%;padding:22px 24px;border:1px solid var(--border)}
+.dialog h2{font-size:16px;font-weight:600;margin-bottom:14px}
+.felder{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:11px}
+.feld label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-hint);margin-bottom:3px;font-weight:600}
+.feld input,.feld select,.feld textarea{width:100%;font-family:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);outline:none}
+.feld input:focus,.feld select:focus,.feld textarea:focus{border-color:var(--accent-mid)}
+.feld-voll{grid-column:1/-1}
+.feld .hint{font-size:10.5px;color:var(--text-hint);margin-top:3px}
+label.chk{display:flex;align-items:center;gap:8px;font-size:13px;text-transform:none;letter-spacing:0;color:var(--text);font-weight:500;cursor:pointer}
+label.chk input{width:auto}
+.dlg-err{color:var(--error);font-size:12px;min-height:16px;margin-top:10px}
+.dialog-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.ea-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
 .footer-note{max-width:900px;margin:0 auto;padding:0 20px 40px;font-size:11px;color:var(--text-hint);line-height:1.7}
 .footer-note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
 </style>
@@ -218,6 +234,37 @@ table.ea-tbl td{padding:9px 10px;border-top:1px solid var(--border);vertical-ali
 
 <div class="ea-toast" id="eaToast"></div>
 
+<div class="overlay" id="itemOverlay">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="itemDlgTitel">
+    <h2 id="itemDlgTitel"></h2>
+    <div class="felder">
+      <div class="feld feld-voll"><label for="dlgTitel">Titel</label><input id="dlgTitel" placeholder="z. B. Leitfaden Dokumentation in Kilanka"></div>
+      <div class="feld"><label for="dlgTyp">Art</label>
+        <select id="dlgTyp">
+          <option value="link">Link / Ressource</option>
+          <option value="task">Aufgabe</option>
+          <option value="milestone">Meilenstein</option>
+          <option value="reflection">Reflexionsfrage (privat)</option>
+        </select></div>
+      <div class="feld"><label for="dlgPhase">Phase</label><select id="dlgPhase"></select></div>
+      <div class="feld"><label for="dlgOwner">Zuständig</label><select id="dlgOwner"></select></div>
+      <div class="feld feld-voll" id="dlgUrlWrap"><label for="dlgUrl">Link (URL)</label><input id="dlgUrl" type="url" placeholder="https://…">
+        <div class="hint">SharePoint-, OneDrive- oder Web-Adresse. Muss mit https:// beginnen.</div></div>
+      <div class="feld feld-voll" id="dlgPflichtWrap"><label class="chk"><input type="checkbox" id="dlgPflicht"> Pflicht — muss gelesen werden (sonst optional)</label></div>
+      <div class="feld feld-voll"><label for="dlgBeschreibung">Beschreibung</label><textarea id="dlgBeschreibung" rows="3" placeholder="Worum geht es, warum ist es wichtig?"></textarea></div>
+      <div class="feld"><label for="dlgFrist">Frist (Tage zum Start)</label><input id="dlgFrist" type="number" step="1" placeholder="z. B. -7">
+        <div class="hint">Optional. Erscheint dann in den Fälligkeiten.</div></div>
+    </div>
+    <div class="dlg-err" id="dlgFehler"></div>
+    <div class="dialog-actions">
+      <button class="btn btn-solid" id="dlgSpeichern">Speichern</button>
+      <button class="btn btn-outline" id="dlgAbbrechen">Abbrechen</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm btn-ghost" id="dlgLoeschen" style="color:var(--error);border-color:var(--error)">Punkt löschen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ═══════════════════════════════════════════════════════════
  * KONFIGURATION — identisch zu Fuhrpark / Mobilfunk / Mitarbeiter-Cockpit
@@ -236,6 +283,7 @@ const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
 const GF_ERLAUBT = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
 const APP_VERSION = 'BETA-b51a8b4'; // auto-updated on deploy
 document.getElementById('versionBadge').textContent = APP_VERSION;
+document.addEventListener('DOMContentLoaded', ()=>initItemDialog());
 
 /* ═══════════════════════════════════════════════════════════
  * FELD-SCHEMATA — SharePoint-Spalten
@@ -704,6 +752,136 @@ async function speicherReihenfolge(items, okText){
 }
 
 /* ═══════════════════════════════════════════════════════════
+ * FAHRPLAN-PUNKTE BEARBEITEN / ANLEGEN / LÖSCHEN (Dialog)
+ * ═══════════════════════════════════════════════════════════ */
+function sichereUrl(u){ return typeof u==='string' && /^https?:\/\//i.test(u.trim()); }
+function kurzUrl(u){ try{ const x=new URL(u); const pfad=decodeURIComponent(x.pathname); return x.hostname.replace(/^www\./,'')+(pfad.length>1 ? (pfad.length>40 ? pfad.slice(0,40)+'…' : pfad) : ''); }catch(e){ return u; } }
+function naechsteReihenfolge(phase, ohne){
+  const max = fahrplanListe.filter(x=>x.phase===phase && x!==ohne).reduce((m,x)=>Math.max(m, Number(x.reihenfolge||x.order||0)), 0);
+  return max + 10;
+}
+let dlgItemId = null;
+const byId = id => document.getElementById(id);
+function initItemDialog(){
+  byId('dlgPhase').innerHTML = PHASEN.map(p=>'<option value="'+p.key+'">'+esc(p.label)+'</option>').join('');
+  byId('dlgOwner').innerHTML = Object.keys(OWNER_LABEL).map(k=>'<option value="'+k+'">'+OWNER_LABEL[k]+'</option>').join('');
+  byId('dlgTyp').onchange = aktualisiereDlgFelder;
+  byId('dlgSpeichern').onclick = speichereItemDialog;
+  byId('dlgAbbrechen').onclick = schliesseItemDialog;
+  byId('dlgLoeschen').onclick = loescheItemDialog;
+  byId('itemOverlay').addEventListener('click', e=>{ if (e.target.id==='itemOverlay') schliesseItemDialog(); });
+  document.addEventListener('keydown', e=>{ if (e.key==='Escape' && byId('itemOverlay').classList.contains('open')) schliesseItemDialog(); });
+}
+function aktualisiereDlgFelder(){
+  const link = byId('dlgTyp').value==='link';
+  byId('dlgUrlWrap').style.display = link ? '' : 'none';
+  byId('dlgPflichtWrap').style.display = link ? '' : 'none';
+  if (byId('dlgTyp').value==='reflection') byId('dlgOwner').value = 'mitarbeiter';
+}
+function oeffneItemDialog(id, vorgaben){
+  const it = id ? fahrplanListe.find(x=>String(x.id)===String(id)) : null;
+  dlgItemId = it ? it.id : null;
+  const v = it || Object.assign({titel:'', typ:'task', owner:'mitarbeiter', phase:'woche1', beschreibung:'', url:'', pflicht:false, fristTage:''}, vorgaben||{});
+  byId('itemDlgTitel').textContent = it ? 'Punkt bearbeiten' : (v.typ==='link' ? 'Neuer Link / neue Ressource' : 'Neuer Fahrplan-Punkt');
+  byId('dlgTitel').value = v.titel || '';
+  byId('dlgTyp').value = v.typ || 'task';
+  byId('dlgPhase').value = v.phase || 'woche1';
+  byId('dlgOwner').value = v.owner || 'mitarbeiter';
+  byId('dlgUrl').value = v.url || '';
+  byId('dlgPflicht').checked = !!v.pflicht;
+  byId('dlgBeschreibung').value = v.beschreibung || '';
+  byId('dlgFrist').value = (v.fristTage==null || v.fristTage==='') ? '' : v.fristTage;
+  byId('dlgLoeschen').style.display = it ? '' : 'none';
+  byId('dlgFehler').textContent = '';
+  aktualisiereDlgFelder();
+  byId('itemOverlay').classList.add('open');
+  setTimeout(()=>byId('dlgTitel').focus(), 30);
+}
+function schliesseItemDialog(){ byId('itemOverlay').classList.remove('open'); dlgItemId = null; }
+async function speichereItemDialog(){
+  const fehler = t => { byId('dlgFehler').textContent = t; };
+  const d = {
+    titel: byId('dlgTitel').value.trim(), typ: byId('dlgTyp').value, phase: byId('dlgPhase').value,
+    owner: byId('dlgOwner').value, beschreibung: byId('dlgBeschreibung').value.trim(),
+    url: byId('dlgUrl').value.trim(), pflicht: byId('dlgPflicht').checked
+  };
+  if (!d.titel) return fehler('Bitte einen Titel eingeben.');
+  if (d.typ==='link'){
+    if (!d.url) return fehler('Bitte einen Link eintragen.');
+    if (!sichereUrl(d.url)) return fehler('Der Link muss mit https:// beginnen.');
+  } else { d.url = ''; d.pflicht = false; }
+  let frist = null;
+  const fristRoh = byId('dlgFrist').value.trim();
+  if (fristRoh !== ''){
+    frist = parseInt(fristRoh, 10); // ganze Tage, kein Dezimalformat
+    if (isNaN(frist)) return fehler('Frist bitte als ganze Zahl eingeben (z. B. -7).');
+  }
+  const felder = {Title:d.titel, Art:d.typ, Zustaendig:d.owner, Phase:d.phase, Beschreibung:d.beschreibung, Link:d.url, Pflicht:d.pflicht, FristTageZumStart:frist};
+  const basis = '/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan;
+  const btn = byId('dlgSpeichern'); btn.disabled = true;
+  try{
+    if (dlgItemId){
+      const it = fahrplanListe.find(x=>String(x.id)===String(dlgItemId));
+      const phaseWechsel = it.phase !== d.phase;
+      const neueReihenfolge = phaseWechsel ? naechsteReihenfolge(d.phase, it) : it.reihenfolge;
+      if (phaseWechsel) felder.Reihenfolge = neueReihenfolge;
+      if (!demoMode) await graph(basis+'/items/'+it.id+'/fields', {method:'PATCH', body:JSON.stringify(felder)});
+      Object.assign(it, d, {fristTage: frist==null ? '' : frist, reihenfolge: neueReihenfolge});
+    } else {
+      const neu = Object.assign({}, d, {schluessel:'custom-'+Date.now(), reihenfolge: naechsteReihenfolge(d.phase), fristTage: frist==null ? '' : frist});
+      if (demoMode) neu.id = 'demo-item-'+Date.now();
+      else {
+        const f = Object.assign({}, felder, {Schluessel:neu.schluessel, Reihenfolge:neu.reihenfolge});
+        if (frist==null) delete f.FristTageZumStart;
+        const res = await graph(basis+'/items', {method:'POST', body:JSON.stringify({fields:f})});
+        neu.id = res.id;
+      }
+      fahrplanListe.push(neu);
+    }
+    schliesseItemDialog();
+    render();
+    zeigeToast('Gespeichert ✓'+(demoMode?' (Demo)':''));
+  }catch(e){
+    fehler('Speichern fehlgeschlagen: '+e.message);
+  }finally{ btn.disabled = false; }
+}
+async function loescheItemDialog(){
+  const it = fahrplanListe.find(x=>String(x.id)===String(dlgItemId));
+  if (!it) return;
+  if (!confirm('„'+it.titel+'“ aus dem Fahrplan löschen?\n\nDer Punkt verschwindet bei allen Mitarbeitenden.')) return;
+  try{
+    if (!demoMode) await graph('/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan+'/items/'+it.id, {method:'DELETE'});
+    fahrplanListe = fahrplanListe.filter(x=>x!==it);
+    schliesseItemDialog();
+    render();
+    zeigeToast('Gelöscht'+(demoMode?' (Demo)':''));
+  }catch(e){ byId('dlgFehler').textContent = 'Löschen fehlgeschlagen: '+e.message; }
+}
+
+function gfLinks(){
+  const alle = fahrplanListe.filter(it=>it.typ==='link');
+  const pflicht = alle.filter(it=>it.pflicht).length;
+  let h = '<div class="ea-card ea-card-head"><div><h3>Links &amp; Ressourcen</h3>'
+    + '<p class="ea-item-desc">Dokumente, Anleitungen und Webseiten für neue Mitarbeitende — '+alle.length+' insgesamt, davon '+pflicht+' Pflicht. Sie erscheinen im Fahrplan in der gewählten Phase.</p></div>'
+    + '<button class="btn btn-sm btn-solid" data-new-item="link">+ Neuer Link</button></div>';
+  if (!alle.length) return h + '<div class="ea-card"><p class="ea-item-desc">Noch keine Links hinterlegt.</p></div>';
+  PHASEN.forEach(p=>{
+    const liste = itemsFuerPhase(p.key).filter(it=>it.typ==='link');
+    if (!liste.length) return;
+    h += '<div class="ea-card"><h3>'+esc(p.label)+'</h3>';
+    liste.forEach(it=>{
+      h += '<div class="ea-item" style="align-items:center"><div style="flex:1;min-width:0">';
+      h += '<span class="ea-item-title">'+esc(it.titel)+'</span><span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
+      if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
+      h += sichereUrl(it.url) ? '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(kurzUrl(it.url))+' ↗</a>' : '<div class="ea-item-desc" style="color:var(--error)">Kein Link hinterlegt</div>';
+      h += '</div><div class="ea-move"><button class="ea-mv" data-edit-item="'+esc(it.id)+'" title="Bearbeiten">✎</button></div></div>';
+    });
+    h += '</div>';
+  });
+  return h;
+}
+
+/* ═══════════════════════════════════════════════════════════
  * RENDERING
  * ═══════════════════════════════════════════════════════════ */
 function mitarbeiter(id){ return mitarbeiterListe.find(m=>m.id===id) || null; }
@@ -725,7 +903,7 @@ function render(){
   }
   if (rolle === 'gf'){
     vb.style.display = 'flex';
-    vb.innerHTML = '<div class="pill-group">' + [['faelligkeiten','Fälligkeiten'],['mitarbeitende','Mitarbeitende'],['fahrplan','Fahrplan verwalten'],['einzelansicht','Einzelansicht']]
+    vb.innerHTML = '<div class="pill-group">' + [['faelligkeiten','Fälligkeiten'],['mitarbeitende','Mitarbeitende'],['fahrplan','Fahrplan verwalten'],['links','Links & Ressourcen'],['einzelansicht','Einzelansicht']]
       .map(t=>'<button class="pill '+(gfTab===t[0]?'active':'')+'" data-gftab="'+t[0]+'">'+t[1]+'</button>').join('') + '</div>';
     Array.from(vb.querySelectorAll('[data-gftab]')).forEach(b=>b.onclick=()=>{ gfTab=b.getAttribute('data-gftab'); render(); });
     sub.textContent = 'Geschäftsführung';
@@ -827,7 +1005,7 @@ function itemRow(mitarbeiterId, it, editable){
   h += '<div class="ea-check '+(erledigt?'checked ':'')+(editable?'editable':'readonly')+'" '+(editable?'data-toggle-item="'+mitarbeiterId+'|'+it.schluessel+'"':'')+'>'+(erledigt?'✓':'')+'</div>';
   h += '<div style="flex:1"><span class="ea-item-title '+(erledigt?'checked':'')+'">'+esc(it.titel)+'</span>'+badges;
   if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
-  if (it.typ==='link' && it.url) h += '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">Öffnen ↗</a>';
+  if (it.typ==='link' && sichereUrl(it.url)) h += '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">Öffnen ↗</a>';
   h += '</div></div>';
   return h;
 }
@@ -866,6 +1044,7 @@ function viewGf(){
   if (gfTab==='faelligkeiten') return gfFaelligkeiten();
   if (gfTab==='mitarbeitende') return gfMitarbeitende();
   if (gfTab==='fahrplan') return gfFahrplan();
+  if (gfTab==='links') return gfLinks();
   return gfEinzelansicht();
 }
 function gfEinzelansicht(){
@@ -935,8 +1114,10 @@ function gfFahrplan(){
       if (it.typ==='link') h += '<span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
       if (it.fristTage!=null && it.fristTage!=='') h += '<span class="ea-badge owner">Start '+(Number(it.fristTage)>=0?'+':'')+it.fristTage+' Tg.</span>';
       if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
+      if (it.typ==='link') h += sichereUrl(it.url) ? '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(kurzUrl(it.url))+' ↗</a>' : '<div class="ea-item-desc" style="color:var(--error)">Kein Link hinterlegt</div>';
       h += '</div><div class="ea-move">';
-      h += '<button class="ea-mv" data-mv="'+esc(it.id)+'|-1" '+(idx===0?'disabled':'')+' title="Nach oben">↑</button>';
+      h += '<button class="ea-mv" data-edit-item="'+esc(it.id)+'" title="Bearbeiten">✎</button>';
+      h += '<button class="ea-mv" data-mv=""'+esc(it.id)+'|-1" '+(idx===0?'disabled':'')+' title="Nach oben">↑</button>';
       h += '<button class="ea-mv" data-mv="'+esc(it.id)+'|1" '+(idx===items.length-1?'disabled':'')+' title="Nach unten">↓</button>';
       h += '<select class="ea-phase-sel" data-phase-sel="'+esc(it.id)+'" title="In andere Phase verschieben">'
         + PHASEN.map(q=>'<option value="'+q.key+'" '+(q.key===p.key?'selected':'')+'>'+esc(q.label.split(' · ')[0])+'</option>').join('')
@@ -945,7 +1126,8 @@ function gfFahrplan(){
     });
     h += '</div>';
   });
-  h += addFahrplanForm(['mitarbeiter','mentor','tl','gf']);
+  h += '<div class="ea-card ea-card-head"><div><h3>Neuen Punkt anlegen</h3><p class="ea-item-desc">Aufgabe, Link, Meilenstein oder Reflexionsfrage — erscheint sofort bei allen Mitarbeitenden.</p></div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-outline" data-new-item="link">+ Link / Ressource</button><button class="btn btn-sm btn-solid" data-new-item="task">+ Punkt</button></div></div>';
   return h;
 }
 function addFahrplanForm(ownerOptions){
@@ -1042,6 +1224,8 @@ function bindContentEvents(){
     copyBtn.textContent = 'Kopiert ✓'; setTimeout(()=>copyBtn.textContent='Kopieren', 1500);
   };
   bindFahrplanVerschieben();
+  document.querySelectorAll('[data-edit-item]').forEach(b=>{ b.onclick = ()=>oeffneItemDialog(b.getAttribute('data-edit-item')); });
+  document.querySelectorAll('[data-new-item]').forEach(b=>{ b.onclick = ()=>oeffneItemDialog(null, {typ:b.getAttribute('data-new-item'), phase: b.getAttribute('data-new-item')==='link' ? 'vorab' : 'woche1'}); });
   Array.from(document.querySelectorAll('.addItemForm')).forEach(f=>{
     f.onsubmit = async (ev)=>{
       ev.preventDefault();
