@@ -5238,11 +5238,25 @@ function toggleQuali2Custom(i) {
   if (sel.value !== '__custom__') { const c = document.getElementById(`FK${i}_Quali2Custom`); if (c) c.value = ''; }
 }
 
+// Name zu einer E-Mail-Adresse aus den geladenen Gruppenmitgliedern (Einreicherin eines Berichts)
+function nameZuMail(mail) {
+  const m = String(mail || '').trim().toLowerCase();
+  if (!m) return '';
+  const alle = [...(_teamMembers || []), ...(_tlMembers || []), ...(_stationaerFreigeber || [])];
+  const t = alle.find(x => [x.mail, x.userPrincipalName].some(v => String(v || '').toLowerCase() === m));
+  return t ? (t.displayName || '') : '';
+}
+
 // Zeile 1 vorbelegen, sofern noch leer: mit der Fachkraft aus den Stammdaten (Seite 1),
-// ersatzweise mit der angemeldeten Person. Bleibt danach frei änderbar.
+// sonst mit der Einreicherin des Berichts, und nur bei einem eigenen/neuen Bericht mit der
+// angemeldeten Person — damit in der Prüfansicht nie die Teamleitung als Fachkraft landet.
 function syncUnterschriftNamen() {
   const el = document.getElementById('FK1_Name');
-  const vorgabe = (document.getElementById('Fachkraft_NeueWege')?.value || '').trim() || (currentAccount?.name || '');
+  const eigenerBericht = !currentListId || !currentEingereichtVon
+    || currentEingereichtVon.toLowerCase() === (currentAccount?.username || '').toLowerCase();
+  const vorgabe = (document.getElementById('Fachkraft_NeueWege')?.value || '').trim()
+    || nameZuMail(currentEingereichtVon)
+    || (eigenerBericht && !_isReviewMode ? (currentAccount?.name || '') : '');
   if (el && !el.value && vorgabe) {
     if (!Array.from(el.options).some(o => o.value === vorgabe)) el.add(new Option(vorgabe, vorgabe));
     el.value = vorgabe;
