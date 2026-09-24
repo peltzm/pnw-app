@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-15.5 (op-liste Hinweise)";
+const WORKER_VERSION = "2026-09-25.1 (ansprechpartner-global)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -2382,7 +2382,14 @@ export default {
           fetchQualiMap(env, now),
           fetchAmtKurznamen(env),
         ]);
-        const klienten = clientsForUser(all, auth.upn, now, qualiMap, ansprechpartnerJeAmt(all, amtKurz && amtKurz.mails), amtKurz);
+        const apMap = ansprechpartnerJeAmt(all, amtKurz && amtKurz.mails);
+        const klienten = clientsForUser(all, auth.upn, now, qualiMap, apMap, amtKurz);
+        // Alle Ansprechpartner aller Jugendämter mit Mailadresse — unabhängig von der eigenen Klientenzuordnung,
+        // damit auch eine prüfende Teamleitung die ASD-Adresse für den Versand bekommt
+        const amtName = new Map();
+        for (const c of all) for (const a of (c.actions || [])) { const d = a.department; if (d && d.id != null && !amtName.has(String(d.id))) amtName.set(String(d.id), d.shortName || (amtKurz && amtKurz.get(String(d.id))) || d.name || ""); }
+        const ansprechpartner = [];
+        for (const [amtId, obj] of apMap.mails) for (const [name, mail] of Object.entries(obj)) ansprechpartner.push({ amt: amtName.get(amtId) || "", name, mail: mail || "" });
         // Alle vergebenen Qualifikationen als Auswahlliste (ohne "NICHT verwenden"-Alteintraege)
         const qualifikationen = [...new Set(Object.values(qualiMap))]
           .filter((q) => !/^\s*nicht\s/i.test(q))
@@ -2394,6 +2401,7 @@ export default {
             anzahl: klienten.length,
             qualifikationen,
             aemter: aemterListe(all, amtKurz),
+            ansprechpartner,
             klienten,
           },
           200, origin

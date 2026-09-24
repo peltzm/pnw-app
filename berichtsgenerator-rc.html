@@ -764,6 +764,7 @@ async function _loadKilankaKlienten(refresh) {
     _kilankaKlienten = d.klienten || [];
     if (Array.isArray(d.qualifikationen) && d.qualifikationen.length) _kilankaQualiListe = d.qualifikationen;
     if (Array.isArray(d.aemter)) _kilankaAemter = d.aemter;
+    if (Array.isArray(d.ansprechpartner)) { _asdKontakte = d.ansprechpartner; if (document.getElementById('tlAktionen')?.style.display === 'block') fuelleAsdVersandBlock(); }
     if (typeof jugendamtAufKurznameUmstellen === 'function') jugendamtAufKurznameUmstellen();   // offenes Formular nachziehen
     // Doppelte Anzeigenamen (mehrere Maßnahmen) erkennen -> Maßnahme im Label zeigen
     const nameCount = {};
@@ -830,6 +831,7 @@ function _setSelect(id, val) {
 // ist das Feld leer, wird der aktuelle Ansprechpartner vorbelegt.
 // ── ASD-Mailadressen aus Kilanka (Name der Sachbearbeitung -> E-Mail) ──
 let _asdMailMap = {};          // Sachbearbeitung -> Mailadresse (aus Kilanka)
+let _asdKontakte = [];         // alle Ansprechpartner aller Ämter [{amt, name, mail}] — für die Prüfansicht der TL
 let _asdVersandInfo = null;    // { an, datum, von } nach erfolgtem Versand (im FormularDaten-JSON persistiert)
 function merkeAsdMails(k) {
   if (!k) return;
@@ -843,7 +845,10 @@ function fuelleAsdVersandBlock() {
   const name = document.getElementById('Sachbearbeitung_JA')?.value || '';
   const nameEl = document.getElementById('ASD_Name'); if (nameEl && !nameEl.value.trim()) nameEl.value = (name === '__custom__' ? '' : name);
   const mailEl = document.getElementById('ASD_Mail');
-  if (mailEl && !mailEl.value.trim() && _asdMailMap[name]) mailEl.value = _asdMailMap[name];
+  if (mailEl && !mailEl.value.trim()) {
+    const m = _asdMailMap[name] || asdMailFinden(nameEl?.value || name, document.getElementById('Jugendamt')?.value || '');
+    if (m) mailEl.value = m;
+  }
   // Kennwort vorschlagen (überschreibbar): PNW-<Nachname 2 Buchstaben><Vorname 2 Buchstaben>*<JJ>_<MM>
   const kwEl = document.getElementById('ASD_Kennwort');
   if (kwEl && !kwEl.value.trim()) { const v = kennwortVorschlag(); if (v) { kwEl.value = v; kwEl.placeholder = v; } }
@@ -865,6 +870,27 @@ function kennwortVorschlag() {
   const d = new Date();
   return `PNW-${nach}${vor}*${String(d.getFullYear()).slice(2)}_${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+// Mailadresse zur Sachbearbeitung aus der globalen Ansprechpartnerliste: exakter Name, sonst
+// Nachname (aus "Frau Häusler" / "Häusler, Manuela" / "Manuela Häusler") — bei mehreren Treffern
+// entscheidet das Jugendamt des Berichts; bleibt es mehrdeutig, keine Vorbelegung.
+function asdMailFinden(name, jugendamt) {
+  const glatt = v => String(v || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const n = glatt(name);
+  if (!n || !_asdKontakte.length) return '';
+  const exakt = _asdKontakte.find(k => glatt(k.name) === n && k.mail);
+  if (exakt) return exakt.mail;
+  const nachname = (() => {
+    const ohneAnrede = n.replace(/^(frau|herr|hr\.|fr\.)\s+/, '');
+    if (ohneAnrede.includes(',')) return ohneAnrede.split(',')[0].trim();
+    const teile = ohneAnrede.split(' ').filter(Boolean); return teile[teile.length - 1] || '';
+  })();
+  if (!nachname) return '';
+  let kand = _asdKontakte.filter(k => k.mail && (glatt(k.name).split(',')[0].trim() === nachname || glatt(k.name).replace(/,/g, ' ').split(' ').filter(Boolean).includes(nachname)));
+  if (kand.length > 1 && jugendamt) { const j = glatt(jugendamt); const gef = kand.filter(k => glatt(k.amt) === j); if (gef.length) kand = gef; }
+  const mails = [...new Set(kand.map(k => k.mail.toLowerCase()))];
+  return mails.length === 1 ? mails[0] : '';
+}
+
 // Auge-Schalter: Kennwort im Klartext zeigen/verbergen
 function kennwortAnzeigen() {
   const el = document.getElementById('ASD_Kennwort'); const b = document.getElementById('btnKennwortAuge');
