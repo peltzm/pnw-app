@@ -146,6 +146,13 @@ table.ea-tbl td{padding:9px 10px;border-top:1px solid var(--border);vertical-ali
 .ea-mv:hover:not(:disabled){border-color:var(--accent-mid);color:var(--accent)}
 .ea-mv:disabled{opacity:.3;cursor:default}
 .ea-phase-sel{border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-family:inherit;font-size:11px;background:var(--surface);color:var(--text-muted);max-width:120px;height:26px}
+.ea-group{font-size:11.5px;font-weight:700;color:var(--accent-mid);margin:14px 0 2px;padding-bottom:3px;border-bottom:1px solid var(--border)}
+.ea-group:first-child{margin-top:4px}
+.ea-auswahl{margin:8px 0 10px}
+.ea-optionen{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.ea-opt{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;color:var(--text-muted);background:var(--surface)}
+.ea-opt input{accent-color:var(--accent)}
+.ea-opt.aktiv{border-color:var(--accent-mid);background:var(--accent-light);color:var(--accent);font-weight:600}
 .ea-toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:#fff;font-size:12.5px;padding:8px 16px;border-radius:20px;z-index:300;display:none}
 .ea-toast.err{background:var(--error)}
 @media(max-width:600px){.ea-drag{flex-wrap:wrap}.ea-move{width:100%;justify-content:flex-end;padding-left:0}.ea-handle{display:none}}
@@ -210,6 +217,11 @@ label.chk input{width:auto}
     <button class="btn btn-sm btn-solid" onclick="seedFahrplan()">Fahrplan befüllen</button>
     <span id="seedStatus"></span>
   </div>
+  <div class="seed-bar" id="heftBar">
+    <strong>Neuer Heft-Stand:</strong> <span id="heftInfo"></span>
+    <button class="btn btn-sm btn-solid" onclick="heftStandUebernehmen()">Jetzt übernehmen</button>
+    <span id="heftStatus"></span>
+  </div>
   <div class="denied-bar" id="deniedBar">
     Für dieses Konto ist kein Einarbeitungsplan hinterlegt. Bitte wende dich an die Verwaltung, falls das nicht stimmt.
   </div>
@@ -245,9 +257,13 @@ label.chk input{width:auto}
           <option value="task">Aufgabe</option>
           <option value="milestone">Meilenstein</option>
           <option value="reflection">Reflexionsfrage (privat)</option>
+          <option value="auswahl">Selbsteinschätzung (privat)</option>
         </select></div>
       <div class="feld"><label for="dlgPhase">Phase</label><select id="dlgPhase"></select></div>
       <div class="feld"><label for="dlgOwner">Zuständig</label><select id="dlgOwner"></select></div>
+      <div class="feld feld-voll"><label for="dlgGruppe">Gruppe / Zwischenüberschrift</label><input id="dlgGruppe" list="dlgGruppenListe" placeholder="z. B. Deine Arbeitsmittel"><datalist id="dlgGruppenListe"></datalist></div>
+      <div class="feld feld-voll" id="dlgOptWrap"><label for="dlgOptionen">Antwortmöglichkeiten</label><input id="dlgOptionen" placeholder="Ja|Teilweise|Noch nicht">
+        <div class="hint">Mit senkrechtem Strich | trennen.</div></div>
       <div class="feld feld-voll" id="dlgUrlWrap"><label for="dlgUrl">Link (URL)</label><input id="dlgUrl" type="url" placeholder="https://…">
         <div class="hint">SharePoint-, OneDrive- oder Web-Adresse. Muss mit https:// beginnen.</div></div>
       <div class="feld feld-voll" id="dlgPflichtWrap"><label class="chk"><input type="checkbox" id="dlgPflicht"> Pflicht — muss gelesen werden (sonst optional)</label></div>
@@ -308,7 +324,9 @@ const SCHEMA_FAHRPLAN = [
   {sp:'Link', key:'url', typ:'text'},
   {sp:'Pflicht', key:'pflicht', typ:'bool'},
   {sp:'FristTageZumStart', key:'fristTage', typ:'zahl'},
-  {sp:'Reihenfolge', key:'reihenfolge', typ:'zahl'}
+  {sp:'Reihenfolge', key:'reihenfolge', typ:'zahl'},
+  {sp:'Gruppe', key:'gruppe', typ:'text'},
+  {sp:'Optionen', key:'optionen', typ:'text'}
 ];
 const SCHEMA_FORTSCHRITT = [
   {sp:'Title', key:'kombi', typ:'text'},
@@ -337,55 +355,198 @@ const PHASEN = [
 ];
 const OWNER_LABEL = {mitarbeiter:'Mitarbeiter:in', mentor:'Mentor:in', tl:'Teamleitung', gf:'Geschäftsführung'};
 
-/* Standard-Fahrplan aus dem Einarbeitungsheft — Grundlage für die Ersteinrichtung */
-const DEFAULT_FAHRPLAN = [
-{schluessel:'vorab-gf-vertrag',order:1,owner:'gf',phase:'vorab',typ:'task',titel:'Arbeitsvertrag erstellen und versenden',fristTage:-21},
-{schluessel:'vorab-gf-konten',order:2,owner:'gf',phase:'vorab',typ:'task',titel:'IT-Konten anlegen (E-Mail, Kilanka, OneDrive)',fristTage:-7},
-{schluessel:'vorab-gf-hardware',order:3,owner:'gf',phase:'vorab',typ:'task',titel:'Hardware bereitstellen (Tablet, ggf. Diensthandy)',fristTage:-7},
-{schluessel:'vorab-gf-ausweis',order:4,owner:'gf',phase:'vorab',typ:'task',titel:'Mitarbeiterausweis vorbereiten',fristTage:-5},
-{schluessel:'vorab-gf-willkommen',order:5,owner:'gf',phase:'vorab',typ:'task',titel:'Willkommens-Mail mit Zugangslink, Mentor- & TL-Infos versenden',fristTage:-10},
-{schluessel:'vorab-mentor-vorstellen',order:6,owner:'mentor',phase:'vorab',typ:'task',titel:'Sich beim neuen Mitarbeiter kurz vorstellen (Anruf oder Mail)',fristTage:-5},
-{schluessel:'vorab-res-vorstellung',order:7,owner:'mitarbeiter',phase:'vorab',typ:'link',titel:'Kurzvorstellung Praxis NeueWege',url:'https://praxisneuewege.de/ueber-uns',pflicht:true},
-{schluessel:'vorab-res-anfahrt',order:8,owner:'mitarbeiter',phase:'vorab',typ:'link',titel:'Anfahrt & erster Ansprechpartner am Standort',url:'https://praxisneuewege.de/kontakt',pflicht:false},
-{schluessel:'tag1-kennenlernen',order:1,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Team, Mentor:in, Teamleitung, Arbeitsplatz und Räumlichkeiten kennenlernen',beschreibung:'Groß- & Kleinteam, dein Arbeitsplatz und die Räumlichkeiten vor Ort'},
-{schluessel:'tag1-rahmen',order:2,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Arbeitszeiten, Dienstfahrzeug-Nutzung und Plus-Bausteine erklärt bekommen'},
-{schluessel:'tag1-ansprechpartner',order:3,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Wichtigste Ansprechpartner kennen',beschreibung:'TL: Nadine Grund (Pfaffenhofen & Dachau), Jörg Schneider (Ingolstadt, Eichstätt, Regensburg & Neuburg-Schrobenhausen), Laura Meier (Kelheim & Freising). IT/Verwaltung/Personal: Markus Peltz.'},
-{schluessel:'tag1-arbeitsmittel',order:4,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Arbeitsmittel erhalten',beschreibung:'Tablet, Kilanka-Zugang, OneDrive, Outlook, Mitarbeiterausweis, PNW-App, DATEV'},
-{schluessel:'tag1-grundfunktionen',order:5,owner:'mitarbeiter',phase:'tag1',typ:'task',titel:'Grundfunktionen kennenlernen',beschreibung:'Tablet nutzen, Kilanka-Anmeldung inkl. Notfallkontakt, Dokumentation, technischer Support, Berichte, Krankmeldung, Urlaub, Zeiterfassung, Fortbildungen eintragen'},
-{schluessel:'tag1-reflexion',order:6,owner:'mitarbeiter',phase:'tag1',typ:'reflection',titel:'Deine erste Hausaufgabe',beschreibung:'Was nimmst du dir für deinen ersten Arbeitstag mit? Was ist noch unklar? Welche Frage möchtest du stellen?'},
-{schluessel:'woche1-konzept',order:1,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Arbeitsweise & pädagogisches Konzept der Einrichtung kennenlernen'},
-{schluessel:'woche1-aufgaben',order:2,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Aufgaben, Zuständigkeiten und Teamstruktur verstehen'},
-{schluessel:'woche1-kommunikation',order:3,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Kommunikationswege und Teambesprechungen kennenlernen'},
-{schluessel:'woche1-doku',order:4,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Wichtigste Dokumentationsregeln kennenlernen'},
-{schluessel:'woche1-sgb',order:5,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Gesetzliche Grundlagen SGB VIII durchgehen',beschreibung:'§27, §30, §31, §34, §35, §35a, §41, §8a, §8b'},
-{schluessel:'woche1-erstefaelle',order:6,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Erste Fälle mit Mentor:in anschauen',beschreibung:'Hilfeplanung lesen, Ziele der Familie kennen, wichtige Ansprechpartner kennen, bisherige Dokumentation anschauen'},
-{schluessel:'woche1-hausbesuch',order:7,owner:'mitarbeiter',phase:'woche1',typ:'task',titel:'Ersten Hausbesuch begleiten (beobachtend)'},
-{schluessel:'woche1-reflexion',order:8,owner:'mitarbeiter',phase:'woche1',typ:'reflection',titel:'Deine Hausbesuch-Reflexion',beschreibung:'Was ist dir aufgefallen? Was möchtest du fragen?'},
-{schluessel:'woche2-uebung',order:1,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Tablet, Kilanka, Terminorganisation und Zeitplanung üben'},
-{schluessel:'woche2-doku',order:2,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Dokumentationen erstellen und Gespräche vorbereiten'},
-{schluessel:'woche2-hilfeplan',order:3,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Informationen aus Hilfeplänen nutzen, dich im Team austauschen'},
-{schluessel:'woche2-hausbesuch',order:4,owner:'mitarbeiter',phase:'woche2',typ:'task',titel:'Bei Hausbesuchen aktiv mitmachen',beschreibung:'Begrüßung, Fragen stellen, aktiv zuhören, Gesprächsteile übernehmen'},
-{schluessel:'woche2-reflexion',order:5,owner:'mitarbeiter',phase:'woche2',typ:'reflection',titel:'Deine Reflexion',beschreibung:'Was ist gut gelungen? Was fiel schwer?'},
-{schluessel:'woche3-eigenefaelle',order:1,owner:'mitarbeiter',phase:'woche3',typ:'task',titel:'Erste eigene Fälle übernehmen',beschreibung:'Fall 1 & Fall 2 mit Zielen und Ansprechpartnern dokumentieren'},
-{schluessel:'woche3-sorgfalt',order:2,owner:'mitarbeiter',phase:'woche3',typ:'task',titel:'Bei eigenen Fällen achtgeben',beschreibung:'Hilfeplanung, Termine, Kontakte, Stammdaten, Absprachen, Fristen, Datenschutz, Rücksprache mit der TL'},
-{schluessel:'woche3-hausbesuch',order:3,owner:'mitarbeiter',phase:'woche3',typ:'task',titel:'Eigene Gesprächsanteile bei Hausbesuchen übernehmen'},
-{schluessel:'woche3-reflexion',order:4,owner:'mitarbeiter',phase:'woche3',typ:'reflection',titel:'Deine Reflexion',beschreibung:'Was gelingt bereits gut? Wo bist du unsicher?'},
-{schluessel:'woche4-selbstcheck',order:1,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Selbstcheck: Termine, Fallvorbereitung, Kilanka, Dokumentation'},
-{schluessel:'woche4-gespraeche',order:2,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Gespräche selbstständig vorbereiten & führen, Aufgaben priorisieren'},
-{schluessel:'woche4-unterstuetzung',order:3,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Wissen, wann und bei wem du Unterstützung holst'},
-{schluessel:'woche4-hausbesuch',order:4,owner:'mitarbeiter',phase:'woche4',typ:'task',titel:'Hausbesuche zunehmend selbstständig durchführen',beschreibung:'Von der Vorbereitung bis zur Nachbereitung'},
-{schluessel:'woche4-reflexion',order:5,owner:'mitarbeiter',phase:'woche4',typ:'reflection',titel:'Rückblick auf deine ersten vier Wochen',beschreibung:'Das kannst du bereits gut. Das möchtest du noch lernen. Dabei brauchst du noch Unterstützung.'},
-{schluessel:'woche4-abschlusscheck',order:6,owner:'mitarbeiter',phase:'woche4',typ:'reflection',titel:'Dein persönlicher Einarbeitungs-Check',beschreibung:'Fühlst du dich im Team, bei Aufgaben, Hausbesuchen und eigenen Fällen sicher?'},
-{schluessel:'woche4-abschlussgespraech',order:7,owner:'tl',phase:'woche4',typ:'milestone',titel:'Abschlussgespräch nach 4 Wochen mit TL und Mentor:in führen'},
-{schluessel:'monat2-fallzahl',order:1,owner:'mitarbeiter',phase:'monat2',typ:'task',titel:'Fallzahl schrittweise erhöhen (in Absprache mit der Teamleitung)'},
-{schluessel:'monat2-hilfeplan',order:2,owner:'mitarbeiter',phase:'monat2',typ:'task',titel:'Erste eigenständige Hilfeplanfortschreibung erstellen'},
-{schluessel:'monat2-fortbildung',order:3,owner:'mitarbeiter',phase:'monat2',typ:'link',titel:'An einer Fortbildung oder einem Fachtag teilnehmen',url:'https://praxisneuewege.de/fortbildungen',pflicht:false},
-{schluessel:'monat2-feedback',order:4,owner:'tl',phase:'monat2',typ:'milestone',titel:'Zwischen-Feedback-Gespräch nach 2 Monaten'},
-{schluessel:'monat3-verantwortung',order:1,owner:'mitarbeiter',phase:'monat3',typ:'task',titel:'Volle Fallverantwortung im vereinbarten Rahmen übernehmen'},
-{schluessel:'monat3-abschluss',order:2,owner:'tl',phase:'monat3',typ:'milestone',titel:'Abschlussgespräch nach 3 Monaten – Einarbeitung offiziell abschließen'},
-{schluessel:'monat3-reflexion',order:3,owner:'mitarbeiter',phase:'monat3',typ:'reflection',titel:'3-Monats-Rückblick',beschreibung:'Was ist dir in den ersten drei Monaten gelungen? Wo stehst du heute?'},
-{schluessel:'monat3-rueckmeldung',order:4,owner:'mitarbeiter',phase:'monat3',typ:'task',titel:'Rückmeldung zum Einarbeitungs-Fahrplan geben',beschreibung:'Was hat gefehlt, was war hilfreich? Fließt in den nächsten Fahrplan ein.'}
-];
+/* Standard-Fahrplan aus dem Einarbeitungsheft — jede Checkbox des Heftes ist ein eigenes Element,
+ * gruppiert nach den Zwischenüberschriften. Schlüssel alter Sammelpunkte werden weiterverwendet,
+ * wo der Inhalt passt (so bleiben dort gesetzte Haken erhalten). */
+const DEFAULT_FAHRPLAN = (()=>{
+  const L = [];
+  let phase = '', gruppe = '';
+  const P = (ph)=>{ phase = ph; };
+  const G = (g)=>{ gruppe = g; };
+  // t: Aufgabe/Checkbox · r: Reflexionsfrage (privat) · a: Selbsteinschätzung (privat)
+  const t = (schluessel, titel, extra)=>L.push(Object.assign({phase, gruppe, owner:'mitarbeiter', typ:'task', schluessel, titel}, extra||{}));
+  const r = (schluessel, titel)=>t(schluessel, titel, {typ:'reflection'});
+  const a = (schluessel, titel, optionen)=>t(schluessel, titel, {typ:'auswahl', optionen:optionen||'Ja|Teilweise|Noch nicht'});
+
+  P('vorab');
+  G('Vorbereitung durch Geschäftsführung & Mentor:in');
+  t('vorab-gf-vertrag','Arbeitsvertrag erstellen und versenden',{owner:'gf',fristTage:-21});
+  t('vorab-gf-willkommen','Willkommens-Mail mit Zugangslink, Mentor- & TL-Infos versenden',{owner:'gf',fristTage:-10});
+  t('vorab-gf-konten','IT-Konten anlegen (E-Mail, Kilanka, OneDrive, PNW-App)',{owner:'gf',fristTage:-7});
+  t('vorab-gf-hardware','Hardware bereitstellen (Tablet, ggf. Diensthandy)',{owner:'gf',fristTage:-7});
+  t('vorab-gf-datev','DATEV-Zugang für die Gehaltsabrechnung einrichten',{owner:'gf',fristTage:-7});
+  t('vorab-gf-ausweis','Mitarbeiterausweis vorbereiten',{owner:'gf',fristTage:-5});
+  t('vorab-mentor-vorstellen','Sich beim neuen Mitarbeiter kurz vorstellen (Anruf oder Mail)',{owner:'mentor',fristTage:-5});
+  G('Zum Reinlesen vor deinem Start');
+  t('vorab-res-vorstellung','Kurzvorstellung Praxis NeueWege',{typ:'link',url:'https://praxisneuewege.de/ueber-uns',pflicht:true});
+  t('vorab-res-anfahrt','Anfahrt & erster Ansprechpartner am Standort',{typ:'link',url:'https://praxisneuewege.de/kontakt',pflicht:false});
+
+  P('tag1');
+  G('Heute lernst du kennen');
+  t('tag1-team','dein Team (Groß- & Kleinteam)');
+  t('tag1-mentor','deinen Mentor');
+  t('tag1-tl','deine Teamleitung');
+  t('tag1-arbeitsplatz','deinen Arbeitsplatz');
+  t('tag1-raeume','die Räumlichkeiten');
+  t('tag1-arbeitszeiten','deine Arbeitszeiten');
+  t('tag1-fahrzeug','Nutzung des Dienstfahrzeugs');
+  t('tag1-plus','Erklärung der Plus-Bausteine');
+  t('tag1-ansprechpartner','deine wichtigsten Ansprechpartner',{beschreibung:
+    'Teamleitung und Zuständigkeitsbereich: Sonja Peltz – Gesamtleitung; Nadine Grund – Pfaffenhofen & Dachau; Jörg Schneider – Ingolstadt, Eichstätt, Regensburg & Neuburg-Schrobenhausen; Laura Meier – Kelheim & Freising. '
+   +'Fachliche Ansprechpartner / Plus-Bausteine: ISEF – Simone Koch, Dina Steinberger & Lena Blumoser; Fachcoach Gewaltprävention – Jessica Hermann & Saskia Dietrich; Psychologischer Fachdienst – Marie Leurpendeur; Systemischer Elternfachdienst – Jörg Schneider; Fachdienst Asyl, Migration und Integration – Kilian Freundl; Prävention/Aufarbeitung Hass im Netz & Digitales – Sharon Ogiemwonyi. '
+   +'IT/Verwaltung/Personal: Markus Peltz.'});
+  G('Deine Arbeitsmittel');
+  t('tag1-am-tablet','Tablet');
+  t('tag1-am-kilanka','Kilanka');
+  t('tag1-am-onedrive','OneDrive');
+  t('tag1-am-outlook','E-Mail (Outlook)');
+  t('tag1-am-ausweis','Mitarbeiterausweis');
+  t('tag1-am-app','Praxis-NeueWege-App');
+  t('tag1-am-datev','DATEV – Gehaltsabrechnung');
+  G('Du lernst');
+  t('tag1-l-tablet','wie du dein Tablet benutzt');
+  t('tag1-l-kilanka','wie du dich in Kilanka anmeldest und es benutzt',{beschreibung:'inkl. Notfallkontakt in Kilanka einrichten'});
+  t('tag1-l-doku','wo und wie du dokumentierst');
+  t('tag1-l-support','wie du bei technischen Problemen Hilfe bekommst');
+  t('tag1-l-berichte','wie du Berichte schreibst');
+  t('tag1-l-krank','wie du dich krank meldest');
+  t('tag1-l-urlaub','wie du Urlaub beantragst');
+  t('tag1-l-zeiten','wie du deine Arbeitszeiten erfasst');
+  t('tag1-l-fortbildung','wie du Fortbildungen einträgst');
+  G('Deine erste Hausaufgabe');
+  r('tag1-reflexion','Was nimmst du dir für deinen ersten Arbeitstag mit?');
+  r('tag1-refl-unklar','Was ist für dich noch unklar?');
+  r('tag1-refl-frage','Welche Frage möchtest du noch stellen?');
+
+  P('woche1');
+  G('Diese Woche lernst du …');
+  t('woche1-arbeitsweise','die Arbeitsweise unserer Einrichtung kennen');
+  t('woche1-konzept','das pädagogische Konzept kennen');
+  t('woche1-aufgaben','deine Aufgaben und Zuständigkeiten kennen');
+  t('woche1-teamstruktur','die Teamstrukturen kennen');
+  t('woche1-kommunikation','die Kommunikationswege kennen');
+  t('woche1-teambesprechung','Teambesprechungen kennen');
+  t('woche1-doku','die wichtigsten Dokumentationsregeln kennen');
+  t('woche1-erstefaelle','erste Fälle kennenlernen');
+  G('SGB VIII – Heft gemeinsam durchgehen');
+  t('woche1-sgb','§27 Hilfe zur Erziehung');
+  t('woche1-sgb-30','§30 Erziehungsbeistand (EB)');
+  t('woche1-sgb-31','§31 Sozialpädagogische Familienhilfe (SPFH)');
+  t('woche1-sgb-34','§34 Heimerziehung, sonstige betreute Wohnform');
+  t('woche1-sgb-35','§35 Intensive sozialpädagogische Einzelbetreuung (ISE)');
+  t('woche1-sgb-35a','§35a Eingliederungshilfe für seelisch behinderte Kinder und Jugendliche');
+  t('woche1-sgb-41','§41 Hilfe für junge Volljährige');
+  t('woche1-sgb-8a','§8a Schutzauftrag bei Kindeswohlgefährdung');
+  t('woche1-sgb-8b','§8b Fachliche Beratung zum Schutz von Kindern und Jugendlichen');
+  G('Deine ersten Fälle (gemeinsam mit deinem Mentor)');
+  t('woche1-fall-hilfeplan','Du hast eine Hilfeplanung gelesen.');
+  t('woche1-fall-ziele','Du kennst die Ziele der Familie / des Klienten.');
+  t('woche1-fall-ansprech','Du kennst wichtige Ansprechpartner.');
+  t('woche1-fall-doku','Du hast die bisherige Dokumentation angeschaut.');
+  G('Dein erster Hausbesuch');
+  t('woche1-hausbesuch','Ersten Hausbesuch begleiten (beobachtend)',{beschreibung:'Wenn es fachlich passt, begleitest du deinen Mentor oder eine Kollegin/einen Kollegen und bekommst einen Eindruck, wie ein Hausbesuch abläuft.'});
+  r('woche1-reflexion','Was ist dir im Hausbesuch aufgefallen?');
+  r('woche1-refl-frage','Was möchtest du deinen Mentor/Kollegen fragen?');
+
+  P('woche2');
+  G('Diese Woche übst du …');
+  t('woche2-uebung','mit dem Tablet zu arbeiten');
+  t('woche2-kilanka','Kilanka zu nutzen');
+  t('woche2-termine','Termine zu organisieren');
+  t('woche2-arbeitszeit','deine Arbeitszeit zu planen');
+  t('woche2-doku','Dokumentationen zu erstellen');
+  t('woche2-gespraeche','Gespräche vorzubereiten');
+  t('woche2-hilfeplan','Informationen aus Hilfeplänen zu nutzen');
+  t('woche2-austausch','dich im Team auszutauschen');
+  G('Deine Hausbesuche – du machst zunehmend mit');
+  t('woche2-hb-begruessung','Begrüßung / Vorstellung');
+  t('woche2-hb-fragen','Fragen stellen');
+  t('woche2-hb-zuhoeren','aktiv zuhören');
+  t('woche2-hb-gespraech','Gesprächsteile übernehmen');
+  t('woche2-hb-infos','Informationen sammeln');
+  t('woche2-hb-schritte','nächste Schritte besprechen');
+  t('woche2-hb-doku','Dokumentation vorbereiten');
+  G('Deine Hausbesuch-Reflexion');
+  r('woche2-reflexion','Was ist dir gut gelungen?');
+  r('woche2-refl-schwer','Was fiel dir schwer?');
+  r('woche2-refl-naechstes','Was möchtest du beim nächsten Besuch ausprobieren?');
+
+  P('woche3');
+  G('Deine ersten eigenen Fälle');
+  t('woche3-eigenefaelle','Ersten eigenen Fall übernommen',{beschreibung:'Ziele und wichtige Ansprechpartner in Kilanka festhalten — bitte keine Klientendaten hier eintragen.'});
+  t('woche3-fall2','Zweiten eigenen Fall übernommen',{beschreibung:'Ziele und wichtige Ansprechpartner in Kilanka festhalten — bitte keine Klientendaten hier eintragen.'});
+  G('Bei deinen eigenen Fällen achtest du auf');
+  t('woche3-sorgfalt','Hilfeplanung und Ziele');
+  t('woche3-a-termine','Termine');
+  t('woche3-a-kontakte','Kontakte');
+  t('woche3-a-stammdaten','Stammdaten & Dokumentation');
+  t('woche3-a-absprachen','Absprachen');
+  t('woche3-a-fristen','Fristen');
+  t('woche3-a-datenschutz','Datenschutz & Schweigepflichtsentbindung');
+  t('woche3-a-ruecksprache','Rücksprache mit deiner Teamleitung');
+  G('Deine Hausbesuche – eigene Gesprächsanteile');
+  t('woche3-hausbesuch','Gespräch vorbereiten');
+  t('woche3-hb-beginnen','Gespräch beginnen');
+  t('woche3-hb-fragen','Fragen stellen');
+  t('woche3-hb-anliegen','Anliegen aufnehmen');
+  t('woche3-hb-ziele','Ziele gemeinsam besprechen');
+  t('woche3-hb-schritte','nächste Schritte vereinbaren');
+  t('woche3-hb-doku','Dokumentation durchführen');
+  G('Deine Reflexion');
+  r('woche3-reflexion','Was gelingt dir bereits gut?');
+  r('woche3-refl-unsicher','Wo bist du noch unsicher?');
+  r('woche3-refl-unterstuetzung','Welche Unterstützung brauchst du?');
+
+  P('woche4');
+  G('Überprüfe dich selbst');
+  t('woche4-selbstcheck','Du kannst deine Termine organisieren.');
+  t('woche4-c-faelle','Du kannst deine Fälle vorbereiten.');
+  t('woche4-c-ziele','Du kennst die Ziele deiner Fälle.');
+  t('woche4-c-kilanka','Du kannst Kilanka nutzen.');
+  t('woche4-c-doku','Du kannst deine Arbeit dokumentieren.');
+  t('woche4-gespraeche','Du kannst Gespräche vorbereiten.');
+  t('woche4-c-fuehren','Du kannst Gespräche selbstständig führen.');
+  t('woche4-c-prio','Du kannst deine Aufgaben priorisieren.');
+  t('woche4-unterstuetzung','Du weißt, wann du Unterstützung brauchst.');
+  t('woche4-c-ansprech','Du weißt, wen du bei Fragen ansprechen kannst.');
+  G('Deine Hausbesuche – zunehmend selbstständig');
+  t('woche4-hausbesuch','Vorbereitung');
+  t('woche4-hb-fuehrung','Gesprächsführung');
+  t('woche4-hb-ziele','Zielvereinbarungen');
+  t('woche4-hb-termine','Terminabsprachen');
+  t('woche4-hb-doku','Dokumentation');
+  t('woche4-hb-nach','Nachbereitung');
+  G('Dein Rückblick auf die ersten vier Wochen');
+  r('woche4-reflexion','Das kannst du bereits gut:');
+  r('woche4-refl-lernen','Das möchtest du noch lernen:');
+  r('woche4-refl-unterstuetzung','Dabei brauchst du noch Unterstützung:');
+  G('Dein persönlicher Einarbeitungs-Check');
+  a('woche4-abschlusscheck','Fühlst du dich in deinem Team angekommen?');
+  a('woche4-check-aufgaben','Fühlst du dich in deinen Aufgaben sicher?');
+  a('woche4-check-hausbesuche','Fühlst du dich bei den Hausbesuchen sicher?');
+  a('woche4-check-faelle','Fühlst du dich mit deinen ersten eigenen Fällen sicher?');
+  a('woche4-check-unterstuetzung','Weißt du, wann und wo du Unterstützung holen musst/kannst?','Ja|Noch nicht ganz');
+  G('Abschluss der ersten vier Wochen');
+  t('woche4-abschlussgespraech','Abschlussgespräch mit Teamleitung und Mentor',{owner:'tl',typ:'milestone'});
+
+  P('monat2');
+  G('Vertiefen');
+  t('monat2-fallzahl','Fallzahl schrittweise erhöhen (in Absprache mit der Teamleitung)');
+  t('monat2-hilfeplan','Erste eigenständige Hilfeplanfortschreibung erstellen');
+  t('monat2-fortbildung','An einer Fortbildung oder einem Fachtag teilnehmen',{typ:'link',url:'https://praxisneuewege.de/fortbildungen',pflicht:false});
+  t('monat2-feedback','Zwischen-Feedback-Gespräch nach 2 Monaten',{owner:'tl',typ:'milestone'});
+
+  P('monat3');
+  G('Ankommen im Alltag');
+  t('monat3-verantwortung','Volle Fallverantwortung im vereinbarten Rahmen übernehmen');
+  t('monat3-abschluss','Abschlussgespräch nach 3 Monaten – Einarbeitung offiziell abschließen',{owner:'tl',typ:'milestone'});
+  r('monat3-reflexion','Was ist dir in den ersten drei Monaten gelungen? Wo stehst du heute?');
+  t('monat3-rueckmeldung','Rückmeldung zum Einarbeitungs-Fahrplan geben',{beschreibung:'Was hat gefehlt, was war hilfreich? Fließt in den nächsten Fahrplan ein.'});
+
+  const zaehler = {};
+  L.forEach(x=>{ zaehler[x.phase] = (zaehler[x.phase]||0)+1; x.order = zaehler[x.phase]; });
+  return L;
+})();
 
 /* Demo-Daten (fiktiv) für den Modus ohne Anmeldung */
 const DEMO_MITARBEITER = [
@@ -446,7 +607,7 @@ function startDemo(){
   mitarbeiterListe = DEMO_MITARBEITER.map(m=>({...m}));
   fahrplanListe = DEFAULT_FAHRPLAN.map((it,i)=>({...it, reihenfolge:it.order*10, id:'demo-item-'+i}));
   fortschrittMap = demoFortschritt();
-  reflexionMap = demoReflexionen();
+  reflexionMap = {}; Object.entries(demoReflexionen()).forEach(([k,v])=>{ reflexionMap[k] = {kombi:k, text:v}; });
   zeigeApp();
   document.getElementById('demoBar').style.display = 'flex';
   rolle = 'mitarbeiter';
@@ -456,24 +617,25 @@ function startDemo(){
 }
 function demoFortschritt(){
   const map = {};
-  const setDone = (empId, schluessel, tage) => { map[empId+'__'+schluessel] = {erledigt:true, erledigtAm:addTageISO(todayISO(),-tage)}; };
-  const vorTag1 = ['vorab-gf-vertrag','vorab-gf-konten','vorab-gf-hardware','vorab-gf-ausweis','vorab-gf-willkommen','vorab-mentor-vorstellen','vorab-res-vorstellung','vorab-res-anfahrt'];
-  const tag1 = ['tag1-kennenlernen','tag1-rahmen','tag1-ansprechpartner','tag1-arbeitsmittel','tag1-grundfunktionen'];
-  const w1 = ['woche1-konzept','woche1-aufgaben','woche1-kommunikation','woche1-doku','woche1-sgb','woche1-erstefaelle','woche1-hausbesuch'];
-  const w2 = ['woche2-uebung','woche2-doku','woche2-hilfeplan','woche2-hausbesuch'];
-  const w3 = ['woche3-eigenefaelle','woche3-sorgfalt'];
-  [...vorTag1,...tag1,...w1,...w2,...w3].forEach(s=>setDone('demo-tobias', s, 1));
-  const w3b = ['woche3-hausbesuch'];
-  const w4 = ['woche4-selbstcheck','woche4-gespraeche','woche4-unterstuetzung','woche4-hausbesuch','woche4-abschlussgespraech'];
-  const m2 = ['monat2-fallzahl','monat2-hilfeplan','monat2-fortbildung','monat2-feedback'];
-  const m3 = ['monat3-verantwortung'];
-  [...vorTag1,...tag1,...w1,...w2,...w3,...w3b,...w4,...m2,...m3].forEach(s=>setDone('demo-julia', s, 1));
+  const setDone = (empId, schluessel) => { map[empId+'__'+schluessel] = {erledigt:true, erledigtAm:addTageISO(todayISO(),-1)}; };
+  const abhakbar = it => it.typ!=='reflection' && it.typ!=='auswahl';
+  // Tobias (Tag 14): alles bis Woche 2 erledigt, in Woche 3 die ersten Punkte
+  DEFAULT_FAHRPLAN.filter(abhakbar).forEach(it=>{
+    if (['vorab','tag1','woche1','woche2'].includes(it.phase)) setDone('demo-tobias', it.schluessel);
+    if (it.phase==='woche3' && it.order<=6) setDone('demo-tobias', it.schluessel);
+  });
+  // Julia (Tag 93): alles außer den letzten Punkten aus Monat 3
+  DEFAULT_FAHRPLAN.filter(abhakbar).forEach(it=>{
+    if (!['monat3-abschluss','monat3-rueckmeldung'].includes(it.schluessel)) setDone('demo-julia', it.schluessel);
+  });
   return map;
 }
 function demoReflexionen(){
   return {
     'demo-tobias__tag1-reflexion': 'Ich nehme mit, dass ich mir am Anfang keinen Druck machen muss.',
     'demo-tobias__woche1-reflexion': 'Der erste Hausbesuch war spannend. Die ruhige Gesprächsführung hat mir gut gefallen.',
+    'demo-julia__woche4-abschlusscheck': 'Ja',
+    'demo-julia__woche4-check-faelle': 'Teilweise',
     'demo-julia__monat3-reflexion': 'Ich fühle mich mittlerweile sicher in der eigenen Fallführung, hole mir bei komplexen Fällen noch bewusst eine zweite Meinung.'
   };
 }
@@ -576,6 +738,7 @@ async function ladeAllesUndStarte(){
 
   bestimmeRolle(gfKonto);
   render();
+  if (gfKonto) pruefeHeftStand();
 }
 function bestimmeRolle(gfKonto){
   if (gfKonto){
@@ -600,15 +763,32 @@ function bestimmeRolle(gfKonto){
 /* ═══════════════════════════════════════════════════════════
  * ERSTEINRICHTUNG
  * ═══════════════════════════════════════════════════════════ */
+function spaltenDefinition(s){
+  if(s.typ==='zahl')  return {name:s.sp, number:{decimalPlaces:'automatic'}};
+  if(s.typ==='datum') return {name:s.sp, dateTime:{format:'dateOnly'}};
+  if(s.typ==='bool')  return {name:s.sp, boolean:{}};
+  if(s.typ==='lang')  return {name:s.sp, text:{allowMultipleLines:true}};
+  return {name:s.sp, text:{}};
+}
+async function fehlendeFahrplanSpalten(){
+  const cols = await graphAlle('/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan+'/columns?$select=name');
+  const da = new Set(cols.map(c=>c.name));
+  return SCHEMA_FAHRPLAN.filter(s=>s.sp!=='Title' && !da.has(s.sp));
+}
+async function ergaenzeFahrplanSpalten(){
+  const fehlen = await fehlendeFahrplanSpalten();
+  if (!fehlen.length) return;
+  const t = await token(['Sites.Manage.All']);
+  for (const s of fehlen){
+    const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan+'/columns', {
+      method:'POST', headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}, body:JSON.stringify(spaltenDefinition(s))
+    });
+    if (!r.ok) throw new Error('Spalte '+s.sp+' konnte nicht angelegt werden ('+r.status+'): '+await r.text());
+  }
+}
 async function legeListeAn(name, schema){
   const t = await token(['Sites.Manage.All']);
-  const columns = schema.filter(s=>s.sp!=='Title').map(s=>{
-    if(s.typ==='zahl')  return {name:s.sp, number:{decimalPlaces:'automatic'}};
-    if(s.typ==='datum') return {name:s.sp, dateTime:{format:'dateOnly'}};
-    if(s.typ==='bool')  return {name:s.sp, boolean:{}};
-    if(s.typ==='lang')  return {name:s.sp, text:{allowMultipleLines:true}};
-    return {name:s.sp, text:{}};
-  });
+  const columns = schema.filter(s=>s.sp!=='Title').map(spaltenDefinition);
   const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/lists', {
     method:'POST', headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
     body:JSON.stringify({displayName:name, columns, list:{template:'genericList'}})
@@ -631,13 +811,73 @@ async function seedFahrplan(){
   const status = document.getElementById('seedStatus');
   status.textContent = 'Fahrplan wird befüllt …';
   try{
+    await ergaenzeFahrplanSpalten();
+    let n = 0;
     for(const it of DEFAULT_FAHRPLAN){
-      await schreibeItem(CFG.listFahrplan, SCHEMA_FAHRPLAN, {titel:it.titel, schluessel:it.schluessel, phase:it.phase, owner:it.owner, typ:it.typ, beschreibung:it.beschreibung||'', url:it.url||'', pflicht:!!it.pflicht, fristTage:it.fristTage!=null?it.fristTage:'', reihenfolge:it.order});
+      await schreibeItem(CFG.listFahrplan, SCHEMA_FAHRPLAN, standardZuEintrag(it));
+      status.textContent = 'Fahrplan wird befüllt … '+(++n)+'/'+DEFAULT_FAHRPLAN.length;
     }
     status.textContent = 'Fertig.';
     document.getElementById('seedBar').style.display = 'none';
     await ladeAllesUndStarte();
   }catch(e){ status.textContent = 'Fehler: '+e.message; }
+}
+
+function standardZuEintrag(it){
+  return {titel:it.titel, schluessel:it.schluessel, phase:it.phase, owner:it.owner, typ:it.typ, beschreibung:it.beschreibung||'',
+          url:it.url||'', pflicht:!!it.pflicht, fristTage:it.fristTage!=null?it.fristTage:'', reihenfolge:it.order*10,
+          gruppe:it.gruppe||'', optionen:it.optionen||''};
+}
+function heftAbgleichPlan(){
+  const heftKeys = new Set(DEFAULT_FAHRPLAN.map(x=>x.schluessel));
+  const vorhanden = new Map(fahrplanListe.map(x=>[x.schluessel, x]));
+  const entfallen = fahrplanListe.filter(x=>x.schluessel && !String(x.schluessel).startsWith('custom-') && !heftKeys.has(x.schluessel));
+  const neu = DEFAULT_FAHRPLAN.filter(x=>!vorhanden.has(x.schluessel));
+  const aktualisieren = DEFAULT_FAHRPLAN.filter(x=>vorhanden.has(x.schluessel));
+  return {entfallen, neu, aktualisieren, vorhanden};
+}
+let heftAbgleichNoetig = false;
+async function pruefeHeftStand(){
+  heftAbgleichNoetig = false;
+  if (!listenVorhanden.fahrplan || !fahrplanListe.length) return;
+  const plan = heftAbgleichPlan();
+  let spaltenFehlen = false;
+  try{ spaltenFehlen = (await fehlendeFahrplanSpalten()).length > 0; }catch(e){}
+  heftAbgleichNoetig = spaltenFehlen || plan.neu.length>0 || plan.entfallen.length>0;
+  const bar = document.getElementById('heftBar');
+  bar.style.display = heftAbgleichNoetig ? 'flex' : 'none';
+  if (heftAbgleichNoetig) document.getElementById('heftInfo').textContent =
+    plan.neu.length+' Einzelpunkte aus dem Einarbeitungsheft fehlen, '+plan.entfallen.length+' alte Sammelpunkte werden ersetzt.';
+}
+async function heftStandUebernehmen(){
+  const status = document.getElementById('heftStatus');
+  const plan = heftAbgleichPlan();
+  const verlorenHaken = Object.values(fortschrittMap).filter(f=>f.erledigt && plan.entfallen.some(x=>x.schluessel===f.itemSchluessel)).length;
+  if (!confirm('Fahrplan auf den Stand des Einarbeitungshefts bringen?\n\n'
+    + '• '+plan.neu.length+' Einzelpunkte werden neu angelegt\n'
+    + '• '+plan.entfallen.length+' alte Sammelpunkte werden gelöscht'+(verlorenHaken?' ('+verlorenHaken+' dort gesetzte Haken entfallen)':'')+'\n'
+    + '• '+plan.aktualisieren.length+' bestehende Punkte bekommen Titel, Gruppe und Reihenfolge aus dem Heft\n\n'
+    + 'Selbst angelegte Punkte bleiben unverändert. Bei Links bleiben Adresse und Pflicht-Einstellung erhalten.')) return;
+  const basis = '/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan;
+  try{
+    status.textContent = 'Spalten prüfen …';
+    await ergaenzeFahrplanSpalten();
+    let n = 0; const gesamt = plan.neu.length + plan.entfallen.length + plan.aktualisieren.length;
+    const fortschritt = ()=>{ status.textContent = 'Übernehme Heft-Stand … '+(++n)+'/'+gesamt; };
+    for (const it of plan.aktualisieren){
+      const alt = plan.vorhanden.get(it.schluessel);
+      const f = {Gruppe:it.gruppe||'', Optionen:it.optionen||''};
+      if (it.typ!=='link'){ Object.assign(f, {Title:it.titel, Art:it.typ, Zustaendig:it.owner, Beschreibung:it.beschreibung||''}); }
+      if (alt.phase === it.phase) f.Reihenfolge = it.order*10; // verschobene Punkte behalten Phase und Position
+      await graph(basis+'/items/'+alt.id+'/fields', {method:'PATCH', body:JSON.stringify(f)});
+      fortschritt();
+    }
+    for (const it of plan.neu){ await schreibeItem(CFG.listFahrplan, SCHEMA_FAHRPLAN, standardZuEintrag(it)); fortschritt(); }
+    for (const x of plan.entfallen){ await graph(basis+'/items/'+x.id, {method:'DELETE'}); fortschritt(); }
+    status.textContent = 'Fertig.';
+    await ladeAllesUndStarte();
+    zeigeToast('Fahrplan entspricht jetzt dem Einarbeitungsheft ✓');
+  }catch(e){ status.textContent = 'Fehler: '+e.message+' — bitte erneut starten, bereits Übernommenes bleibt erhalten.'; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -776,7 +1016,10 @@ function aktualisiereDlgFelder(){
   const link = byId('dlgTyp').value==='link';
   byId('dlgUrlWrap').style.display = link ? '' : 'none';
   byId('dlgPflichtWrap').style.display = link ? '' : 'none';
-  if (byId('dlgTyp').value==='reflection') byId('dlgOwner').value = 'mitarbeiter';
+  const auswahl = byId('dlgTyp').value==='auswahl';
+  byId('dlgOptWrap').style.display = auswahl ? '' : 'none';
+  if (auswahl && !byId('dlgOptionen').value) byId('dlgOptionen').value = 'Ja|Teilweise|Noch nicht';
+  if (byId('dlgTyp').value==='reflection' || auswahl) byId('dlgOwner').value = 'mitarbeiter';
 }
 function oeffneItemDialog(id, vorgaben){
   const it = id ? fahrplanListe.find(x=>String(x.id)===String(id)) : null;
@@ -791,6 +1034,10 @@ function oeffneItemDialog(id, vorgaben){
   byId('dlgPflicht').checked = !!v.pflicht;
   byId('dlgBeschreibung').value = v.beschreibung || '';
   byId('dlgFrist').value = (v.fristTage==null || v.fristTage==='') ? '' : v.fristTage;
+  byId('dlgGruppe').value = v.gruppe || '';
+  byId('dlgOptionen').value = v.optionen || '';
+  const gruppen = [...new Set(fahrplanListe.map(x=>x.gruppe).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
+  byId('dlgGruppenListe').innerHTML = gruppen.map(g=>'<option value="'+esc(g)+'">').join('');
   byId('dlgLoeschen').style.display = it ? '' : 'none';
   byId('dlgFehler').textContent = '';
   aktualisiereDlgFelder();
@@ -803,8 +1050,14 @@ async function speichereItemDialog(){
   const d = {
     titel: byId('dlgTitel').value.trim(), typ: byId('dlgTyp').value, phase: byId('dlgPhase').value,
     owner: byId('dlgOwner').value, beschreibung: byId('dlgBeschreibung').value.trim(),
-    url: byId('dlgUrl').value.trim(), pflicht: byId('dlgPflicht').checked
+    url: byId('dlgUrl').value.trim(), pflicht: byId('dlgPflicht').checked,
+    gruppe: byId('dlgGruppe').value.trim(), optionen: byId('dlgOptionen').value.trim()
   };
+  if (d.typ==='auswahl'){
+    const opts = d.optionen.split('|').map(s=>s.trim()).filter(Boolean);
+    if (opts.length<2) return byId('dlgFehler').textContent = 'Bitte mindestens zwei Antwortmöglichkeiten angeben (mit | getrennt).';
+    d.optionen = opts.join('|');
+  } else d.optionen = '';
   if (!d.titel) return fehler('Bitte einen Titel eingeben.');
   if (d.typ==='link'){
     if (!d.url) return fehler('Bitte einen Link eintragen.');
@@ -816,7 +1069,7 @@ async function speichereItemDialog(){
     frist = parseInt(fristRoh, 10); // ganze Tage, kein Dezimalformat
     if (isNaN(frist)) return fehler('Frist bitte als ganze Zahl eingeben (z. B. -7).');
   }
-  const felder = {Title:d.titel, Art:d.typ, Zustaendig:d.owner, Phase:d.phase, Beschreibung:d.beschreibung, Link:d.url, Pflicht:d.pflicht, FristTageZumStart:frist};
+  const felder = {Title:d.titel, Art:d.typ, Zustaendig:d.owner, Phase:d.phase, Beschreibung:d.beschreibung, Link:d.url, Pflicht:d.pflicht, FristTageZumStart:frist, Gruppe:d.gruppe, Optionen:d.optionen};
   const basis = '/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan;
   const btn = byId('dlgSpeichern'); btn.disabled = true;
   try{
@@ -887,7 +1140,7 @@ function gfLinks(){
 function mitarbeiter(id){ return mitarbeiterListe.find(m=>m.id===id) || null; }
 function itemsFuerPhase(phaseKey){ return fahrplanListe.filter(it=>it.phase===phaseKey).sort((a,b)=>(a.reihenfolge||a.order||0)-(b.reihenfolge||b.order||0)); }
 function fortschrittFuer(mitarbeiterId, items){
-  const relevant = items.filter(it=>it.typ!=='reflection');
+  const relevant = items.filter(it=>it.typ!=='reflection' && it.typ!=='auswahl');
   if (!relevant.length) return null;
   const done = relevant.filter(it=>{ const e=fortschrittMap[mitarbeiterId+'__'+it.schluessel]; return e && e.erledigt; }).length;
   return {done, total:relevant.length, pct: Math.round(100*done/relevant.length)};
@@ -977,17 +1230,23 @@ function renderWaypoint(phase, idx, curPhaseKey, m, ansicht){
   if (ansicht==='mitarbeiter'){
     const eigene = items.filter(it=>it.owner==='mitarbeiter');
     const andere = items.filter(it=>it.owner==='mentor'||it.owner==='tl');
-    const refl = items.filter(it=>it.typ==='reflection');
-    if (!eigene.length && !andere.length && !refl.length) h += '<p class="ea-item-desc">Für diese Phase sind noch keine Punkte hinterlegt.</p>';
-    eigene.forEach(it=>h+=itemRow(m.id, it, true));
+    if (!eigene.length && !andere.length) h += '<p class="ea-item-desc">Für diese Phase sind noch keine Punkte hinterlegt.</p>';
+    let grp = null;
+    eigene.forEach(it=>{
+      if ((it.gruppe||'') !== grp){ grp = it.gruppe||''; if (grp) h += '<div class="ea-group">'+esc(grp)+'</div>'; }
+      if (it.typ==='reflection') h += reflexionRow(m.id, it);
+      else if (it.typ==='auswahl') h += auswahlRow(m.id, it);
+      else h += itemRow(m.id, it, true);
+    });
     if (andere.length){
       h += '<div class="ea-note"><div class="l">Darum kümmern sich in dieser Zeit Mentor:in / Teamleitung:</div><ul>'+andere.map(it=>'<li>'+esc(it.titel)+'</li>').join('')+'</ul></div>';
     }
-    refl.forEach(it=>h+=reflexionRow(m.id, it));
   } else {
-    const relevante = items.filter(it=>it.typ!=='reflection');
+    const relevante = items.filter(it=>it.typ!=='reflection' && it.typ!=='auswahl');
     if (!relevante.length) h += '<p class="ea-item-desc">Für diese Phase sind noch keine Punkte hinterlegt.</p>';
+    let grp = null;
     relevante.forEach(it=>{
+      if ((it.gruppe||'') !== grp){ grp = it.gruppe||''; if (grp) h += '<div class="ea-group">'+esc(grp)+'</div>'; }
       const mine = (ansicht==='mentor_tl' && (it.owner==='mentor'||it.owner==='tl')) || (ansicht==='gf' && it.owner==='gf');
       h += itemRow(m.id, it, mine);
     });
@@ -1011,10 +1270,21 @@ function itemRow(mitarbeiterId, it, editable){
 }
 function reflexionRow(mitarbeiterId, it){
   const val = (reflexionMap[mitarbeiterId+'__'+it.schluessel] || {}).text || '';
-  let h = '<div style="margin:10px 0"><div class="ea-item-title">'+esc(it.titel)+'</div>';
+  let h = '<div style="margin:8px 0 10px"><div class="ea-item-title">'+esc(it.titel)+'</div>';
   if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
   h += '<textarea class="ea-refl" data-refl-key="'+mitarbeiterId+'|'+it.schluessel+'" placeholder="Deine Notizen …">'+esc(val)+'</textarea>';
-  h += '<div class="ea-lock">🔒 Nur für dich sichtbar — Mentor:in, Teamleitung und Geschäftsführung sehen diese Notiz nicht.</div></div>';
+  h += '<div class="ea-lock">🔒 Nur für dich sichtbar</div></div>';
+  return h;
+}
+function auswahlRow(mitarbeiterId, it){
+  const kombi = mitarbeiterId+'__'+it.schluessel;
+  const val = (reflexionMap[kombi] || {}).text || '';
+  const optionen = String(it.optionen||'Ja|Teilweise|Noch nicht').split('|').map(s=>s.trim()).filter(Boolean);
+  let h = '<div class="ea-auswahl"><div class="ea-item-title">'+esc(it.titel)+'</div><div class="ea-optionen" role="radiogroup">';
+  optionen.forEach(o=>{
+    h += '<label class="ea-opt'+(o===val?' aktiv':'')+'"><input type="radio" name="opt-'+esc(kombi)+'" value="'+esc(o)+'" '+(o===val?'checked':'')+' data-auswahl-key="'+mitarbeiterId+'|'+it.schluessel+'"> '+esc(o)+'</label>';
+  });
+  h += '</div><div class="ea-lock">🔒 Nur für dich sichtbar</div></div>';
   return h;
 }
 
@@ -1106,18 +1376,22 @@ function gfFahrplan(){
     const items = itemsFuerPhase(p.key);
     h += '<div class="ea-card ea-dropzone" data-drop-phase="'+p.key+'"><h3>'+esc(p.label)+' <span class="ea-item-desc" style="font-weight:400">('+items.length+')</span></h3>';
     if (!items.length) h += '<p class="ea-item-desc" style="margin-top:6px">Keine Punkte — zum Einfügen hierher ziehen.</p>';
-    else items.forEach((it, idx)=>{
+    let grp = null;
+    if (items.length) items.forEach((it, idx)=>{
+      if ((it.gruppe||'') !== grp){ grp = it.gruppe||''; if (grp) h += '<div class="ea-group">'+esc(grp)+'</div>'; }
       h += '<div class="ea-item ea-drag" draggable="true" data-drag-id="'+esc(it.id)+'">';
       h += '<span class="ea-handle" title="Ziehen zum Verschieben">⠿</span>';
       h += '<div style="flex:1;min-width:0"><span class="ea-item-title">'+esc(it.titel)+'</span>';
       h += '<span class="ea-badge owner">'+OWNER_LABEL[it.owner]+'</span>';
+      if (it.typ==='reflection') h += '<span class="ea-badge optional">Reflexion</span>';
+      if (it.typ==='auswahl') h += '<span class="ea-badge optional">Selbsteinschätzung</span>';
       if (it.typ==='link') h += '<span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
       if (it.fristTage!=null && it.fristTage!=='') h += '<span class="ea-badge owner">Start '+(Number(it.fristTage)>=0?'+':'')+it.fristTage+' Tg.</span>';
       if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
       if (it.typ==='link') h += sichereUrl(it.url) ? '<a class="ea-item-link" href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(kurzUrl(it.url))+' ↗</a>' : '<div class="ea-item-desc" style="color:var(--error)">Kein Link hinterlegt</div>';
       h += '</div><div class="ea-move">';
       h += '<button class="ea-mv" data-edit-item="'+esc(it.id)+'" title="Bearbeiten">✎</button>';
-      h += '<button class="ea-mv" data-mv=""'+esc(it.id)+'|-1" '+(idx===0?'disabled':'')+' title="Nach oben">↑</button>';
+      h += '<button class="ea-mv" data-mv="'+esc(it.id)+'|-1" '+(idx===0?'disabled':'')+' title="Nach oben">↑</button>';
       h += '<button class="ea-mv" data-mv="'+esc(it.id)+'|1" '+(idx===items.length-1?'disabled':'')+' title="Nach unten">↓</button>';
       h += '<select class="ea-phase-sel" data-phase-sel="'+esc(it.id)+'" title="In andere Phase verschieben">'
         + PHASEN.map(q=>'<option value="'+q.key+'" '+(q.key===p.key?'selected':'')+'>'+esc(q.label.split(' · ')[0])+'</option>').join('')
@@ -1201,6 +1475,14 @@ function bindContentEvents(){
   });
   Array.from(document.querySelectorAll('[data-refl-key]')).forEach(el=>{
     el.onblur = ()=>{ const [empId, schluessel] = el.getAttribute('data-refl-key').split('|'); speicherReflexion(empId, schluessel, el.value); };
+  });
+  Array.from(document.querySelectorAll('[data-auswahl-key]')).forEach(el=>{
+    el.onchange = ()=>{
+      const [empId, schluessel] = el.getAttribute('data-auswahl-key').split('|');
+      speicherReflexion(empId, schluessel, el.value);
+      el.closest('.ea-optionen').querySelectorAll('.ea-opt').forEach(l=>l.classList.toggle('aktiv', l.contains(el)));
+      zeigeToast('Gespeichert ✓');
+    };
   });
   Array.from(document.querySelectorAll('[data-open-emp]')).forEach(b=>{
     b.onclick = ()=>{ aktiverMitarbeiterId = b.getAttribute('data-open-emp'); gfTab='einzelansicht'; render(); };
