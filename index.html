@@ -590,7 +590,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 'v30f5414'; // auto-updated on deploy
+const APP_VERSION = 've2141c4'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -5718,15 +5718,26 @@ renderUnterschriftFachkraefte();
       zLabel('ZIELERREICHUNG — ERGEBNIS'),
       { text: dash(z.ergebnis), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, alignment: 'justify' }
     );
-    return {
-      unbreakable: true,
-      table: { widths: ['*'], body: [[{ stack: inner, margin: [8, 6, 8, 7] }]] },
-      layout: {
-        hLineWidth: () => LINE.trenner, vLineWidth: () => LINE.trenner,
-        hLineColor: () => C.rahmenMittel, vLineColor: () => C.rahmenMittel,
-      },
-      margin: [20, 0, 0, 7],
+    // Unteilbar nur, wenn die Karte sicher auf eine Seite passt. pdfmake lässt einen
+    // unbreakable-Block, der höher als eine Seite ist, ersatzlos verschwinden (leere Seite,
+    // Inhalt fehlt) — deshalb werden lange Ziele als umbrechbare Karte gesetzt.
+    const zeilen = t => String(t || '').split('\n').reduce((a, z) => a + Math.max(1, Math.ceil(z.length / 90)), 0);
+    const geschaetzt = zeilen(z.beschreibung) + (mitMethoden ? zeilen(z.methoden) : 0) + zeilen(z.ergebnis) + 4;
+    const passt = geschaetzt <= 26;
+    const layout = {
+      hLineWidth: () => LINE.trenner, vLineWidth: () => LINE.trenner,
+      hLineColor: () => C.rahmenMittel, vLineColor: () => C.rahmenMittel,
     };
+    if (passt) {
+      return { unbreakable: true, zielUnteilbar: true,
+        table: { widths: ['*'], body: [[{ stack: inner, margin: [8, 6, 8, 7] }]] }, layout, margin: [20, 0, 0, 7] };
+    }
+    // Umbrechbar: jeder Abschnitt eine Tabellenzeile, damit Seitenwechsel zwischen den Abschnitten fallen
+    const zeile = (elemente) => [{ stack: elemente, margin: [8, 6, 8, 6] }];
+    const body = [zeile(inner.slice(0, 2))];
+    if (mitMethoden) body.push(zeile(inner.slice(2, 4)));
+    body.push(zeile(inner.slice(mitMethoden ? 4 : 2)));
+    return { table: { widths: ['*'], body, dontBreakRows: false }, layout, margin: [20, 0, 0, 7] };
   }
 
   // ── Ressourcen/Risiken-Zweispalter ──
@@ -5928,7 +5939,8 @@ renderUnterschriftFachkraefte();
         let kopf = s.zieleLabel ? subLabel(s.zieleLabel) : null;
         if (heading) { kopf = kopf ? { stack: [heading, kopf] } : heading; heading = null; }
         if (karten.length) {
-          content.push(kopf ? mitBlock(kopf, karten[0]) : karten[0]);
+          if (kopf && karten[0].zielUnteilbar) content.push(mitBlock(kopf, karten[0]));
+          else { if (kopf) content.push(kopf); content.push(karten[0]); }
           karten.slice(1).forEach(k => content.push(k));
         } else if (kopf) content.push(kopf);
       }
