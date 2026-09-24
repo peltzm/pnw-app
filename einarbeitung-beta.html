@@ -117,6 +117,7 @@ textarea.ea-refl{width:100%;min-height:64px;border:1px solid var(--border);borde
 .ea-status{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
 .ea-status.overdue{background:var(--error-bg);color:var(--error)}
 .ea-status.soon{background:var(--warn-bg);color:var(--warn)}
+.ea-status.done{background:var(--ok-bg);color:var(--ok)}
 .ea-status.later{background:var(--bg);color:var(--text-hint);border:1px solid var(--border)}
 
 table.ea-tbl{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
@@ -1323,26 +1324,56 @@ function gfEinzelansicht(){
   h += viewMentorTl();
   return h;
 }
+let faelligFilter = 'offen';
 function gfFaelligkeiten(){
-  const gfItems = fahrplanListe.filter(it=>it.owner==='gf' && it.fristTage!=null && it.fristTage!=='');
-  const rows = [];
-  mitarbeiterListe.forEach(m=>gfItems.forEach(it=>rows.push({m, it, faellig: addTageISO(m.startDatum, Number(it.fristTage))})));
-  rows.sort((a,b)=> a.faellig < b.faellig ? -1 : 1);
-  if (!rows.length) return '<div class="ea-card"><p class="ea-item-desc">Keine GF-Aufgaben mit Fristen hinterlegt.</p></div>';
-  let h = '<div class="ea-card"><h3>Fälligkeiten über alle Mitarbeitenden</h3><p class="ea-item-desc" style="margin-top:6px">Automatisch aus dem Startdatum berechnet.</p><div style="margin-top:10px">';
-  rows.forEach(r=>{
-    const off = tageZwischen(todayISO(), r.faellig);
-    const e = fortschrittMap[r.m.id+'__'+r.it.schluessel];
-    const erledigt = e && e.erledigt;
-    let status='later', label='fällig '+fmtDatum(r.faellig);
-    if (erledigt){ status='soon'; label='erledigt'; }
-    else if (off<0){ status='overdue'; label='überfällig ('+fmtDatum(r.faellig)+')'; }
-    else if (off<=7){ status='soon'; label='fällig '+fmtDatum(r.faellig); }
-    h += '<div class="ea-due-row"><div><div style="font-size:13px">'+esc(r.it.titel)+'</div><div class="ea-item-desc">'+esc(r.m.name)+'</div></div>';
-    h += '<div style="display:flex;align-items:center;gap:8px"><span class="ea-status '+status+'">'+label+'</span>';
-    h += '<button class="btn btn-sm btn-ghost" data-gf-toggle="'+r.m.id+'|'+r.it.schluessel+'">'+(erledigt?'Zurücksetzen':'Erledigt?')+'</button></div></div>';
+  const gfItems = fahrplanListe.filter(it=>it.owner==='gf' && it.fristTage!=null && it.fristTage!=='')
+    .sort((a,b)=>Number(a.fristTage)-Number(b.fristTage) || (a.reihenfolge||0)-(b.reihenfolge||0));
+  if (!gfItems.length || !mitarbeiterListe.length) return '<div class="ea-card"><p class="ea-item-desc">Keine GF-Aufgaben mit Fristen hinterlegt.</p></div>';
+  const heute = todayISO();
+  const gruppen = mitarbeiterListe.map(m=>{
+    const rows = gfItems.map(it=>{
+      const faellig = addTageISO(m.startDatum, Number(it.fristTage));
+      const e = fortschrittMap[m.id+'__'+it.schluessel];
+      return {it, faellig, erledigt: !!(e && e.erledigt), off: tageZwischen(heute, faellig)};
+    });
+    const offen = rows.filter(r=>!r.erledigt).sort((a,b)=>a.faellig<b.faellig?-1:a.faellig>b.faellig?1:0);
+    return {m, rows, offen, ueberfaellig: offen.filter(r=>r.off<0).length, naechste: offen.length ? offen[0].faellig : '9999-12-31'};
+  }).sort((a,b)=> (b.ueberfaellig>0)-(a.ueberfaellig>0) || (a.naechste<b.naechste?-1:a.naechste>b.naechste?1:0) || (a.m.startDatum<b.m.startDatum?-1:1));
+
+  const offenGesamt = gruppen.reduce((n,g)=>n+g.offen.length, 0);
+  const ueberGesamt = gruppen.reduce((n,g)=>n+g.ueberfaellig, 0);
+  let h = '<div class="ea-card ea-card-head"><div><h3>Fälligkeiten der Geschäftsführung</h3>'
+    + '<p class="ea-item-desc">'+offenGesamt+' offen'+(ueberGesamt?', davon <b style="color:var(--error)">'+ueberGesamt+' überfällig</b>':'')+' · Fristen werden aus dem Startdatum berechnet.</p></div>'
+    + '<div class="pill-group">'
+    + '<button class="pill '+(faelligFilter==='offen'?'active':'')+'" data-ffilter="offen">Nur offene</button>'
+    + '<button class="pill '+(faelligFilter==='alle'?'active':'')+'" data-ffilter="alle">Alle</button></div></div>';
+
+  const fertig = [];
+  gruppen.forEach(g=>{
+    if (faelligFilter==='offen' && !g.offen.length){ fertig.push(g.m); return; }
+    const d = tageZwischen(g.m.startDatum, heute);
+    const erledigtAnz = g.rows.length - g.offen.length;
+    h += '<div class="ea-card"><div class="ea-card-head"><div><h3>'+esc(g.m.name)+'</h3>'
+      + '<p class="ea-item-desc">Start '+fmtDatum(g.m.startDatum)+' ('+(d<0?'in '+(-d)+' Tagen':(d===0?'heute':'seit '+d+' Tagen'))+')</p></div>'
+      + '<span class="ea-status '+(g.ueberfaellig?'overdue':(g.offen.length?'later':'done'))+'">'+erledigtAnz+' von '+g.rows.length+' erledigt</span></div>'
+      + '<div style="margin-top:8px">';
+    const zeilen = faelligFilter==='offen' ? g.offen : g.rows;
+    zeilen.forEach(r=>{
+      let status='later', label='fällig '+fmtDatum(r.faellig);
+      if (r.erledigt){ status='done'; label='erledigt'; }
+      else if (r.off<0){ status='overdue'; label='überfällig seit '+fmtDatum(r.faellig); }
+      else if (r.off===0){ status='soon'; label='heute fällig'; }
+      else if (r.off<=7){ status='soon'; label='fällig '+fmtDatum(r.faellig); }
+      h += '<div class="ea-due-row"><div style="font-size:13px'+(r.erledigt?';color:var(--text-muted)':'')+'">'+esc(r.it.titel)+'</div>';
+      h += '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span class="ea-status '+status+'">'+label+'</span>';
+      h += '<button class="btn btn-sm '+(r.erledigt?'btn-ghost':'btn-outline')+'" data-gf-toggle="'+g.m.id+'|'+r.it.schluessel+'">'+(r.erledigt?'Zurücksetzen':'Erledigt')+'</button></div></div>';
+    });
+    h += '</div></div>';
   });
-  h += '</div></div>';
+  if (fertig.length){
+    h += '<div class="ea-card"><p class="ea-item-desc"><span class="ea-status done">✓ vollständig vorbereitet</span>&nbsp; '
+      + fertig.map(m=>esc(m.name)).join(', ')+'</p></div>';
+  }
   return h;
 }
 function gfMitarbeitende(){
@@ -1490,6 +1521,7 @@ function bindContentEvents(){
   Array.from(document.querySelectorAll('[data-gf-toggle]')).forEach(b=>{
     b.onclick = ()=>{ const [empId, schluessel] = b.getAttribute('data-gf-toggle').split('|'); toggleItem(empId, schluessel); };
   });
+  document.querySelectorAll('[data-ffilter]').forEach(b=>{ b.onclick = ()=>{ faelligFilter = b.getAttribute('data-ffilter'); render(); }; });
   const gfEmpSelect = document.getElementById('gfEmpSelect');
   if (gfEmpSelect) gfEmpSelect.onchange = function(){ aktiverMitarbeiterId = this.value; render(); };
   const addEmpForm = document.getElementById('addEmpForm');
