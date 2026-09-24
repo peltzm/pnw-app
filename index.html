@@ -590,7 +590,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 've48f8f3'; // auto-updated on deploy
+const APP_VERSION = 'vfbe88a6'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -1644,9 +1644,12 @@ async function erzeugePdfBytes(data, opts) {
     freigegebenVon: opts.freigegebenVon || '',
     // Teamleitung im Unterschriftenblock: explizit übergeben, sonst ab dem Status "TL freigegeben"
     // bzw. in der GF-Prüfung die zugewiesene Teamleitung — vor der TL-Freigabe steht "Entwurf"
+    // Unterschrift "Freigabe Leitung": explizit übergeben; sonst ab TL-Freigabe die zugewiesene Teamleitung;
+    // in der Prüfansicht einer Teamleitung bereits deren Name (sie sieht, was sie freigibt). Fachkraft: "Entwurf".
     freigabeLeitung: opts.freigabeLeitung
-      || ((['TL freigegeben', 'GF-Prüfung', 'Genehmigt'].includes(currentItemStatus)
-            && (currentAssignedReviewer || data._assignedReviewer || (typeof isTLUser === 'function' && isTLUser() ? (currentAccount?.name || '') : ''))) || ''),
+      || ((['TL freigegeben', 'GF-Prüfung', 'Genehmigt'].includes(currentItemStatus) && (currentAssignedReviewer || data._assignedReviewer)) || '')
+      || ((typeof _isReviewMode !== 'undefined' && _isReviewMode && typeof isTLUser === 'function' && isTLUser())
+            ? (currentAssignedReviewer || currentAccount?.name || '') : ''),
     anhang: _anhangPDF ? { titel: _anhangPDF.titel || '', name: _anhangPDF.name } : null,
   });
   // Kennwortschutz (pdfmake/pdfkit): ein geschuetztes PDF laesst sich danach nicht mehr per pdf-lib um den
