@@ -133,6 +133,22 @@ table.ea-tbl td{padding:9px 10px;border-top:1px solid var(--border);vertical-ali
 .loading-state{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--text-muted);padding:60px 20px;font-size:13px}
 .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent-mid);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Fahrplan verwalten: Verschieben */
+.ea-drag{align-items:center}
+.ea-handle{cursor:grab;color:var(--text-hint);font-size:16px;padding:0 2px;user-select:none;flex-shrink:0;line-height:1}
+.ea-handle:active{cursor:grabbing}
+.ea-drag.dragging{opacity:.35}
+.ea-drag.drop-before{box-shadow:inset 0 3px 0 var(--accent-mid)}
+.ea-dropzone{transition:border-color .12s,background .12s}
+.ea-dropzone.drop-zone-hover{border-color:var(--accent-mid);background:var(--accent-light)}
+.ea-move{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.ea-mv{border:1px solid var(--border);background:var(--surface);border-radius:4px;width:26px;height:26px;cursor:pointer;font-family:inherit;color:var(--text-muted);font-size:12px}
+.ea-mv:hover:not(:disabled){border-color:var(--accent-mid);color:var(--accent)}
+.ea-mv:disabled{opacity:.3;cursor:default}
+.ea-phase-sel{border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-family:inherit;font-size:11px;background:var(--surface);color:var(--text-muted);max-width:120px;height:26px}
+.ea-toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:#fff;font-size:12.5px;padding:8px 16px;border-radius:20px;z-index:300;display:none}
+.ea-toast.err{background:var(--error)}
+@media(max-width:600px){.ea-drag{flex-wrap:wrap}.ea-move{width:100%;justify-content:flex-end;padding-left:0}.ea-handle{display:none}}
 .footer-note{max-width:900px;margin:0 auto;padding:0 20px 40px;font-size:11px;color:var(--text-hint);line-height:1.7}
 .footer-note code{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:0 4px;font-size:10.5px}
 </style>
@@ -199,6 +215,8 @@ table.ea-tbl td{padding:9px 10px;border-top:1px solid var(--border);vertical-ali
     jeweilige Person selbst sichtbar — Mentor:in, Teamleitung und Geschäftsführung sehen ausschließlich den Haken-Fortschritt.
   </div>
 </div>
+
+<div class="ea-toast" id="eaToast"></div>
 
 <script>
 /* ═══════════════════════════════════════════════════════════
@@ -378,7 +396,7 @@ function logout(){ if(msalInstance) msalInstance.logoutPopup({account:currentAcc
 function startDemo(){
   demoMode = true;
   mitarbeiterListe = DEMO_MITARBEITER.map(m=>({...m}));
-  fahrplanListe = DEFAULT_FAHRPLAN.map((it,i)=>({...it, id:'demo-item-'+i}));
+  fahrplanListe = DEFAULT_FAHRPLAN.map((it,i)=>({...it, reihenfolge:it.order*10, id:'demo-item-'+i}));
   fortschrittMap = demoFortschritt();
   reflexionMap = demoReflexionen();
   zeigeApp();
@@ -624,6 +642,68 @@ async function neuerFahrplanPunkt(daten){
 }
 
 /* ═══════════════════════════════════════════════════════════
+ * FAHRPLAN-PUNKTE VERSCHIEBEN
+ * Fortschritt hängt am Schlüssel, nicht an der Phase — beim Verschieben
+ * bleiben alle Haken und Reflexionen erhalten.
+ * ═══════════════════════════════════════════════════════════ */
+function zeigeToast(text, fehler){
+  const t = document.getElementById('eaToast');
+  t.textContent = text;
+  t.classList.toggle('err', !!fehler);
+  t.style.display = 'block';
+  clearTimeout(zeigeToast._timer);
+  zeigeToast._timer = setTimeout(()=>{ t.style.display='none'; }, fehler ? 6000 : 1800);
+}
+function nummeriereNeu(liste){
+  // Reihenfolge in 10er-Schritten neu vergeben; liefert nur geänderte Einträge
+  const geaendert = [];
+  liste.forEach((x,i)=>{ const r=(i+1)*10; if (Number(x.reihenfolge)!==r){ x.reihenfolge=r; geaendert.push(x); } });
+  return geaendert;
+}
+async function verschiebePunkt(itemId, zielPhase, vorId){
+  const it = fahrplanListe.find(x=>String(x.id)===String(itemId));
+  if (!it) return;
+  if (vorId && String(vorId)===String(itemId)) return;
+  const quellPhase = it.phase;
+  const ziel = itemsFuerPhase(zielPhase).filter(x=>x!==it);
+  let pos = ziel.length;
+  if (vorId){ const i = ziel.findIndex(x=>String(x.id)===String(vorId)); if (i>=0) pos = i; }
+  ziel.splice(pos, 0, it);
+  it.phase = zielPhase;
+  const geaendert = new Set(nummeriereNeu(ziel));
+  geaendert.add(it); // Phase hat sich ggf. geändert
+  if (quellPhase !== zielPhase) nummeriereNeu(itemsFuerPhase(quellPhase)).forEach(x=>geaendert.add(x));
+  render();
+  const phasenLabel = (PHASEN.find(p=>p.key===zielPhase)||{}).label || zielPhase;
+  await speicherReihenfolge([...geaendert], quellPhase!==zielPhase ? 'Verschoben nach „'+phasenLabel.split(' · ')[0]+'“' : 'Reihenfolge gespeichert');
+}
+async function schiebeInPhase(itemId, delta){
+  const it = fahrplanListe.find(x=>String(x.id)===String(itemId));
+  if (!it) return;
+  const liste = itemsFuerPhase(it.phase);
+  const i = liste.indexOf(it), j = i+delta;
+  if (i<0 || j<0 || j>=liste.length) return;
+  [liste[i], liste[j]] = [liste[j], liste[i]];
+  const geaendert = nummeriereNeu(liste);
+  render();
+  await speicherReihenfolge(geaendert, 'Reihenfolge gespeichert');
+}
+async function speicherReihenfolge(items, okText){
+  if (!items.length) return;
+  if (demoMode){ zeigeToast(okText+' (Demo)'); return; }
+  const basis = '/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan;
+  try{
+    for (const x of items){
+      await graph(basis+'/items/'+x.id+'/fields', {method:'PATCH', body:JSON.stringify({Phase:x.phase, Reihenfolge:x.reihenfolge})});
+    }
+    zeigeToast(okText+' ✓');
+  }catch(e){
+    zeigeToast('Speichern fehlgeschlagen — Stand wird neu geladen. ('+e.message+')', true);
+    await ladeAllesUndStarte();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
  * RENDERING
  * ═══════════════════════════════════════════════════════════ */
 function mitarbeiter(id){ return mitarbeiterListe.find(m=>m.id===id) || null; }
@@ -842,17 +922,25 @@ function gfMitarbeitende(){
   return h;
 }
 function gfFahrplan(){
-  let h = '';
+  let h = '<p class="ea-item-desc" style="margin-bottom:12px">Punkte am Griff ⠿ in eine andere Phase oder an eine andere Position ziehen — oder über ↑/↓ und die Phasenauswahl verschieben. Bereits gesetzte Haken bleiben erhalten.</p>';
   PHASEN.forEach(p=>{
     const items = itemsFuerPhase(p.key);
-    h += '<div class="ea-card"><h3>'+esc(p.label)+'</h3>';
-    if (!items.length) h += '<p class="ea-item-desc" style="margin-top:6px">Keine Punkte.</p>';
-    else items.forEach(it=>{
-      h += '<div class="ea-item"><div style="flex:1"><span class="ea-item-title">'+esc(it.titel)+'</span>';
+    h += '<div class="ea-card ea-dropzone" data-drop-phase="'+p.key+'"><h3>'+esc(p.label)+' <span class="ea-item-desc" style="font-weight:400">('+items.length+')</span></h3>';
+    if (!items.length) h += '<p class="ea-item-desc" style="margin-top:6px">Keine Punkte — zum Einfügen hierher ziehen.</p>';
+    else items.forEach((it, idx)=>{
+      h += '<div class="ea-item ea-drag" draggable="true" data-drag-id="'+esc(it.id)+'">';
+      h += '<span class="ea-handle" title="Ziehen zum Verschieben">⠿</span>';
+      h += '<div style="flex:1;min-width:0"><span class="ea-item-title">'+esc(it.titel)+'</span>';
       h += '<span class="ea-badge owner">'+OWNER_LABEL[it.owner]+'</span>';
       if (it.typ==='link') h += '<span class="ea-badge '+(it.pflicht?'pflicht':'optional')+'">'+(it.pflicht?'Pflicht':'Optional')+'</span>';
       if (it.fristTage!=null && it.fristTage!=='') h += '<span class="ea-badge owner">Start '+(Number(it.fristTage)>=0?'+':'')+it.fristTage+' Tg.</span>';
       if (it.beschreibung) h += '<div class="ea-item-desc">'+esc(it.beschreibung)+'</div>';
+      h += '</div><div class="ea-move">';
+      h += '<button class="ea-mv" data-mv="'+esc(it.id)+'|-1" '+(idx===0?'disabled':'')+' title="Nach oben">↑</button>';
+      h += '<button class="ea-mv" data-mv="'+esc(it.id)+'|1" '+(idx===items.length-1?'disabled':'')+' title="Nach unten">↓</button>';
+      h += '<select class="ea-phase-sel" data-phase-sel="'+esc(it.id)+'" title="In andere Phase verschieben">'
+        + PHASEN.map(q=>'<option value="'+q.key+'" '+(q.key===p.key?'selected':'')+'>'+esc(q.label.split(' · ')[0])+'</option>').join('')
+        + '</select>';
       h += '</div></div>';
     });
     h += '</div>';
@@ -869,6 +957,57 @@ function addFahrplanForm(ownerOptions){
   h += '<div><label>Titel</label><input name="titel" required placeholder="z. B. Neue Arbeitsanweisung lesen"></div>';
   h += '</div><button class="btn btn-outline btn-sm" type="submit">Punkt hinzufügen</button></form></div>';
   return h;
+}
+
+let dragId = null;
+function entferneDropMarken(){
+  document.querySelectorAll('.drop-before').forEach(x=>x.classList.remove('drop-before'));
+  document.querySelectorAll('.drop-zone-hover').forEach(x=>x.classList.remove('drop-zone-hover'));
+}
+function bindFahrplanVerschieben(){
+  // Pfeile: innerhalb der Phase nach oben/unten
+  document.querySelectorAll('[data-mv]').forEach(b=>{
+    b.onclick = ()=>{ const [id, d] = b.getAttribute('data-mv').split('|'); schiebeInPhase(id, Number(d)); };
+  });
+  // Auswahl: in andere Phase (ans Ende)
+  document.querySelectorAll('[data-phase-sel]').forEach(s=>{
+    s.onchange = ()=>{ verschiebePunkt(s.getAttribute('data-phase-sel'), s.value, null); };
+  });
+  // Drag & Drop (Desktop)
+  document.querySelectorAll('[data-drag-id]').forEach(el=>{
+    el.addEventListener('dragstart', e=>{
+      if (e.target.closest('button,select')) { e.preventDefault(); return; }
+      dragId = el.getAttribute('data-drag-id');
+      el.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try{ e.dataTransfer.setData('text/plain', dragId); }catch(_){}
+    });
+    el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); dragId = null; entferneDropMarken(); });
+    el.addEventListener('dragover', e=>{
+      if (!dragId) return;
+      e.preventDefault();
+      document.querySelectorAll('.drop-before').forEach(x=>x.classList.remove('drop-before'));
+      if (el.getAttribute('data-drag-id') !== dragId) el.classList.add('drop-before');
+    });
+    el.addEventListener('drop', e=>{
+      if (!dragId) return;
+      e.preventDefault(); e.stopPropagation();
+      const id = dragId, zone = el.closest('[data-drop-phase]');
+      entferneDropMarken();
+      if (el.getAttribute('data-drag-id') !== id) verschiebePunkt(id, zone.getAttribute('data-drop-phase'), el.getAttribute('data-drag-id'));
+    });
+  });
+  document.querySelectorAll('[data-drop-phase]').forEach(z=>{
+    z.addEventListener('dragover', e=>{ if (!dragId) return; e.preventDefault(); z.classList.add('drop-zone-hover'); });
+    z.addEventListener('dragleave', e=>{ if (!z.contains(e.relatedTarget)) z.classList.remove('drop-zone-hover'); });
+    z.addEventListener('drop', e=>{
+      if (!dragId) return;
+      e.preventDefault();
+      const id = dragId;
+      entferneDropMarken();
+      verschiebePunkt(id, z.getAttribute('data-drop-phase'), null); // ans Ende der Phase
+    });
+  });
 }
 
 function bindContentEvents(){
@@ -902,6 +1041,7 @@ function bindContentEvents(){
     if (navigator.clipboard) navigator.clipboard.writeText(code).catch(()=>{});
     copyBtn.textContent = 'Kopiert ✓'; setTimeout(()=>copyBtn.textContent='Kopieren', 1500);
   };
+  bindFahrplanVerschieben();
   Array.from(document.querySelectorAll('.addItemForm')).forEach(f=>{
     f.onsubmit = async (ev)=>{
       ev.preventDefault();
