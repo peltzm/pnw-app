@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-25.2 (scorecard)";
+const WORKER_VERSION = "2026-09-25.3 (scorecard-ratelimit-fix)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -1786,6 +1786,10 @@ async function buildScorecardFinanzen(env, monatIso) {
   };
   const alle = [];
   for (let offset = 0; offset < 30000; offset += 500) {
+    // Rate Limit 10 Anfragen / 5 s — dieser Block läuft nach den buildCockpit-
+    // Aufrufen der Mitarbeiterschleife, ohne Pause reißt das die Kilanka-429-
+    // Grenze (siehe fetchCockpitInvoices, gleiches Muster).
+    if (offset > 0) await new Promise((r) => setTimeout(r, 700));
     const batch = await kilankaPost(env, "accounting/invoices", { ...graph, $offset: offset });
     const arr = Array.isArray(batch) ? batch : [];
     alle.push(...arr);
