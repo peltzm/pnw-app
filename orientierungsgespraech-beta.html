@@ -752,7 +752,15 @@ function vorrunde(maUpn, runde){
   return { runde: alt?.f.Runde || altIntern?.f.Runde, gemeinsam: alt?entpacke(alt).leitung.gemeinsam:{}, vereinbarungen: alt?entpacke(alt).leitung.vereinbarungen:[], intern: altIntern?entpacke(altIntern).leitung.intern:{} };
 }
 function setGemeinsam(t,w){ (akt.leitung.gemeinsam ||= {})[t]=w; geaendert(); }
-function internListe(L,t){ const v=(L.intern||={})[t]; if(v==null) return (L.intern[t]=[]); if(typeof v==='string') return (L.intern[t]= v?[{von:'markus.peltz@praxisneuewege.de',name:'Markus Peltz',am:'2026-09-25T12:00:00.000Z',text:v}]:[]); /* Altbestand vom 25.09.2026 stammt von Markus (Vorgabe) */ return v; }
+function internListe(L,t){
+  const MP='markus.peltz@praxisneuewege.de';
+  let v=(L.intern||={})[t]; if(v==null) v=[]; if(typeof v==='string') v = v?[{von:'',text:v}]:[];
+  /* Altbestand vom 25.09.2026 ohne Verfasser stammt von Markus (Vorgabe); je Verfasser genau ein Eintrag — Duplikate zusammenführen */
+  const by=new Map();
+  for(const e of v){ const von=e.von||MP, name=e.von?e.name:'Markus Peltz', am=e.am||(e.von?'':'2026-09-25T12:00:00.000Z');
+    const z=by.get(von); if(!z) by.set(von,{von,name,am,text:e.text||''}); else { z.text=[z.text,e.text||''].filter(Boolean).join('\n'); if(am>z.am) z.am=am; } }
+  return (L.intern[t]=[...by.values()]);
+}
 function internText(v){ if(!v) return ''; if(typeof v==='string') return v; return v.filter(x=>x.text).map(x=>`${x.name||x.von}: ${x.text}`).join(' · '); }
 function meinName(){ return GF_NAMEN[upn] || (currentAccount?.name||'').split(',').reverse().join(' ').trim() || upn; }
 function setIntern(t,w){
