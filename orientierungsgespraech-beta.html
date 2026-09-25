@@ -195,7 +195,7 @@ table.skala tr.fremd td.kom{font-size:12.5px;color:var(--accent);text-align:left
   h2.teil{break-after:avoid;margin-top:12pt}.hinweis,.papier-hinweis{font-size:8.6pt;padding:6pt 10pt}.bogen-kopf{padding-bottom:6pt;margin-bottom:8pt}.stamm{margin-bottom:8pt}.bogen-fuss{margin-top:14pt}.teil-hinweis{break-after:avoid}
   .frage-block,.themen,.stamm,.hinweis{break-inside:avoid}
   table.skala tr,table.daten tr{break-inside:avoid}table.skala td,table.skala th{padding:2.4pt 3pt}table.daten td input{padding:1pt 2pt}
-  textarea{min-height:40pt}table.daten td{padding:4pt 8pt}.frage{margin-top:9pt}
+  textarea{min-height:40pt;overflow:hidden!important;height:auto}table.daten td{padding:4pt 8pt}.frage{margin-top:9pt}
   .nur-druck{display:block}
   table.skala tr.fremd,.fremd-info{display:none!important}   /* TL-Einschätzung nie auf dem Ausdruck */
   .skala-legende{margin-bottom:4pt}input::placeholder{color:transparent}
@@ -404,6 +404,9 @@ async function wiederaufnahme(){
   }catch(e){ console.warn('Keine Wiederaufnahme —', e.message); }
 }
 window.addEventListener('load', wiederaufnahme);
+/* Vor dem Druck jede Textarea auf ihre volle Inhaltshöhe setzen, danach zurück */
+window.addEventListener('beforeprint',()=>{ document.querySelectorAll('textarea').forEach(t=>{ t.dataset.h=t.style.height||''; t.style.height='auto'; t.style.height=(t.scrollHeight+6)+'px'; }); });
+window.addEventListener('afterprint',()=>{ document.querySelectorAll('textarea').forEach(t=>{ t.style.height=t.dataset.h||''; delete t.dataset.h; }); });
 function logout(){ if(msalInstance) msalInstance.logoutPopup({account:currentAccount}).catch(()=>{}); location.href=location.pathname; }
 async function tokens(){
   const req={scopes:SCOPES,account:currentAccount};
