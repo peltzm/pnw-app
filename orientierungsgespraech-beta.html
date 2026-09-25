@@ -197,6 +197,7 @@ table.skala tr.fremd td.kom{font-size:12.5px;color:var(--accent);text-align:left
   table.skala tr,table.daten tr{break-inside:avoid}table.skala td,table.skala th{padding:2.4pt 3pt}table.daten td input{padding:1pt 2pt}
   textarea{min-height:40pt}table.daten td{padding:4pt 8pt}.frage{margin-top:9pt}
   .nur-druck{display:block}
+  table.skala tr.fremd,.fremd-info{display:none!important}   /* TL-Einschätzung nie auf dem Ausdruck */
   .skala-legende{margin-bottom:4pt}input::placeholder{color:transparent}
   body.papier .papier-hinweis{display:block}body.papier .hinweis{display:none}
   table.skala td.kom{min-width:0;width:24%}table.skala th:first-child,table.skala td:first-child{width:48%}
@@ -691,7 +692,7 @@ function skalaTabelle(V, a, ro, fremd){
        : `<td class="r"><label data-l="${w==='ka'?'k. A.':w}"><input type="radio" name="s_${id}" value="${w}" ${String(a.skala[id]??'')===String(w)?'checked':''} onchange="setSkala('${id}',this.value)" aria-label="${w==='ka'?'keine Angabe':w}"></label></td>`).join('')}
     <td class="kom"><input type="text" ${ro?'readonly':''} value="${esc(a.kommentar?.[id]||'')}" oninput="setKommentar('${id}',this.value)" aria-label="Kommentar" placeholder="${ro?'':'Kommentar (optional)'}"></td></tr>${tl}`;}).join('')).join('');
   const kopf = mehrere ? 'Aussage' : V.sektionen[0][0];
-  const fremdInfo = fremd ? `<div class="teil-hinweis">${fremd.abgegeben?`Unter jeder Aussage steht in einer zweiten Zeile die Einschätzung von ${esc(fremd.tlName)} – gleiche Skala, dunkler Punkt = Selbsteinschätzung, brauner Punkt = ${esc(fremd.tlName)}; Abweichungen ab 2 Punkten sind gelb hinterlegt. Die Person selbst sieht diese Werte nicht.`:`${esc(fremd.tlName)} hat die Einschätzung noch nicht abgegeben.`}</div>` : '';
+  const fremdInfo = fremd ? `<div class="teil-hinweis fremd-info">${fremd.abgegeben?`Unter jeder Aussage steht in einer zweiten Zeile die Einschätzung von ${esc(fremd.tlName)} – gleiche Skala, dunkler Punkt = Selbsteinschätzung, brauner Punkt = ${esc(fremd.tlName)}; Abweichungen ab 2 Punkten sind gelb hinterlegt. Die Person selbst sieht diese Werte nicht.`:`${esc(fremd.tlName)} hat die Einschätzung noch nicht abgegeben.`}</div>` : '';
   return `<div class="skala-legende">1 = trifft gar nicht zu · 5 = trifft voll zu · k. A. = keine Angabe</div>${fremdInfo}
     <div class="skala-wrap"><table class="skala${fremd?.abgegeben?' mitfremd':''}"><tr><th>${esc(kopf)}</th>${SKALA.map(n=>`<th style="width:34px">${n}</th>`).join('')}<th style="width:40px">k. A.</th><th style="text-align:left;padding-left:8px">Kommentar (optional)</th></tr>${zeilen}</table></div>`;
 }
