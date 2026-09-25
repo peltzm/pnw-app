@@ -120,3 +120,13 @@ Jeder Zweig ist fail-soft (`{ vorhanden:false, fehler|grund }`); der Bogen zeigt
   `leitung.freigabeTL` im Bogen (Chip „freigegeben"). Hintergrund: Die Ablage ist für Teamleitungen nicht lesbar
   (nur eigene Elemente) — E-Mail ist der einzige Kanal, und nur die GF kann beide Seiten sehen.
 - Gleiche Regel für Sonja bei den drei Teamleitungen: Deren Bogen öffnet sich für sie erst nach ihrer eigenen Einschätzung.
+
+## Gesprächsnotizen je Teil (25.09.2026)
+
+- **Gesprächsnotiz (sehen alle):** `leitung.gemeinsam[1..5]` im Bogen der Person; die GF führt sie im Gespräch. Kopie
+  `gemeinsamKopie` im TL-Element, damit die Teamleitung sie sieht (kein Lesezugriff auf den Bogen der Person).
+- **Interne Notiz (nur GF + TL):** `leitung.intern[1..5]` im TL-Element `__tl__:<tl>:<ma>` — GF und TL schreiben dort;
+  die Person hat keinen Zugriff. Existiert kein TL-Element, legt die GF ein Element `__gf__:<ma>` an (nur GF liest).
+  Interne Notizen erscheinen nie im Ausdruck und nie in Mails.
+- **Vorrunde:** Beim Öffnen werden Gesprächsnotizen, Vereinbarungen (Teil 5: „was wurde daraus?") und – für GF/TL –
+  interne Notizen der jüngsten früheren Runde derselben Person eingeblendet.

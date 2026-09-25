@@ -118,6 +118,13 @@ table.skala tr.fremd td.kom{font-size:12.5px;color:var(--accent);text-align:left
 .pkt{display:inline-block;width:15px;height:15px;border-radius:50%;border:1.5px solid var(--r1);background:#fff;vertical-align:middle}
 .pkt.an{border-color:var(--accent);background:radial-gradient(circle,var(--accent) 0 45%,#fff 50%)}
 .pkt.selbst.an{border-color:var(--ink);background:radial-gradient(circle,var(--ink) 0 45%,#fff 50%)}
+/* Gesprächsnotizen je Teil */
+.notiz{margin:10px 0 4px;border:1px solid var(--r2);border-radius:8px;padding:8px 12px;background:#fff}
+.notiz .lbl{font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--meta);margin-bottom:3px}
+.notiz textarea{min-height:56px}
+.notiz.intern{background:#FBF5EE;border-color:#E6CDB8}.notiz.intern .lbl{color:var(--accent)}
+.notiz.vorrunde{background:var(--creme);border-style:dashed}.notiz.vorrunde .txt{white-space:pre-wrap;font-size:13px;color:var(--text-muted)}
+.notiz .txt{white-space:pre-wrap;font-size:13.5px}
 .tl-wert{display:block;margin-top:4px;font-size:12px;color:var(--accent);background:var(--accent-light);border-radius:6px;padding:3px 8px;font-weight:400}
 .tl-wert.abw{background:var(--warn-bg);color:var(--warn);border:1px solid #fcd34d}
 .skala-legende{font-size:11.5px;color:var(--meta);margin:2px 0 8px}
@@ -197,7 +204,8 @@ table.skala tr.fremd td.kom{font-size:12.5px;color:var(--accent);text-align:left
   table.skala tr,table.daten tr{break-inside:avoid}table.skala td,table.skala th{padding:2.4pt 3pt}table.daten td input{padding:1pt 2pt}
   textarea{min-height:40pt;overflow:hidden!important;height:auto}table.daten td{padding:4pt 8pt}.frage{margin-top:9pt}
   .nur-druck{display:block}
-  table.skala tr.fremd,.fremd-info{display:none!important}   /* TL-Einschätzung nie auf dem Ausdruck */
+  table.skala tr.fremd,.fremd-info,.notiz.intern{display:none!important}   /* interne Notizen nie auf dem Ausdruck */
+  .notiz{break-inside:avoid;padding:4pt 8pt}   /* TL-Einschätzung nie auf dem Ausdruck */
   .skala-legende{margin-bottom:4pt}input::placeholder{color:transparent}
   body.papier .papier-hinweis{display:block}body.papier .hinweis{display:none}
   table.skala td.kom{min-width:0;width:24%}table.skala th:first-child,table.skala td:first-child{width:48%}
@@ -275,6 +283,8 @@ const OHNE_GESPRAECH = ['tischoff, silvia'];
 const ANLEITUNG = { ma:'https://apps.praxisneuewege.de/anleitungen/orientierungsgespraech-mitarbeitende.pdf',
                     tl:'https://apps.praxisneuewege.de/anleitungen/orientierungsgespraech-teamleitung.pdf' };
 const TL_PRAEFIX = '__tl__:';
+const GF_PRAEFIX = '__gf__:';   // interne Notizen der GF, falls (noch) kein Teamleitungs-Element existiert — nur GF sieht sie
+const TEILE = [[1,'Meine Einschätzung'],[2,'Wichtigste Themen'],[3,'Kurz in Stichpunkten'],[4,'Zahlen & Fakten'],[5,'Ziele & Vereinbarungen']];
 /* Die drei Teamleitungen werden von Sonja eingeschätzt (Vorgabe GF 22.09.2026) — gleiche Mechanik, Einstieg über die GF-Übersicht. */
 const TL_EINSCHAETZUNG_DURCH = 'sonja.peltz@praxisneuewege.de';
 const GF_NAMEN = { 'sonja.peltz@praxisneuewege.de':'Sonja Peltz', 'markus.peltz@praxisneuewege.de':'Markus Peltz' };
@@ -651,7 +661,7 @@ function teamleitungFuerHinweis(){
  * ═══════════════════════════════════════════════════════════ */
 function entpacke(i){
   const j = s => { try{ return s ? JSON.parse(s) : null }catch(e){ return null } };
-  return { spId:i.spId, f:i.f, antworten:{skala:{},themen:[],text:{},kommentar:{},...(j(i.f.AntwortenJSON)||{})}, kennzahlen:j(i.f.KennzahlenJSON), leitung:j(i.f.LeitungJSON)||{manuell:{},vereinbarungen:[],naechster:''} };
+  return { spId:i.spId, f:i.f, antworten:{skala:{},themen:[],text:{},kommentar:{},...(j(i.f.AntwortenJSON)||{})}, kennzahlen:j(i.f.KennzahlenJSON), leitung:{manuell:{},vereinbarungen:[],naechster:'',gemeinsam:{},intern:{},gemeinsamKopie:{},...(j(i.f.LeitungJSON)||{})} };
 }
 async function oeffneEigenen(){
   const runde=P.get('r'), v=P.get('v');
@@ -707,6 +717,50 @@ function tlEinschaetzungFuer(maUpn, runde){
   const tlName=GF_NAMEN[tlUpn] || ((mitarbeiter||[]).find(m=>m.upn===tlUpn)?.name||tlUpn).split(',').reverse().join(' ').trim();
   return { abgegeben:i.f.OGStatus==='Abgegeben', status:i.f.OGStatus, skala:e.antworten.skala, kommentar:e.antworten.kommentar, tlName, tlUpn };
 }
+/* ═══════════════════════════════════════════════════════════
+ * GESPRÄCHSNOTIZEN (Vorgabe GF 25.09.2026)
+ *   gemeinsam  – je Teil, sehen alle (Person, TL, GF); liegt im Bogen der Person, Kopie im TL-Element
+ *   intern     – je Teil, nur GF und TL; liegt im TL-Element (Person hat darauf keinen Zugriff)
+ *   beides wird in der nächsten Runde als „Aus der letzten Runde“ angezeigt
+ * ═══════════════════════════════════════════════════════════ */
+let internItem=null;   // Element, in dem die internen Notizen liegen (TL-Element oder GF-Fallback)
+function findeInternItem(maUpn, runde){
+  const u=(maUpn||'').toLowerCase();
+  return items.find(x=>{ const k=(x.f.MitarbeiterUpn||'').toLowerCase(); return k.startsWith(TL_PRAEFIX) && k.endsWith(':'+u) && x.f.Runde===runde; })
+      || items.find(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===GF_PRAEFIX+u && x.f.Runde===runde) || null;
+}
+async function ladeInternItem(maUpn, runde, anlegen){
+  let i=findeInternItem(maUpn,runde);
+  if(!i && anlegen){
+    const fields={ Title:`GF-Notizen ${akt?.f.MitarbeiterName||maUpn} – ${runde}`, MitarbeiterUpn:GF_PRAEFIX+maUpn.toLowerCase(), MitarbeiterName:akt?.f.MitarbeiterName||'', Runde:runde, Version:akt?.f.Version||'', OGStatus:'System', AntwortenJSON:'', KennzahlenJSON:'', LeitungJSON:'' };
+    try{ const neu=await graph(LISTE()+'/items',{method:'POST',body:JSON.stringify({fields})}); i={spId:neu.id,f:{...fields}}; items.push(i); }catch(e){ console.warn('GF-Notiz-Element nicht anlegbar —',e.message); return null; }
+  }
+  return i ? entpacke(i) : null;
+}
+/* Vorrunde: jüngster Bogen derselben Person aus einer früheren Runde (Person sieht eigene, GF alle) */
+function vorrunde(maUpn, runde){
+  const u=(maUpn||'').toLowerCase();
+  const alt=items.filter(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===u && x.f.Runde<runde).sort((a,b)=>b.f.Runde.localeCompare(a.f.Runde))[0];
+  const altIntern=items.filter(x=>{ const k=(x.f.MitarbeiterUpn||'').toLowerCase(); return (k.startsWith(TL_PRAEFIX)&&k.endsWith(':'+u) || k===GF_PRAEFIX+u) && x.f.Runde<runde; }).sort((a,b)=>b.f.Runde.localeCompare(a.f.Runde))[0];
+  return { runde: alt?.f.Runde || altIntern?.f.Runde, gemeinsam: alt?entpacke(alt).leitung.gemeinsam:{}, vereinbarungen: alt?entpacke(alt).leitung.vereinbarungen:[], intern: altIntern?entpacke(altIntern).leitung.intern:{} };
+}
+function setGemeinsam(t,w){ (akt.leitung.gemeinsam ||= {})[t]=w; geaendert(); }
+function setIntern(t,w){ const ziel = gfSicht ? internItem : akt; if(!ziel) return; (ziel.leitung.intern ||= {})[t]=w; geaendert(); }
+/* Notizblock unter einem Teil. Sicht: 'ma' | 'gf' | 'tl' */
+function notizen(t, sicht, vr){
+  const L=akt.leitung, ro=!(sicht==='gf' && akt.f.OGStatus!=='Abgeschlossen');
+  const gem = sicht==='tl' ? (L.gemeinsamKopie?.[t]||'') : (L.gemeinsam?.[t]||'');
+  const intern = sicht==='gf' ? (internItem?.leitung.intern?.[t]||'') : (sicht==='tl' ? (L.intern?.[t]||'') : null);
+  let h='';
+  if(vr?.runde && ((vr.gemeinsam?.[t]) || (sicht!=='ma' && vr.intern?.[t])))
+    h+=`<div class="notiz vorrunde"><div class="lbl">Aus der letzten Runde (${esc(vr.runde)})</div>${vr.gemeinsam?.[t]?`<div class="txt">${esc(vr.gemeinsam[t])}</div>`:''}${sicht!=='ma'&&vr.intern?.[t]?`<div class="txt" style="margin-top:4px;color:var(--accent)">Intern: ${esc(vr.intern[t])}</div>`:''}</div>`;
+  if(sicht==='gf') h+=`<div class="notiz"><div class="lbl">Gesprächsnotiz zu Teil ${t} – sehen alle (auch ${esc((akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim())})</div><textarea ${ro?'readonly':''} oninput="setGemeinsam(${t},this.value)" placeholder="${ro?'':'Was wurde im Gespräch zu diesem Teil festgehalten?'}">${esc(gem)}</textarea></div>`;
+  else if(gem) h+=`<div class="notiz"><div class="lbl">Gesprächsnotiz zu Teil ${t}</div><div class="txt">${esc(gem)}</div></div>`;
+  if(sicht==='gf') h+= internItem ? `<div class="notiz intern"><div class="lbl">🔒 Interne Notiz GF / Teamleitung – die Person sieht das nicht</div><textarea ${ro?'readonly':''} oninput="setIntern(${t},this.value)">${esc(intern)}</textarea></div>`
+                                  : `<div class="notiz intern no-print"><div class="lbl">🔒 Interne Notizen</div><div class="txt" style="color:var(--text-muted)">Werden geladen …</div></div>`;
+  if(sicht==='tl') h+=`<div class="notiz intern"><div class="lbl">🔒 Interne Notiz zu Teil ${t} – nur GF und Teamleitung</div><textarea ${tlAnsicht?'readonly':''} oninput="setIntern(${t},this.value)">${esc(intern)}</textarea></div>`;
+  return h;
+}
 function renderBogen(){
   const V = VERSIONEN[akt.f.Version] || VERSIONEN.B, a=akt.antworten, L=akt.leitung;
   const roMA = leseModus || gfSicht;         // Teil 1–3: nur Mitarbeiter:in, solange nicht abgegeben
@@ -727,8 +781,10 @@ function renderBogen(){
   const verTabelle = `<table class="daten"><tr><th style="width:62%">Was nehmen wir uns vor?</th><th>Wer</th><th>Bis wann</th></tr>${ver}</table>
     <div class="frage">Zwischencheck / nächstes Gespräch am:</div>
     <input type="text" ${roGF?'readonly':''} value="${esc(L.naechster||'')}" oninput="akt.leitung.naechster=this.value;geaendert()" style="max-width:280px">`;
+  const vrV=vorrunde(akt.f.MitarbeiterUpn, akt.f.Runde), altVer=(vrV.vereinbarungen||[]).filter(z=>z&&(z.was||z.wer||z.bis));
+  const vorrundeVer = altVer.length ? `<div class="notiz vorrunde"><div class="lbl">Vereinbarungen aus der letzten Runde (${esc(vrV.runde)}) – was wurde daraus?</div><table class="daten"><tr><th>Was</th><th>Wer</th><th>Bis wann</th></tr>${altVer.map(z=>`<tr><td>${esc(z.was||'')}</td><td>${esc(z.wer||'')}</td><td>${esc(z.bis||'')}</td></tr>`).join('')}</table></div>` : '';
   const vorschlag = a.text.ziele||'';
-  const teil5 = gfSicht
+  const teil5 = vorrundeVer + (gfSicht
     ? `<div class="teil-hinweis">Im Gespräch gemeinsam ausfüllen. Auch die Leitung trägt hier ein, was sie zusagt.</div>
        ${vorschlag?`<div class="frage">Vorschläge von ${esc((akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim())}:</div><textarea readonly>${esc(vorschlag)}</textarea><div style="height:12px"></div>`:''}
        ${verTabelle}`
@@ -736,8 +792,9 @@ function renderBogen(){
        <textarea ${roMA?'readonly':''} oninput="setText('ziele',this.value)">${esc(vorschlag)}</textarea></div>
        <div class="frage">Unsere Vereinbarungen</div>
        ${hatVer ? `<div class="teil-hinweis">Im Gespräch gemeinsam festgehalten – von der Leitung eingetragen.</div>${verTabelle}`
-                : `<div class="gesperrt no-print">🔒 Die Vereinbarungen tragen wir <b>im Gespräch gemeinsam</b> ein – die Leitung schreibt mit. Danach findest du sie hier zum Nachlesen. Bis dahin musst du hier nichts ausfüllen.</div><div class="nur-druck">${verTabelle}</div>`}`;
+                : `<div class="gesperrt no-print">🔒 Die Vereinbarungen tragen wir <b>im Gespräch gemeinsam</b> ein – die Leitung schreibt mit. Danach findest du sie hier zum Nachlesen. Bis dahin musst du hier nichts ausfüllen.</div><div class="nur-druck">${verTabelle}</div>`}`);
 
+  const sichtN = gfSicht ? 'gf' : 'ma', vr = vorrunde(akt.f.MitarbeiterUpn, akt.f.Runde);
   app().className='wrap';
   app().innerHTML = `
   ${gfSicht?`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zurueckAdmin()">← Übersicht</button></div>`
@@ -755,22 +812,27 @@ function renderBogen(){
 
     <h2 class="teil"><span>Teil 1 ·</span> Meine Einschätzung</h2>
     ${skalaHtml}
+    ${notizen(1,sichtN,vr)}
 
     <h2 class="teil"><span>Teil 2 ·</span> Meine 3 wichtigsten Themen für das Gespräch</h2>
     <div class="teil-hinweis">Bitte höchstens drei ankreuzen – darauf verwenden wir den Großteil der Stunde.</div>
     <div class="themen">${themen}</div>
+    ${notizen(2,sichtN,vr)}
 
     <h2 class="teil"><span>Teil 3 ·</span> Kurz in Stichpunkten</h2>
     ${fragen}
+    ${notizen(3,sichtN,vr)}
 
     <h2 class="teil umbruch"><span>Teil 4 ·</span> Zahlen &amp; Fakten</h2>
     <div class="teil-hinweis">Automatisch aus Kilanka übernommen${akt.kennzahlen?.stand?' (Stand '+esc(fmtDT(akt.kennzahlen.stand))+')':''}. Privat gefahrene km = gefahrene km seit Fahrzeugübernahme abzüglich aller Fahrtenbuch-Einträge (diese gelten als dienstlich). Stimmt etwas nicht? Sprich es im Gespräch an.</div>
     <table class="daten"><tr><th style="width:46%">Kennzahl</th><th>Stand</th></tr>
       ${kz || '<tr><td colspan="2">Kennzahlen aus Kilanka derzeit nicht verfügbar.</td></tr>'}${man}</table>
     ${gfSicht && !roGF ? `<div class="no-print" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="kennzahlenNeu()">↻ Kennzahlen aus Kilanka aktualisieren</button></div>`:''}
+    ${notizen(4,sichtN,vr)}
 
     <h2 class="teil"><span>Teil 5 ·</span> Ziele &amp; Vereinbarungen</h2>
     ${teil5}
+    ${notizen(5,sichtN,vr)}
 
     <div class="bogen-fuss">Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach · Amtsgericht Ingolstadt HRB 13133 · GF: Sonja Peltz, Markus Peltz<br>info@praxisneuewege.de · vertraulich – Personalunterlage</div>
   </div>`;
@@ -813,11 +875,18 @@ async function speichern(manuell, extra={}){
   const s=document.getElementById('saveStand');
   /* Jede Sicht schreibt NUR ihre eigenen Felder — so überschreiben sich Mitarbeiter:in und Leitung nie gegenseitig. */
   const fields = gfSicht ? { LeitungJSON:JSON.stringify(akt.leitung), KennzahlenJSON:akt.kennzahlen?JSON.stringify(akt.kennzahlen):'', ...extra }
-                         : { AntwortenJSON:JSON.stringify(akt.antworten), ...extra };
+                : tlModus ? { AntwortenJSON:JSON.stringify(akt.antworten), LeitungJSON:JSON.stringify(akt.leitung), ...extra }
+                          : { AntwortenJSON:JSON.stringify(akt.antworten), ...extra };
   try{
     if(s) s.textContent='Speichert …';
     await graph(`${LISTE()}/items/${akt.spId}/fields`,{method:'PATCH',body:JSON.stringify(fields)});
-    Object.assign(akt.f,fields); dirty=false;
+    Object.assign(akt.f,fields);
+    if(gfSicht && internItem){   // interne Notizen + Kopie der Gesprächsnotizen für die Teamleitung
+      internItem.leitung.gemeinsamKopie = akt.leitung.gemeinsam||{};
+      const lf={LeitungJSON:JSON.stringify(internItem.leitung)};
+      await graph(`${LISTE()}/items/${internItem.spId}/fields`,{method:'PATCH',body:JSON.stringify(lf)}); Object.assign(internItem.f,lf);
+    }
+    dirty=false;
     if(s) s.textContent='Gespeichert um '+new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr';
     return true;
   }catch(e){
@@ -982,6 +1051,7 @@ async function oeffneTL(maUpn){
 /* Für die Fremdeinschätzung entfällt die Abschlussfrage zum Nutzen der Gespräche (nur die Person selbst kann sie beantworten). */
 function tlVersion(){ const V=VERSIONEN[akt.f.Version]||VERSIONEN.B; return {...V, sektionen:V.sektionen.map(([t,it])=>[t,it.filter(([id])=>id!=='og_nutzen')])}; }
 function renderTL(){
+  const maUpn=(akt.f.MitarbeiterUpn||'').slice(TL_PRAEFIX.length).split(':')[1]||'', vrTL=vorrunde(maUpn, akt.f.Runde);
   const V=tlVersion(), name=(akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim();
   app().className='wrap';
   app().innerHTML=`<div class="no-print" style="margin-bottom:10px"><button class="btn btn-ghost btn-sm" onclick="zuTeam()">← ${istGF?'Übersicht':'Mein Team'}</button></div>
@@ -992,12 +1062,15 @@ function renderTL(){
     ${tlAnsicht?`<div class="hinweis"><b>Nur-Lese-Ansicht für die Geschäftsführung.</b> Abgegebene Einschätzung von <b>${esc(tlAnsichtVon)}</b> zu ${esc(name)}. Sobald ${esc(name)} den eigenen Bogen abgegeben hat, seht ihr beide Sichten nebeneinander über „Öffnen“.</div>`:`<div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>`}
     <h2 class="teil"><span>Teil 1 ·</span> ${tlAnsicht?'Einschätzung von '+esc(tlAnsichtVon):'Meine Einschätzung '+(istGF?'als Vorgesetzte':'als Teamleitung')}</h2>
     ${skalaTabelle(V, akt.antworten, leseModus, null)}
+    ${tlAnsicht?'':`<h2 class="teil"><span>Gesprächsnotizen ·</span> Teil 1 bis 5</h2>
+    <div class="teil-hinweis">Interne Notizen (nur GF und du) kannst du vor, während und nach dem Gespräch eintragen – auch nach der Abgabe deiner Einschätzung. Die Gesprächsnotizen, die alle sehen, führt die Geschäftsführung im Gespräch; sie erscheinen hier nach dem Speichern.</div>
+    ${TEILE.map(([t,titel])=>`<div style="margin-top:10px;font-weight:600;font-size:13px">Teil ${t} · ${esc(titel)}</div>${notizen(t,'tl',vrTL)}`).join('')}`}
     <div class="bogen-fuss">Praxis NeueWege GmbH · vertraulich – Personalunterlage · sichtbar nur für ${istGF?'die Geschäftsführung':'die Teamleitung und die Geschäftsführung'}</div>
   </div>`;
   const el=document.getElementById('leiste'); el.style.display='flex'; el.classList.remove('offen');
   if(tlAnsicht){ el.innerHTML=`<span class="stand" id="saveStand">Abgegeben${akt.f.AbgegebenAm?' am '+esc(fmtDT(akt.f.AbgegebenAm)):''} – nur Anzeige.</span><button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`; return; }
   el.innerHTML=`<span class="stand" id="saveStand">${leseModus?(istGF?'Einschätzung abgegeben – nicht mehr änderbar.':'Einschätzung abgegeben – nicht mehr änderbar. Die Selbsteinschätzung erhältst du per E-Mail, sobald die Person abgegeben hat und die Geschäftsführung sie freigibt.'):''}</span>`+
-    (leseModus?''
+    (leseModus?(tlAnsicht||istGF?'':`<button class="btn btn-ghost" onclick="speichern(true)">Notizen speichern</button>`)
               :`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="tlStatus('Abgegeben')">Einschätzung abgeben</button>`);
 }
 async function tlStatus(neu){
@@ -1029,7 +1102,8 @@ function oeffneFuerGF(zielUpn){
   if(upn===TL_EINSCHAETZUNG_DURCH && istTeamleitung(zielUpn) && !tlEinschaetzungFuer(zielUpn,runde)?.abgegeben){
     return meldung('warn','Bitte gib zuerst deine eigene Einschätzung zu Teil 1 ab – danach siehst du die Selbsteinschätzung. <button class="btn btn-primary btn-sm" onclick="oeffneTL(\''+esc(zielUpn)+'\')">Jetzt einschätzen</button> <button class="btn btn-ghost btn-sm" onclick="zeigeAdmin()">Zur Übersicht</button>');
   }
-  akt=entpacke(i); gfSicht=true; leseModus=true; renderBogen(); window.scrollTo(0,0);
+  akt=entpacke(i); gfSicht=true; leseModus=true; internItem=null; renderBogen(); window.scrollTo(0,0);
+  ladeInternItem(zielUpn,runde,true).then(x=>{ internItem=x; if(gfSicht && akt?.spId===i.spId) renderBogen(); });
   const alt = !akt.kennzahlen?.stand || new Date(akt.kennzahlen.stand).toDateString() !== new Date().toDateString() || !akt.kennzahlen.teamleitung || !akt.kennzahlen.teamleitung.quelle;
   if(['Entwurf','Papier'].includes(akt.f.OGStatus) && alt) kennzahlenNeu(true);
 }
@@ -1149,6 +1223,7 @@ function vorgangTeile(u, runde){
   if(bogen) teile.push({art:'bogen', item:bogen, text:`Bogen (Status „${bogen.f.OGStatus}“)`});
   items.filter(x=>{ const k=(x.f.MitarbeiterUpn||'').toLowerCase(); return k.startsWith(TL_PRAEFIX) && k.endsWith(':'+u) && x.f.Runde===runde; })
     .forEach(x=>{ const t=(x.f.MitarbeiterUpn||'').slice(TL_PRAEFIX.length).split(':')[0]; teile.push({art:'tl', item:x, text:`Einschätzung von ${GF_NAMEN[t]||((mitarbeiter||[]).find(m=>m.upn===t)?.name||t)} (Status „${x.f.OGStatus}“)`}); });
+  items.filter(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===GF_PRAEFIX+u && x.f.Runde===runde).forEach(x=>teile.push({art:'gf', item:x, text:'Interne Notizen der GF'}));
   if(plan[u]?.mailAm) teile.push({art:'mail', text:`Einladungsvermerk (gesendet ${fmtDT(plan[u].mailAm)})`});
   return teile;
 }
