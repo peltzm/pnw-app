@@ -752,20 +752,36 @@ function vorrunde(maUpn, runde){
   return { runde: alt?.f.Runde || altIntern?.f.Runde, gemeinsam: alt?entpacke(alt).leitung.gemeinsam:{}, vereinbarungen: alt?entpacke(alt).leitung.vereinbarungen:[], intern: altIntern?entpacke(altIntern).leitung.intern:{} };
 }
 function setGemeinsam(t,w){ (akt.leitung.gemeinsam ||= {})[t]=w; geaendert(); }
-function setIntern(t,w){ const ziel = gfSicht ? internItem : akt; if(!ziel) return; (ziel.leitung.intern ||= {})[t]=w; geaendert(); }
+function internListe(L,t){ const v=(L.intern||={})[t]; if(v==null) return (L.intern[t]=[]); if(typeof v==='string') return (L.intern[t]= v?[{von:'',name:'(ohne Zuordnung)',am:'',text:v}]:[]); return v; }
+function internText(v){ if(!v) return ''; if(typeof v==='string') return v; return v.filter(x=>x.text).map(x=>`${x.name||x.von}: ${x.text}`).join(' · '); }
+function meinName(){ return GF_NAMEN[upn] || (currentAccount?.name||'').split(',').reverse().join(' ').trim() || upn; }
+function setIntern(t,w){
+  const ziel = gfSicht ? internItem : akt; if(!ziel) return;
+  const l=internListe(ziel.leitung,t); let e=l.find(x=>x.von===upn);
+  if(!e){ e={von:upn,name:meinName(),am:'',text:''}; l.push(e); }
+  e.text=w; e.am=new Date().toISOString(); geaendert();
+}
+/* Interne Notizen: fremde Einträge nur lesen (mit Name und Datum), eigener Eintrag editierbar */
+function internHtml(L,t,ro){
+  const l=internListe(L,t), eigene=l.find(x=>x.von===upn), fremde=l.filter(x=>x!==eigene && x.text);
+  const alt=fremde.map(x=>`<div class="txt" style="margin:2px 0 6px"><span style="font-size:11px;color:var(--meta)">${esc(x.name||x.von)}${x.am?' · '+esc(fmtDT(x.am)):''}</span><br>${esc(x.text)}</div>`).join('');
+  const mein=ro ? (eigene?.text?`<div class="txt"><span style="font-size:11px;color:var(--meta)">${esc(eigene.name)}${eigene.am?' · '+esc(fmtDT(eigene.am)):''}</span><br>${esc(eigene.text)}</div>`:'')
+                : `<textarea oninput="setIntern(${t},this.value)" placeholder="Meine Notiz (${esc(meinName())})">${esc(eigene?.text||'')}</textarea>${eigene?.am?`<div style="font-size:11px;color:var(--meta);margin-top:2px">${esc(meinName())} · zuletzt ${esc(fmtDT(eigene.am))}</div>`:''}`;
+  return alt+mein;
+}
 /* Notizblock unter einem Teil. Sicht: 'ma' | 'gf' | 'tl' */
 function notizen(t, sicht, vr){
   const L=akt.leitung, ro=!(sicht==='gf' && akt.f.OGStatus!=='Abgeschlossen');
   const gem = sicht==='tl' ? (L.gemeinsamKopie?.[t]||'') : (L.gemeinsam?.[t]||'');
-  const intern = sicht==='gf' ? (internItem?.leitung.intern?.[t]||'') : (sicht==='tl' ? (L.intern?.[t]||'') : null);
+  const internL = sicht==='gf' ? internItem?.leitung : (sicht==='tl' ? L : null);
   let h='';
-  if(vr?.runde && ((vr.gemeinsam?.[t]) || (sicht!=='ma' && vr.intern?.[t])))
-    h+=`<div class="notiz vorrunde"><div class="lbl">Aus der letzten Runde (${esc(vr.runde)})</div>${vr.gemeinsam?.[t]?`<div class="txt">${esc(vr.gemeinsam[t])}</div>`:''}${sicht!=='ma'&&vr.intern?.[t]?`<div class="txt" style="margin-top:4px;color:var(--accent)">Intern: ${esc(vr.intern[t])}</div>`:''}</div>`;
+  if(vr?.runde && ((vr.gemeinsam?.[t]) || (sicht!=='ma' && internText(vr.intern?.[t]))))
+    h+=`<div class="notiz vorrunde"><div class="lbl">Aus der letzten Runde (${esc(vr.runde)})</div>${vr.gemeinsam?.[t]?`<div class="txt">${esc(vr.gemeinsam[t])}</div>`:''}${sicht!=='ma'&&internText(vr.intern?.[t])?`<div class="txt" style="margin-top:4px;color:var(--accent)">Intern: ${esc(internText(vr.intern[t]))}</div>`:''}</div>`;
   if(sicht==='gf') h+=`<div class="notiz"><div class="lbl">Gesprächsnotiz zu Teil ${t} – sehen alle (auch ${esc((akt.f.MitarbeiterName||'').split(',').reverse().join(' ').trim())})</div><textarea ${ro?'readonly':''} oninput="setGemeinsam(${t},this.value)" placeholder="${ro?'':'Was wurde im Gespräch zu diesem Teil festgehalten?'}">${esc(gem)}</textarea></div>`;
   else if(gem) h+=`<div class="notiz"><div class="lbl">Gesprächsnotiz zu Teil ${t}</div><div class="txt">${esc(gem)}</div></div>`;
-  if(sicht==='gf') h+= internItem ? `<div class="notiz intern"><div class="lbl">🔒 Interne Notiz GF / Teamleitung – die Person sieht das nicht</div><textarea ${ro?'readonly':''} oninput="setIntern(${t},this.value)">${esc(intern)}</textarea></div>`
+  if(sicht==='gf') h+= internItem ? `<div class="notiz intern"><div class="lbl">🔒 Interne Notizen GF / Teamleitung – die Person sieht das nicht</div>${internHtml(internL,t,ro)}</div>`
                                   : `<div class="notiz intern no-print"><div class="lbl">🔒 Interne Notizen</div><div class="txt" style="color:var(--text-muted)">Werden geladen …</div></div>`;
-  if(sicht==='tl') h+=`<div class="notiz intern"><div class="lbl">🔒 Interne Notiz zu Teil ${t} – nur GF und Teamleitung</div><textarea ${tlAnsicht?'readonly':''} oninput="setIntern(${t},this.value)">${esc(intern)}</textarea></div>`;
+  if(sicht==='tl') h+=`<div class="notiz intern"><div class="lbl">🔒 Interne Notizen zu Teil ${t} – nur GF und Teamleitung</div>${internHtml(internL,t,tlAnsicht)}</div>`;
   return h;
 }
 /* Durchführung: Gespräch hat stattgefunden am … / Teilnehmende (Vorgabe GF 25.09.2026) — trägt die GF ein */
