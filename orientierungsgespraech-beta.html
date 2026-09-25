@@ -752,7 +752,7 @@ function vorrunde(maUpn, runde){
   return { runde: alt?.f.Runde || altIntern?.f.Runde, gemeinsam: alt?entpacke(alt).leitung.gemeinsam:{}, vereinbarungen: alt?entpacke(alt).leitung.vereinbarungen:[], intern: altIntern?entpacke(altIntern).leitung.intern:{} };
 }
 function setGemeinsam(t,w){ (akt.leitung.gemeinsam ||= {})[t]=w; geaendert(); }
-function internListe(L,t){ const v=(L.intern||={})[t]; if(v==null) return (L.intern[t]=[]); if(typeof v==='string') return (L.intern[t]= v?[{von:'',name:'(ohne Zuordnung)',am:'',text:v}]:[]); return v; }
+function internListe(L,t){ const v=(L.intern||={})[t]; if(v==null) return (L.intern[t]=[]); if(typeof v==='string') return (L.intern[t]= v?[{von:'markus.peltz@praxisneuewege.de',name:'Markus Peltz',am:'2026-09-25T12:00:00.000Z',text:v}]:[]); /* Altbestand vom 25.09.2026 stammt von Markus (Vorgabe) */ return v; }
 function internText(v){ if(!v) return ''; if(typeof v==='string') return v; return v.filter(x=>x.text).map(x=>`${x.name||x.von}: ${x.text}`).join(' · '); }
 function meinName(){ return GF_NAMEN[upn] || (currentAccount?.name||'').split(',').reverse().join(' ').trim() || upn; }
 function setIntern(t,w){
