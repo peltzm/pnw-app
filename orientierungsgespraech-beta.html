@@ -666,7 +666,7 @@ function teamleitungFuerHinweis(){
  * ═══════════════════════════════════════════════════════════ */
 function entpacke(i){
   const j = s => { try{ return s ? JSON.parse(s) : null }catch(e){ return null } };
-  return { spId:i.spId, f:i.f, antworten:{skala:{},themen:[],text:{},kommentar:{},...(j(i.f.AntwortenJSON)||{})}, kennzahlen:j(i.f.KennzahlenJSON), leitung:{manuell:{},vereinbarungen:[],naechster:'',gemeinsam:{},intern:{},gemeinsamKopie:{},...(j(i.f.LeitungJSON)||{})} };
+  return { spId:i.spId, f:i.f, antworten:{skala:{},themen:[],text:{},kommentar:{},...(j(i.f.AntwortenJSON)||{})}, kennzahlen:j(i.f.KennzahlenJSON), leitung:{manuell:{},vereinbarungen:[],naechster:'',gemeinsam:{},intern:{},gemeinsamKopie:{},gespraech:{am:'',teilnehmer:[]},...(j(i.f.LeitungJSON)||{})} };
 }
 async function oeffneEigenen(){
   const runde=P.get('r'), v=P.get('v');
@@ -766,6 +766,25 @@ function notizen(t, sicht, vr){
   if(sicht==='tl') h+=`<div class="notiz intern"><div class="lbl">🔒 Interne Notiz zu Teil ${t} – nur GF und Teamleitung</div><textarea ${tlAnsicht?'readonly':''} oninput="setIntern(${t},this.value)">${esc(intern)}</textarea></div>`;
   return h;
 }
+/* Durchführung: Gespräch hat stattgefunden am … / Teilnehmende (Vorgabe GF 25.09.2026) — trägt die GF ein */
+function gespraechBlock(){
+  const g=akt.leitung.gespraech||{am:'',teilnehmer:[]}, ro=!gfSicht || akt.f.OGStatus==='Abgeschlossen';
+  const tl=akt.kennzahlen?.teamleitung, kandidaten=[['Sonja Peltz','sonja.peltz@praxisneuewege.de'],['Markus Peltz','markus.peltz@praxisneuewege.de']];
+  if(tl?.name && !GF.includes(tl.mail)) kandidaten.push([tl.name,tl.mail]);
+  if(!gfSicht && !g.am) return '';   // Person sieht den Block erst, wenn das Gespräch eingetragen ist
+  const chips=kandidaten.map(([n,m])=>`<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 14px 4px 0;font-size:13.5px"><input type="checkbox" ${g.teilnehmer.includes(m)?'checked':''} ${ro?'disabled':''} onchange="setTeilnehmer('${esc(m)}',this.checked)" style="accent-color:var(--accent);width:17px;height:17px">${esc(n)}</label>`).join('');
+  const sonst=(g.teilnehmer||[]).filter(x=>!kandidaten.some(([,m])=>m===x)).join(', ');
+  return `<div class="notiz" style="margin-top:22px;border-color:var(--terra)"><div class="lbl" style="color:var(--terra)">Durchführung des Gesprächs</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;margin-top:4px">
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px"><input type="checkbox" ${g.am?'checked':''} ${ro?'disabled':''} onchange="setGespraechAm(this.checked)" style="accent-color:var(--accent);width:18px;height:18px"><b>Gespräch hat stattgefunden</b></label>
+      <label style="font-size:13px;color:var(--text-muted)">am <input type="date" value="${esc((g.am||'').slice(0,10))}" ${ro?'disabled':''} onchange="akt.leitung.gespraech.am=this.value;geaendert()" style="width:150px;margin-left:4px;font-family:inherit;font-size:13.5px;border:1px solid var(--r1);border-radius:6px;padding:5px 8px"></label></div>
+    <div style="margin-top:6px"><span style="font-size:12px;color:var(--meta)">Teilgenommen:</span><br>${chips}
+      <label style="display:inline-flex;align-items:center;gap:6px;margin:4px 0;font-size:13px;color:var(--text-muted)">weitere: <input type="text" value="${esc(sonst)}" ${ro?'readonly':''} placeholder="${ro?'':'z. B. Kilian Freundl'}" onchange="setSonstige(this.value)" style="width:220px;font-family:inherit;font-size:13px;border:1px solid var(--r1);border-radius:6px;padding:5px 8px"></label></div></div>`;
+}
+function setGespraechAm(an){ const g=(akt.leitung.gespraech ||= {am:'',teilnehmer:[]}); g.am = an ? (g.am || (akt.f.Termin||new Date().toISOString()).slice(0,10)) : ''; geaendert(); renderBogen(); }
+function setTeilnehmer(m,an){ const g=(akt.leitung.gespraech ||= {am:'',teilnehmer:[]}); g.teilnehmer=(g.teilnehmer||[]).filter(x=>x!==m); if(an) g.teilnehmer.push(m); geaendert(); }
+function setSonstige(txt){ const g=(akt.leitung.gespraech ||= {am:'',teilnehmer:[]}); const mails=g.teilnehmer.filter(x=>x.includes('@')); g.teilnehmer=[...mails,...txt.split(',').map(x=>x.trim()).filter(Boolean)]; geaendert(); }
+function teilnehmerNamen(g){ const n={'sonja.peltz@praxisneuewege.de':'Sonja','markus.peltz@praxisneuewege.de':'Markus'}; TEAMS.forEach(t=>n[t.tl]=t.name); return (g?.teilnehmer||[]).map(x=>n[x]||(x.includes('@')?(mitarbeiter||[]).find(m=>m.upn===x)?.name?.split(',').reverse().join(' ').trim()||x.split('@')[0]:x)); }
 function renderBogen(){
   const V = VERSIONEN[akt.f.Version] || VERSIONEN.B, a=akt.antworten, L=akt.leitung;
   const roMA = leseModus || gfSicht;         // Teil 1–3: nur Mitarbeiter:in, solange nicht abgegeben
@@ -835,6 +854,7 @@ function renderBogen(){
     ${gfSicht && !roGF ? `<div class="no-print" style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="kennzahlenNeu()">↻ Kennzahlen aus Kilanka aktualisieren</button></div>`:''}
     ${notizen(4,sichtN,vr)}
 
+    ${gespraechBlock()}
     <h2 class="teil"><span>Teil 5 ·</span> Ziele &amp; Vereinbarungen</h2>
     ${teil5}
     ${notizen(5,sichtN,vr)}
@@ -988,7 +1008,12 @@ async function loeschen(){
   }catch(e){ alert('Löschen fehlgeschlagen: '+e.message); }
 }
 async function setStatus(neu){
-  if(neu==='Abgeschlossen' && !confirm('Gespräch abschließen? Teil 4 und 5 werden danach gesperrt (über „wieder öffnen“ änderbar).')) return;
+  if(neu==='Abgeschlossen'){
+    const g=akt.leitung.gespraech||{};
+    if(!g.am){ if(!confirm('Das Gespräch ist noch nicht als „stattgefunden“ eingetragen.\n\nMit heutigem Datum eintragen und abschließen?')) return; akt.leitung.gespraech={am:new Date().toISOString().slice(0,10),teilnehmer:g.teilnehmer||[]}; }
+    if(!(akt.leitung.gespraech.teilnehmer||[]).length && !confirm('Es ist niemand als teilnehmend markiert. Trotzdem abschließen?')) return;
+    if(!confirm('Gespräch abschließen? Teil 4 und 5 werden danach gesperrt (über „wieder öffnen“ änderbar).')) return;
+  }
   if(await speichern(true,{OGStatus:neu})) { leseModus = neu!=='Entwurf'; renderBogen(); }
 }
 async function kennzahlenNeu(still){
@@ -1142,7 +1167,7 @@ async function zeigeAdmin(){
       <td>${gesperrt?`<span style="font-size:12.5px;color:var(--text-muted)">Bogen „${esc(VERSIONEN[ver].titel)}“ folgt – vorerst nicht freigegeben</span>`
         :`<select onchange="setPlan('${esc(m.upn)}','v',this.value)">${Object.entries(VERSIONEN).filter(([k])=>AKTIVE_VERSIONEN.includes(k)).map(([k,v])=>`<option value="${k}" ${ver===k?'selected':''}>${k} · ${esc(v.titel)}</option>`).join('')}</select>`}</td>
       <td><input type="datetime-local" value="${esc(p.t||'')}" onchange="setPlan('${esc(m.upn)}','t',this.value)">${p.mailAm?`<br><span style="font-size:11px;color:var(--text-hint)" title="Einladung gesendet ${esc(fmtDT(p.mailAm))}">✉ ${esc(new Date(p.mailAm).toLocaleDateString('de-DE'))}</span>`:''}</td>
-      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${(t=>t?` <span class="status ${t.abgegeben?'abgegeben':'entwurf'}" title="Einschätzung durch ${esc(t.tlName)}">${istTeamleitung(m.upn)?'Sonja':'TL'} ${t.abgegeben?'✓':'…'}</span>`:'')(tlEinschaetzungFuer(m.upn,runde))}${(i && entpacke(i).leitung.freigabeTL)?` <span class="status offen" title="Selbsteinschätzung an die Teamleitung gesendet ${esc(fmtDT(entpacke(i).leitung.freigabeTL))}">freigegeben</span>`:''}${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
+      <td><span class="status ${st.toLowerCase()}">${esc(st)}</span>${(t=>t?` <span class="status ${t.abgegeben?'abgegeben':'entwurf'}" title="Einschätzung durch ${esc(t.tlName)}">${istTeamleitung(m.upn)?'Sonja':'TL'} ${t.abgegeben?'✓':'…'}</span>`:'')(tlEinschaetzungFuer(m.upn,runde))}${(g=>g?.am?` <span class="status abgeschlossen" title="Gespräch am ${esc(new Date(g.am).toLocaleDateString('de-DE'))} – teilgenommen: ${esc(teilnehmerNamen(g).join(', ')||'–')}">✓ ${esc(new Date(g.am).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}))} ${esc(teilnehmerNamen(g).map(x=>x.split(' ')[0]).join(', '))}</span>`:'')(i?entpacke(i).leitung.gespraech:null)}${(i && entpacke(i).leitung.freigabeTL)?` <span class="status offen" title="Selbsteinschätzung an die Teamleitung gesendet ${esc(fmtDT(entpacke(i).leitung.freigabeTL))}">freigegeben</span>`:''}${i?.f.AbgegebenAm?'<br><span style="font-size:11px;color:var(--text-hint)">'+esc(fmtDT(i.f.AbgegebenAm))+'</span>':''}</td>
       <td style="white-space:nowrap;text-align:right">${(()=>{
         const tl=tlEinschaetzungFuer(m.upn,runde), sonja=upn===TL_EINSCHAETZUNG_DURCH && istTeamleitung(m.upn);
         const primaer = i ? `<button class="btn btn-primary btn-sm" onclick="oeffneFuerGF('${esc(m.upn)}')">Öffnen</button>`
