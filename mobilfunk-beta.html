@@ -457,6 +457,35 @@ async function setupListe(){
   }
 }
 
+/* Sucht einen bereits vorhandenen Eintrag, der zum Import-Datensatz passt —
+ * Treffer über Rufnummer/Kennung (Title), IMEI oder Mitarbeitername (je exakt,
+ * ohne Groß-/Kleinschreibung, leere Werte zählen nie als Treffer). */
+function findeDuplikat(e){
+  const norm = v => (v||'').toString().trim().toLowerCase();
+  const titel = norm(e.titel), imei = norm(e.geraetIMEI), name = norm(e.mitarbeiter);
+  return eintraege.find(x => {
+    if(titel && norm(x.titel) === titel) return true;
+    if(imei && norm(x.geraetIMEI) === imei) return true;
+    if(name && norm(x.mitarbeiter) === name) return true;
+    return false;
+  });
+}
+
+/* Führt Import-Datensatz e in bestehenden Eintrag best zusammen: nur Felder
+ * übernehmen, die im Bestand noch leer sind — vorhandene Werte bleiben unangetastet. */
+function mergeEintrag(best, e){
+  const merged = {...best};
+  let ergaenzt = [];
+  for(const s of SCHEMA){
+    const k = s.key;
+    const neu = e[k], alt = best[k];
+    const altLeer = (alt===undefined || alt===null || alt==='');
+    const neuVorhanden = !(neu===undefined || neu===null || neu==='');
+    if(altLeer && neuVorhanden){ merged[k] = neu; ergaenzt.push(s.label); }
+  }
+  return {merged, ergaenzt};
+}
+
 /* Seed-/Daten-Import aus JSON-Datei (Format: Array von Objekten mit Schema-Keys) */
 async function seedImport(file){
   if(!file) return;
@@ -464,14 +493,39 @@ async function seedImport(file){
     const data = JSON.parse(await file.text());
     const liste = Array.isArray(data) ? data : (data.eintraege||[]);
     if(!liste.length){ alert('Keine Einträge in der Datei gefunden.'); return; }
-    if(!confirm(liste.length+' Einträge in die SharePoint-Liste schreiben?')) return;
-    let ok=0, fehler=0;
+    if(!confirm(liste.length+' Einträge prüfen und importieren?')) return;
+    let neu=0, ergaenztAnzahl=0, uebersprungen=0, fehler=0;
     for(const e of liste){
-      try{ const f={...e,_spId:null}; await speichern(f); eintraege.push(f); ok++; }
+      try{
+        const best = findeDuplikat(e);
+        if(best){
+          const treffer = [
+            e.titel && best.titel && e.titel.toLowerCase()===best.titel.toLowerCase() ? 'Rufnummer/Kennung' : null,
+            e.geraetIMEI && best.geraetIMEI && e.geraetIMEI.toLowerCase()===best.geraetIMEI.toLowerCase() ? 'IMEI' : null,
+            e.mitarbeiter && best.mitarbeiter && e.mitarbeiter.toLowerCase()===best.mitarbeiter.toLowerCase() ? 'Name' : null
+          ].filter(Boolean).join(', ');
+          const ok = confirm(
+            'Möglicher Duplikat-Treffer über: '+treffer+'\n\n'+
+            'Bestehend: "'+(best.titel||'—')+'" · '+(best.mitarbeiter||'—')+'\n'+
+            'Import:    "'+(e.titel||'—')+'" · '+(e.mitarbeiter||'—')+'\n\n'+
+            'OK = fehlende Felder im bestehenden Eintrag ergänzen\n'+
+            'Abbrechen = diesen Import-Datensatz überspringen'
+          );
+          if(!ok){ uebersprungen++; continue; }
+          const {merged, ergaenzt} = mergeEintrag(best, e);
+          await speichern(merged);
+          Object.assign(best, merged); // lokale Referenz aktuell halten
+          ergaenztAnzahl++;
+          if(ergaenzt.length) console.info('Ergänzt bei "'+(best.titel||best.mitarbeiter)+'":', ergaenzt.join(', '));
+        } else {
+          const f={...e,_spId:null}; await speichern(f); eintraege.push(f); neu++;
+        }
+      }
       catch(err){ console.warn('Import-Fehler:', e.titel, err.message); fehler++; }
     }
     renderAll();
-    alert('Import abgeschlossen: '+ok+' übernommen'+(fehler?(', '+fehler+' fehlgeschlagen (Konsole)'):'')+'.');
+    alert('Import abgeschlossen: '+neu+' neu angelegt, '+ergaenztAnzahl+' ergänzt, '+uebersprungen+' übersprungen'
+      +(fehler?(', '+fehler+' fehlgeschlagen (Konsole)'):'')+'.');
   }catch(e){ alert('Datei konnte nicht gelesen werden: '+e.message); }
   document.getElementById('seedFile').value = '';
 }
