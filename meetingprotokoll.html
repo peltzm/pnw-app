@@ -3405,7 +3405,6 @@ function renderArchivTable() {
         <div style="font-size:13px;font-weight:600;color:var(--text);">
           ${r.typIcon} ${r.typLabel}
           <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">${r.datum}</span>
-          ${r.bearbeiter ? '<span title="Aktueller Bearbeiter" style="display:inline-block;margin-left:8px;padding:1px 8px;font-size:11px;font-weight:600;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:10px;white-space:nowrap;">👤 ' + _esc(r.bearbeiter) + '</span>' : ''}
         </div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
           ${r.themaText ? 'Betreff: <strong style="color:var(--text);">' + r.themaText + '</strong>' : ''}
@@ -3413,6 +3412,7 @@ function renderArchivTable() {
           ${r.approverShort !== '—' ? 'Freigabe: <strong>' + r.approverShort + '</strong>' : ''}
           ${r.teiln ? ' &nbsp;·&nbsp; ' + r.teiln + ' Teiln.' : ''}
         </div>
+        ${r.bearbeiter ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Letzter Bearbeiter: <strong style="color:var(--text);">' + _esc(r.bearbeiter) + '</strong></div>' : ''}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:11px;font-weight:600;color:${st.color};white-space:nowrap;">${r.status}</span>
