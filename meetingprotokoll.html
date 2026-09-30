@@ -659,6 +659,7 @@
           <div style="flex:1;min-width:200px;">
             <select id="archivStatusFilter" onchange="loadArchiv(true)"
               style="font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:white;width:100%;font-family:inherit;">
+              <option value="offen" selected>Offene Protokolle</option>
               <option value="alle">Alle Protokolle</option>
               <option value="entwurf">Entwürfe</option>
               <option value="eingereicht">Eingereicht (warten auf TL)</option>
@@ -3335,11 +3336,14 @@ function renderArchivTable() {
   const contentEl = document.getElementById('archivContent');
   if (!contentEl) return;
 
-  const statusFilter = (document.getElementById('archivStatusFilter')?.value || 'alle').toLowerCase();
+  const statusFilter = (document.getElementById('archivStatusFilter')?.value || 'offen').toLowerCase();
   const q = (document.getElementById('archivSearch')?.value || '').toLowerCase().trim();
 
   let rows = _archivData;
-  if (statusFilter !== 'alle') rows = rows.filter(r => r.status.toLowerCase() === statusFilter);
+  // Standardansicht „Offene Protokolle": Freigegebene und Versendete ausblenden –
+  // die gibt es nur über das Auswahlfeld (Freigegeben / Versendet / Alle).
+  if (statusFilter === 'offen') rows = rows.filter(r => r.status !== 'Freigegeben' && r.status !== 'Versendet');
+  else if (statusFilter !== 'alle') rows = rows.filter(r => r.status.toLowerCase() === statusFilter);
   if (q) rows = rows.filter(r =>
     r.typLabel.toLowerCase().includes(q) ||
     r.themaText.toLowerCase().includes(q) ||
