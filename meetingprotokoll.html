@@ -1042,9 +1042,23 @@ async function uploadToSharePoint(path, content, contentType) {
   return await r.json();
 }
 
-async function sendMail(to, subject, body) {
+// Geschäftsführung: erhält jedes abgeschlossene Protokoll in CC
+const GF_MAILS = ['sonja.peltz@praxisneuewege.de', 'markus.peltz@praxisneuewege.de'];
+/* Empfänger + GF in CC. Wer schon Empfänger ist, wird nicht zusätzlich in CC gesetzt;
+ * gibt es keine Empfänger, geht die Mail direkt an die GF. */
+function mitGfCc(mails) {
+  const an = [...new Set((mails || []).filter(Boolean))];
+  const schon = new Set(an.map(m => m.toLowerCase()));
+  const cc = GF_MAILS.filter(m => !schon.has(m.toLowerCase()));
+  return an.length ? { to: an, cc } : { to: cc, cc: [] };
+}
+
+async function sendMail(to, subject, body, cc) {
   const token = await getToken();
   const toList = (Array.isArray(to) ? to : [to])
+    .filter(Boolean)
+    .map(addr => ({ emailAddress: { address: addr } }));
+  const ccList = (Array.isArray(cc) ? cc : (cc ? [cc] : []))
     .filter(Boolean)
     .map(addr => ({ emailAddress: { address: addr } }));
   if (!toList.length) throw new Error('Keine Empfänger-Adresse angegeben');
@@ -1052,7 +1066,7 @@ async function sendMail(to, subject, body) {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      message: { subject, body: { contentType: 'HTML', content: body }, toRecipients: toList },
+      message: { subject, body: { contentType: 'HTML', content: body }, toRecipients: toList, ccRecipients: ccList },
       saveToSentItems: true
     })
   });
@@ -2223,9 +2237,10 @@ async function executePublish() {
     const spUrl    = `${CFG.siteUrl}/Freigegebene Dokumente/${spPath}`;
     const mailBody = `<p>Guten Tag,</p><p>das Protokoll zum <strong>${label}</strong> vom ${fmtDate(datum)} steht zur Verfügung.</p>${mailNote ? `<p>${mailNote}</p>` : ''}<p><a href="${spUrl}">→ Protokoll in SharePoint öffnen</a></p><p>Mit freundlichen Grüßen<br>Praxis NeueWege</p>`;
 
-    if (mails.length) {
-      await sendMail(mails, mailSubj, mailBody);
-      showToast(`✉ Mail an ${mails.length} Empfänger gesendet`, 'success');
+    {
+      const v = mitGfCc(mails);   // Geschäftsführung in CC
+      await sendMail(v.to, mailSubj, mailBody, v.cc);
+      showToast(`✉ Mail an ${v.to.length} Empfänger gesendet` + (v.cc.length ? ' (GF in CC)' : ''), 'success');
     }
 
     // 4. Update draft list item: Status → Versendet, store spUrl
@@ -2637,10 +2652,9 @@ async function freigabeAction(itemId, newStatus) {
         + '<p><a href="' + spUrl + '" style="background:#166534;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;">→ Protokoll in SharePoint öffnen</a></p>'
         + '<p>Mit freundlichen Grüßen<br>' + freigeberName + '<br>Praxis NeueWege</p>';
       try {
-        if (mails.length) {
-          await sendMail(mails, mailSubj, partMail);
-          showToast('✉ Mail an ' + mails.length + ' Teilnehmer gesendet', 'success');
-        }
+        const v = mitGfCc(mails);   // Geschäftsführung in CC
+        await sendMail(v.to, mailSubj, partMail, v.cc);
+        showToast('✉ Mail an ' + v.to.length + ' Teilnehmer gesendet' + (v.cc.length ? ' (GF in CC)' : ''), 'success');
       } catch(e) { console.warn('Teilnehmer-Mail:', e); }
 
       // SP-Liste: Status Freigegeben + spUrl
