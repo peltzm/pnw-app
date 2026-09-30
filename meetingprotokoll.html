@@ -822,8 +822,13 @@ const SP_FOLDERS = {
 const DRAFT_LIST = 'Protokoll_Entwuerfe';
 let _currentDraftId = null;
 let _draftStatus = 'Entwurf'; // lokal gecachter Status des aktuellen Entwurfs
+// Ersteller des geladenen Entwurfs { oid, by } – bleibt erhalten, wenn jemand
+// anderes (Teamleitung, GF) den Entwurf oeffnet und der Autosave laeuft. Sonst
+// wuerde der Entwurf dem Ersteller aus „Entwurf laden" / Archiv verschwinden.
+let _draftOwner = null;
 let _autoSaving = false;
 let _autoSaveTimer = null;
+let _autoSaveFehler = 0;
 let _graphListIdDraft = null;
 
 const SCOPES = ['User.Read','Files.ReadWrite.All','Sites.ReadWrite.All',
@@ -1454,6 +1459,7 @@ function selectThema(type, themaKey, el) {
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
   _currentDraftId = null; // fresh draft
+  _draftOwner = null;
   _draftStatus = 'Entwurf';
   // Pre-load bewohner TOPs if applicable (async, cached)
   if (thema.bewohner) {
@@ -2240,17 +2246,8 @@ async function loadFreigabe() {
   if (errEl)     errEl.style.display = 'none';
   if (contentEl) contentEl.textContent = '';
   try {
-    const { siteId } = await getSiteAndDrive();
-    const listId     = await getDraftListId();
-    const token      = await getToken();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    if (!r.ok) throw new Error('SP ' + r.status);
-    const d = await r.json();
     // Show items with Status = Eingereicht (waiting for approval)
-    _freigabeData = (d.value || []).filter(i => i.fields?.Status === 'Eingereicht');
+    _freigabeData = (await ladeAlleProtokollEintraege()).filter(i => i.fields?.Status === 'Eingereicht');
     renderFreigabe();
     // Update badge
     const badge = document.getElementById('pendingBadge');
@@ -3058,6 +3055,29 @@ async function getDraftListId() {
   return cl.id;
 }
 
+/* Alle Eintraege der Protokoll-Liste laden. Folgt @odata.nextLink, damit bei
+ * wachsender Liste nichts abgeschnitten wird; sortiert wird im Browser
+ * (Graph sortiert nicht verlaesslich nach nicht indizierten Spalten). */
+async function ladeAlleProtokollEintraege() {
+  const { siteId } = await getSiteAndDrive();
+  const listId = await getDraftListId();
+  const token  = await getToken();
+  let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=200`;
+  const alle = [];
+  for (let seite = 0; url && seite < 100; seite++) {
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) {
+      const err = new Error('SP ' + r.status + ': ' + (await r.text()).slice(0, 200));
+      err.status = r.status;
+      throw err;
+    }
+    const d = await r.json();
+    alle.push(...(d.value || []));
+    url = d['@odata.nextLink'] || null;
+  }
+  return alle;
+}
+
 function collectDraftData() {
   const now = new Date();
   const yy = String(now.getFullYear()).slice(-2);
@@ -3085,7 +3105,11 @@ function collectDraftData() {
     tops:        JSON.stringify(S.tops),
     participants:JSON.stringify(S.participants.map(p => ({...p}))),
     savedAt:     now.toISOString(),
-    savedBy:     currentAccount?.username || currentAccount?.name || '',  // UPN/email preferred for matching
+    // Ersteller bleibt der urspruengliche Ersteller (siehe _draftOwner); wer zuletzt
+    // gespeichert hat, steht in lastSavedBy.
+    savedBy:     (_draftOwner && _draftOwner.by) || currentAccount?.username || currentAccount?.name || '',
+    lastSavedBy: currentAccount?.username || currentAccount?.name || '',
+    _ownerOid:   _draftOwner ? (_draftOwner.oid || '') : (meineOid() || ''),
   };
 }
 
@@ -3118,30 +3142,40 @@ async function autoSaveDraft(dataOverride, draftIdOverride) {
     const currentStatus = (_draftStatus && _draftStatus !== 'Entwurf') ? _draftStatus : 'Entwurf';
     const fields = {
       Title:        data.label || 'Protokoll Entwurf',
-      ProtokollDaten: JSON.stringify({ ...data, _ownerOid: data._ownerOid || meineOid() || '' }),
+      ProtokollDaten: JSON.stringify(data),
       Status:       currentStatus,
       Erstellt_Von: data.savedBy,
     };
     if (targetId) {
-      await fetch(
+      const pr = await fetch(
         `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${targetId}/fields`,
         { method: 'PATCH', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify(fields) }
       );
+      if (!pr.ok) throw new Error('SP ' + pr.status);
     } else {
       const r = await fetch(
         `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`,
         { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify({ fields }) }
       );
+      if (!r.ok) throw new Error('SP ' + r.status);
       const item = await r.json();
+      if (!item.id) throw new Error('keine ID erhalten');
       // Nur den Live-Zustand verknüpfen, nicht bei Snapshot-Saves
       if (dataOverride === undefined) _currentDraftId = item.id;
     }
     // Show subtle save indicator
     const ind = document.getElementById('autoSaveIndicator');
-    if (ind) { ind.textContent = '✓ Gespeichert'; ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 3000); }
-  } catch(e) { console.warn('Auto-save failed:', e); }
+    if (ind) { ind.style.color = 'var(--success)'; ind.textContent = '✓ Gespeichert'; ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 3000); }
+    _autoSaveFehler = 0;
+  } catch(e) {
+    // Fehlgeschlagenes Speichern darf nicht wie „Gespeichert" aussehen
+    console.warn('Auto-save failed:', e);
+    const ind = document.getElementById('autoSaveIndicator');
+    if (ind) { ind.style.color = 'var(--error)'; ind.textContent = '⚠ Nicht gespeichert'; ind.style.opacity='1'; }
+    if (++_autoSaveFehler === 1) showToast('Entwurf konnte nicht gespeichert werden (' + e.message + '). Bitte Text sichern und Seite neu laden.', 'info');
+  }
   finally { _autoSaving = false; }
 }
 
@@ -3174,21 +3208,18 @@ async function loadArchiv(forceReload) {
     const { siteId } = await getSiteAndDrive();
     const listId     = await getDraftListId();
     const token      = await getToken();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    if (!r.ok) {
-      const errText = await r.text();
-      if (r.status === 404) {
+    let _alle;
+    try { _alle = await ladeAlleProtokollEintraege(); }
+    catch (le) {
+      if (le.status === 404) {
         const lr = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists?$select=displayName,name&$top=200`, { headers: { Authorization: 'Bearer ' + token } });
         const ld = await lr.json();
         const names = (ld.value || []).map(l => l.displayName).join(', ');
         throw new Error('Liste nicht gefunden. Vorhandene Listen: ' + names);
       }
-      throw new Error('SP ' + r.status + ': ' + errText.slice(0, 200));
+      throw le;
     }
-    const d = await r.json();
+    const d = { value: _alle };
     await ladeMeineAliase();   // frueher genutzte Adressen fuer die Zuordnung
     const isAdmin = _isAdminUser();
 
@@ -3381,25 +3412,18 @@ async function showDraftPanel() {
   panel.style.display = 'block';
   content.innerHTML = '<span class="spin"></span> Wird geladen…';
   try {
-    const { siteId } = await getSiteAndDrive();
-    const listId = await getDraftListId();
-    const token  = await getToken();
     await ladeMeineAliase();
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=50&$orderby=fields/Modified desc`,
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
-    const d = await r.json();
-    const items = (d.value || []).filter(i =>
-      i.fields?.Status === 'Entwurf' &&
-      istMeinProtokoll(i.fields, (() => { try { return JSON.parse(i.fields?.ProtokollDaten || '{}'); } catch(e) { return {}; } })())
-    );
+    const _pd = i => { try { return JSON.parse(i.fields?.ProtokollDaten || '{}'); } catch(e) { return {}; } };
+    const _zeit = i => _pd(i).savedAt || i.fields?.Modified || '';
+    const items = (await ladeAlleProtokollEintraege())
+      .filter(i => i.fields?.Status === 'Entwurf' && istMeinProtokoll(i.fields, _pd(i)))
+      .sort((a, b) => _zeit(b).localeCompare(_zeit(a)));   // neueste zuerst
     if (!items.length) {
       content.innerHTML = '<div style="color:var(--text-muted);padding:.5rem 0;">Keine Entwürfe gefunden.</div>';
       return;
     }
     content.innerHTML = items.map(it => {
-      const data = JSON.parse(it.fields?.ProtokollDaten || '{}');
+      const data = _pd(it);
       const date = data.datum ? data.datum.split('-').reverse().join('.') : '—';
       const saved = data.savedAt ? new Date(data.savedAt).toLocaleString('de-DE') : '—';
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
@@ -3430,6 +3454,10 @@ async function loadDraft(itemId, targetSection) {
     const item = await r.json();
     const data = JSON.parse(item.fields?.ProtokollDaten || '{}');
     _currentDraftId = itemId;
+    _draftOwner = {
+      oid: String(data._ownerOid || ''),
+      by:  String(item.fields?.Erstellt_Von || data.savedBy || ''),
+    };
     // Restore _draftStatus from SP (wichtig: verhindert dass autoSave den Status überschreibt)
     _draftStatus = item.fields?.Status || 'Entwurf';
     // Restore state
