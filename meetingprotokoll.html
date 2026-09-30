@@ -2388,8 +2388,8 @@ function renderFreigabe() {
 function escHtml(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function nl2br(s) { return escHtml(s).replace(/\r\n|\r|\n/g, '<br>'); }
 
-async function generateProtokollPDF(data, freigeberName) {
-  // Baue temporäres HTML-Element mit exakt dem Vorschau-Layout
+function protokollHtml(data, freigeberName) {
+  // Baue HTML mit exakt dem Vorschau-Layout (Grundlage für PDF und Lese-Ansicht)
   const cfg      = data.type ? TYPES[data.type] : null;
   const thema    = data.thema && cfg ? cfg.themen?.[data.thema] : null;
   const typLabel = cfg ? cfg.label : (data.label || 'Protokoll');
@@ -2477,6 +2477,11 @@ async function generateProtokollPDF(data, freigeberName) {
     <p style="text-align:center;font-size:10px;color:#bbb;margin-top:1.5rem;">Erstellt mit Praxis NeueWege Meetingprotokoll-App &middot; Ablage: ${cfg?.sp||''}</p>
   </div>`;
 
+  return html;
+}
+
+async function generateProtokollPDF(data, freigeberName) {
+  const html = protokollHtml(data, freigeberName);
   // Render HTML to canvas, then to PDF
   const container = document.createElement('div');
   container.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;';
@@ -2517,6 +2522,52 @@ async function generateProtokollPDF(data, freigeberName) {
 
 
 
+
+/* ──────────────────────────────────────
+   LESE-ANSICHT (nur Geschäftsführung)
+   Zeigt ein Protokoll aus der Liste an, ohne es in den Editor zu laden –
+   es wird nichts gespeichert oder verändert.
+────────────────────────────────────── */
+function schliesseLeseAnsicht() {
+  const o = document.getElementById('leseAnsicht');
+  if (o) o.remove();
+}
+async function leseProtokoll(itemId) {
+  if (!_isAdminUser()) { showToast('Die Lese-Ansicht steht nur der Geschäftsführung zur Verfügung.', 'info'); return; }
+  try {
+    showToast('Protokoll wird geladen…', 'info');
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}?expand=fields`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!r.ok) throw new Error('SP ' + r.status);
+    const item = await r.json();
+    const f = item.fields || {};
+    let data = {};
+    try { data = JSON.parse(f.ProtokollDaten || '{}'); } catch(e) { throw new Error('Protokolldaten nicht lesbar'); }
+    const bearbeiter = _nameAusMail(data.lastSavedBy || data.savedBy || f.Erstellt_Von || '');
+    schliesseLeseAnsicht();
+    const o = document.createElement('div');
+    o.id = 'leseAnsicht';
+    o.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.45);display:flex;flex-direction:column;align-items:center;padding:16px;box-sizing:border-box;';
+    o.onclick = e => { if (e.target === o) schliesseLeseAnsicht(); };
+    o.innerHTML = `
+      <div style="width:100%;max-width:840px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius) var(--radius) 0 0;padding:8px 14px;box-sizing:border-box;">
+        <div style="font-size:12px;color:#92400e;"><strong>Nur lesen</strong> · Status: ${_esc(f.Status || '—')}${bearbeiter ? ' · Letzter Bearbeiter: ' + _esc(bearbeiter) : ''}</div>
+        <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="schliesseLeseAnsicht()">Schließen</button>
+      </div>
+      <div style="width:100%;max-width:840px;flex:1;overflow:auto;background:white;border-radius:0 0 var(--radius) var(--radius);">
+        ${protokollHtml(data, 'Entwurf')}
+      </div>`;
+    document.body.appendChild(o);
+  } catch(e) {
+    showToast('Protokoll konnte nicht geöffnet werden: ' + e.message, 'info');
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') schliesseLeseAnsicht(); });
 
 /* ──────────────────────────────────────
    FREIGABE-MODUS (Banner + Buttons für TL)
@@ -3410,10 +3461,15 @@ function renderArchivTable() {
              border:1px solid ${st.border};border-radius:var(--radius);font-weight:600;
              min-height:36px;text-decoration:none;display:inline-flex;align-items:center;">
              Öffnen ↗</a>`
-        : `<button disabled
-             style="font-size:12px;padding:6px 14px;background:var(--bg);color:var(--text-muted);
-             border:1px solid var(--border);border-radius:var(--radius);cursor:not-allowed;min-height:36px;">
-             Öffnen</button>`;
+        : r.isAdmin
+          ? `<button onclick="leseProtokoll('${r.id}')" title="Nur lesen – es wird nichts verändert"
+               style="font-size:12px;padding:6px 14px;background:${st.btnBg};color:${st.btnColor};
+               border:1px solid ${st.border};border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">
+               Öffnen</button>`
+          : `<button disabled
+               style="font-size:12px;padding:6px 14px;background:var(--bg);color:var(--text-muted);
+               border:1px solid var(--border);border-radius:var(--radius);cursor:not-allowed;min-height:36px;">
+               Öffnen</button>`;
 
     return `<div style="display:flex;align-items:center;justify-content:space-between;
         padding:10px 14px;border:1px solid ${st.border};border-left:4px solid ${st.border};
