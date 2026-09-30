@@ -3247,6 +3247,17 @@ function scheduleAutoSave() {
 let _archivData = [];
 let _archivLoaded = false;
 
+/* Anzeigename aus Mailadresse: simone.koch@… -> „Simone Koch". */
+function _nameAusMail(adr) {
+  const a = String(adr || '').trim();
+  if (!a) return '';
+  if (!a.includes('@')) return a;
+  return a.split('@')[0].split(/[._]/).filter(Boolean)
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+function _esc(t) {
+  return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
 function _isAdminUser() {
   const me = (currentAccount?.username || '').toLowerCase();
   return me.includes('markus') || me.includes('peltz') || me.includes('sonja');
@@ -3303,7 +3314,9 @@ async function loadArchiv(forceReload) {
       // mind. 12 Stunden unverändert (niemand arbeitet gerade daran).
       const _alter = Date.now() - new Date(data.savedAt || f.Modified || 0).getTime();
       const leer = status === 'Entwurf' && !spUrl && !_draftHasContent(data) && _alter > 12 * 3600 * 1000;
-      return { id: it.id, datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, isMine, isAdmin, leer };
+      // Aktueller Bearbeiter = wer zuletzt gespeichert hat (Altbestand: Ersteller)
+      const bearbeiter = _nameAusMail(data.lastSavedBy || data.savedBy || f.Erstellt_Von || '');
+      return { id: it.id, datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, isMine, isAdmin, leer, bearbeiter };
     }).filter(r => r.isAdmin || r.isMine); // Admins sehen alles, andere nur eigene
     // Debug: log count
     console.log('[Archiv] Items loaded:', _archivData.length, '(admin:', _isAdminUser(), 'me:', (currentAccount?.username||'').split('@')[0], ')');
@@ -3331,6 +3344,7 @@ function renderArchivTable() {
     r.typLabel.toLowerCase().includes(q) ||
     r.themaText.toLowerCase().includes(q) ||
     r.datum.includes(q) ||
+    (r.bearbeiter || '').toLowerCase().includes(q) ||
     r.approverShort.toLowerCase().includes(q)
   );
 
@@ -3391,6 +3405,7 @@ function renderArchivTable() {
         <div style="font-size:13px;font-weight:600;color:var(--text);">
           ${r.typIcon} ${r.typLabel}
           <span style="font-size:11px;font-weight:400;color:var(--text-muted);margin-left:6px;">${r.datum}</span>
+          ${r.bearbeiter ? '<span title="Aktueller Bearbeiter" style="display:inline-block;margin-left:8px;padding:1px 8px;font-size:11px;font-weight:600;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:10px;white-space:nowrap;">👤 ' + _esc(r.bearbeiter) + '</span>' : ''}
         </div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:3px;">
           ${r.themaText ? 'Betreff: <strong style="color:var(--text);">' + r.themaText + '</strong>' : ''}
