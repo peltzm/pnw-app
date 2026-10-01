@@ -100,6 +100,7 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
 .leiste label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px}
 .leiste select,.leiste input[type=search]{font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);min-height:36px}
 .leiste input[type=search]{min-width:220px}
+.leiste #selKlient{max-width:240px}
 .leiste .check{flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text);min-height:36px;cursor:pointer}
 .leiste .rechts{margin-left:auto;display:flex;gap:8px}
 .kpi{cursor:pointer;transition:border-color .12s,box-shadow .12s;text-align:left;font-family:inherit;color:inherit}
@@ -161,10 +162,11 @@ tr.st-erledigt td.komm,tr.st-ignoriert td.komm{text-decoration:line-through}
       <label>Monat<select id="selMonat"></select></label>
       <label>Jahr<select id="selJahr"></select></label>
       <button class="btn btn-primary" id="btnLaden">Prüfen</button>
+      <label>Klient<select id="selKlient"><option value="">Alle Klienten</option></select></label>
       <label>Suche<input type="search" id="suche" placeholder="Klient, Fachkraft, Amt, Kommentar"></label>
       <label class="check"><input type="checkbox" id="chkAlle"> Erledigte und ignorierte anzeigen</label>
       <div class="rechts">
-        <button class="btn btn-ghost btn-sm" id="btnExport" style="display:none">⬇ CSV</button>
+        <button class="btn btn-ghost" id="btnExport" style="display:none" title="Exportiert die aktuell angezeigten Einträge (Filter werden berücksichtigt)">⬇ CSV-Export</button>
       </div>
     </div>
     <div class="msg" id="runMsg"></div>
@@ -331,14 +333,31 @@ async function laden(frisch){
     document.getElementById('hinweise').innerHTML = hin.map(h=>'<div class="msg zeigen fehler" style="margin:0 0 12px">'+esc(h)+'</div>').join('');
     document.getElementById('ergebnis').style.display = 'block';
     document.getElementById('btnExport').style.display = 'inline-flex';
+    fuelleKlienten();
     zeichne();
   }catch(e){
     zeige('runMsg', 'Prüfung fehlgeschlagen: '+esc(e.message||e), 'fehler');
   }finally{ btn.disabled = false; }
 }
 
+function klientenVon(t){ return String(t.klient||'').split(' / ').map(x=>x.trim()).filter(Boolean); }
+/* Auswahlliste aus den Treffern des Monats; bisherige Auswahl bleibt erhalten, sofern noch vorhanden */
+function fuelleKlienten(){
+  const sel = document.getElementById('selKlient'), alt = sel.value;
+  const anz = new Map();
+  for (const t of DATEN.treffer) for (const k of klientenVon(t)) anz.set(k, (anz.get(k)||0)+1);
+  const namen = [...anz.keys()].sort((a,b)=>a.localeCompare(b,'de'));
+  sel.innerHTML = '<option value="">Alle Klienten ('+namen.length+')</option>' +
+    namen.map(n=>'<option value="'+esc(n)+'">'+esc(n)+' ('+anz.get(n)+')</option>').join('');
+  sel.value = namen.includes(alt) ? alt : '';
+}
+function passtKlient(t){
+  const k = document.getElementById('selKlient').value;
+  return !k || klientenVon(t).includes(k);
+}
 function statusVon(t){ return (STATUS[t.key] && STATUS[t.key].s) || 'offen'; }
 function sichtbar(t){
+  if (!passtKlient(t)) return false;
   if (!document.getElementById('chkAlle').checked && statusVon(t) !== 'offen') return false;
   const q = document.getElementById('suche').value.trim().toLowerCase();
   if (!q) return true;
@@ -350,7 +369,7 @@ function zeichne(){
   // Kennzahlen je Regel: offen / gesamt
   let kpi = '';
   for (const r of REGELN){
-    const alle = DATEN.treffer.filter(t=>t.regel===r.id);
+    const alle = DATEN.treffer.filter(t=>t.regel===r.id && passtKlient(t));
     const offen = alle.filter(t=>statusVon(t)==='offen');
     const h = offen.reduce((s,t)=>s+(t.std||0),0);
     kpi += '<button class="kpi'+(FILTER_REGEL===r.id?' aktiv':'')+(offen.length?'':' null')+'" data-regel="'+r.id+'">'+
@@ -365,7 +384,7 @@ function zeichne(){
   let html = '';
   for (const r of REGELN){
     if (FILTER_REGEL && FILTER_REGEL !== r.id) continue;
-    const alle = DATEN.treffer.filter(t=>t.regel===r.id);
+    const alle = DATEN.treffer.filter(t=>t.regel===r.id && passtKlient(t));
     const liste = alle.filter(sichtbar);
     const s = SORT[r.id] || { feld:'datum', auf:true };
     liste.sort((a,b)=>{
@@ -437,14 +456,20 @@ async function setzeStatus(btn){
 function exportCsv(){
   if (!DATEN) return;
   const titel = Object.fromEntries(REGELN.map(r=>[r.id, r.titel]));
-  const z = [['Regel','Status','Klient','Amt','Fachkraft','Datum','Stunden','Kommentar','Tätigkeit','Leistung']];
-  for (const r of REGELN) for (const t of DATEN.treffer.filter(x=>x.regel===r.id).filter(sichtbar)){
-    z.push([titel[t.regel], statusVon(t), t.klient, t.amt, t.fachkraft, datumDe(t.datum), stdDe(t.std), t.kommentar, t.taetigkeit, t.leistung]);
+  const z = [['Regel','Status','Klient','Amt','Fachkraft','Datum','Von','Bis','Stunden','Kommentar','Tätigkeit','Leistung','Bearbeitet von','Bearbeitet am']];
+  for (const r of REGELN){
+    if (FILTER_REGEL && FILTER_REGEL !== r.id) continue;
+    for (const t of DATEN.treffer.filter(x=>x.regel===r.id).filter(sichtbar)){
+      const e = STATUS[t.key];
+      z.push([titel[t.regel], statusVon(t), t.klient, t.amt, t.fachkraft, datumDe(t.datum), t.von, t.bis, stdDe(t.std), t.kommentar, t.taetigkeit, t.leistung, e?kurzName(e.von):'', e?zeitDe(e.am):'']);
+    }
   }
+  if (z.length === 1){ zeige('runMsg', 'Kein Eintrag für den Export — Filter prüfen.', 'info'); return; }
   const csv = '\uFEFF' + z.map(r => r.map(f => '"'+String(f==null?'':f).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"').join(';')).join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
-  a.download = 'sanity-check_'+DATEN.monat+'.csv';
+  const k = document.getElementById('selKlient').value;
+  a.download = 'sanity-check_'+DATEN.monat+(k ? '_'+k.replace(/[^A-Za-zÄÖÜäöüß0-9]+/g,'-').replace(/^-|-$/g,'') : '')+'.csv';
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
 }
@@ -458,6 +483,7 @@ document.getElementById('btnLaden').onclick = () => laden(true);
 document.getElementById('selMonat').onchange = () => laden(false);
 document.getElementById('selJahr').onchange = () => laden(false);
 document.getElementById('suche').oninput = zeichne;
+document.getElementById('selKlient').onchange = zeichne;
 document.getElementById('chkAlle').onchange = zeichne;
 document.getElementById('btnExport').onclick = exportCsv;
 /* Bestehende Sitzung übernehmen (sessionStorage) */
