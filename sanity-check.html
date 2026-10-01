@@ -189,7 +189,7 @@ tr.st-erledigt td.komm,tr.st-ignoriert td.komm{text-decoration:line-through}
 const CFG = {
   clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
   tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
-  redirectUri: 'https://apps.praxisneuewege.de/sanity-check-beta.html',
+  redirectUri: 'https://apps.praxisneuewege.de/sanity-check.html',
   workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
 const SCOPES = ['User.Read'];
@@ -208,7 +208,7 @@ const REGELN = [
   { id:'medial', icon:'💬', titel:'Medialer Kontakt über 15 min',
     text:'Mediale Kontakte für Neuburg-Schrobenhausen, Ingolstadt, Eichstätt oder Pfaffenhofen mit mehr als 15 Minuten — werden nicht abgerechnet und sollten umgewandelt werden.' },
   { id:'kurz', icon:'⏱️', titel:'Termin kürzer als 1 h',
-    text:'Alle Termine unter einer Stunde — ohne Terminausfälle, Übergaben und Hilfeplangespräche. Fahrt-, Berichts-, Dokumentationszeiten und mediale Kontakte zählen nicht als Termin.' },
+    text:'Alle Termine unter einer Stunde — ohne Terminausfälle, Übergaben und Hilfeplangespräche. Berichts-, Dokumentationszeiten und mediale Kontakte zählen nicht als Termin; „KM und Arbeitszeit“-Buchungen sind generell ausgeklammert.' },
   { id:'zeit', icon:'🕒', titel:'Zeiterfassung mit Klientenbezug',
     text:'Buchungen aus der Zeiterfassung ohne Klientenzuordnung, deren Kommentar einen Klienten nennt — können dem Klienten zugewiesen und abgerechnet werden.' }
 ];

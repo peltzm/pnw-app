@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-10-01.1 (sanity-check)";
+const WORKER_VERSION = "2026-10-01.2 (sanity-check ohne KM-Buchungen)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -2324,7 +2324,8 @@ const SANITY_EPS = 1e-6;
 // Leistungsart grob einordnen — nur "termin" zaehlt als abrechenbarer Kontakt.
 function sanityLeistungsArt(name) {
   const n = String(name || "").toLowerCase();
-  if (/\bkm\b|fahrzeit|fahrtzeit/.test(n)) return "fahrt";
+  // "KM und Arbeitszeit", "KM und Fahrzeit", "KM + Fahrzeit": Fahrt-/Wegebuchungen
+  if (/\bkm\b|fahrzeit|fahrtzeit|km und arbeitszeit/.test(n)) return "fahrt";
   if (/medial/.test(n)) return "medial";
   if (/berichtszeit|dokumentation/.test(n)) return "doku";
   return "termin";
@@ -2402,6 +2403,8 @@ function sanityAuswerten({ ts, rts, svc, inv, clients, users, amtKurz }) {
 
     const leistung = svcName.get(String(t.service?.id ?? "")) || "";
     const art = sanityLeistungsArt(leistung);
+    // KM-/Fahrtbuchungen ("KM und Arbeitszeit" u. a.) sind generell ausgeklammert
+    if (art === "fahrt") { geprueft--; continue; }
     const taetigkeit = t.activity?.recName || "";
     const amt = amtFuer(t);
     const h = kStunden(t.total);
@@ -2562,6 +2565,10 @@ async function sanityStamm(env) {
   }
   const [svcMap, users, amtKurz] = await Promise.all([serviceNamen(env), kilankaUser(env), fetchAmtKurznamen(env)]);
   const svc = [...svcMap].map(([id, recName]) => ({ id, recName }));
+  if (!svc.length) {
+    // Ohne Leistungsnamen sind KM-/Fahrtbuchungen nicht erkennbar und landen faelschlich unter "Termin < 1 h"
+    hinweise.push("Leistungsarten nicht abrufbar — KM-/Fahrtbuchungen können nicht ausgeklammert werden, die Liste „Termin kürzer als 1 h“ ist dadurch zu lang.");
+  }
   const data = { clients, inv, svc, users, amtKurz, hinweise };
   sanityStammCache = { data, fetchedAt: Date.now() };
   return data;

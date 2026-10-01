@@ -1,4 +1,4 @@
-# Sanity Check (sanity-check-beta.html)
+# Sanity Check (sanity-check.html)
 
 Findet vor der Rechnungsstellung Auffälligkeiten in den in Kilanka erfassten Leistungen.
 Zugriff: nur Geschäftsführung (Worker: `GF_UPNS`, zusätzlich Entra-Gruppe `PNW-App-Sanity`,
@@ -15,6 +15,7 @@ sobald `SANITY_GRUPPE_ID` im Worker gesetzt ist). Gruppe/Redirect-URI: `scripts/
 | `ausfall` | Tätigkeit „Termin ausgefallen“, Amt Kelheim oder Regensburg, Dauer > 0,5 h |
 | `telefon` | Amt ND/IN/EI/PAF, Kommentar enthält „Telefon…“, Leistung ist weder medialer Kontakt noch Fahrt |
 | `medial` | Amt ND/IN/EI/PAF, Leistung „Mediale Kontakte“, Dauer > 15 min |
+| alle | KM-/Fahrtbuchungen („KM und Arbeitszeit“, „KM und Fahrzeit“) sind generell ausgeklammert |
 | `kurz` | Termin-Leistung < 1 h; ausgenommen Tätigkeit Ausfall/Hilfeplangespräch sowie „Übergabe“ in Tätigkeit oder Kommentar; Fahrt, Bericht, Dokumentation, mediale Kontakte zählen nicht als Termin |
 | `zeit` | `rosters/timeSheets` ohne `clientTimeSheet`, Kommentar nennt den Nachnamen eines aktiven Klienten (Mitarbeiternamen ausgenommen); `eindeutig` = genau ein Klient, `familie` = mehrere Klienten gleichen Nachnamens, `pruefen` = mehrere Familien |
 

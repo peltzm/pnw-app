@@ -26,7 +26,7 @@ $ErrorActionPreference = 'Stop'
 $GruppenName = 'PNW-App-Sanity'
 $Mitglieder  = @('markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de')
 $AppId       = 'f7e00950-2421-43b5-b48a-447bf8e7d4b3'   # App-Registrierung „Verlaufsbericht-App“
-$RedirectUri = 'https://apps.praxisneuewege.de/sanity-check-beta.html'
+$RedirectUri = 'https://apps.praxisneuewege.de/sanity-check.html'
 $TenantId    = '1ac059d9-8d39-43ab-a8db-bd9197bde0f4'
 
 if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Authentication)) {
