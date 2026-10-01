@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sanity Check · Praxis NeueWege</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2;
+  --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#68351a}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--border-strong);color:var(--text)}
+.btn-sm{padding:5px 12px;min-height:30px;font-size:12px}
+
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px}
+.card h2{font-size:15px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.card .sub{font-size:12px;color:var(--text-muted);margin-bottom:12px}
+
+/* Status / Meldungen */
+.msg{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:12px;display:none}
+.msg.zeigen{display:block}
+.msg.info{background:var(--blue-bg);color:var(--blue)}
+.msg.fehler{background:var(--error-bg);color:var(--error)}
+.msg.ok{background:var(--ok-bg);color:var(--ok)}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(0,0,0,.15);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Ergebnis-Kennzahlen */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px}
+.kpi .k-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.kpi .k-val{font-size:21px;font-weight:700;margin-top:2px}
+.kpi .k-sub{font-size:11.5px;color:var(--text-muted)}
+.kpi.gruen .k-val{color:var(--ok)}
+.kpi.orange .k-val{color:var(--warn)}
+
+/* Tabellen */
+.tabelle{width:100%;border-collapse:collapse;font-size:12.5px}
+.tabelle th{text-align:left;font-weight:600;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:7px 8px;border-bottom:2px solid var(--border);white-space:nowrap}
+.tabelle td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+.tabelle tr:last-child td{border-bottom:none}
+.tabelle .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tabelle .vz{color:var(--text-muted);font-size:11.5px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr.kuerzung td{background:var(--warn-bg)}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:4px;white-space:nowrap}
+.tag.renr{background:var(--ok-bg);color:var(--ok)}
+.tag.betrag{background:var(--blue-bg);color:var(--blue)}
+.tag.abw{background:var(--warn-bg);color:var(--warn)}
+.tag.mahn{background:var(--error-bg);color:var(--error)}
+.tab-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.summenzeile td{font-weight:700;border-top:2px solid var(--border-strong);background:var(--bg)}
+details.mehr{margin-top:10px}
+details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);user-select:none}
+.leer{color:var(--text-muted);font-size:13px;padding:8px 0}
+
+/* Login-Gate */
+.gate{max-width:420px;margin:80px auto;text-align:center}
+.gate .g-icon{font-size:44px;margin-bottom:10px}
+.gate h1{font-size:19px;margin-bottom:6px}
+.gate p{font-size:13px;color:var(--text-muted);margin-bottom:18px}
+
+.page-footer{text-align:center;font-size:11px;color:var(--text-hint);margin-top:28px}
+.page-footer a{color:var(--text-muted)}
+@media(max-width:640px){
+  .wrap{padding:14px 10px 50px}
+  .card{padding:14px}
+  .tabelle .vz{max-width:160px}
+}
+
+/* Sanity Check */
+.leiste{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.leiste label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px}
+.leiste select,.leiste input[type=search]{font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);min-height:36px}
+.leiste input[type=search]{min-width:220px}
+.leiste .check{flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--text);min-height:36px;cursor:pointer}
+.leiste .rechts{margin-left:auto;display:flex;gap:8px}
+.kpi{cursor:pointer;transition:border-color .12s,box-shadow .12s;text-align:left;font-family:inherit;color:inherit}
+.kpi:hover{border-color:var(--accent-mid)}
+.kpi.aktiv{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.kpi.null .k-val{color:var(--ok)}
+.kpi .k-val small{font-size:12px;font-weight:500;color:var(--text-muted)}
+.tabelle td.komm{max-width:420px;white-space:normal;word-break:break-word}
+.tabelle td.komm .neben{display:block;color:var(--text-hint);font-size:11px;margin-top:2px}
+.tabelle td.nw{white-space:nowrap}
+.tabelle th.sortierbar{cursor:pointer;user-select:none}
+.tabelle th.sortierbar:hover{color:var(--text)}
+tr.st-erledigt td,tr.st-ignoriert td{color:var(--text-hint);background:var(--bg)}
+tr.st-erledigt td.komm,tr.st-ignoriert td.komm{text-decoration:line-through}
+.aktionen{display:flex;gap:4px;white-space:nowrap}
+.akt{font-family:inherit;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);cursor:pointer;min-height:28px}
+.akt:hover{border-color:var(--accent-mid);color:var(--text)}
+.akt:disabled{opacity:.5;cursor:wait}
+.akt.an-erledigt{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.akt.an-ignoriert{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+.tag.sicher{background:var(--ok-bg);color:var(--ok)}
+.tag.familie{background:var(--blue-bg);color:var(--blue)}
+.tag.pruefen{background:var(--warn-bg);color:var(--warn)}
+.tag.abger{background:var(--error-bg);color:var(--error)}
+.wer{display:block;font-size:10.5px;color:var(--text-hint);margin-top:2px;white-space:nowrap}
+.card h2 .anz{font-weight:400;color:var(--text-muted);font-size:13px}
+.wrap{max-width:1320px}
+@media(max-width:640px){.leiste .rechts{margin-left:0}.leiste input[type=search]{min-width:0;width:100%}}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand" onclick="location.href='https://apps.praxisneuewege.de/beta-apps.html'">
+    <img src="https://apps.praxisneuewege.de/assets/pnw-logo.png" alt="PNW" onerror="this.style.display='none'">
+    <span>Sanity Check</span>
+    <span class="beta-badge">BETA</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge"><span class="user-dot"></span><span id="userName"></span></div>
+    <button class="btn btn-ghost btn-sm" id="btnLogout" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- Login-Gate -->
+<div class="gate" id="gate">
+  <div class="g-icon">🔎</div>
+  <h1>Sanity Check Leistungserfassung</h1>
+  <p>Findet Auffälligkeiten in den in Kilanka erfassten Leistungen, bevor sie bei der Rechnungsstellung zu Rückfragen und Korrekturen führen. Nur für die Geschäftsführung.</p>
+  <button class="btn btn-primary" id="btnLogin">Mit Microsoft anmelden</button>
+  <div class="msg fehler" id="gateMsg"></div>
+</div>
+
+<!-- App -->
+<div class="wrap" id="app" style="display:none">
+
+  <div class="card">
+    <div class="leiste">
+      <label>Monat<select id="selMonat"></select></label>
+      <label>Jahr<select id="selJahr"></select></label>
+      <button class="btn btn-primary" id="btnLaden">Prüfen</button>
+      <label>Suche<input type="search" id="suche" placeholder="Klient, Fachkraft, Amt, Kommentar"></label>
+      <label class="check"><input type="checkbox" id="chkAlle"> Erledigte und ignorierte anzeigen</label>
+      <div class="rechts">
+        <button class="btn btn-ghost btn-sm" id="btnExport" style="display:none">⬇ CSV</button>
+      </div>
+    </div>
+    <div class="msg" id="runMsg"></div>
+  </div>
+
+  <div id="ergebnis" style="display:none">
+    <div class="kpis" id="kpis"></div>
+    <div id="hinweise"></div>
+    <div id="regeln"></div>
+  </div>
+
+  <div class="page-footer">
+    Praxis NeueWege GmbH · Sanity Check <span id="versionBadge"></span> ·
+    <a href="https://apps.praxisneuewege.de/beta-apps.html">Beta-Übersicht</a>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zu OP-Abgleich / Mobilfunk
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/sanity-check-beta.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
+};
+const SCOPES = ['User.Read'];
+/* Clientseitige Sperre; die eigentliche Absicherung ist die Prüfung im
+ * Worker-Endpunkt /api/sanity (Entra-Token, GF-Liste, Gruppe PNW-App-Sanity). */
+const ERLAUBT = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+const APP_VERSION = 'BETA-0000000'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+
+/* Prüfregeln: Reihenfolge = Reihenfolge der Karten */
+const REGELN = [
+  { id:'ausfall', icon:'🚫', titel:'Terminausfall über 0,5 h',
+    text:'Ausgefallene Termine für Kelheim oder Regensburg, die mit mehr als 0,5 Stunden gebucht sind.' },
+  { id:'telefon', icon:'📞', titel:'Telefonat als Termin gebucht',
+    text:'Termine für Neuburg-Schrobenhausen, Ingolstadt, Eichstätt oder Pfaffenhofen, deren Kommentar „Telefon“, „Telefonat“ oder „Telefongespräch“ enthält.' },
+  { id:'medial', icon:'💬', titel:'Medialer Kontakt über 15 min',
+    text:'Mediale Kontakte für Neuburg-Schrobenhausen, Ingolstadt, Eichstätt oder Pfaffenhofen mit mehr als 15 Minuten — werden nicht abgerechnet und sollten umgewandelt werden.' },
+  { id:'kurz', icon:'⏱️', titel:'Termin kürzer als 1 h',
+    text:'Alle Termine unter einer Stunde — ohne Terminausfälle, Übergaben und Hilfeplangespräche. Fahrt-, Berichts-, Dokumentationszeiten und mediale Kontakte zählen nicht als Termin.' },
+  { id:'zeit', icon:'🕒', titel:'Zeiterfassung mit Klientenbezug',
+    text:'Buchungen aus der Zeiterfassung ohne Klientenzuordnung, deren Kommentar einen Klienten nennt — können dem Klienten zugewiesen und abgerechnet werden.' }
+];
+const MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+/* ═══════════════════════════════════════════════════════════
+ * MSAL — defensiv nach dem Mobilfunk-Muster
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance = null, currentAccount = null;
+function initMsal(){
+  if (msalInstance) return true;
+  if (typeof msal === 'undefined'){
+    zeige('gateMsg', 'MSAL-Bibliothek konnte nicht geladen werden — bitte Seite neu laden (ggf. Netzwerk/Adblocker prüfen).', 'fehler');
+    return false;
+  }
+  msalInstance = new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'sessionStorage' }
+  });
+  return true;
+}
+async function login(){
+  try{
+    if (!initMsal()) return;
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account;
+    msalInstance.setActiveAccount(currentAccount);
+    nachLogin();
+  }catch(e){ zeige('gateMsg', 'Anmeldung fehlgeschlagen: '+esc(e.message||e), 'fehler'); }
+}
+function nachLogin(){
+  const upn = (currentAccount.username||'').toLowerCase();
+  if (!ERLAUBT.includes(upn)) {
+    zeige('gateMsg', 'Der Sanity Check ist der Geschäftsführung vorbehalten.', 'fehler');
+    return;
+  }
+  document.getElementById('gate').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('userBadge').style.display='flex';
+  document.getElementById('userName').textContent = currentAccount.name || upn;
+  const lo = document.getElementById('btnLogout');
+  lo.style.display='inline-flex';
+  lo.onclick = () => msalInstance.logoutPopup({account:currentAccount}).then(()=>location.reload());
+  laden(false);
+}
+function tokenAblauf(jwt){
+  try{ return JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000; }
+  catch(e){ return 0; }
+}
+/* ID-Token für den Worker, Graph-Token für dessen Gruppenprüfung */
+async function tokens(){
+  const req = {scopes:SCOPES, account:currentAccount};
+  let r = await msalInstance.acquireTokenSilent(req).catch(async ()=>msalInstance.acquireTokenPopup(req));
+  if (tokenAblauf(r.idToken) < Date.now()+60000){
+    r = await msalInstance.acquireTokenSilent({...req, forceRefresh:true});
+  }
+  return { id:r.idToken, graph:r.accessToken };
+}
+async function worker(pfad, opt){
+  const t = await tokens();
+  const res = await fetch(CFG.workerUrl + pfad, {
+    ...(opt||{}),
+    headers:{ Authorization:'Bearer '+t.id, 'X-Graph-Token':t.graph, ...(opt && opt.body ? {'Content-Type':'application/json'} : {}) }
+  });
+  let d = null;
+  try{ d = await res.json(); }catch(e){}
+  if (!res.ok) throw new Error((d && d.error) || ('HTTP '+res.status));
+  return d;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * HELFER — Ausgabe im deutschen Format
+ * ═══════════════════════════════════════════════════════════ */
+function zeige(id, text, art){
+  const el = document.getElementById(id);
+  el.className = 'msg zeigen ' + (art||'info');
+  el.innerHTML = text;
+}
+function verstecke(id){ document.getElementById(id).className = 'msg'; }
+function esc(s){ const d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
+function datumDe(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; }
+function stdDe(n){ return (n==null||!isFinite(n)) ? '–' : n.toLocaleString('de-DE',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+function zeitDe(iso){ const d=new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); }
+function kurzName(upn){ return String(upn||'').split('@')[0].split('.').map(x=>x.charAt(0).toUpperCase()+x.slice(1)).join(' '); }
+
+/* ═══════════════════════════════════════════════════════════
+ * ZUSTAND
+ * ═══════════════════════════════════════════════════════════ */
+let DATEN = null;            // Antwort von /api/sanity
+let STATUS = {};             // key → { s, von, am }
+let FILTER_REGEL = null;     // null = alle Regeln
+const SORT = {};             // regel → { feld, auf }
+
+function monatWahl(){ return document.getElementById('selJahr').value + '-' + document.getElementById('selMonat').value; }
+function fuelleAuswahl(){
+  const jetzt = new Date();
+  const vor = new Date(jetzt.getFullYear(), jetzt.getMonth()-1, 1); // Standard: Vormonat
+  const sm = document.getElementById('selMonat'), sj = document.getElementById('selJahr');
+  sm.innerHTML = MONATE.map((n,i)=>'<option value="'+String(i+1).padStart(2,'0')+'">'+n+'</option>').join('');
+  let j = '';
+  for (let y = jetzt.getFullYear(); y >= 2023; y--) j += '<option value="'+y+'">'+y+'</option>';
+  sj.innerHTML = j;
+  sm.value = String(vor.getMonth()+1).padStart(2,'0');
+  sj.value = String(vor.getFullYear());
+}
+
+async function laden(frisch){
+  const btn = document.getElementById('btnLaden');
+  btn.disabled = true;
+  zeige('runMsg', '<span class="spinner"></span>Leistungen werden aus Kilanka geladen und geprüft …', 'info');
+  try{
+    const d = await worker('/api/sanity?monat='+encodeURIComponent(monatWahl())+(frisch?'&frisch=1':''));
+    DATEN = d; STATUS = d.status || {}; FILTER_REGEL = null;
+    const [j,m] = d.monat.split('-');
+    let info = MONATE[Number(m)-1]+' '+j+': '+d.geprueft.toLocaleString('de-DE')+' Leistungen und '+
+      d.zeitGeprueft.toLocaleString('de-DE')+' Zeiterfassungs-Buchungen geprüft · Stand '+zeitDe(d.stand);
+    zeige('runMsg', esc(info), 'ok');
+    const hin = (d.hinweise||[]).slice();
+    if (d.statusFehler) hin.push('Bearbeitungsstatus nicht verfügbar: '+d.statusFehler);
+    document.getElementById('hinweise').innerHTML = hin.map(h=>'<div class="msg zeigen fehler" style="margin:0 0 12px">'+esc(h)+'</div>').join('');
+    document.getElementById('ergebnis').style.display = 'block';
+    document.getElementById('btnExport').style.display = 'inline-flex';
+    zeichne();
+  }catch(e){
+    zeige('runMsg', 'Prüfung fehlgeschlagen: '+esc(e.message||e), 'fehler');
+  }finally{ btn.disabled = false; }
+}
+
+function statusVon(t){ return (STATUS[t.key] && STATUS[t.key].s) || 'offen'; }
+function sichtbar(t){
+  if (!document.getElementById('chkAlle').checked && statusVon(t) !== 'offen') return false;
+  const q = document.getElementById('suche').value.trim().toLowerCase();
+  if (!q) return true;
+  return [t.klient,t.amt,t.amtLang,t.fachkraft,t.kommentar,t.taetigkeit,t.leistung,datumDe(t.datum)].join(' ').toLowerCase().includes(q);
+}
+
+function zeichne(){
+  if (!DATEN) return;
+  // Kennzahlen je Regel: offen / gesamt
+  let kpi = '';
+  for (const r of REGELN){
+    const alle = DATEN.treffer.filter(t=>t.regel===r.id);
+    const offen = alle.filter(t=>statusVon(t)==='offen');
+    const h = offen.reduce((s,t)=>s+(t.std||0),0);
+    kpi += '<button class="kpi'+(FILTER_REGEL===r.id?' aktiv':'')+(offen.length?'':' null')+'" data-regel="'+r.id+'">'+
+      '<div class="k-label">'+r.icon+' '+esc(r.titel)+'</div>'+
+      '<div class="k-val">'+offen.length+' <small>offen von '+alle.length+'</small></div>'+
+      '<div class="k-sub">'+stdDe(h)+' Std. offen</div></button>';
+  }
+  const kp = document.getElementById('kpis');
+  kp.innerHTML = kpi;
+  kp.querySelectorAll('.kpi').forEach(b => b.onclick = () => { FILTER_REGEL = (FILTER_REGEL===b.dataset.regel) ? null : b.dataset.regel; zeichne(); });
+
+  let html = '';
+  for (const r of REGELN){
+    if (FILTER_REGEL && FILTER_REGEL !== r.id) continue;
+    const alle = DATEN.treffer.filter(t=>t.regel===r.id);
+    const liste = alle.filter(sichtbar);
+    const s = SORT[r.id] || { feld:'datum', auf:true };
+    liste.sort((a,b)=>{
+      const x=a[s.feld], y=b[s.feld];
+      const c = (typeof x==='number' && typeof y==='number') ? x-y : String(x||'').localeCompare(String(y||''),'de');
+      return (s.auf?c:-c) || a.datum.localeCompare(b.datum);
+    });
+    const offen = alle.filter(t=>statusVon(t)==='offen').length;
+    html += '<div class="card"><h2>'+r.icon+' '+esc(r.titel)+' <span class="anz">('+offen+' offen von '+alle.length+')</span></h2>'+
+      '<div class="sub">'+esc(r.text)+'</div>';
+    if (!liste.length){
+      html += '<div class="leer">'+(alle.length ? 'Keine offenen Einträge — alles erledigt oder ignoriert.' : 'Keine Auffälligkeiten ✔')+'</div></div>';
+      continue;
+    }
+    const th = (feld, text, num) => '<th class="sortierbar'+(num?' num':'')+'" data-regel="'+r.id+'" data-feld="'+feld+'">'+text+(s.feld===feld?(s.auf?' ▲':' ▼'):'')+'</th>';
+    html += '<div class="tab-scroll"><table class="tabelle"><thead><tr>'+
+      '<th>Bearbeitung</th>'+th('klient','Klient')+th('amt','Amt')+th('fachkraft','Fachkraft')+th('datum','Datum')+th('std','Stunden',true)+th('kommentar','Kommentar')+
+      '</tr></thead><tbody>';
+    for (const t of liste){
+      const st = statusVon(t), e = STATUS[t.key];
+      let marken = '';
+      if (t.regel==='zeit'){
+        marken = t.sicherheit==='eindeutig' ? '<span class="tag sicher">eindeutig</span> '
+               : t.sicherheit==='familie' ? '<span class="tag familie">mehrere Klienten der Familie</span> '
+               : '<span class="tag pruefen">Zuordnung prüfen</span> ';
+      }
+      if (t.abgerechnet) marken += '<span class="tag abger">bereits abgerechnet</span> ';
+      const neben = [t.taetigkeit, t.leistung, (t.von&&t.bis)?(t.von+'–'+t.bis+' Uhr'):''].filter(Boolean).join(' · ');
+      html += '<tr class="st-'+st+'">'+
+        '<td><div class="aktionen">'+
+          '<button class="akt'+(st==='erledigt'?' an-erledigt':'')+'" data-key="'+esc(t.key)+'" data-ziel="erledigt" title="Als erledigt markieren (z. B. in Kilanka korrigiert)">✓ Erledigt</button>'+
+          '<button class="akt'+(st==='ignoriert'?' an-ignoriert':'')+'" data-key="'+esc(t.key)+'" data-ziel="ignoriert" title="Ignorieren — Buchung ist in Ordnung">Ignorieren</button>'+
+        '</div>'+(e ? '<span class="wer">'+esc(kurzName(e.von))+' · '+esc(zeitDe(e.am))+'</span>' : '')+'</td>'+
+        '<td>'+esc(t.klient||'–')+'</td>'+
+        '<td title="'+esc(t.amtLang||'')+'">'+esc(t.amt||'–')+'</td>'+
+        '<td>'+esc(t.fachkraft)+'</td>'+
+        '<td class="nw">'+datumDe(t.datum)+'</td>'+
+        '<td class="num">'+stdDe(t.std)+'</td>'+
+        '<td class="komm">'+marken+esc(t.kommentar||'–')+(neben?'<span class="neben">'+esc(neben)+'</span>':'')+'</td>'+
+      '</tr>';
+    }
+    html += '</tbody></table></div></div>';
+  }
+  const box = document.getElementById('regeln');
+  box.innerHTML = html;
+  box.querySelectorAll('.akt').forEach(b => b.onclick = () => setzeStatus(b));
+  box.querySelectorAll('th.sortierbar').forEach(h => h.onclick = () => {
+    const s = SORT[h.dataset.regel] || { feld:'datum', auf:true };
+    SORT[h.dataset.regel] = { feld:h.dataset.feld, auf:(s.feld===h.dataset.feld) ? !s.auf : true };
+    zeichne();
+  });
+}
+
+/* Klick auf den aktiven Status nimmt ihn zurück (→ offen) */
+async function setzeStatus(btn){
+  const key = btn.dataset.key, ziel = btn.dataset.ziel;
+  const neu = ((STATUS[key] && STATUS[key].s) === ziel) ? 'offen' : ziel;
+  btn.closest('.aktionen').querySelectorAll('.akt').forEach(b=>b.disabled=true);
+  try{
+    const d = await worker('/api/sanity/status', { method:'POST', body:JSON.stringify({ monat:DATEN.monat, key, status:neu }) });
+    if (d.eintrag) STATUS[key] = d.eintrag; else delete STATUS[key];
+  }catch(e){
+    zeige('runMsg', 'Status konnte nicht gespeichert werden: '+esc(e.message||e), 'fehler');
+  }
+  zeichne();
+}
+
+/* CSV-Export (Semikolon, UTF-8 mit BOM, deutsche Zahlen) — für Excel */
+function exportCsv(){
+  if (!DATEN) return;
+  const titel = Object.fromEntries(REGELN.map(r=>[r.id, r.titel]));
+  const z = [['Regel','Status','Klient','Amt','Fachkraft','Datum','Stunden','Kommentar','Tätigkeit','Leistung']];
+  for (const r of REGELN) for (const t of DATEN.treffer.filter(x=>x.regel===r.id).filter(sichtbar)){
+    z.push([titel[t.regel], statusVon(t), t.klient, t.amt, t.fachkraft, datumDe(t.datum), stdDe(t.std), t.kommentar, t.taetigkeit, t.leistung]);
+  }
+  const csv = '\uFEFF' + z.map(r => r.map(f => '"'+String(f==null?'':f).replace(/"/g,'""').replace(/\r?\n/g,' ')+'"').join(';')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = 'sanity-check_'+DATEN.monat+'.csv';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * START
+ * ═══════════════════════════════════════════════════════════ */
+fuelleAuswahl();
+document.getElementById('btnLogin').onclick = login;
+document.getElementById('btnLaden').onclick = () => laden(true);
+document.getElementById('selMonat').onchange = () => laden(false);
+document.getElementById('selJahr').onchange = () => laden(false);
+document.getElementById('suche').oninput = zeichne;
+document.getElementById('chkAlle').onchange = zeichne;
+document.getElementById('btnExport').onclick = exportCsv;
+/* Bestehende Sitzung übernehmen (sessionStorage) */
+if (initMsal()){
+  const accts = msalInstance.getAllAccounts();
+  if (accts.length){ currentAccount = accts[0]; msalInstance.setActiveAccount(currentAccount); nachLogin(); }
+}
+</script>
+</body>
+</html>

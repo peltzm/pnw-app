@@ -98,7 +98,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-09-25.3 (scorecard-ratelimit-fix)";
+const WORKER_VERSION = "2026-10-01.1 (sanity-check)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -1875,7 +1875,7 @@ function corsHeaders(origin) {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Graph-Token",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
@@ -2300,6 +2300,316 @@ async function buildOgKennzahlen(env, upn, now) {
   return { upn, personVerfuegbar: true, zeitkonto, anteil, fahrzeug, stand: now.toISOString() };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Sanity Check — Auffaelligkeiten in den erfassten Leistungen
+//
+// Findet vor der Rechnungsstellung Buchungen, die erfahrungsgemaess zu
+// Rueckfragen/Korrekturen der Jugendaemter fuehren. Nur Geschaeftsfuehrung.
+// Regeln (Stand 01.10.2026, Vorgabe Markus):
+//   ausfall  Termin ausgefallen bei Kelheim/Regensburg mit mehr als 0,5 h
+//   telefon  R10-Aemter (ND, IN, EI, PAF): Telefon-Stichwort im Kommentar
+//   medial   R10-Aemter: medialer Kontakt laenger als 15 min (nicht abrechenbar)
+//   kurz     Termin kuerzer als 1 h (ausser Ausfall, Uebergabe, Hilfeplangespraech)
+//   zeit     Zeiterfassung ohne Klientbezug, die eindeutig einem Klienten zuzuordnen ist
+// ═══════════════════════════════════════════════════════════════
+const SANITY_AMT_AUSFALL = /kelheim|regensburg/i;
+const SANITY_AMT_R10 = /neuburg|schrobenhausen|ingolstadt|eichst(ä|ae)tt|pfaffenhofen/i;
+const SANITY_TELEFON = /telefon|telefonat|telefongespr/i; // "telefon" deckt alle Varianten ab
+const SANITY_UEBERGABE = /(ü|ue)bergabe/i;
+const SANITY_AUSFALL_MAX_H = 0.5;
+const SANITY_MEDIAL_MAX_H = 0.25;
+const SANITY_KURZ_MIN_H = 1;
+const SANITY_EPS = 1e-6;
+
+// Leistungsart grob einordnen — nur "termin" zaehlt als abrechenbarer Kontakt.
+function sanityLeistungsArt(name) {
+  const n = String(name || "").toLowerCase();
+  if (/\bkm\b|fahrzeit|fahrtzeit/.test(n)) return "fahrt";
+  if (/medial/.test(n)) return "medial";
+  if (/berichtszeit|dokumentation/.test(n)) return "doku";
+  return "termin";
+}
+
+function sanityNorm(s) {
+  return String(s || "").toLowerCase()
+    .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss");
+}
+
+// Reine Auswertung (keine Abrufe) — damit lokal gegen Echtdaten pruefbar.
+function sanityAuswerten({ ts, rts, svc, inv, clients, users, amtKurz }) {
+  const svcName = new Map((svc || []).map((s) => [String(s.id), s.recName || ""]));
+  const userName = new Map();
+  const personalWoerter = new Set(); // Vor-/Nachnamen der Mitarbeiter: keine Klienten-Treffer
+  for (const u of users || []) {
+    const name = [u.name, u.firstName].filter(Boolean).join(", ").replace(/^\[archiviert\]\s*/i, "");
+    userName.set(String(u.id), name);
+    if (kDate(u.deletedAt)) continue;
+    for (const w of sanityNorm(`${u.name || ""} ${u.firstName || ""}`).split(/[^a-z]+/)) {
+      if (w.length >= 3) personalWoerter.add(w);
+    }
+  }
+
+  // Massnahme → Amt, Abrechnungsprofil → Massnahme
+  const klient = new Map();
+  const actionAmt = new Map();
+  for (const c of clients || []) {
+    const name = String(c.recName || "").replace(/^\[archiviert\]\s*/i, "");
+    const aemter = new Set();
+    for (const a of c.actions || []) {
+      const d = a.department;
+      if (!d || !d.name) continue;
+      const lang = String(d.name).replace(/\s*\n\s*/g, " · ").trim();
+      const kurz = (amtKurz && amtKurz.get(String(d.id ?? ""))) || String(d.name).split("\n")[0].trim();
+      actionAmt.set(String(a.id), { lang, kurz });
+      if (!kDate(a.deletedAt)) aemter.add(kurz + "\u0000" + lang);
+    }
+    klient.set(String(c.id), {
+      name, archiviert: !!kDate(c.deletedAt) || isArchived(c.recName),
+      aemter: [...aemter].map((x) => { const [kurz, lang] = x.split("\u0000"); return { kurz, lang }; }),
+    });
+  }
+  const invAction = new Map((inv || []).map((i) => [String(i.id), String(i.action?.id ?? "")]));
+
+  const amtFuer = (t) => {
+    const viaProfil = actionAmt.get(invAction.get(String(t.invoiceSet?.id ?? "")) || "");
+    if (viaProfil) return viaProfil;
+    // Rueckfall: Klient hat genau ein Amt ueber alle Massnahmen
+    const k = klient.get(String(t.client?.id ?? ""));
+    if (k && k.aemter.length === 1) return k.aemter[0];
+    return { kurz: "", lang: "" };
+  };
+
+  const zeile = (regel, t, extra) => ({
+    key: `${regel}|${t.id}`, regel, id: String(t.id),
+    datum: t.date?.$date || "", von: kZeit(t.start), bis: kZeit(t.end),
+    std: Math.round(kStunden(t.total) * 100) / 100,
+    fachkraft: userName.get(String(t.user?.id ?? "")) || "Unbekannt",
+    kommentar: t.comment || "",
+    abgerechnet: !!t.invoice,
+    ...extra,
+  });
+
+  const treffer = [];
+  const klientenJeUser = new Map(); // user → Set(clientId), fuer die Zuordnung der Zeiterfassung
+  let geprueft = 0;
+
+  for (const t of ts || []) {
+    if (kDate(t.deletedAt)) continue;
+    geprueft++;
+    const uid = String(t.user?.id ?? ""), cid = String(t.client?.id ?? "");
+    if (!klientenJeUser.has(uid)) klientenJeUser.set(uid, new Set());
+    klientenJeUser.get(uid).add(cid);
+
+    const leistung = svcName.get(String(t.service?.id ?? "")) || "";
+    const art = sanityLeistungsArt(leistung);
+    const taetigkeit = t.activity?.recName || "";
+    const amt = amtFuer(t);
+    const h = kStunden(t.total);
+    const basis = {
+      klient: klient.get(cid)?.name || "", amt: amt.kurz, amtLang: amt.lang,
+      leistung, taetigkeit,
+    };
+    const istAusfall = /ausgefallen|ausfall/i.test(taetigkeit);
+    const istHpg = /hilfeplan/i.test(taetigkeit);
+    const istUebergabe = SANITY_UEBERGABE.test(taetigkeit) || SANITY_UEBERGABE.test(t.comment || "");
+
+    if (istAusfall && SANITY_AMT_AUSFALL.test(amt.lang) && h > SANITY_AUSFALL_MAX_H + SANITY_EPS) {
+      treffer.push(zeile("ausfall", t, basis));
+    }
+    if (SANITY_AMT_R10.test(amt.lang)) {
+      if (art === "medial" && h > SANITY_MEDIAL_MAX_H + SANITY_EPS) {
+        treffer.push(zeile("medial", t, basis));
+      } else if (art !== "medial" && art !== "fahrt" && SANITY_TELEFON.test(t.comment || "")) {
+        treffer.push(zeile("telefon", t, basis));
+      }
+    }
+    if (art === "termin" && h > 0 && h < SANITY_KURZ_MIN_H - SANITY_EPS && !istAusfall && !istHpg && !istUebergabe) {
+      treffer.push(zeile("kurz", t, basis));
+    }
+  }
+
+  // ── Zeiterfassung ohne Klientbezug: Nachname eines Klienten im Kommentar ──
+  // Index: normalisierter Nachname → Klienten (nur aktive). Namen, die auch
+  // ein Mitarbeiter traegt, bleiben aussen vor (sonst Treffer bei "Austausch mit …").
+  const nachnamen = new Map();
+  for (const [cid, k] of klient) {
+    if (k.archiviert || !k.name) continue;
+    const nn = sanityNorm(k.name.split(",")[0]).replace(/[^a-z -]/g, "").trim();
+    if (nn.length < 4 || personalWoerter.has(nn)) continue;
+    if (!nachnamen.has(nn)) nachnamen.set(nn, []);
+    nachnamen.get(nn).push(cid);
+  }
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const namenRe = [...nachnamen.keys()].map((nn) => ({ nn, re: new RegExp(`(^|[^a-z])${escapeRe(nn)}([^a-z]|$)`) }));
+  let zeitGeprueft = 0;
+
+  for (const r of rts || []) {
+    if (r.clientTimeSheet?.id) continue;         // haengt bereits an einer Klientenleistung
+    const kommentar = String(r.comment || "").trim();
+    if (!kommentar) continue;
+    zeitGeprueft++;
+    const kn = sanityNorm(kommentar);
+    const uid = String(r.user?.id ?? "");
+    const eigene = klientenJeUser.get(uid) || new Set();
+    let kandidaten = [];
+    for (const { nn, re } of namenRe) if (re.test(kn)) kandidaten.push(...nachnamen.get(nn));
+    if (!kandidaten.length) continue;
+    // Eindeutigkeit: bevorzugt Klienten, fuer die diese Fachkraft im Monat gebucht hat
+    const eigeneTreffer = kandidaten.filter((c) => eigene.has(c));
+    if (eigeneTreffer.length >= 1) kandidaten = eigeneTreffer;
+    kandidaten = [...new Set(kandidaten)];
+    const familien = new Set(kandidaten.map((c) => sanityNorm(klient.get(c).name.split(",")[0])));
+    // eindeutig = genau ein Klient; familie = mehrere Klienten gleichen Nachnamens;
+    // pruefen = mehrere Familien im selben Kommentar
+    const sicherheit = familien.size > 1 ? "pruefen" : kandidaten.length === 1 ? "eindeutig" : "familie";
+    const aemter = new Map();
+    for (const c of kandidaten) for (const a of klient.get(c).aemter) aemter.set(a.kurz, a.lang);
+    const h = decimalToNumber(r.totalDecimal) || kStunden(r.total);
+    treffer.push({
+      key: `zeit|${r.id}`, regel: "zeit", id: String(r.id),
+      datum: r.date?.$date || "", von: kZeit(r.start), bis: kZeit(r.end),
+      std: Math.round(h * 100) / 100,
+      fachkraft: userName.get(uid) || "Unbekannt",
+      kommentar,
+      abgerechnet: false,
+      klient: kandidaten.map((c) => klient.get(c).name).join(" / "),
+      amt: [...aemter.keys()].join(" / "), amtLang: [...aemter.values()].join(" / "),
+      leistung: r.costCenter?.name || "", taetigkeit: "Zeiterfassung",
+      sicherheit,
+    });
+  }
+
+  treffer.sort((a, b) => a.datum.localeCompare(b.datum) || a.klient.localeCompare(b.klient, "de"));
+  return { treffer, geprueft, zeitGeprueft };
+}
+
+// ID der Entra-Sicherheitsgruppe "PNW-App-Sanity" (Objekt-ID). Leer = nur die
+// feste GF-Liste gilt. Sobald gesetzt, wird ZUSAETZLICH die Gruppenmitgliedschaft
+// ueber Graph geprueft (checkMemberGroups, braucht nur User.Read).
+const SANITY_GRUPPE_ID = "";
+
+// Zugriff: GF-Liste (fail-closed) und — falls konfiguriert — Gruppe PNW-App-Sanity.
+async function sanityZugriff(request, caller) {
+  if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+    return { ok: false, status: 403, error: "Der Sanity Check ist der Geschäftsführung vorbehalten" };
+  }
+  if (!SANITY_GRUPPE_ID) return { ok: true };
+  const graphToken = request.headers.get("X-Graph-Token");
+  if (!graphToken) return { ok: false, status: 403, error: "Gruppenprüfung nicht möglich (Graph-Token fehlt)" };
+  try {
+    const r = await fetch("https://graph.microsoft.com/v1.0/me/checkMemberGroups", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${graphToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ groupIds: [SANITY_GRUPPE_ID] }),
+    });
+    if (!r.ok) return { ok: false, status: 503, error: `Gruppenprüfung derzeit nicht möglich (Graph ${r.status})` };
+    const d = await r.json();
+    if ((d.value || []).includes(SANITY_GRUPPE_ID)) return { ok: true };
+    return { ok: false, status: 403, error: "Kein Mitglied der Gruppe PNW-App-Sanity" };
+  } catch (e) {
+    return { ok: false, status: 503, error: `Gruppenprüfung derzeit nicht möglich: ${e.message}` };
+  }
+}
+
+// Schmale Graphen: keine Adressen, keine GPS-Daten, keine Unterschriften.
+const SANITY_TS_GRAPH = {
+  id: 1, date: 1, start: 1, end: 1, total: 1, state: 1, comment: 1, deletedAt: 1,
+  client: { id: 1 }, user: { id: 1 }, service: { id: 1 },
+  activity: { recName: 1 }, invoice: { id: 1 }, invoiceSet: { id: 1 },
+  $limit: 1000,
+};
+const SANITY_RTS_GRAPH = {
+  id: 1, date: 1, start: 1, end: 1, total: 1, totalDecimal: 1, comment: 1,
+  user: { id: 1 }, clientTimeSheet: { id: 1 }, costCenter: { id: 1, name: 1 },
+  $limit: 1000,
+};
+// Eigener Klienten-Graph: CLIENT_GRAPH liefert keine Massnahmen-ID, die fuer die
+// Zuordnung Leistung → Abrechnungsprofil → Massnahme → Amt noetig ist.
+const SANITY_CLIENT_GRAPH = {
+  id: 1, recName: 1, deletedAt: 1,
+  actions: { id: 1, deletedAt: 1, department: { id: 1, name: 1 }, $limit: N_LIMIT.actions },
+  $limit: 1000,
+};
+
+// Rate-Limit (10 Anfragen / 5 s): kilankaPost wartet bei 429 nur kurz. Der Sanity
+// Check laedt viele Seiten am Stueck — deshalb hier ein laengeres Nachfassen.
+async function sanitySeiten(env, model, graph, maxSeiten) {
+  for (let versuch = 1; ; versuch++) {
+    try { return await kilankaSeiten(env, model, graph, maxSeiten); }
+    catch (e) {
+      if (versuch >= 3 || !/ 429 /.test(e.message)) throw e;
+      await new Promise((res) => setTimeout(res, 3000));
+    }
+  }
+}
+
+let sanityCache = new Map();                       // "YYYY-MM" → { data, fetchedAt }
+let sanityStammCache = { data: null, fetchedAt: 0 };
+const SANITY_CACHE_MIN = 5;
+
+async function sanityStamm(env) {
+  if (sanityStammCache.data && Date.now() - sanityStammCache.fetchedAt < CACHE_TTL_MIN * 60 * 1000) {
+    return sanityStammCache.data;
+  }
+  const hinweise = [];
+  const clients = await sanitySeiten(env, "clients", SANITY_CLIENT_GRAPH, 5);
+  let inv = [];
+  try {
+    inv = await sanitySeiten(env, "accounting/invoiceSets", { id: 1, action: { id: 1 }, $limit: 1000 }, 5);
+  } catch (e) {
+    // Ohne Abrechnungsprofile bleibt die Amt-Zuordnung auf Klienten mit genau einem Amt beschraenkt
+    hinweise.push(`Abrechnungsprofile nicht abrufbar (${e.message}) — Amt wird nur bei Klienten mit genau einem Jugendamt erkannt.`);
+  }
+  const [svcMap, users, amtKurz] = await Promise.all([serviceNamen(env), kilankaUser(env), fetchAmtKurznamen(env)]);
+  const svc = [...svcMap].map(([id, recName]) => ({ id, recName }));
+  const data = { clients, inv, svc, users, amtKurz, hinweise };
+  sanityStammCache = { data, fetchedAt: Date.now() };
+  return data;
+}
+
+async function buildSanity(env, monat, frisch) {
+  const cached = sanityCache.get(monat);
+  if (!frisch && cached && Date.now() - cached.fetchedAt < SANITY_CACHE_MIN * 60 * 1000) return cached.data;
+
+  const [j, m] = monat.split("-").map(Number);
+  const von = `${monat}-01`;
+  const bis = `${monat}-${String(new Date(Date.UTC(j, m, 0)).getUTCDate()).padStart(2, "0")}`;
+  const filter = { date: { $gte: { $date: von }, $lte: { $date: bis } } };
+
+  // Nacheinander statt parallel: Rate-Limit 10 Anfragen / 5 s
+  const stamm = await sanityStamm(env);
+  const ts = await sanitySeiten(env, "clients/timeSheets", { ...SANITY_TS_GRAPH, $filter: filter }, 10);
+  const hinweise = [...stamm.hinweise];
+  let rts = [];
+  try {
+    rts = await sanitySeiten(env, "rosters/timeSheets", { ...SANITY_RTS_GRAPH, $filter: filter }, 10);
+  } catch (e) {
+    hinweise.push(`Zeiterfassung nicht abrufbar (${e.message}) — Regel „Zeiterfassung“ wurde übersprungen.`);
+  }
+  // Der Bereichsfilter wird clientseitig nachgezogen, falls Kilanka ihn ignoriert
+  const imMonat = (r) => { const d = r.date?.$date || ""; return d >= von && d <= bis; };
+  const erg = sanityAuswerten({ ...stamm, ts: ts.filter(imMonat), rts: rts.filter(imMonat) });
+  const data = {
+    monat, von, bis, stand: new Date().toISOString(),
+    geprueft: erg.geprueft, zeitGeprueft: erg.zeitGeprueft,
+    treffer: erg.treffer, hinweise,
+  };
+  if (sanityCache.size > 6) sanityCache.clear();
+  sanityCache.set(monat, { data, fetchedAt: Date.now() });
+  return data;
+}
+
+// Bearbeitungsstatus (erledigt / ignoriert) je Monat in Workers KV.
+// Schluessel: sanity:status:<YYYY-MM> → { "<regel>|<id>": { s, von, am } }
+async function sanityStatusLesen(env, monat) {
+  if (!env.PNW_DATEN) return { status: {}, fehler: "KV-Speicher PNW_DATEN ist nicht gebunden" };
+  try {
+    return { status: (await env.PNW_DATEN.get(`sanity:status:${monat}`, "json")) || {}, fehler: null };
+  } catch (e) {
+    return { status: {}, fehler: e.message };
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -2307,6 +2617,56 @@ export default {
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+
+    // ── Sanity Check: Auffaelligkeiten in den erfassten Leistungen — nur GF ──
+    if (url.pathname === "/api/sanity" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      const zugriff = await sanityZugriff(request, caller);
+      if (!zugriff.ok) return json({ error: zugriff.error }, zugriff.status, origin);
+      let monat = (url.searchParams.get("monat") || "").trim();
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat)) {
+        const d = new Date();
+        d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); // Standard: Vormonat
+        monat = d.toISOString().slice(0, 7);
+      }
+      try {
+        const data = await buildSanity(env, monat, url.searchParams.get("frisch") === "1");
+        const st = await sanityStatusLesen(env, monat);
+        return json({ ...data, nutzer: caller, status: st.status, statusFehler: st.fehler }, 200, origin);
+      } catch (e) {
+        return json({ error: `Kilanka-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    if (url.pathname === "/api/sanity/status" && request.method === "POST") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      const zugriff = await sanityZugriff(request, caller);
+      if (!zugriff.ok) return json({ error: zugriff.error }, zugriff.status, origin);
+      if (!env.PNW_DATEN) return json({ error: "KV-Speicher PNW_DATEN ist nicht gebunden" }, 500, origin);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "Ungültiger Request-Body" }, 400, origin); }
+      const monat = String(body?.monat || "");
+      const key = String(body?.key || "");
+      const neu = String(body?.status || "");
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monat) || !/^[a-z]+\|[\w-]{1,80}$/.test(key) ||
+          !["offen", "erledigt", "ignoriert"].includes(neu)) {
+        return json({ error: "Ungültige Angaben" }, 400, origin);
+      }
+      try {
+        const kvKey = `sanity:status:${monat}`;
+        const status = (await env.PNW_DATEN.get(kvKey, "json")) || {};
+        if (neu === "offen") delete status[key];
+        else status[key] = { s: neu, von: caller, am: new Date().toISOString() };
+        await env.PNW_DATEN.put(kvKey, JSON.stringify(status));
+        return json({ ok: true, monat, key, eintrag: status[key] || null }, 200, origin);
+      } catch (e) {
+        return json({ error: `Status konnte nicht gespeichert werden: ${e.message}` }, 500, origin);
+      }
     }
 
     // Offene Unterschriften — ersetzt den XLSX-Upload der Unterschriften-App.
