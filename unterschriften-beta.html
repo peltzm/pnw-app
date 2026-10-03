@@ -346,12 +346,6 @@ function istDAH(leistung) {
   return /\bDAH\b/i.test(String(leistung || ''));
 }
 
-// "Klient fehlt": Termin fand nicht statt, es gibt keine Unterschrift einzuholen.
-// Der Worker filtert das ebenfalls — hier zusätzlich, damit es auch vor dem Worker-Deploy wirkt.
-function istKlientFehlt(status) {
-  return /klient\s+fehlt/i.test(String(status || ''));
-}
-
 // Teamleitungen und GF wählen: eigene Unterschriften oder Team (GF: alle Mitarbeitenden).
 // Fachkräfte sehen immer nur ihre eigenen.
 function setAnsicht(a) { ansicht = a; wendeAnsichtAn(); }
@@ -382,8 +376,8 @@ function verteileDaten() {
   // DAH ausblenden: hier unterschreibt die Fachkraft gesammelt, es gibt
   // keine Klientenunterschrift je Leistung — die Zeilen sind also nie "offen".
   const alle = (daten.gruppen || []).map(g => {
-    const rows = (g.rows || []).filter(r => !istDAH(r.leistung) && !istKlientFehlt(r.status));
-    return { ...g, rows, count: rows.length, stunden: Math.round(rows.reduce((a, r) => a + (Number(r.std) || 0), 0) * 100) / 100 };
+    const rows = (g.rows || []).filter(r => !istDAH(r.leistung));
+    return { ...g, rows, count: rows.length };
   }).filter(g => g.count > 0);
   eigenGruppe = alle.find(g => (g.upn || '').toLowerCase() === meineUpn) || null;
   const team = alle.filter(g => (g.upn || '').toLowerCase() !== meineUpn);
