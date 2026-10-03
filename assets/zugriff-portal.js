@@ -59,7 +59,7 @@
     try {
       const d = await worker(ctx.msalInstance, ctx.account, ctx.scopes, '/api/zugriff/bericht');
       ziel.textContent = '';
-      ziel.appendChild(el('div', d.anzahl + ' Konten haben das Portal seit Beginn des Testmodus geöffnet. ' +
+      ziel.appendChild(el('div', (d.anzahl === 1 ? '1 Konto hat' : d.anzahl + ' Konten haben') + ' das Portal seit Beginn des Testmodus geöffnet. ' +
         'Wer es noch nicht geöffnet hat, steht hier nicht — die vollständige Matrix liefert das Skript scripts/zugriffsmatrix-pnw-apps.ps1.'));
       const tab = el('table', null, { class: 'zg-tab' });
       const kopf = el('tr');
@@ -92,15 +92,19 @@
       const d = await worker(ctx.msalInstance, ctx.account, ctx.scopes, '/api/zugriff?apps=' + encodeURIComponent(gruppen.join(',')));
       if (d.fehler) throw new Error(d.fehler); // Prüfung nicht möglich → alles zeigen
       const ohne = karten.filter((k) => d.apps[k.dataset.gruppe] === false);
+      // Kacheln mit data-scharf werden schon im Testmodus für Nichtmitglieder ausgeblendet
+      const hart = ohne.filter((k) => k.hasAttribute('data-scharf'));
+      const weich = ohne.filter((k) => !k.hasAttribute('data-scharf'));
+      hart.forEach((k) => { k.style.display = 'none'; });
       if (d.modus === 'scharf') {
         ohne.forEach((k) => { k.style.display = 'none'; });
       } else {
-        ohne.forEach((k) => { k.classList.add('zg-test'); k.appendChild(el('span', 'würde ausgeblendet', { class: 'zg-pill' })); });
+        weich.forEach((k) => { k.classList.add('zg-test'); k.appendChild(el('span', 'würde ausgeblendet', { class: 'zg-pill' })); });
         const box = document.getElementById('zgBox');
         if (box) {
           const info = el('div', null, { class: 'zg-info' });
           info.appendChild(el('span', '🧪 Testmodus Zugriffssteuerung: noch nichts gesperrt. ' +
-            (d.gf ? 'Als Geschäftsführung wirst du nie ausgeblendet.' : ohne.length + ' von ' + karten.length + ' Kacheln würden dir ausgeblendet.')));
+            (d.gf ? 'Als Geschäftsführung wirst du nie ausgeblendet.' : weich.length + ' von ' + (karten.length - hart.length) + ' Kacheln würden dir ausgeblendet.')));
           if (d.gf) {
             const knopf = el('button', 'Testbericht anzeigen');
             const ziel = el('div');
