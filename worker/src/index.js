@@ -1926,7 +1926,8 @@ function corsHeaders(origin) {
 // ═══════════════════════════════════════════════════════════════
 
 // Status, die KEINE offene Unterschrift bedeuten (Kilanka liefert Klartext).
-const SIG_ERLEDIGT = new Set(["unterschrieben", "nicht erforderlich"]);
+// "klient fehlt": Termin hat nicht stattgefunden, es gibt nichts zu unterschreiben.
+const SIG_ERLEDIGT = new Set(["unterschrieben", "nicht erforderlich", "klient fehlt"]);
 
 // Bewusst schmal: keine Adressen, keine GPS-Koordinaten. Der Kommentar
 // bleibt drin, weil er im Erinnerungsmail die Zuordnung erst moeglich macht.
