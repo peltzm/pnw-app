@@ -220,19 +220,30 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── RESPONSIVE ── */
+  .nav-ico { font-size: 14px; flex-shrink: 0; }
   @media (max-width: 1024px) {
-    .layout { grid-template-columns: 52px 1fr; }
-    .nav-item span:not(.nav-num) { display: none; }
-    .nav-section { display: none; }
-    .nav-item { justify-content: center; padding: 10px; }
-    .nav-item.active { border-left: none; border-bottom: 2px solid var(--accent); }
+    .layout { grid-template-columns: 190px 1fr; }
     .type-grid { grid-template-columns: repeat(3, 1fr); }
     .main { padding: 1.25rem; }
   }
+  /* Schmal (Notebook, Fensterhälfte): Icon-Leiste – Nummern UND Verwaltungs-Icons bleiben sichtbar */
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 52px 1fr; }
+    .nav-lbl { display: none; }
+    .nav-section { display: none; }
+    .nav-item { justify-content: center; padding: 10px 0; border-left: 2px solid transparent; position: relative; }
+    .nav-item.active { border-left-color: var(--accent); }
+    .nav-ico { font-size: 18px; }
+    #pendingBadge { position: absolute; top: 4px; right: 3px; margin-left: 0 !important; padding: 0 5px !important; font-size: 9px !important; }
+    .nav-divider { margin: 0.5rem 0.75rem; }
+  }
+  /* Handy: Navigation als scrollbare Leiste oben statt komplett ausgeblendet */
   @media (max-width: 700px) {
-    /* Sidebar komplett ausblenden, volle Breite für Content */
     .layout { grid-template-columns: 1fr; }
-    .sidebar { display: none; }
+    .sidebar { display: flex; flex-direction: row; align-items: center; position: sticky; top: 56px; z-index: 50; height: auto; padding: 0 .5rem; border-right: none; border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; }
+    .nav-item { flex: 0 0 auto; min-height: 44px; min-width: 44px; padding: 0 10px; border-left: none; border-bottom: 2px solid transparent; }
+    .nav-item.active { border-left: none; border-bottom-color: var(--accent); }
+    .nav-divider { width: 1px; height: 24px; margin: 0 .5rem; flex: 0 0 auto; }
     .field-grid, .field-grid.triple { grid-template-columns: 1fr; }
     .type-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .main { padding: 1rem; overflow: hidden; }
@@ -302,40 +313,40 @@
     <!-- SIDEBAR -->
     <div class="sidebar">
       <div class="nav-section">Neues Protokoll</div>
-      <div class="nav-item done" id="n1" onclick="goSection('s-typ')">
+      <div class="nav-item done" id="n1" title="Meeting-Typ" onclick="goSection('s-typ')">
         <span class="nav-num" id="nn1">1</span>
-        <span>Meeting-Typ</span>
+        <span class="nav-lbl">Meeting-Typ</span>
       </div>
-      <div class="nav-item" id="n2" onclick="goSection('s-meta')">
+      <div class="nav-item" id="n2" title="Details" onclick="goSection('s-meta')">
         <span class="nav-num" id="nn2">2</span>
-        <span>Details</span>
+        <span class="nav-lbl">Details</span>
       </div>
-      <div class="nav-item" id="n3" onclick="goSection('s-teiln')">
+      <div class="nav-item" id="n3" title="Teilnehmer" onclick="goSection('s-teiln')">
         <span class="nav-num" id="nn3">3</span>
-        <span>Teilnehmer</span>
+        <span class="nav-lbl">Teilnehmer</span>
       </div>
-      <div class="nav-item" id="n4" onclick="goSection('s-tops')">
+      <div class="nav-item" id="n4" title="Inhalte" onclick="goSection('s-tops')">
         <span class="nav-num" id="nn4">4</span>
-        <span>Inhalte</span>
+        <span class="nav-lbl">Inhalte</span>
       </div>
-      <div class="nav-item" id="n5" onclick="goSection('s-freigabe')">
+      <div class="nav-item" id="n5" title="Freigabe" onclick="goSection('s-freigabe')">
         <span class="nav-num" id="nn5">5</span>
-        <span>Freigabe</span>
+        <span class="nav-lbl">Freigabe</span>
       </div>
       <div class="nav-divider"></div>
       <div class="nav-section">Verwaltung</div>
-      <div class="nav-item" id="n-offen" onclick="goSection('s-offen')">
-        <span style="font-size:14px;">⏳</span>
-        <span>Zur Freigabe</span>
+      <div class="nav-item" id="n-offen" title="Zur Freigabe" onclick="goSection('s-offen')">
+        <span class="nav-ico">⏳</span>
+        <span class="nav-lbl">Zur Freigabe</span>
         <span id="pendingBadge" style="margin-left:auto;background:var(--accent);color:white;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;display:none;">2</span>
       </div>
-      <div class="nav-item" id="n-archiv" onclick="goSection('s-archiv')">
-        <span style="font-size:14px;">📁</span>
-        <span>Status Protokolle</span>
+      <div class="nav-item" id="n-archiv" title="Status Protokolle" onclick="goSection('s-archiv')">
+        <span class="nav-ico">📁</span>
+        <span class="nav-lbl">Status Protokolle</span>
       </div>
-      <div class="nav-item" id="n-vorschau" onclick="goSection('s-vorschau');buildPreview()">
-        <span style="font-size:14px;">📄</span>
-        <span>Vorschau</span>
+      <div class="nav-item" id="n-vorschau" title="Vorschau" onclick="goSection('s-vorschau');buildPreview()">
+        <span class="nav-ico">📄</span>
+        <span class="nav-lbl">Vorschau</span>
       </div>
     </div>
 
