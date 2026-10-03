@@ -472,6 +472,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
         <div id="noFormWarn" class="alert alert-warn" style="display:none;">Bitte mindestens ein Formular auswählen.</div>
         <div class="btn-row">
           <button class="btn btn-secondary" onclick="showPanel('stamm')">← Stammdaten</button>
+          <button class="btn btn-secondary" id="btnBlanko" onclick="openBlanko()" title="Ausgewählte Formulare als Blanko-PDF herunterladen, drucken oder per Mail senden">📄 Blanko erstellen</button>
           <button class="btn btn-primary" onclick="goToDetails()">Weiter → Details / Übergabe</button>
         </div>
       </div>
@@ -656,6 +657,27 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
   </div><!-- /fk-layout -->
 </div><!-- /fkScreen -->
 
+<!-- BLANKO-DIALOG (Formularauswahl) -->
+<div id="blankoModal" style="display:none;position:fixed;inset:0;background:rgba(26,25,22,.45);z-index:9000;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)closeBlanko()">
+  <div style="background:#fff;border-radius:12px;max-width:460px;width:100%;padding:22px 22px 18px;box-shadow:0 12px 40px rgba(0,0,0,.25);max-height:90vh;overflow:auto;">
+    <div style="font-size:17px;font-weight:600;margin-bottom:4px;">Blanko erstellen</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Ausgewählte Formulare als Leerformular — Stammdaten vorbefüllt, Datum und Unterschriften bleiben frei.</div>
+    <div id="blankoList" style="font-size:13px;line-height:1.9;margin-bottom:12px;"></div>
+    <div class="btn-row-r" style="flex-wrap:wrap;margin-bottom:14px;">
+      <button class="btn btn-secondary btn-sm" onclick="blankoDownload()">⬇️ PDF herunterladen</button>
+      <button class="btn btn-secondary btn-sm" onclick="blankoPrint()">🖨️ Drucken</button>
+    </div>
+    <div class="field"><label>Per Mail senden an</label>
+      <input type="email" id="blankoMail" placeholder="E-Mail-Adresse">
+    </div>
+    <div id="blankoStatus" style="font-size:12px;margin-top:8px;"></div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-secondary" onclick="closeBlanko()">Schließen</button>
+      <button class="btn btn-primary" id="blankoSendBtn" onclick="blankoSend()">📧 Per Mail senden</button>
+    </div>
+  </div>
+</div>
+
 <!-- KLIENT-MODUS -->
 <div id="klientScreen" class="screen">
   <div class="klient-header">
@@ -733,7 +755,7 @@ const MSAL_CONFIG = {
   system: { allowNativeBroker:false }
 };
 const SCOPES = ['User.Read','User.ReadBasic.All','Mail.Send','GroupMember.Read.All'];
-const APP_VERSION = 'v2a10983'; // auto-updated on deploy
+const APP_VERSION = 'v41d3b47'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
@@ -861,55 +883,18 @@ function fillLeerKlientSelect(){
   const st=document.getElementById('leerKilankaStatus');
   if(st) st.textContent=_kilankaKlienten.length?(_kilankaKlienten.length+' aktive Zuordnungen (HB/MB/V)'):'Keine aktiven Zuordnungen in Kilanka gefunden.';
 }
-
-// SGB-Paragraph aus „Rechtsgrundlage der Maßnahme“ (Kilanka legalBasis.name, z. B. "§ 27 (2) SGB VIII - Clearing") ermitteln.
-// Liefert {match: vorhandene Option | null, neu: Label für neue Option | null}; ohne Angabe beides null.
-function sgbWahl(hilfeart, optionTexte){
-  const txt=String(hilfeart||'').replace(/\s+/g,' ').trim();
-  if(!txt) return {match:null,neu:null};
-  const norm=t=>String(t||'').replace(/\s+/g,'').toLowerCase();
-  const optTexte=(optionTexte||[]).filter(Boolean);
-  const bez=(txt.indexOf(' - ')>-1)?txt.slice(txt.indexOf(' - ')+3).trim():'';
-  let num='',abs='';
-  const pm=txt.match(/§\s*(\d+)\s*([a-z])?(?![a-z])\s*(?:\(\s*(\d+)\s*\)|Abs\.?\s*(\d+))?/i);
-  if(pm){ num=pm[1]+(pm[2]||'').toLowerCase(); abs=pm[3]||pm[4]||''; }
-  else{
-    // Fallback ohne Paragraphenzeichen: Schlagwörter
-    const t=txt.toLowerCase();
-    if(/einzelbetreuung|clearing/.test(t)){num='27';abs='2';}
-    else if(/familienhilfe|spfh/.test(t)) num='31';
-    else if(/erziehungsbeistand|betreuungshelfer/.test(t)) num='30';
-    else if(/heimerziehung|wohngruppe|betreute wohnform/.test(t)) num='34';
-    else if(/eingliederung|seelisch/.test(t)) num='35a';
-    else if(/volljährig|volljaehrig/.test(t)) num='41';
-  }
-  if(!num) return {match:null,neu:txt};   // keine Zuordnung möglich → Originaltext als Option übernehmen
-  const key='§'+num;
-  const treffer=t=>{ const n=norm(t); return n.startsWith(key) && !/^[0-9a-z]/.test(n.slice(key.length)); };
-  let kand=optTexte.filter(treffer);
-  let match=null;
-  if(kand.length){
-    if(abs) match=kand.find(t=>norm(t).startsWith(key+'('+abs+')'))||null;
-    if(!match) match=kand.find(t=>!/^\(/.test(norm(t).slice(key.length)))||kand[0];
-  }
-  if(match) return {match,neu:null};
-  return {match:null,neu:key+(abs?'('+abs+')':'')+(bez?' — '+bez:' — SGB VIII')};
-}
-function sgbSetzen(selEl, hilfeart){
-  if(!selEl) return '';
-  const r=sgbWahl(hilfeart, Array.from(selEl.options).map(o=>o.text));
-  let val=r.match;
-  if(!val&&r.neu){ const o=document.createElement('option'); o.textContent=r.neu; selEl.appendChild(o); val=r.neu; }
-  if(val) selEl.value=val;
-  return val||'';
-}
 function buildLeerPre(k){
   const nn=_kVal(k.Kind_Familienname||''), vn=_kVal(k.Kind_Vorname||'');
   const m=_kVal(k.Kind_PLZ_Ort||'').match(/^(\d{4,5})\s+(.*)$/);
   const plz=m?m[1]:'', ort=m?m[2]:_kVal(k.Kind_PLZ_Ort||'');
-  // SGB-Paragraph aus der Rechtsgrundlage der Maßnahme (Kilanka) ableiten
-  const sgbR=sgbWahl(k.Hilfeart, Array.from(document.getElementById('k_sgb').options).map(o=>o.text));
-  const sgb=sgbR.match||sgbR.neu||'';
+  // SGB-Paragraph wie in der Stammdaten-Übernahme aus der Hilfeart ableiten
+  let sgb='';
+  const pm=_kVal(k.Hilfeart||'').match(/§\s*(\d+\s*a?)/i);
+  if(pm){
+    const num=pm[1].replace(/\s+/g,'').toLowerCase();
+    const opt=Array.from(document.getElementById('k_sgb').options).find(o=>o.text.replace(/\s+/g,'').toLowerCase().includes('§'+num));
+    if(opt) sgb=opt.value||opt.text;
+  }
   const sorg=k.Sorgeberechtigte||[];
   const vg=sorg.map(s=>({name:[_kVal(s.familienname),_kVal(s.vorname)].filter(Boolean).join(', '),ort:_kVal(k.Kind_PLZ_Ort||'')})).filter(x=>x.name);
   const ids={
@@ -959,8 +944,14 @@ function onKilankaKlientSelect(){
   _kSet('k_str', k.Kind_Strasse);
   const m = _kVal(k.Kind_PLZ_Ort || '').match(/^(\d{4,5})\s+(.*)$/);
   if(m){ _kSet('k_plz', m[1]); _kSet('k_ort', m[2]); } else { _kSet('k_ort', k.Kind_PLZ_Ort); }
-  // SGB-Paragraph aus „Rechtsgrundlage der Maßnahme“ (Kilanka) ableiten; unbekannte Werte werden als Option ergänzt
-  sgbSetzen(document.getElementById('k_sgb'), k.Hilfeart);
+  // SGB-Paragraph aus Hilfeart-Text ableiten (z.B. "§ 31" -> Option mit "§31")
+  const pm = _kVal(k.Hilfeart || '').match(/§\s*(\d+\s*a?)/i);
+  if(pm){
+    const num = pm[1].replace(/\s+/g,'').toLowerCase();
+    const sgb = document.getElementById('k_sgb');
+    const opt = Array.from(sgb.options).find(o => o.text.replace(/\s+/g,'').toLowerCase().includes('§'+num));
+    if(opt) sgb.value = opt.value || opt.text;
+  }
   // Jugendamt: Option finden, deren Name im Kilanka-Text vorkommt; sonst ergaenzen
   const jaText = _kVal(k.Jugendamt || '');
   if(jaText){
@@ -2211,6 +2202,97 @@ async function blankDownloadAll(){
     const _kn=_leerPre?_leerFileSuffix():''; a.download='PNW_'+(_leerPre?'Formulare':'Leerformulare')+'_Komplett'+_kn+'.pdf'; a.click();
     showToast('⬇️ '+a.download);
   }catch(e){ alert('PDF-Fehler: '+e.message); }
+}
+// ── BLANKO AUS DER FORMULARAUSWAHL (Download / Druck / Mailversand) ──
+const _BLANKO_ORDER=['kompass','schweig','datenschutz','vollm'];
+const _BLANKO_NAMEN={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass'};
+const _BLANKO_TITEL={schweig:'🤝 Schweigepflichtsentbindung',datenschutz:'🔒 Datenschutzerklärung',vollm:'⚖️ Vollmacht Sorgerecht',kompass:'🧭 Startkompass'};
+function _blankoFids(){ return _BLANKO_ORDER.filter(f=>selForms.has(f)); }
+// Vorbefüllung aus den aktuellen Stammdaten-Feldern (ungespeicherte Änderungen zählen mit); Datum/Unterschriften bleiben leer
+function _blankoPre(){
+  const g=id=>((document.getElementById(id)||{}).value||'').trim();
+  let base={kd:{},ids:{},vollmachtgeber:[]};
+  const ksel=document.getElementById('kilankaKlient');
+  const kk=(ksel&&ksel.value!=='')?_kilankaKlienten[Number(ksel.value)]:null;
+  if(kk){ try{ base=buildLeerPre(kk); }catch(e){} }
+  const geb=g('k_geb');
+  const name=(typeof getKlientName==='function')?getKlientName():[g('k_nn'),g('k_vn')].filter(Boolean).join(', ');
+  const kdB=Object.assign({},base.kd,{
+    name, nn:g('k_nn'), vn:g('k_vn'), geb:geb?fmtDate(geb):'',
+    str:g('k_str'), plz:g('k_plz'), ort:g('k_ort'), sgb:g('k_sgb'), ja:g('k_ja'),
+    tel:g('k_tel'), fk:M365_USER.displayName, datum:''
+  });
+  const ids=Object.assign({},base.ids,{ v_kind:name, v_kind_geb:geb?fmtDate(geb):'', v_fk1:M365_USER.displayName });
+  const vg=(base.vollmachtgeber&&base.vollmachtgeber.length)?base.vollmachtgeber:[];
+  return {kd:kdB,ids,vollmachtgeber:vg};
+}
+function _blankoSuffix(pre){
+  const nn=(pre.kd.nn||'Klient').replace(/\s+/g,'');
+  const vv=(pre.kd.vn||'').replace(/\s+/g,'').substring(0,2);
+  return '_'+nn+vv;
+}
+function _blankoName(fid,pre){ return 'PNW_'+(_BLANKO_NAMEN[fid]||fid)+_blankoSuffix(pre)+'.pdf'; }
+function openBlanko(){
+  const fids=_blankoFids();
+  if(!fids.length){ document.getElementById('noFormWarn').style.display='block'; return; }
+  document.getElementById('noFormWarn').style.display='none';
+  document.getElementById('blankoList').innerHTML=fids.map(f=>'<div>'+_BLANKO_TITEL[f]+'</div>').join('');
+  const mi=document.getElementById('blankoMail');
+  if(mi&&!mi.value) mi.value=M365_USER.email||'';
+  document.getElementById('blankoStatus').innerHTML='';
+  const b=document.getElementById('blankoSendBtn'); if(b){b.disabled=false;b.textContent='📧 Per Mail senden';}
+  document.getElementById('blankoModal').style.display='flex';
+}
+function closeBlanko(){ document.getElementById('blankoModal').style.display='none'; }
+async function _blankoMergedBytes(fids,pre){
+  if(typeof PDFLib==='undefined') return null;
+  const merged=await PDFLib.PDFDocument.create();
+  for(const fid of fids){
+    const src=await PDFLib.PDFDocument.load(generatePDF(fid,true,pre).output('arraybuffer'));
+    (await merged.copyPages(src,src.getPageIndices())).forEach(p=>merged.addPage(p));
+  }
+  return await merged.save();
+}
+async function blankoDownload(){
+  const fids=_blankoFids(), pre=_blankoPre();
+  try{
+    if(fids.length===1){ generatePDF(fids[0],true,pre).save(_blankoName(fids[0],pre)); showToast('⬇️ '+_blankoName(fids[0],pre)); return; }
+    const bytes=await _blankoMergedBytes(fids,pre);
+    if(!bytes){ fids.forEach(f=>generatePDF(f,true,pre).save(_blankoName(f,pre))); return; }
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    a.download='PNW_Formulare_Blanko'+_blankoSuffix(pre)+'.pdf'; a.click();
+    showToast('⬇️ '+a.download);
+  }catch(e){ alert('PDF-Fehler: '+e.message); }
+}
+async function blankoPrint(){
+  const fids=_blankoFids(), pre=_blankoPre();
+  try{
+    if(fids.length===1){ window.open(URL.createObjectURL(generatePDF(fids[0],true,pre).output('blob')),'_blank'); return; }
+    const bytes=await _blankoMergedBytes(fids,pre);
+    if(!bytes){ fids.forEach(f=>window.open(URL.createObjectURL(generatePDF(f,true,pre).output('blob')),'_blank')); return; }
+    window.open(URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})),'_blank');
+  }catch(e){ alert('PDF-Fehler: '+e.message); }
+}
+async function blankoSend(){
+  const fids=_blankoFids(), pre=_blankoPre();
+  const to=((document.getElementById('blankoMail')||{}).value||'').trim();
+  const st=document.getElementById('blankoStatus'), btn=document.getElementById('blankoSendBtn');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){ st.innerHTML='<div class="alert alert-error">Bitte eine gültige E-Mail-Adresse eingeben.</div>'; return; }
+  btn.disabled=true; btn.textContent='⏳ …';
+  st.innerHTML='<div class="alert alert-info">⏳ PDFs werden erstellt und versendet …</div>';
+  try{
+    const atts=fids.map(f=>({name:_blankoName(f,pre),base64:generatePDF(f,true,pre).output('datauristring').split(',')[1]}));
+    const liste=atts.map(a=>'<li>'+a.name+'</li>').join('');
+    const fkFirst=(M365_USER.displayName||'').split(' ')[0]||'';
+    const body='<p>'+(fkFirst?'Hallo '+fkFirst+',':'Guten Tag,')+'</p><p>anbei die Formulare als Blanko zum handschriftlichen Ausfüllen'+(pre.kd.name?' für '+pre.kd.name:'')+' (Datum und Unterschriften sind frei):</p><ul>'+liste+'</ul><hr style="border:none;border-top:1px solid #e2dfd8;margin:16px 0;"><p style="font-size:12px;color:#6b6860;">Praxis NeueWege · Formulare-App</p>';
+    await sendMailWithAttachments(to,'Blanko-Formulare'+(pre.kd.name?' – '+pre.kd.name:''),body,atts);
+    st.innerHTML='<div class="alert alert-success">✅ Gesendet an '+to+'<br><span style="font-size:11px;">'+atts.map(a=>'📎 '+a.name).join('<br>')+'</span></div>';
+    btn.disabled=false; btn.textContent='✅ Erneut senden';
+  }catch(e){
+    st.innerHTML='<div class="alert alert-error">❌ Fehler: '+e.message+'</div>';
+    btn.disabled=false; btn.textContent='Erneut versuchen';
+  }
 }
 function mockPrint(name){
   showToast('🖨️ Druckdialog für '+name+' wird geöffnet …');
