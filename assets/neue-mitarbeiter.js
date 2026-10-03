@@ -15,6 +15,7 @@ const NM = (function () {
     { key: 'vt', datei: 'verfassungstreue.json', titel: 'Verpflichtung Verfassungstreue (Vorlage, Seiten 1–2)', accept: '.json,application/json' },
     { key: 'vta', datei: 'Verfassungstreue_Verzeichnis_Belehrung.pdf', titel: 'Verfassungstreue: Verzeichnis und Belehrung (amtlich, 5 Seiten, wird angehängt)', accept: '.pdf,application/pdf', angehaengt: true },
     { key: 'ds', datei: 'PNW_Datenschutzerklaerung_Mitarbeiter.pdf', titel: 'Datenschutzerklärung Mitarbeiter', accept: '.pdf,application/pdf' },
+    { key: 'sig', datei: 'Unterschrift_Sonja.png', titel: 'Unterschrift Geschäftsführung (Sonja Peltz, PNG mit transparentem Hintergrund)', accept: '.png,image/png' },
     { key: 'az', datei: 'PNW_Arbeitszeitrichtlinie.pdf', titel: 'Arbeitszeitrichtlinie', accept: '.pdf,application/pdf' },
     { key: 'fb', datei: 'PNW_Unternehmensrichtlinie_Fortbildung.pdf', titel: 'Unternehmensrichtlinie Fortbildung', accept: '.pdf,application/pdf' },
     { key: 'dr', datei: 'PNW_Unternehmensrichtlinie_Dienstreisen.pdf', titel: 'Unternehmensrichtlinie Dienstreisen', accept: '.pdf,application/pdf' },
@@ -214,11 +215,12 @@ const NM = (function () {
     try {
       if (v.datei.endsWith('.json')) { const j = JSON.parse(await file.text()); if (!Array.isArray(j.blocks)) throw new Error('Keine gültige Vorlage (blocks fehlt).'); }
       else if (file.size > 4 * 1024 * 1024) throw new Error('Datei größer als 4 MB.');
+      if (v.datei.endsWith('.png')) { const k = new Uint8Array(await file.slice(0, 4).arrayBuffer()); if (!(k[0] === 0x89 && k[1] === 0x50 && k[2] === 0x4E && k[3] === 0x47)) throw new Error('Das ist keine PNG-Datei.'); if (file.size > 1024 * 1024) throw new Error('Das Bild ist größer als 1 MB – bitte verkleinern (700 px Breite genügen).'); }
       if (v.datei.endsWith('.docx')) { const k = new Uint8Array(await file.slice(0, 2).arrayBuffer()); if (k[0] !== 0x50 || k[1] !== 0x4B) throw new Error('Das ist keine Word-Datei (.docx).'); }
       if (st) st.textContent = 'Lade „' + v.datei + '“ hoch …';
       const t = await token();
       const url = 'https://graph.microsoft.com/v1.0/sites/' + CFG.spHost + '/drive/root:/' + encodeURIComponent(ORDNER) + '/' + encodeURIComponent(v.datei) + ':/content?@microsoft.graph.conflictBehavior=replace';
-      const r = await fetch(url, { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': v.datei.endsWith('.json') ? 'application/json' : (v.datei.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf') }, body: file });
+      const r = await fetch(url, { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': v.datei.endsWith('.json') ? 'application/json' : (v.datei.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : (v.datei.endsWith('.png') ? 'image/png' : 'application/pdf')) }, body: file });
       if (!r.ok) throw new Error('Upload fehlgeschlagen (' + r.status + '): ' + await r.text());
       await ladeVorlagenStatus(); zeigeToast('Vorlage gespeichert'); render();
     } catch (e) { if (st) st.textContent = 'Fehler: ' + e.message; else zeigeToast(e.message, true); }
@@ -374,13 +376,15 @@ const NM = (function () {
       const vals = werteFuerVertrag(x);
       const offen = NM_PDF.fehlende(tpl, vals); if (offen.length) throw new Error('Platzhalter ohne Wert: ' + offen.join(', '));
       const a = await pdfAssets(); pdfMake.vfs = a.vfs; pdfMake.fonts = a.fonts;
-      const dd = NM_PDF.docDefinition(tpl, vals, { titel: 'Arbeitsvertrag', kopfRechts: 'Arbeitsvertrag ' + x.name, logo: a.logo });
+      const sigBuf = await vorlageHolen('Unterschrift_Sonja.png', false); const sigV = new DataView(sigBuf);
+      const sig = { bild: 'data:image/png;base64,' + bufZuB64(sigBuf), w: 150, h: Math.round(150 * sigV.getUint32(20) / sigV.getUint32(16)) };
+      const dd = NM_PDF.docDefinition(tpl, vals, { titel: 'Arbeitsvertrag', kopfRechts: 'Arbeitsvertrag ' + x.name, logo: a.logo, unterschrift: sig });
       const vertragB64 = await new Promise((res, rej) => { try { pdfMake.createPdf(dd).getBase64(res); } catch (e) { rej(e); } });
       const fzTpl = JSON.parse(await vorlageHolen('fuehrungszeugnis.json', true));
       const fzVals = { vorname: x.vorname, nachname: x.nachname, geburtsdatum: x.geburtsdatum ? kurzDatum(x.geburtsdatum) : '', strasse: x.strasse, plz_ort: x.plzOrt, ort: x.vertragsort || 'Nandlstadt', datum: kurzDatum(x.vertragsdatum) };
       if (!fzVals.geburtsdatum) throw new Error('Für den Führungszeugnis-Antrag fehlt das Geburtsdatum (Bearbeiten).');
       const fzOffen = NM_PDF.fehlende(fzTpl, fzVals); if (fzOffen.length) throw new Error('Platzhalter ohne Wert: ' + fzOffen.join(', '));
-      const fzB64 = await new Promise((res, rej) => { try { pdfMake.createPdf(NM_PDF.docDefinition(fzTpl, fzVals, { titel: fzTpl.name, titelGroesse: 12.5, kopfRechts: x.name, logo: a.logo })).getBase64(res); } catch (e) { rej(e); } });
+      const fzB64 = await new Promise((res, rej) => { try { pdfMake.createPdf(NM_PDF.docDefinition(fzTpl, fzVals, { titel: fzTpl.name, titelGroesse: 12.5, kopfRechts: x.name, logo: a.logo, unterschrift: sig })).getBase64(res); } catch (e) { rej(e); } });
       const fzName = ('Antrag_Fuehrungszeugnis_' + x.nachname + '_' + x.vorname + '.pdf').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
       const vollzeit = Number(x.stunden) >= 39;
       const pfVals = { name: x.name, vorname: x.vorname, nachname: x.nachname, geburtsdatum: fzVals.geburtsdatum, strasse: x.strasse, plz_ort: x.plzOrt, eintritt: kurzDatum(x.eintritt),

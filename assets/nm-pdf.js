@@ -55,16 +55,21 @@
       margin: [0, 0, 0, 2.5],
     };
   }
-  function linieSpalte(beschriftung) {
-    return { width: 210, stack: [
+  // sig: { bild: data-URL (PNG), w, h } = Unterschrift der Geschäftsführung. mitBild: true = Bild über die Linie setzen,
+  // false (bei vorhandenem sig) = gleich hoher leerer Platzhalter, damit beide Linien auf einer Höhe bleiben.
+  function linieSpalte(beschriftung, sig, mitBild) {
+    const kopf = [];
+    if (sig && mitBild) kopf.push({ image: sig.bild, width: sig.w, height: sig.h, margin: [14, 0, 0, -5] });
+    else if (sig) kopf.push({ canvas: [{ type: 'rect', x: 0, y: 0, w: 1, h: sig.h - 5, color: '#FFFFFF' }] });
+    return { width: 210, stack: kopf.concat([
       { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 200, y2: 0, lineWidth: 0.6, lineColor: C.ink }] },
-      { text: beschriftung, fontSize: 8, color: C.meta, margin: [0, 2, 0, 0] } ] };
+      { text: beschriftung, fontSize: 8, color: C.meta, margin: [0, 2, 0, 0] } ]) };
   }
-  function unterschrift(text) {
+  function unterschrift(text, sig) {
     return { unbreakable: true, stack: [
       p(text, { margin: [0, 8, 0, 0] }),
       { columns: [linieSpalte('Ort, Datum'), { width: 30, text: '' }, linieSpalte('Ort, Datum')], margin: [0, 30, 0, 0] },
-      { columns: [linieSpalte('Unterschrift Arbeitgeber'), { width: 30, text: '' }, linieSpalte('Unterschrift Arbeitnehmer')], margin: [0, 30, 0, 0] },
+      { columns: [linieSpalte('Unterschrift Arbeitgeber', sig, true), { width: 30, text: '' }, linieSpalte('Unterschrift Arbeitnehmer', sig, false)], margin: [0, sig ? 8 : 30, 0, 0] },
     ] };
   }
 
@@ -118,10 +123,10 @@
     if (on) { cv.push({ type: 'line', x1: 2, y1: 3, x2: 9, y2: 10, lineWidth: 1.1, lineColor: C.ink }, { type: 'line', x1: 9, y1: 3, x2: 2, y2: 10, lineWidth: 1.1, lineColor: C.ink }); }
     return { columns: [{ width: 24, canvas: cv }, { width: '*', text: laeufe(text), fontSize: 9.8, lineHeight: 1.35, color: C.ink }], margin: [8, 0, 0, 7] };
   }
-  function unterschrift1(text, links, rechts) {
+  function unterschrift1(text, links, rechts, sig) {
     return { unbreakable: true, stack: [
       p(text, { margin: [0, 14, 0, 0] }),
-      { columns: [linieSpalte(links), { width: 30, text: '' }, linieSpalte(rechts)], margin: [0, 34, 0, 0] } ] };
+      { columns: [linieSpalte(links, sig, false), { width: 30, text: '' }, linieSpalte(rechts, sig, true)], margin: [0, sig ? 10 : 34, 0, 0] } ] };
   }
 
   /**
@@ -142,11 +147,11 @@
       else if (b.t === 'h2') content.push(h2(t));
       else if (b.t === 'p') content.push(p(t));
       else if (b.t === 'sub') content.push(sub(b.label, t));
-      else if (b.t === 'sign') content.push(unterschrift(t));
+      else if (b.t === 'sign') content.push(unterschrift(t, opts.unterschrift));
       else if (b.t === 'pl') content.push(p(t, { alignment: 'left' }));
       else if (b.t === 'felder') content.push(felder(b.rows));
       else if (b.t === 'check') content.push(check(istAn(b.on), t));
-      else if (b.t === 'sign1') content.push(unterschrift1(t, b.links || 'Ort, Datum', b.rechts || 'Unterschrift'));
+      else if (b.t === 'sign1') content.push(unterschrift1(t, b.links || 'Ort, Datum', b.rechts || 'Unterschrift', b.ohneBild ? null : opts.unterschrift));
       else if (b.t === 'abstand') content.push({ text: ' ', fontSize: b.h || 8 });
       else if (b.t === 'zeilen') {
         const z = zeilen(b), vor = content[content.length - 1];

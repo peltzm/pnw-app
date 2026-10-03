@@ -119,8 +119,7 @@
     // 13 Unterschrift Arbeitgeber: Datum
     const tb15 = tabellen(doc)[14]; const zeile15 = kids(tb15, 'tr')[1];
     absatzErsetzen(doc, kids(zeile15, 'tc')[0], w.vertragsdatum);
-    // Ein in der Vorlage eingefügtes Unterschriftsbild wird entfernt: unterschrieben wird jede Ausfertigung einzeln
-    alle(zeile15, 'drawing').concat(alle(zeile15, 'pict')).forEach(d => { let r = d; while (r && !(r.localName === 'r' && r.namespaceURI === W)) r = r.parentNode; if (r && r.parentNode) r.parentNode.removeChild(r); });
+    // Das in der Vorlage enthaltene Unterschriftsbild der Geschäftsführung bleibt unverändert stehen
 
     const kopf = headerXml ? (function () {
       const h = P.parseFromString(headerXml, 'application/xml');
