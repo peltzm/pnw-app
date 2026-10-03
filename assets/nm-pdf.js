@@ -22,6 +22,10 @@
   function fuellen(text, vals) {
     return String(text).replace(/\{\{(\w+)\}\}/g, (m, k) => (vals[k] !== undefined && vals[k] !== null && vals[k] !== '') ? String(vals[k]) : m);
   }
+  function fuellenDeep(tpl, vals) {
+    const esc = {}; Object.keys(vals).forEach(k => { esc[k] = JSON.stringify(String(vals[k])).slice(1, -1); });
+    return JSON.parse(fuellen(JSON.stringify(tpl), esc));
+  }
   function fehlende(tpl, vals) {
     const s = new Set();
     JSON.stringify(tpl.blocks).replace(/\{\{(\w+)\}\}/g, (m, k) => { if (vals[k] === undefined || vals[k] === null || vals[k] === '') s.add(k); return m; });
@@ -64,15 +68,38 @@
     ] };
   }
 
+  // Feldkästen: rows = [[{l:'Name', v:'Steiger', w:0.4}, ...]]  (alle Zeilen eines Blocks gleich viele Zellen; w = Anteil der Textbreite)
+  function felder(rows) {
+    const body = rows.map(r => r.map(c => ({
+      stack: [{ text: c.l || '', fontSize: 6.8, color: C.meta, margin: [0, 0, 0, 1.5] },
+              { text: (c.v == null || c.v === '') ? ' ' : String(c.v), font: 'KodchasanSemi', fontSize: 10.2, color: C.ink }],
+      margin: [6, 4, 6, 5] })));
+    const widths = rows[0].map(c => c.w ? c.w * (TEXT_W - 1.6) : '*');
+    return { table: { widths, body }, margin: [0, 0, 0, 8],
+             layout: { hLineWidth: () => 0.8, vLineWidth: () => 0.8, hLineColor: () => C.ink, vLineColor: () => C.ink } };
+  }
+  // Ankreuzfeld wird gezeichnet (Kodchasan enthält keine ☐/☒-Zeichen)
+  function check(on, text) {
+    const cv = [{ type: 'rect', x: 0.5, y: 1.5, w: 10, h: 10, lineWidth: 0.9, lineColor: C.ink }];
+    if (on) { cv.push({ type: 'line', x1: 2, y1: 3, x2: 9, y2: 10, lineWidth: 1.1, lineColor: C.ink }, { type: 'line', x1: 9, y1: 3, x2: 2, y2: 10, lineWidth: 1.1, lineColor: C.ink }); }
+    return { columns: [{ width: 24, canvas: cv }, { width: '*', text: laeufe(text), fontSize: 9.8, lineHeight: 1.35, color: C.ink }], margin: [8, 0, 0, 7] };
+  }
+  function unterschrift1(text, links, rechts) {
+    return { unbreakable: true, stack: [
+      p(text, { margin: [0, 14, 0, 0] }),
+      { columns: [linieSpalte(links), { width: 30, text: '' }, linieSpalte(rechts)], margin: [0, 34, 0, 0] } ] };
+  }
+
   /**
    * tpl: { blocks:[{t:'center'|'h2'|'p'|'sub'|'sign', ...}] }   vals: Platzhalterwerte
    * opts: { titel, kopfRechts, logo (data-URL), autor }
    */
   function docDefinition(tpl, vals, opts) {
     opts = opts || {};
-    const content = [{ text: opts.titel || tpl.name, font: 'Baskerville', bold: true, fontSize: 15, alignment: 'center', color: C.ink, margin: [0, 68, 0, 10] }];
+    tpl = fuellenDeep(tpl, vals || {});
+    const content = [{ text: opts.titel || tpl.name, font: 'Baskerville', bold: true, fontSize: opts.titelGroesse || 15, alignment: 'center', color: C.ink, margin: [0, 68, 0, 10] }];
     tpl.blocks.forEach(b => {
-      const t = fuellen(b.text || '', vals);
+      const t = b.text || '';
       if (b.t === 'center') {
         const el = p(t, { alignment: 'center', margin: [0, 0, 0, b.after != null ? b.after : 3] });
         if (b.bold) el.text = [{ text: t, font: 'KodchasanSemi' }];
@@ -82,6 +109,11 @@
       else if (b.t === 'p') content.push(p(t));
       else if (b.t === 'sub') content.push(sub(b.label, t));
       else if (b.t === 'sign') content.push(unterschrift(t));
+      else if (b.t === 'pl') content.push(p(t, { alignment: 'left' }));
+      else if (b.t === 'felder') content.push(felder(b.rows));
+      else if (b.t === 'check') content.push(check(!!b.on, t));
+      else if (b.t === 'sign1') content.push(unterschrift1(t, b.links || 'Ort, Datum', b.rechts || 'Unterschrift'));
+      else if (b.t === 'abstand') content.push({ text: ' ', fontSize: b.h || 8 });
     });
     return {
       pageSize: 'A4',
@@ -127,5 +159,5 @@
     Baskerville:     { normal: 'LibreBaskerville-Regular.ttf', bold: 'LibreBaskerville-Bold.ttf', italics: 'LibreBaskerville-Italic.ttf', bolditalics: 'LibreBaskerville-Bold.ttf' },
   };
 
-  return { docDefinition, fuellen, fehlende, FONTS, FONT_DATEIEN };
+  return { docDefinition, fuellen, fuellenDeep, fehlende, FONTS, FONT_DATEIEN };
 });
