@@ -7,7 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
-<title>Onboarding (Beta) — Praxis NeueWege</title>
+<title>Onboarding — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <style>
 :root {
@@ -30,7 +30,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
 .header-right{display:flex;align-items:center;gap:8px}
 .user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
 .user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
-.beta-badge{font-size:10px;font-weight:700;color:#fff;background:var(--accent-mid);border-radius:4px;padding:1px 7px;letter-spacing:.4px}
+.version-badge{font-size:10px;font-weight:600;color:var(--text-hint);background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px}
 .btn-outline{background:var(--surface);color:var(--accent);border:1px solid var(--accent)}
 .btn-outline:hover{background:var(--accent-light)}
@@ -187,7 +187,7 @@ label.chk input{width:auto}
   <div class="header-brand" onclick="location.href='apps.html'">
     <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
     <span>Onboarding</span>
-    <span class="beta-badge" id="versionBadge">BETA</span>
+    <span class="version-badge" id="versionBadge"></span>
   </div>
   <div class="header-right">
     <div class="user-badge" id="userBadge"><div class="user-dot"></div><span id="userName"></span></div>
@@ -198,7 +198,7 @@ label.chk input{width:auto}
 <div class="login-screen" id="loginScreen">
   <div class="login-card">
     <img src="assets/logo-pnw-neu.png" alt="Praxis NeueWege">
-    <div class="login-title">Onboarding <span class="beta-badge">BETA</span></div>
+    <div class="login-title">Onboarding</div>
     <div class="login-desc">Dein Fahrplan für die ersten drei Monate — mit Aufgaben für dich, deine Mentor:in, Teamleitung und die Geschäftsführung.</div>
     <button class="btn btn-solid" style="width:100%" onclick="login()">Mit Microsoft anmelden</button>
     <button class="btn-text" onclick="startDemo()">Demo ansehen (Beispieldaten)</button>
@@ -313,7 +313,7 @@ const CFG = {
 };
 const SCOPES = ['User.Read', 'Sites.ReadWrite.All'];
 const GF_ERLAUBT = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
-const APP_VERSION = 'BETA-279a74d'; // auto-updated on deploy
+const APP_VERSION = 'v279a74d'; // auto-updated on deploy
 document.getElementById('versionBadge').textContent = APP_VERSION;
 document.addEventListener('DOMContentLoaded', ()=>initItemDialog());
 
