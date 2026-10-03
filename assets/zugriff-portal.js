@@ -31,10 +31,31 @@
     '.zg-tab th{background:#f7f6f2}';
   document.head.appendChild(css);
 
+  // Ist die Sitzung abgelaufen (SPA-Refresh-Token halten nur 24 h) oder fehlt sie, meldet MSAL
+  // interaction_required / AADSTS160021 — dann hilft nur eine erneute Anmeldung.
+  function brauchtAnmeldung(e) {
+    const t = String((e && (e.errorCode || '')) + ' ' + (e && (e.name || '')) + ' ' + (e && (e.message || '')));
+    return /interaction_required|login_required|consent_required|no_tokens_found|invalid_grant|InteractionRequiredAuthError|AADSTS160021|AADSTS50058|AADSTS700082/i.test(t);
+  }
+
   async function tokens(msalInstance, account, scopes) {
     const req = { scopes, account };
     const r = await msalInstance.acquireTokenSilent(req);
     return { id: r.idToken, graph: r.accessToken };
+  }
+
+  // Erneute Anmeldung per Weiterleitung. Schutz vor Endlosschleifen: höchstens einmal je 10 Minuten
+  // automatisch; danach nur noch per Klick auf den Hinweis.
+  const RE_KEY = 'pnw_zg_reauth';
+  function reAuthErlaubt() {
+    try {
+      const t = Number(localStorage.getItem(RE_KEY) || 0);
+      return !t || Date.now() - t > 10 * 60 * 1000;
+    } catch (e) { return true; }
+  }
+  function reAuthStarten(ctx) {
+    try { localStorage.setItem(RE_KEY, String(Date.now())); } catch (e) {}
+    return ctx.msalInstance.acquireTokenRedirect({ scopes: ctx.scopes, account: ctx.account });
   }
 
   async function worker(msalInstance, account, scopes, pfad) {
@@ -117,11 +138,23 @@
       }
     } catch (e) {
       console.warn('Zugriffsprüfung nicht möglich, alle Kacheln bleiben sichtbar:', e.message);
+      const sitzungAbgelaufen = brauchtAnmeldung(e);
+      if (sitzungAbgelaufen && reAuthErlaubt()) {
+        // Sitzung abgelaufen: einmal automatisch neu anmelden, danach klappt die Prüfung wieder
+        try { await reAuthStarten(ctx); return; } catch (e2) { console.warn('Erneute Anmeldung nicht gestartet:', e2.message); }
+      }
       // Sichtbarer Hinweis, damit ein stiller Ausfall nicht als "alles in Ordnung" durchgeht
       const box = document.getElementById('zgBox');
       if (box) {
         const info = el('div', null, { class: 'zg-info' });
-        info.appendChild(el('span', '⚠️ Zugriffsprüfung nicht erreichbar (' + e.message + ') — alle Kacheln bleiben sichtbar, es wird nichts gesperrt.'));
+        if (sitzungAbgelaufen) {
+          info.appendChild(el('span', '🔐 Deine Sitzung ist abgelaufen, die Zugriffsprüfung braucht eine erneute Anmeldung. Bis dahin sind alle Kacheln sichtbar.'));
+          const knopf = el('button', 'Erneut anmelden');
+          knopf.onclick = () => reAuthStarten(ctx);
+          info.appendChild(knopf);
+        } else {
+          info.appendChild(el('span', '⚠️ Zugriffsprüfung nicht erreichbar (' + e.message + ') — alle Kacheln bleiben sichtbar, es wird nichts gesperrt.'));
+        }
         box.appendChild(info);
       }
     } finally {
