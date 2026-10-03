@@ -592,6 +592,20 @@
         <div class="section-sub">Freigabe-Anfrage an Teamleitung senden · Nach Freigabe automatischer Versand.</div>
         <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
 
+        <!-- PRUEFMODUS: Abschluss der Pruefung (analog Berichtsapp) -->
+        <div class="card" id="reviewEndCard" style="display:none;border:2px solid #c9a227;">
+          <div class="card-title">🔍 Prüfung abschließen</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;">
+            Prüfe Vorschau und Anmerkung. <strong>Freigeben</strong> speichert das Protokoll als PDF in SharePoint und versendet es an die Teilnehmer
+            (Geschäftsführung in CC, Ersteller und Teamleitungen werden benachrichtigt). <strong>Zurückweisen</strong> gibt es an den Ersteller zur Überarbeitung zurück.
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-success" id="btnReviewApprove" onclick="freigabeModusAction('Freigegeben')" style="min-height:44px;">✓ Freigeben, speichern &amp; versenden</button>
+            <button class="btn btn-secondary" id="btnReviewReject" onclick="freigabeModusAction('Abgelehnt')" style="min-height:44px;color:#9b1c1c;border-color:#fca5a5;">✗ Zurückweisen</button>
+            <button class="btn btn-secondary" onclick="goSection('s-vorschau');buildPreview()" style="min-height:44px;">👁️ Vorschau</button>
+          </div>
+        </div>
+
         <div class="card" id="approvalCard">
           <div class="card-title">Freigabe durch Teamleitung</div>
           <div class="approval-card">
@@ -1491,6 +1505,7 @@ function selectThema(type, themaKey, el) {
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
   _currentDraftId = null; // fresh draft
+  _suppressAutoSave = false;
   _draftBaseline = null;
   _draftOwner = null;
   _draftStatus = 'Entwurf';
@@ -2386,18 +2401,12 @@ function renderFreigabe() {
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
         <span style="font-size:11px;font-weight:600;color:#92400e;white-space:nowrap;">⏳ Ausstehend</span>
-        ${true ? `<button onclick="aendernVorFreigabe('${it.id}')" title="Protokoll vor der Freigabe ändern oder ergänzen"
-          style="font-size:12px;padding:6px 14px;background:white;color:var(--accent);border:1px solid var(--accent);
-          border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">✏ Ändern</button>` : ''}
         <button onclick="leseProtokoll('${it.id}', {freigabe:true})" title="Nur lesen – es wird nichts verändert"
           style="font-size:12px;padding:6px 14px;background:white;color:#92400e;border:1px solid #fde68a;
           border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">👁 Lesen</button>
-        <button onclick="freigabeAction('${it.id}','Freigegeben')"
-          style="font-size:12px;padding:6px 14px;background:#166534;color:white;border:none;
-          border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">✓ Freigeben</button>
-        <button onclick="freigabeAction('${it.id}','Abgelehnt')"
-          style="font-size:12px;padding:6px 14px;background:white;color:#9b1c1c;
-          border:1px solid #fca5a5;border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">✗ Ablehnen</button>
+        <button onclick="pruefenProtokoll('${it.id}')" title="Protokoll prüfen, ändern/ergänzen und am Ende freigeben"
+          style="font-size:12px;padding:6px 16px;background:var(--accent);color:white;border:none;
+          border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">🔍 Prüfen</button>
       </div>
     </div>`;
   }).join('');
@@ -2581,7 +2590,7 @@ async function leseProtokoll(itemId, opts) {
       <div style="width:100%;max-width:840px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius) var(--radius) 0 0;padding:8px 14px;box-sizing:border-box;">
         <div style="font-size:12px;color:#92400e;"><strong>Nur lesen</strong> · Status: ${_esc(f.Status || '—')}${bearbeiter ? ' · Protokollant: ' + _esc(bearbeiter) : ''}</div>
         <div style="display:flex;gap:6px;">
-          ${((_isAdminUser() || (opts && opts.freigabe)) && f.Status === 'Eingereicht') ? `<button class="btn btn-primary" style="padding:5px 12px;font-size:12px;" onclick="aendernVorFreigabe('${itemId}')">✏ Vor Freigabe ändern</button>` : ''}
+          ${((_isAdminUser() || (opts && opts.freigabe)) && f.Status === 'Eingereicht') ? `<button class="btn btn-primary" style="padding:5px 12px;font-size:12px;" onclick="pruefenProtokoll('${itemId}')">🔍 Prüfen</button>` : ''}
           <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="schliesseLeseAnsicht()">Schließen</button>
         </div>
       </div>
@@ -2680,7 +2689,7 @@ let _freigabeModeItemId = null;
 // Geschaeftsfuehrung: Protokoll vor der Freigabe aendern/ergaenzen. Oeffnet es im Editor
 // (Status bleibt „Eingereicht“, Ersteller bleibt Ersteller) mit dem Freigabe-Banner,
 // sodass direkt danach freigegeben werden kann. Aenderungen werden automatisch gespeichert.
-async function aendernVorFreigabe(itemId) {
+async function pruefenProtokoll(itemId) {
   // Berechtigt: Geschaeftsfuehrung oder wer dieses Protokoll zur Freigabe vorliegen hat (Teamleitung)
   if (!_isAdminUser() && !_freigabeData.some(i => String(i.id) === String(itemId))) {
     showToast('Nur die Freigabe-Person oder die Geschäftsführung kann das Protokoll vor der Freigabe ändern.', 'info'); return;
@@ -2688,11 +2697,13 @@ async function aendernVorFreigabe(itemId) {
   schliesseLeseAnsicht();
   await loadDraft(itemId, 's-meta');
   activateFreigabeModus(itemId);
-  showToast('Änderungen werden automatisch gespeichert – danach oben „Freigeben“.', 'info');
+  showToast('Prüfmodus: Änderungen werden automatisch gespeichert. Abschluss auf der Seite „Freigabe“.', 'info');
 }
 
 function activateFreigabeModus(itemId) {
   _freigabeModeItemId = itemId;
+  { const rc = document.getElementById('reviewEndCard'), ac = document.getElementById('approvalCard'), dp = document.getElementById('btnDirectPublish');
+    if (rc) rc.style.display = ''; if (ac) ac.style.display = 'none'; if (dp) dp.style.display = 'none'; }
   if (!document.getElementById('reviewFrame')) {
     const frame = document.createElement('div');
     frame.id = 'reviewFrame';
@@ -2705,17 +2716,13 @@ function activateFreigabeModus(itemId) {
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c9a227;color:#fff;z-index:999;padding:10px 16px;box-shadow:0 2px 6px rgba(0,0,0,.25);';
     banner.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">'
       + '<div style="text-align:center;font-size:13px;">'
-      + '<strong>&#128269; FREIGABE-MODUS &#8211; Protokoll zur Pr&#252;fung und Freigabe</strong><br>'
-      + '<span style="font-size:12px;opacity:.95;">Pr&#252;fe das Protokoll durch. &#196;nderungen und Erg&#228;nzungen sind m&#246;glich (werden automatisch gespeichert), dann freigeben oder ablehnen.</span>'
+      + '<strong>&#128269; PR&#220;FMODUS &#8211; Sie pr&#252;fen dieses Protokoll</strong><br>'
+      + '<span style="font-size:12px;opacity:.95;">&#196;nderungen und Erg&#228;nzungen sind m&#246;glich und werden automatisch gespeichert. Zum Abschluss: Seite &#8222;Freigabe&#8220; &#8594; Freigeben, speichern &amp; versenden oder Zur&#252;ckweisen.</span>'
       + '</div>'
-      + '<div style="display:flex;gap:8px;flex-shrink:0;">'
-      + '<button id="btnBannerFreigeben" style="background:#166534;color:white;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;min-height:38px;">&#10003; Freigeben</button>'
-      + '<button id="btnBannerAblehnen" style="background:white;color:#9b1c1c;border:2px solid #fca5a5;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;min-height:38px;">&#10007; Ablehnen</button>'
-      + '</div>'
+      + '<button id="btnBannerAbschluss" style="background:#fff;color:#8a6d1a;border:none;border-radius:20px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;min-height:38px;flex-shrink:0;">Zum Abschluss &#8594;</button>'
       + '</div>';
     document.body.appendChild(banner);
-    document.getElementById('btnBannerFreigeben').addEventListener('click', () => freigabeModusAction('Freigegeben'));
-    document.getElementById('btnBannerAblehnen').addEventListener('click',  () => freigabeModusAction('Abgelehnt'));
+    document.getElementById('btnBannerAbschluss').addEventListener('click', () => { goSection('s-freigabe'); });
     const app = document.getElementById('appScreen');
     if (app) app.style.paddingTop = (banner.offsetHeight + 4) + 'px';
   }
@@ -2723,6 +2730,8 @@ function activateFreigabeModus(itemId) {
 
 function deactivateFreigabeModus() {
   _freigabeModeItemId = null;
+  { const rc = document.getElementById('reviewEndCard'), ac = document.getElementById('approvalCard');
+    if (rc) rc.style.display = 'none'; if (ac) ac.style.display = ''; try { _applyFreigabeRoleUI(); } catch(e) {} }
   ['reviewFrame','freigabeBanner'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.remove();
@@ -2733,9 +2742,19 @@ function deactivateFreigabeModus() {
 
 async function freigabeModusAction(newStatus) {
   if (!_freigabeModeItemId) { showToast('Kein Protokoll geladen', 'info'); return; }
-  const res = await freigabeAction(_freigabeModeItemId, newStatus);
-  if (res === 'abbruch') return;   // Rueckfrage verneint: Banner und Ansicht bleiben stehen
+  const itemId = _freigabeModeItemId;
+  // Ausstehende Aenderungen zuerst sichern – die Freigabe liest den Stand aus SharePoint
+  clearTimeout(_autoSaveTimer);
+  for (let i = 0; i < 40 && _autoSaving; i++) await new Promise(r => setTimeout(r, 100));
+  if (newStatus === 'Freigegeben') await autoSaveDraft();
+  const res = await freigabeAction(itemId, newStatus);
+  if (res === 'abbruch') return;     // Rueckfrage verneint: Prüfmodus bleibt offen
+  if (res !== 'ok') return;          // Fehler: Prüfmodus bleibt offen, nichts geht verloren
+  // Fertig: Editor stilllegen (sonst koennte ein spaeterer Autosave den Status zurueckschreiben)
+  _suppressAutoSave = true; _draftBaseline = null;
   deactivateFreigabeModus();
+  goSection('s-offen');
+  try { await loadFreigabe(); } catch(e) {}
 }
 
 
@@ -2894,10 +2913,12 @@ async function freigabeAction(itemId, newStatus) {
     showToast('Protokoll ' + labelDE + ' ✓', 'success');
     if (!_freigabeData.length) renderFreigabe();
     _archivLoaded = false;
+    return 'ok';
 
   } catch(e) {
     showToast('Fehler: ' + e.message, 'info');
     console.error('freigabeAction:', e);
+    return 'fehler';
   }
 }
 
