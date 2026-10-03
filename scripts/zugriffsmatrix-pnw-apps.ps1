@@ -41,7 +41,7 @@ $Erwartet = @(
     "PNW-App-Fahrtenbuchcheck", "PNW-App-Orientierungsgespraech", "PNW-App-MitarbeiterCockpit",
     "PNW-App-ManagerCockpit", "PNW-App-JugendamtCockpit", "PNW-App-KlientenCockpit",
     "PNW-App-BusinessScorecard", "PNW-App-Unterschriften", "PNW-App-Mobilfunk", "PNW-App-OPAbgleich",
-    "PNW-App-Sanity", "PNW-App-Einarbeitung", "PNW-App-Fuhrpark"
+    "PNW-App-Sanity", "PNW-App-Onboarding", "PNW-App-Fuhrpark"
 )
 # Geschäftsführung wird im Worker nie gesperrt (feste Liste)
 $GF = @("markus.peltz@praxisneuewege.de", "sonja.peltz@praxisneuewege.de")
