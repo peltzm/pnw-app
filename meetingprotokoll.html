@@ -682,6 +682,7 @@
           <input type="text" id="archivSearch" placeholder="🔍 Suchen …" oninput="renderArchivTable()"
             style="border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px;outline:none;flex:2;min-width:180px;font-family:inherit;">
           <button onclick="loadArchiv(true)" style="padding:8px 14px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius);background:white;cursor:pointer;font-family:inherit;">↺ Aktualisieren</button>
+          <button id="btnKorrBearbeiter" onclick="korrigiereBearbeiter()" title="Setzt „Letzter Bearbeiter" zurück, wenn jemand nur angesehen hat" style="display:none;padding:8px 14px;font-size:12px;border:1px solid var(--border);border-radius:var(--radius);background:white;cursor:pointer;font-family:inherit;">↩ Bearbeiter korrigieren</button>
         </div>
 
         <div id="archivLoading" style="color:var(--text-muted);font-size:13px;padding:.5rem 0;display:none;"><span class="spin"></span> Wird geladen…</div>
@@ -840,6 +841,10 @@ let _draftStatus = 'Entwurf'; // lokal gecachter Status des aktuellen Entwurfs
 // wuerde der Entwurf dem Ersteller aus „Entwurf laden" / Archiv verschwinden.
 let _draftOwner = null;
 let _autoSaving = false;
+// Beim Oeffnen eines Entwurfs darf NICHT gespeichert werden (sonst steht der
+// Oeffnende als „Letzter Bearbeiter" drin, obwohl nichts geaendert wurde).
+let _suppressAutoSave = false;   // waehrend loadDraft: Formular wird erst befuellt
+let _draftBaseline = null;       // Inhalts-Signatur des zuletzt geladenen/gespeicherten Stands
 let _autoSaveTimer = null;
 let _autoSaveFehler = 0;
 let _graphListIdDraft = null;
@@ -1486,6 +1491,7 @@ function selectThema(type, themaKey, el) {
   S.tops = thema.tops.map(t => ({ id: ++S.topId, title: t, text: '', type: 'info', owner: '', frist: '' }));
   S.participants = [];
   _currentDraftId = null; // fresh draft
+  _draftBaseline = null;
   _draftOwner = null;
   _draftStatus = 'Entwurf';
   // Pre-load bewohner TOPs if applicable (async, cached)
@@ -2380,6 +2386,9 @@ function renderFreigabe() {
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
         <span style="font-size:11px;font-weight:600;color:#92400e;white-space:nowrap;">⏳ Ausstehend</span>
+        <button onclick="leseProtokoll('${it.id}', {freigabe:true})" title="Nur lesen – es wird nichts verändert"
+          style="font-size:12px;padding:6px 14px;background:white;color:#92400e;border:1px solid #fde68a;
+          border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">👁 Lesen</button>
         <button onclick="freigabeAction('${it.id}','Freigegeben')"
           style="font-size:12px;padding:6px 14px;background:#166534;color:white;border:none;
           border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">✓ Freigeben</button>
@@ -2543,8 +2552,8 @@ function schliesseLeseAnsicht() {
   const o = document.getElementById('leseAnsicht');
   if (o) o.remove();
 }
-async function leseProtokoll(itemId) {
-  if (!_isAdminUser()) { showToast('Die Lese-Ansicht steht nur der Geschäftsführung zur Verfügung.', 'info'); return; }
+async function leseProtokoll(itemId, opts) {
+  if (!_isAdminUser() && !(opts && opts.freigabe)) { showToast('Die Lese-Ansicht steht nur der Geschäftsführung zur Verfügung.', 'info'); return; }
   try {
     showToast('Protokoll wird geladen…', 'info');
     const { siteId } = await getSiteAndDrive();
@@ -2579,6 +2588,89 @@ async function leseProtokoll(itemId) {
   }
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') schliesseLeseAnsicht(); });
+
+// Fremden Entwurf (GF) bewusst zum Bearbeiten oeffnen – Ansehen geht ueber „Lesen"
+function weiterbearbeitenFremd(itemId, ersteller) {
+  if (!confirm('Dieser Entwurf stammt von ' + (ersteller || 'einer anderen Person') + '.\n\nZum bloßen Ansehen bitte „Lesen" verwenden.\nWirklich zum Bearbeiten öffnen?')) return;
+  loadDraft(itemId);
+}
+
+/* ──────────────────────────────────────
+   BEARBEITER KORRIGIEREN (nur Geschäftsführung, einmalig/bei Bedarf)
+   Setzt Eintraege zurueck, bei denen eine Person nur „angeschaut" hat und dadurch
+   als „Letzter Bearbeiter" steht. Quelle: SharePoint-Versionsverlauf der Liste –
+   es wird der letzte Stand VOR der Person wiederhergestellt (nur ProtokollDaten).
+────────────────────────────────────── */
+async function korrigiereBearbeiter() {
+  if (!_isAdminUser()) { showToast('Nur für die Geschäftsführung.', 'info'); return; }
+  const wer = (prompt('Bearbeiter zurücksetzen für (Teil der Mailadresse, z. B. sonja):', 'sonja') || '').trim().toLowerCase();
+  if (!wer) return;
+  try {
+    showToast('Prüfe Einträge …', 'info');
+    const { siteId } = await getSiteAndDrive();
+    const listId = await getDraftListId();
+    const token  = await getToken();
+    const H = { Authorization: 'Bearer ' + token };
+    const base = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`;
+    const parse = v => { try { return JSON.parse(v || '{}'); } catch(e) { return {}; } };
+    const items = await ladeAlleProtokollEintraege();
+    // Kandidaten: letzter Bearbeiter = wer, Ersteller ist jemand anderes
+    const kand = items.filter(it => {
+      const d = parse(it.fields?.ProtokollDaten);
+      const last = String(d.lastSavedBy || '').toLowerCase();
+      const ers  = String(it.fields?.Erstellt_Von || d.savedBy || '').toLowerCase();
+      return last.includes(wer) && !ers.includes(wer);
+    });
+    if (!kand.length) { showToast('Keine betroffenen Einträge gefunden.', 'success'); return; }
+
+    const plan = [];
+    for (const it of kand) {
+      const d = parse(it.fields?.ProtokollDaten);
+      let vorher = null;
+      try {
+        const vr = await fetch(`${base}/${it.id}/versions`, { headers: H });
+        if (vr.ok) {
+          const vs = (await vr.json()).value || [];            // neueste zuerst
+          for (const v of vs) {
+            const pd = v.fields && v.fields.ProtokollDaten;
+            if (!pd) continue;
+            const vd = parse(pd);
+            if (!String(vd.lastSavedBy || '').toLowerCase().includes(wer)) { vorher = vd; break; }
+          }
+        }
+      } catch(e) { /* Versionsverlauf nicht lesbar -> Fallback unten */ }
+      plan.push({ it, d, vorher });
+    }
+    const zeile = p => {
+      const t = p.d.label || p.it.fields?.Title || 'Protokoll';
+      const dat = p.d.datum ? p.d.datum.split('-').reverse().join('.') : '—';
+      const wie = p.vorher
+        ? ('→ ' + _nameAusMail(p.vorher.lastSavedBy || p.vorher.savedBy) + (_contentSig(p.vorher) === _contentSig(p.d) ? '' : ' (Inhalt weicht ab, wird wiederhergestellt)'))
+        : '→ Ersteller (kein Versionsverlauf)';
+      return `• ${t} ${dat} ${wie}`;
+    };
+    if (!confirm(`${plan.length} Einträge werden zurückgesetzt:\n\n` + plan.map(zeile).join('\n') + '\n\nFortfahren?')) return;
+
+    let ok = 0, fehl = 0;
+    for (const p of plan) {
+      try {
+        let neu;
+        if (p.vorher) neu = { ...p.vorher };
+        else { neu = { ...p.d }; neu.lastSavedBy = p.it.fields?.Erstellt_Von || p.d.savedBy || ''; }
+        const r = await fetch(`${base}/${p.it.id}/fields`, {
+          method: 'PATCH', headers: { ...H, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ProtokollDaten: JSON.stringify(neu) })
+        });
+        if (!r.ok) throw new Error('SP ' + r.status);
+        ok++;
+      } catch(e) { fehl++; console.warn('Korrektur fehlgeschlagen', p.it.id, e); }
+    }
+    showToast(fehl ? `${ok} zurückgesetzt, ${fehl} fehlgeschlagen` : `✓ ${ok} Einträge zurückgesetzt`, fehl ? 'info' : 'success');
+    loadArchiv(true);
+  } catch(e) {
+    showToast('Korrektur nicht möglich: ' + e.message, 'info');
+  }
+}
 
 /* ──────────────────────────────────────
    FREIGABE-MODUS (Banner + Buttons für TL)
@@ -3244,6 +3336,13 @@ function collectDraftData() {
   };
 }
 
+// Inhalts-Signatur ohne Zeitstempel/Bearbeiter – erkennt, ob wirklich etwas geaendert wurde
+function _contentSig(d) {
+  const k = ['type','thema','einrichtung','kleinteamTeam','datum','zeitVon','zeitBis','ort','protokoll',
+             'mailBetreff','fileName','mailNote','approver','nextDatum','nextZeit','nextHinweis','tops','participants'];
+  return JSON.stringify(k.map(x => (d && d[x] != null) ? d[x] : ''));
+}
+
 // Hat der Entwurf inhaltlich relevante Daten? (Schutz gegen leere Duplikate/Überschreiben)
 function _draftHasContent(data) {
   try {
@@ -3258,12 +3357,18 @@ function _draftHasContent(data) {
 
 async function autoSaveDraft(dataOverride, draftIdOverride) {
   if (_autoSaving) return;
+  if (_suppressAutoSave && !dataOverride) return; // Entwurf wird gerade geladen
   if (!S.type && !dataOverride) return; // Mindestvoraussetzung: Meeting-Typ gewählt
   _autoSaving = true;
   try {
     // Snapshot-Modus: Daten und Ziel-ID wurden VOR einem State-Reset eingefroren
     const data     = dataOverride || collectDraftData();
     const targetId = (draftIdOverride !== undefined) ? draftIdOverride : _currentDraftId;
+    // Nichts geaendert seit Laden/letztem Speichern -> nicht speichern. So bleibt der
+    // bisherige „Letzte Bearbeiter" erhalten, wenn jemand einen Entwurf nur ansieht.
+    if (!dataOverride && targetId && _draftBaseline !== null && _contentSig(data) === _draftBaseline) {
+      _autoSaving = false; return;
+    }
     // Guard 1: Nie einen bestehenden Entwurf mit leerem Zustand überschreiben
     // Guard 2: Keine leeren neuen Entwürfe anlegen
     if (!_draftHasContent(data)) { _autoSaving = false; return; }
@@ -3298,6 +3403,7 @@ async function autoSaveDraft(dataOverride, draftIdOverride) {
       // Nur den Live-Zustand verknüpfen, nicht bei Snapshot-Saves
       if (dataOverride === undefined) _currentDraftId = item.id;
     }
+    if (dataOverride === undefined) _draftBaseline = _contentSig(data);
     // Show subtle save indicator
     const ind = document.getElementById('autoSaveIndicator');
     if (ind) { ind.style.color = 'var(--success)'; ind.textContent = '✓ Gespeichert'; ind.style.opacity='1'; setTimeout(()=>ind.style.opacity='0', 3000); }
@@ -3341,6 +3447,7 @@ function _isAdminUser() {
 }
 
 async function loadArchiv(forceReload) {
+  { const kb = document.getElementById('btnKorrBearbeiter'); if (kb) kb.style.display = _isAdminUser() ? '' : 'none'; }
   if (_archivLoaded && !forceReload) { renderArchivTable(); return; }
   const loadingEl = document.getElementById('archivLoading');
   const errEl     = document.getElementById('archivError');
@@ -3393,7 +3500,8 @@ async function loadArchiv(forceReload) {
       const leer = status === 'Entwurf' && !spUrl && !_draftHasContent(data) && _alter > 12 * 3600 * 1000;
       // Aktueller Bearbeiter = wer zuletzt gespeichert hat (Altbestand: Ersteller)
       const bearbeiter = _nameAusMail(data.lastSavedBy || data.savedBy || f.Erstellt_Von || '');
-      return { id: it.id, datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, isMine, isAdmin, leer, bearbeiter };
+      const ersteller = _nameAusMail(f.Erstellt_Von || data.savedBy || '');
+      return { id: it.id, datum, datumSort, typLabel, typIcon, themaText, teiln, approverShort, status, spUrl, isMine, isAdmin, leer, bearbeiter, ersteller };
     }).filter(r => r.isAdmin || r.isMine); // Admins sehen alles, andere nur eigene
     // Debug: log count
     console.log('[Archiv] Items loaded:', _archivData.length, '(admin:', _isAdminUser(), 'me:', (currentAccount?.username||'').split('@')[0], ')');
@@ -3461,8 +3569,14 @@ function renderArchivTable() {
            border:1px solid #fca5a5;border-radius:var(--radius);cursor:pointer;min-height:36px;">🗑</button>`
       : '';
 
+    const lesenBtn = (r.isAdmin && !r.isMine && (r.status === 'Entwurf' || r.status === 'Abgelehnt'))
+      ? `<button onclick="leseProtokoll('${r.id}')" title="Nur lesen – es wird nichts verändert"
+           style="font-size:12px;padding:6px 12px;background:white;color:var(--text);border:1px solid var(--border);
+           border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">👁 Lesen</button>`
+      : '';
+
     const openBtn = r.status === 'Entwurf'
-      ? `<button onclick="loadDraft('${r.id}')"
+      ? `<button onclick="${(r.isAdmin && !r.isMine) ? `weiterbearbeitenFremd('${r.id}','${_esc(r.ersteller)}')` : `loadDraft('${r.id}')`}"
            style="font-size:12px;padding:6px 14px;background:var(--accent);color:white;
            border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">
            Weiterbearbeiten</button>`
@@ -3502,6 +3616,7 @@ function renderArchivTable() {
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <span style="font-size:11px;font-weight:600;color:${st.color};white-space:nowrap;">${r.status}</span>
         ${deleteBtn}
+        ${lesenBtn}
         ${openBtn}
       </div>
     </div>`;
@@ -3608,6 +3723,7 @@ async function showDraftPanel() {
 }
 
 async function loadDraft(itemId, targetSection) {
+  _suppressAutoSave = true; _draftBaseline = null; clearTimeout(_autoSaveTimer);
   try {
     const { siteId } = await getSiteAndDrive();
     const listId = await getDraftListId();
@@ -3688,9 +3804,13 @@ async function loadDraft(itemId, targetSection) {
         const _rSP = document.getElementById('spPath');
         if (_rSP) _rSP.textContent = _rEinr ? _rEinr.sp : (_rCfg.sp || _rCfg.label);
       }
+      // Formular ist befuellt: ab jetzt gilt dieser Stand als „unveraendert"
+      _draftBaseline = _contentSig(collectDraftData());
+      _suppressAutoSave = false;
     }, 100);
     showToast('Entwurf geladen', 'success');
   } catch(e) {
+    _suppressAutoSave = false;
     showToast('Fehler beim Laden: ' + e.message, 'info');
   }
 }
