@@ -2176,7 +2176,11 @@ function generatePDF(formId, blank, pre){
     subtitle('Erstaufnahme-Dokumentation für die Hilfe zur Erziehung nach SGB VIII.');
     hRule();
     if(blank){hilfeBoxBlank();}else{
-    highlightSection('HILFEEMPFÄNGER',`${kdX.name||'—'}  ·  geb. ${kdX.geb||'—'}  ·  ${((kdX.str||'')+', '+(kdX.plz||'')+' '+(kdX.ort||'')).replace(/^, /,'')||'—'}\nTel.: ${kdX.tel||'—'}  ·  Krankenkasse: ${(($id('ki_k_kk')||{}).value)||'—'}`);
+    {
+      const _hTel=(kdX.tel||'').trim(), _hKk=((($id('ki_k_kk')||{}).value)||'').trim();
+      const _hZeile2=[_hTel?'Tel.: '+_hTel:'',_hKk?'Krankenkasse: '+_hKk:''].filter(Boolean).join('  ·  ');
+      highlightSection('HILFEEMPFÄNGER',`${kdX.name||'—'}  ·  geb. ${kdX.geb||'—'}  ·  ${((kdX.str||'')+', '+(kdX.plz||'')+' '+(kdX.ort||'')).replace(/^, /,'')||'—'}`+(_hZeile2?'\n'+_hZeile2:''));
+    }
     }
     capsSection('ELTERN');
     fieldRow2('Mutter',(($id('ki_m_name')||{}).value)||'','Tel. Mutter',(($id('ki_m_tel')||{}).value)||'');
