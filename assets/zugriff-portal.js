@@ -39,7 +39,8 @@
 
   async function worker(msalInstance, account, scopes, pfad) {
     const t = await tokens(msalInstance, account, scopes);
-    const res = await fetch(WORKER + pfad, { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } });
+    const res = await fetch(WORKER + pfad, { headers: { Authorization: 'Bearer ' + t.id, 'X-Graph-Token': t.graph } })
+      .catch(() => { throw new Error('Worker nicht erreichbar oder CORS-Fehler'); });
     const d = await res.json().catch(() => null);
     if (!res.ok) throw new Error((d && d.error) || 'HTTP ' + res.status);
     return d;
@@ -112,6 +113,13 @@
       }
     } catch (e) {
       console.warn('Zugriffsprüfung nicht möglich, alle Kacheln bleiben sichtbar:', e.message);
+      // Sichtbarer Hinweis, damit ein stiller Ausfall nicht als "alles in Ordnung" durchgeht
+      const box = document.getElementById('zgBox');
+      if (box) {
+        const info = el('div', null, { class: 'zg-info' });
+        info.appendChild(el('span', '⚠️ Zugriffsprüfung nicht erreichbar (' + e.message + ') — alle Kacheln bleiben sichtbar, es wird nichts gesperrt.'));
+        box.appendChild(info);
+      }
     } finally {
       clearTimeout(sicherung);
       document.body.classList.remove('zg-pending');
