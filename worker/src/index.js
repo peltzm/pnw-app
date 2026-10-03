@@ -2498,6 +2498,8 @@ async function sanityZugriff(request, caller) {
   if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
     return { ok: false, status: 403, error: "Der Sanity Check ist der Geschäftsführung vorbehalten" };
   }
+  const gate = await appZugriff(request, caller, ["PNW-App-Sanity"], "/api/sanity");
+  if (!gate.ok) return { ok: false, status: gate.status, error: gate.error };
   if (!SANITY_GRUPPE_ID) return { ok: true };
   const graphToken = request.headers.get("X-Graph-Token");
   if (!graphToken) return { ok: false, status: 403, error: "Gruppenprüfung nicht möglich (Graph-Token fehlt)" };
@@ -2632,7 +2634,7 @@ async function sanityStatusLesen(env, monat) {
 //   "test"   → nichts wird gesperrt; jede Entscheidung wird nur protokolliert
 //              (console.warn "[ZUGRIFF-TEST]" + KV-Bericht über /api/zugriff)
 //   "scharf" → Nichtmitglieder erhalten 403; bei Graph-Ausfall 503 (fail-closed)
-// Die Geschäftsführung (GF_UPNS) wird in BEIDEN Modi nie gesperrt — auch nicht
+// Markus Peltz (ZUGRIFF_IMMER_UPNS) wird in BEIDEN Modi nie gesperrt — auch nicht
 // bei Graph-Ausfall oder fehlender Gruppe.
 // Umschalten = diese Konstante ändern und pushen (Freigabe durch Markus).
 // ═══════════════════════════════════════════════════════════════
@@ -2682,12 +2684,16 @@ async function gruppenDesCallers(request, caller) {
   }
 }
 
-const istGfUpn = (caller) => GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+// Nur diese Konten werden von der Gruppenprüfung NIE betroffen (nie ausgesperrt, immer alle Kacheln).
+// Bewusst NICHT GF_UPNS: Sonja Peltz unterliegt der Gruppenprüfung wie alle anderen (Entscheidung 03.10.2026).
+// GF_UPNS selbst steuert weiter nur die Rollenlogik der Endpunkte (z. B. Vollsicht im Cockpit).
+const ZUGRIFF_IMMER_UPNS = ["markus.peltz@praxisneuewege.de"];
+const istZugriffImmer = (caller) => ZUGRIFF_IMMER_UPNS.some((g) => g.trim().toLowerCase() === caller);
 
 // Zugriffsentscheidung für eine Liste zulässiger Gruppen (any-of).
 // Rückgabe: { ok, status, error, wuerdeSperren, grund }
 async function appZugriff(request, caller, gruppen, kontext) {
-  if (istGfUpn(caller)) return { ok: true, wuerdeSperren: false, grund: "gf" };
+  if (istZugriffImmer(caller)) return { ok: true, wuerdeSperren: false, grund: "immer" };
   const { namen, fehler } = await gruppenDesCallers(request, caller);
   if (fehler) {
     console.warn(`[ZUGRIFF-${ZUGRIFF_MODUS}] ${kontext} ${caller}: Gruppen nicht prüfbar (${fehler})`);
@@ -2709,7 +2715,7 @@ async function endpunktGate(request, caller, schluessel, origin) {
 // Portal: Ergebnis je Kachel-Gruppe (data-gruppe). Im Testmodus wird das
 // Ergebnis je Konto in KV abgelegt (nur Anzeige — es sperrt nichts).
 async function zugriffPortal(request, env, caller, name, angefragt) {
-  const gf = istGfUpn(caller);
+  const gf = istZugriffImmer(caller);
   let namen = new Set(), fehler = null;
   if (!gf) ({ namen, fehler } = await gruppenDesCallers(request, caller));
   const apps = {};
@@ -2752,7 +2758,7 @@ export default {
       const auth = await validateEntraToken(request.headers.get("Authorization"));
       if (!auth.ok) return json({ error: auth.error }, 401, origin);
       const caller = (auth.upn || "").trim().toLowerCase();
-      if (!istGfUpn(caller)) return json({ error: "Nur für die Geschäftsführung" }, 403, origin);
+      if (!istZugriffImmer(caller)) return json({ error: "Nur für Markus Peltz" }, 403, origin);
       if (!env.PNW_DATEN) return json({ error: "KV-Speicher PNW_DATEN ist nicht gebunden" }, 503, origin);
       const eintraege = [];
       let cursor;
@@ -2950,6 +2956,7 @@ export default {
       if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
         return json({ error: "Der OP-Abgleich ist der Geschäftsführung vorbehalten" }, 403, origin);
       }
+      { const gate = await appZugriff(request, caller, ["PNW-App-OPAbgleich"], "/api/op-liste"); if (!gate.ok) return json({ error: gate.error }, gate.status, origin); }
       const unwrap = (v) => (v && typeof v === "object" ? (v.$date ?? v.$datetime ?? v.$decimal ?? null) : v);
       try {
         const graph = {
@@ -3270,6 +3277,7 @@ export default {
       if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
         return json({ error: "Relution-Daten sind der Geschäftsführung vorbehalten" }, 403, origin);
       }
+      { const gate = await appZugriff(request, caller, ["PNW-App-Mobilfunk"], "/api/relution/geraete"); if (!gate.ok) return json({ error: gate.error }, gate.status, origin); }
       if (!env.RELUTION_TOKEN) {
         return json({ error: "RELUTION_TOKEN ist nicht konfiguriert (Cloudflare → Settings → Variables and Secrets, Typ Secret)" }, 503, origin);
       }
