@@ -101,7 +101,7 @@ const NM = (function () {
       await ladeVorlagenStatus();
     } catch (e) { status = 'Laden fehlgeschlagen: ' + e.message; }
     geladen = true;
-    if (typeof gfTab !== 'undefined' && gfTab === 'neue') render();
+    if (typeof gfTab !== 'undefined' && (gfTab === 'neue' || gfTab === 'vorlagen')) render();
   }
   async function ladeVorlagenStatus() {
     vorlagenStatus = {};
@@ -128,12 +128,17 @@ const NM = (function () {
   function aktionen(x) {
     const b = (act, text, solid) => '<button class="btn btn-sm ' + (solid ? 'btn-solid' : 'btn-outline') + '" data-nm="' + act + ':' + x.id + '">' + text + '</button>';
     const out = [];
-    if (x.status === 'plan') return '<span class="ea-item-desc">in der Einarbeitung</span>';
+    if (x.status === 'plan') {
+      return '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="ea-item-desc">in der Einarbeitung</span>' + b('edit', 'Bearbeiten') + b('reset', 'Zurücksetzen') +
+        '<button class="btn btn-sm btn-outline" style="color:var(--error);border-color:var(--error)" data-nm="del:' + x.id + '">Löschen</button></div>';
+    }
     out.push(b('paket', x.status === 'entwurf' || !x.status ? 'Vertragspaket erzeugen' : 'Vertragspaket neu', x.status === 'entwurf' || !x.status));
     if (x.status === 'mail_bereit') out.push(b('stat-versendet', 'Als versendet markieren', true));
     if (x.status === 'versendet') out.push(b('stat-zurueck', 'Vertrag zurück erhalten', true));
     if (x.status === 'zurueck') out.push(b('uebernehmen', 'In Einarbeitung übernehmen', true));
     out.push(b('edit', 'Bearbeiten'));
+    if (x.status && x.status !== 'entwurf') out.push(b('reset', 'Zurücksetzen'));
+    out.push('<button class="btn btn-sm btn-outline" style="color:var(--error);border-color:var(--error)" data-nm="del:' + x.id + '">Löschen</button>');
     return '<div style="display:flex;gap:6px;flex-wrap:wrap">' + out.join('') + '</div>';
   }
   function view() {
@@ -145,7 +150,7 @@ const NM = (function () {
       h += '<div class="ea-card"><h3>Ersteinrichtung</h3><p class="ea-item-desc" style="margin:8px 0">Die SharePoint-Liste <code>' + LIST + '</code> fehlt noch. Sie enthält Personaldaten (Anschrift, Geburtsdatum, Gehalt).</p>' +
         '<button class="btn btn-solid btn-sm" data-nm="setup">Liste jetzt anlegen</button> <span class="ea-item-desc" id="nmSetupStatus"></span>' +
         '<p class="ea-item-desc" style="margin-top:8px"><b>Wichtig:</b> Danach in SharePoint die Berechtigungen dieser Liste auf Markus und Sonja beschränken (Vererbung aufheben). Die App kann das nicht selbst.</p></div>';
-      return h + vorlagenKarte();
+      return h;
     }
     h += '<div class="ea-card"><div class="ea-card-head"><div><h3>Neue Mitarbeiter</h3><p class="ea-item-desc" style="margin-top:4px">Vom Vertrag bis zur Übernahme in die Einarbeitung.</p></div>' +
       '<button class="btn btn-solid btn-sm" data-nm="neu">+ Neue Mitarbeiterin / neuer Mitarbeiter</button></div>';
@@ -159,8 +164,13 @@ const NM = (function () {
       });
       h += '</tbody></table>';
     }
-    h += '<p class="ea-item-desc" style="margin-top:10px">Mailentwurf mit Vertrag und Richtlinien als Anlage: wird in deinem Postfach unter „Entwürfe“ gespeichert, nichts wird automatisch versendet.</p></div>';
-    return h + vorlagenKarte();
+    h += '<p class="ea-item-desc" style="margin-top:10px">Mailentwurf mit dem Vertragspaket: wird in deinem Postfach unter „Entwürfe“ gespeichert, nichts wird automatisch versendet. Die Dokumentvorlagen findest du im Menü „Vorlagen“.</p></div>';
+    return h;
+  }
+  function vorlagenView() {
+    if (demoMode) return '<div class="ea-card"><h3>Vorlagen</h3><p class="ea-item-desc" style="margin-top:8px">Dieser Bereich steht nur nach der Anmeldung zur Verfügung.</p></div>';
+    if (!geladen) return '<div class="loading-state"><div class="spinner"></div>Daten werden geladen …</div>';
+    return (status ? '<div class="ea-card" style="border-color:var(--error);color:var(--error);font-size:12.5px">' + esc(status) + '</div>' : '') + vorlagenKarte();
   }
   function vorlagenKarte() {
     let h = '<div class="ea-card"><h3>Vorlagen</h3><p class="ea-item-desc" style="margin:6px 0 10px">Liegen in SharePoint im Ordner „' + ORDNER + '“ und nicht im öffentlichen App-Repository. Eine neue Version einfach hier hochladen (ersetzt die alte).</p>';
@@ -185,6 +195,8 @@ const NM = (function () {
         else if (act === 'stat-versendet') statusSetzen(id, 'versendet');
         else if (act === 'stat-zurueck') statusSetzen(id, 'zurueck');
         else if (act === 'uebernehmen') uebernehmen(id);
+        else if (act === 'reset') zuruecksetzen(id);
+        else if (act === 'del') loeschen(id);
       };
     });
     Array.from(document.querySelectorAll('[data-nm-upload]')).forEach(inp => {
@@ -296,8 +308,29 @@ const NM = (function () {
     try { x.status = s; await schreibeItem(LIST, SCHEMA, { id: x.id, status: s }); render(); }
     catch (e) { zeigeToast('Status nicht gespeichert: ' + e.message, true); }
   }
+  async function zuruecksetzen(id) {
+    const x = eintrag(id); if (!x) return;
+    let hinweis = 'Status von „' + x.name + '“ auf „Entwurf“ zurücksetzen?\nDie erfassten Daten bleiben erhalten, das Vertragspaket kann neu erzeugt werden.';
+    if (x.status === 'plan') hinweis += '\n\nDie Person bleibt unter „Mitarbeitende“ in der Einarbeitung bestehen.';
+    if (!confirm(hinweis)) return;
+    try { await schreibeItem(LIST, SCHEMA, { id: x.id, status: 'entwurf' }); x.status = 'entwurf'; render(); zeigeToast('Zurückgesetzt'); }
+    catch (e) { zeigeToast('Zurücksetzen fehlgeschlagen: ' + e.message, true); }
+  }
+  async function loeschen(id) {
+    const x = eintrag(id); if (!x) return;
+    let hinweis = '„' + x.name + '“ endgültig löschen?\nAdresse, Geburtsdatum und Gehaltsangaben werden aus der Liste entfernt. Ein bereits angelegter Mailentwurf in Outlook bleibt bestehen und muss dort gelöscht werden.';
+    if (x.status === 'plan') hinweis += '\n\nDie Person bleibt unter „Mitarbeitende“ in der Einarbeitung bestehen und muss dort separat entfernt werden.';
+    if (!confirm(hinweis)) return;
+    try {
+      await graph('/sites/' + CFG.spHost + '/lists/' + LIST + '/items/' + x.id, { method: 'DELETE' });
+      liste = liste.filter(e => e.id !== id); render(); zeigeToast('Gelöscht');
+    } catch (e) { zeigeToast('Löschen fehlgeschlagen: ' + e.message, true); }
+  }
   async function uebernehmen(id) {
     const x = eintrag(id); if (!x) return;
+    // Nach „Zurücksetzen“ nicht doppelt anlegen: existiert die Person schon in der Einarbeitung, nur den Status setzen
+    const vorhandenM = x.mitarbeiterId && mitarbeiterListe.find(m => m.id === x.mitarbeiterId);
+    if (vorhandenM) { try { await schreibeItem(LIST, SCHEMA, { id: x.id, status: 'plan' }); x.status = 'plan'; render(); zeigeToast('Die Person ist bereits in der Einarbeitung angelegt.'); } catch (e) { zeigeToast(e.message, true); } return; }
     if (!confirm(x.name + ' mit Start ' + fmtDatum(x.eintritt) + ' in die Einarbeitung übernehmen?\nMentor:in und Teamleitung trägst du danach unter „Mitarbeitende“ ein.')) return;
     try {
       const m = { name: x.name, bereich: 'ambulant', startDatum: x.eintritt };
@@ -336,7 +369,7 @@ const NM = (function () {
       if (typeof pdfMake === 'undefined') throw new Error('PDF-Bibliothek nicht geladen (CDN blockiert?).');
       await ladeVorlagenStatus();
       const fehlt = VORLAGEN.filter(v => !vorlagenStatus[v.key]).map(v => v.datei);
-      if (fehlt.length) throw new Error('Diese Vorlagen fehlen in SharePoint: ' + fehlt.join(', ') + '. Bitte unten im Bereich „Vorlagen“ hochladen.');
+      if (fehlt.length) throw new Error('Diese Vorlagen fehlen in SharePoint: ' + fehlt.join(', ') + '. Bitte im Menü „Vorlagen“ hochladen.');
       const tpl = JSON.parse(await vorlageHolen('arbeitsvertrag.json', true));
       const vals = werteFuerVertrag(x);
       const offen = NM_PDF.fehlende(tpl, vals); if (offen.length) throw new Error('Platzhalter ohne Wert: ' + offen.join(', '));
@@ -427,5 +460,5 @@ const NM = (function () {
     } catch (e) { err.textContent = e.message; btn.disabled = false; }
   }
 
-  return { laden, view, bind, gehaltBerechnen, eur, parseZahl, TABELLE };
+  return { laden, view, vorlagenView, bind, gehaltBerechnen, eur, parseZahl, TABELLE };
 })();
