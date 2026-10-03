@@ -488,7 +488,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
             <div class="card-title">🤝 Details — Schweigepflichtsentbindung</div>
             <div class="fg full"><div class="field"><label>Institution (Name + Ort) *</label><input type="text" id="s_inst" placeholder="z.B. Grundschule Musterstadt, Hauptstraße 1, 85405 Musterstadt"></div></div>
             <div style="height:1px;background:var(--border);margin:1rem 0 .75rem;"></div>
-            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Unterzeichnende (Sorgeberechtigte) — nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere hinzufügen</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Unterzeichnende (Sorgeberechtigte) — vorbefüllt aus Kilanka (Eltern und Sorgeberechtigte); nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere hinzufügen</div>
             <div id="schweig_list"></div>
             <button class="btn-add" onclick="addSchweigPerson()" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -999,7 +999,7 @@ function buildLeerPre(k){
          str:_kVal(k.Kind_Strasse||''), plz, ort, sgb, tel:'', email:'',
          fk:M365_USER.displayName, datum:'' },   // Datum + Unterschriften bleiben bewusst leer
     ids, vollmachtgeber:vg, geschwister:kp.gs,
-    unterzeichner:schweigKandidaten(k).filter(p=>p.aktiv).map(p=>({name:p.name,rolle:p.rolle}))
+    unterzeichner:schweigKandidaten(k).map(p=>({name:p.name,rolle:p.rolle}))
   };
 }
 function onLeerKlientSelect(){
@@ -2543,7 +2543,7 @@ function schweigListeInit(){
   _schweigQuelle=quelle;
   const list=document.getElementById('schweig_list'); if(!list) return;
   list.innerHTML='';
-  const kand=k?schweigKandidaten(k).filter(p=>p.aktiv):[];
+  const kand=k?schweigKandidaten(k):[];
   if(kand.length) kand.forEach(p=>addSchweigPerson(p));
   else addSchweigPerson({name:'',rolle:'Mutter',aktiv:true});
 }
