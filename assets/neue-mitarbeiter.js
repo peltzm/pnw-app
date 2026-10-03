@@ -11,7 +11,7 @@ const NM = (function () {
   const VORLAGEN = [
     { key: 'vertrag', datei: 'arbeitsvertrag.json', titel: 'Arbeitsvertrag (Vorlage)', accept: '.json,application/json' },
     { key: 'fz', datei: 'fuehrungszeugnis.json', titel: 'Antrag erweitertes Führungszeugnis (Vorlage)', accept: '.json,application/json' },
-    { key: 'pf', datei: 'personalfragebogen.json', titel: 'Personalfragebogen (Vorlage)', accept: '.json,application/json' },
+    { key: 'pf', datei: 'Personalfragebogen_DATEV.docx', titel: 'Personalfragebogen (DATEV-Standarddokument)', accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
     { key: 'az', datei: 'PNW_Arbeitszeitrichtlinie.pdf', titel: 'Arbeitszeitrichtlinie', accept: '.pdf,application/pdf' },
     { key: 'fb', datei: 'PNW_Unternehmensrichtlinie_Fortbildung.pdf', titel: 'Unternehmensrichtlinie Fortbildung', accept: '.pdf,application/pdf' },
     { key: 'dr', datei: 'PNW_Unternehmensrichtlinie_Dienstreisen.pdf', titel: 'Unternehmensrichtlinie Dienstreisen', accept: '.pdf,application/pdf' },
@@ -38,6 +38,7 @@ const NM = (function () {
     { sp: 'Status', key: 'status', typ: 'text' },
     { sp: 'MitarbeiterId', key: 'mitarbeiterId', typ: 'text' },
   ];
+  const DOCX_TYP = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   const STATUS = [
     ['entwurf', 'Entwurf'], ['mail_bereit', 'Mailentwurf liegt vor'], ['versendet', 'Vertrag versendet'],
     ['zurueck', 'Vertrag zurück'], ['plan', 'In Einarbeitung'],
@@ -196,12 +197,13 @@ const NM = (function () {
   async function vorlageHochladen(key, file) {
     const v = VORLAGEN.find(x => x.key === key); const st = byId2('nmUploadStatus');
     try {
-      if (v.datei.endsWith('.json')) { const j = JSON.parse(await file.text()); if (!Array.isArray(j.blocks)) throw new Error('Keine gültige Vertragsvorlage (blocks fehlt).'); }
+      if (v.datei.endsWith('.json')) { const j = JSON.parse(await file.text()); if (!Array.isArray(j.blocks)) throw new Error('Keine gültige Vorlage (blocks fehlt).'); }
       else if (file.size > 4 * 1024 * 1024) throw new Error('Datei größer als 4 MB.');
+      if (v.datei.endsWith('.docx')) { const k = new Uint8Array(await file.slice(0, 2).arrayBuffer()); if (k[0] !== 0x50 || k[1] !== 0x4B) throw new Error('Das ist keine Word-Datei (.docx).'); }
       if (st) st.textContent = 'Lade „' + v.datei + '“ hoch …';
       const t = await token();
       const url = 'https://graph.microsoft.com/v1.0/sites/' + CFG.spHost + '/drive/root:/' + encodeURIComponent(ORDNER) + '/' + encodeURIComponent(v.datei) + ':/content?@microsoft.graph.conflictBehavior=replace';
-      const r = await fetch(url, { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': v.datei.endsWith('.json') ? 'application/json' : 'application/pdf' }, body: file });
+      const r = await fetch(url, { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': v.datei.endsWith('.json') ? 'application/json' : (v.datei.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/pdf') }, body: file });
       if (!r.ok) throw new Error('Upload fehlgeschlagen (' + r.status + '): ' + await r.text());
       await ladeVorlagenStatus(); zeigeToast('Vorlage gespeichert'); render();
     } catch (e) { if (st) st.textContent = 'Fehler: ' + e.message; else zeigeToast(e.message, true); }
@@ -344,31 +346,28 @@ const NM = (function () {
       const fzOffen = NM_PDF.fehlende(fzTpl, fzVals); if (fzOffen.length) throw new Error('Platzhalter ohne Wert: ' + fzOffen.join(', '));
       const fzB64 = await new Promise((res, rej) => { try { pdfMake.createPdf(NM_PDF.docDefinition(fzTpl, fzVals, { titel: fzTpl.name, titelGroesse: 12.5, kopfRechts: x.name, logo: a.logo })).getBase64(res); } catch (e) { rej(e); } });
       const fzName = ('Antrag_Fuehrungszeugnis_' + x.nachname + '_' + x.vorname + '.pdf').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
-      const pfTpl = JSON.parse(await vorlageHolen('personalfragebogen.json', true));
       const vollzeit = Number(x.stunden) >= 39;
       const pfVals = { name: x.name, vorname: x.vorname, nachname: x.nachname, geburtsdatum: fzVals.geburtsdatum, strasse: x.strasse, plz_ort: x.plzOrt, eintritt: kurzDatum(x.eintritt),
-        beruf: x.beruf, stunden: zahlDe(x.stunden), vollzeit: String(vollzeit), teilzeit: String(!vollzeit), grundgehalt: eur(x.grundgehalt), sue: eur(x.sue), vertragsdatum: kurzDatum(x.vertragsdatum) };
-      const pfOffen = NM_PDF.fehlende(pfTpl, pfVals); if (pfOffen.length) throw new Error('Platzhalter ohne Wert im Personalfragebogen: ' + pfOffen.join(', '));
-      const pfB64 = await new Promise((res, rej) => { try { pdfMake.createPdf(NM_PDF.docDefinition(pfTpl, pfVals, { titel: pfTpl.name, titelAlign: 'left', titelGroesse: 16, titelOben: 30, kopfLabel: 'Personalfragebogen', kopfRechts: x.name, logo: a.logo,
-        fuss: ['Dieser Personalfragebogen dient zur Vorerfassung von Personaldaten für das DATEV-Lohnabrechnungsprogramm.', 'Zur Wahrung der Aufbewahrungsfrist wird der ausgefüllte Personalfragebogen gespeichert.'] })).getBase64(res); } catch (e) { rej(e); } });
-      const pfName = ('Personalfragebogen_' + x.nachname + '_' + x.vorname + '.pdf').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
+        beruf: x.beruf, stunden: zahlDe(x.stunden), vollzeit, grundgehalt: eur(x.grundgehalt), sue: eur(x.sue), vertragsdatum: kurzDatum(x.vertragsdatum) };
+      const pfB64 = await NM_DOCX.personalfragebogen(await vorlageHolen('Personalfragebogen_DATEV.docx', false), pfVals, { JSZip: window.JSZip, DOMParser: window.DOMParser, XMLSerializer: window.XMLSerializer });
+      const pfName = ('Personalfragebogen_' + x.nachname + '_' + x.vorname + '.docx').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
       const richtlinien = [];
       for (const v of VORLAGEN.filter(v => v.datei.endsWith('.pdf'))) richtlinien.push({ name: v.datei, b64: bufZuB64(await vorlageHolen(v.datei, false)) });
       const dateiname = ('Arbeitsvertrag_' + x.nachname + '_' + x.vorname + '.pdf').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
-      paket = { id, vertrag: { name: dateiname, b64: vertragB64 }, fz: { name: fzName, b64: fzB64 }, pf: { name: pfName, b64: pfB64 }, richtlinien };
+      paket = { id, vertrag: { name: dateiname, b64: vertragB64 }, fz: { name: fzName, b64: fzB64 }, pf: { name: pfName, b64: pfB64, typ: DOCX_TYP }, richtlinien };
       const kb = n => Math.round(n * 0.75 / 1024) + ' KB';
       inh.innerHTML = '<p style="font-size:13px;margin-bottom:10px">Das Paket ist fertig. Prüfe den Vertrag, bevor du den Mailentwurf anlegst.</p>' +
         '<table class="ea-tbl"><thead><tr><th>Anlage</th><th>Größe</th><th></th></tr></thead><tbody>' +
         '<tr><td>' + esc(dateiname) + '</td><td>' + kb(vertragB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschau">Vertrag ansehen</button></td></tr>' +
         '<tr><td>' + esc(fzName) + '</td><td>' + kb(fzB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschauFz">Antrag ansehen</button></td></tr>' +
-        '<tr><td>' + esc(pfName) + '</td><td>' + kb(pfB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschauPf">Fragebogen ansehen</button></td></tr>' +
+        '<tr><td>' + esc(pfName) + '</td><td>' + kb(pfB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschauPf">Fragebogen laden</button></td></tr>' +
         richtlinien.map(r => '<tr><td>' + esc(r.name) + '</td><td>' + kb(r.b64.length) + '</td><td></td></tr>').join('') + '</tbody></table>' +
         '<p class="ea-item-desc" style="margin:10px 0">Empfänger: ' + esc(x.privatmail) + ' · Gehalt im Vertrag: ' + eur(x.grundgehalt) + ' + ' + eur(x.sue) + ' SuE-Zulage (' + esc(zahlDe(x.stunden)) + ' Std.)</p>' +
         '<div class="dlg-err" id="nmFehler"></div><div class="dialog-actions"><button class="btn btn-solid" id="nmMailBtn">Mailentwurf in meinem Postfach speichern</button>' +
         '<button class="btn btn-outline" id="nmDownload">Vertrag herunterladen</button><button class="btn btn-outline" id="nmZu">Schließen</button></div>';
       byId2('nmVorschau').onclick = () => window.open(URL.createObjectURL(b64Blob(vertragB64)));
       byId2('nmVorschauFz').onclick = () => window.open(URL.createObjectURL(b64Blob(fzB64)));
-      byId2('nmVorschauPf').onclick = () => window.open(URL.createObjectURL(b64Blob(pfB64)));
+      byId2('nmVorschauPf').onclick = () => { const a3 = document.createElement('a'); a3.href = URL.createObjectURL(b64Blob(pfB64, DOCX_TYP)); a3.download = pfName; a3.click(); };
       byId2('nmDownload').onclick = () => { const a2 = document.createElement('a'); a2.href = URL.createObjectURL(b64Blob(vertragB64)); a2.download = dateiname; a2.click(); };
       byId2('nmZu').onclick = schliesse;
       byId2('nmMailBtn').onclick = () => mailentwurf(id);
@@ -377,7 +376,7 @@ const NM = (function () {
       byId2('nmZu').onclick = schliesse;
     }
   }
-  function b64Blob(b64) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: 'application/pdf' }); }
+  function b64Blob(b64, typ) { const bin = atob(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: typ || 'application/pdf' }); }
 
   async function mailentwurf(id) {
     const x = eintrag(id); const err = byId2('nmFehler'); const btn = byId2('nmMailBtn');
@@ -385,13 +384,13 @@ const NM = (function () {
     try {
       btn.disabled = true; err.textContent = '';
       const t = await token(['Mail.ReadWrite']);
-      const anlagen = [paket.vertrag, paket.fz, paket.pf].concat(paket.richtlinien).map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: 'application/pdf', contentBytes: a.b64 }));
+      const anlagen = [paket.vertrag, paket.fz, paket.pf].concat(paket.richtlinien).map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.typ || 'application/pdf', contentBytes: a.b64 }));
       const gruss = 'Guten Tag ' + esc(x.vorname) + ' ' + esc(x.nachname) + ',';
       const body = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' +
         '<p>' + gruss + '</p>' +
         '<p>herzlich willkommen bei Praxis NeueWege! Wir freuen uns, dass du ab dem ' + esc(langDatum(x.eintritt)) + ' bei uns startest.</p>' +
         '<p>Anbei erhältst du deinen Arbeitsvertrag sowie unsere Richtlinien zu Arbeitszeit, Fortbildung und Dienstreisen. Bitte lies alles in Ruhe durch, unterschreibe den Vertrag und sende ihn uns unterschrieben zurück.</p>' +
-        '<p>Bitte fülle außerdem den beigefügten Personalfragebogen aus (Bankverbindung, Steuer-ID, Sozialversicherungsnummer, Krankenkasse usw.) und sende ihn mit dem Vertrag zurück. Die grau hinterlegten Felder füllen wir aus.</p>' +
+        '<p>Bitte fülle außerdem den beigefügten Personalfragebogen (Word) aus, am besten am Computer (Bankverbindung, Steuer-ID, Sozialversicherungsnummer, Krankenkasse usw.), und sende ihn mit dem Vertrag zurück. Die grau hinterlegten Felder füllen wir aus.</p>' +
         '<p>Für die Tätigkeit in der Kinder- und Jugendhilfe benötigen wir außerdem ein erweitertes Führungszeugnis. Mit dem beigefügten Schreiben kannst du es bei deiner Meldebehörde beantragen. Es wird dir direkt zugesandt, bitte lege es uns dann im Original vor.</p>' +
         '<p>Bei Fragen melde dich jederzeit gern.</p>' +
         '<p>Herzliche Grüße<br>Markus Peltz<br>Praxis NeueWege GmbH</p></div>';
