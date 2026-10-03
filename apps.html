@@ -272,21 +272,23 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
     </div>
   </div>
 
+  <div id="zgBox"></div>
+
   <div class="app-grid">
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/sozialraum.html">
+    <a class="app-card" data-gruppe="PNW-App-Sozialraum" href="https://apps.praxisneuewege.de/sozialraum.html">
       <div class="card-icon">🗺️</div>
       <div class="card-name">Sozialraum</div>
       <div class="card-desc">Regionale Angebote finden und pflegen</div>
     </a>
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/index.html">
+    <a class="app-card" data-gruppe="PNW-App-Berichtsgenerator" href="https://apps.praxisneuewege.de/index.html">
       <div class="card-icon">📄</div>
       <div class="card-name">Berichte</div>
       <div class="card-desc">Berichte erstellen und speichern</div>
     </a>
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/spesenabrechnung.html">
+    <a class="app-card" data-gruppe="PNW-App-Spesenabrechnung" href="https://apps.praxisneuewege.de/spesenabrechnung.html">
       <div class="card-icon">🧾</div>
       <div class="card-name">Spesen</div>
       <div class="card-desc">Belege erfassen und einreichen</div>
@@ -308,13 +310,13 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
       <div class="card-desc">Lohnabrechnungen via DATEV</div>
     </a>
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/teamuebersicht.html">
+    <a class="app-card" data-gruppe="PNW-App-Teamkarte" href="https://apps.praxisneuewege.de/teamuebersicht.html">
       <div class="card-icon">🗺️</div>
       <div class="card-name">Teamkarte</div>
       <div class="card-desc">Einzugsgebiet und Teamkarte ansehen und exportieren</div>
     </a>
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/signatur.html">
+    <a class="app-card" data-gruppe="PNW-App-Signatur" href="https://apps.praxisneuewege.de/signatur.html">
       <div class="card-icon">✉️</div>
       <div class="card-name">E-Mail-Signatur</div>
       <div class="card-desc">Offizielle Signatur erstellen — Name/E-Mail fest, Position/Telefon änderbar</div>
@@ -326,19 +328,19 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
       <div class="card-desc">Klientenformulare erfassen, unterzeichnen und drucken — neu mit Kilanka-Vorbefüllung</div>
     </a>
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/meetingprotokoll.html">
+    <a class="app-card" data-gruppe="PNW-App-Meetingprotokoll" href="https://apps.praxisneuewege.de/meetingprotokoll.html">
       <div class="card-icon">📋</div>
       <div class="card-name">Protokolle</div>
       <div class="card-desc">Meetingprotokolle erstellen und freigeben</div>
     </a>
 
-    <a class="app-card beta" href="https://apps.praxisneuewege.de/organisation.html">
+    <a class="app-card beta" data-gruppe="PNW-App-Organisation" href="https://apps.praxisneuewege.de/organisation.html">
       <div class="card-icon">🏢</div>
       <div class="card-name">Organisation</div>
       <div class="card-desc">Organigramm und Mitarbeiterverzeichnis</div>
     </a>
 
-    <a class="app-card beta" href="https://apps.praxisneuewege.de/fahrtenbuch-check.html">
+    <a class="app-card beta" data-gruppe="PNW-App-Fahrtenbuchcheck" href="https://apps.praxisneuewege.de/fahrtenbuch-check.html">
       <div class="card-icon">🚗</div>
       <div class="card-name">Fahrtenbuch-Check</div>
       <div class="card-desc">Eigenen Privatanteil prüfen – rein lokal, ohne Datenspeicherung</div>
@@ -352,6 +354,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   </footer>
 </div>
 
+<script src="assets/zugriff-portal.js"></script>
 <script>
 // HTTPS erzwingen — MSAL funktioniert nicht über HTTP
 if (location.protocol === 'http:' && location.hostname !== 'localhost') {
@@ -466,6 +469,7 @@ async function showApp(account) {
   const initials = name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
   const avatarEl = document.getElementById('profileAvatar');
   avatarEl.textContent = initials;
+  if (window.PNW_ZUGRIFF) PNW_ZUGRIFF.start({ msalInstance, account, scopes: SCOPES }); // Zugriffssteuerung (Worker prüft Gruppen)
   const token = await getToken();
   if (token) {
     const url = await loadProfilePhoto(token);

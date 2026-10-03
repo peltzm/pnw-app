@@ -2617,6 +2617,115 @@ async function sanityStatusLesen(env, monat) {
   }
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+// Zugriffssteuerung über Entra-Sicherheitsgruppen (Weg B)
+//
+// Je App eine Gruppe "PNW-App-<Name>"; darin verschachtelt die Rollengruppen
+// Team / TL-Ambulant / GF. Geprüft wird die TRANSITIVE Mitgliedschaft über das
+// Graph-Token des Aufrufers (X-Graph-Token): /me/transitiveMemberOf — nicht
+// /me/memberOf, das verschachtelte Gruppen nicht auflöst.
+//
+// ZUGRIFF_MODUS:
+//   "test"   → nichts wird gesperrt; jede Entscheidung wird nur protokolliert
+//              (console.warn "[ZUGRIFF-TEST]" + KV-Bericht über /api/zugriff)
+//   "scharf" → Nichtmitglieder erhalten 403; bei Graph-Ausfall 503 (fail-closed)
+// Die Geschäftsführung (GF_UPNS) wird in BEIDEN Modi nie gesperrt — auch nicht
+// bei Graph-Ausfall oder fehlender Gruppe.
+// Umschalten = diese Konstante ändern und pushen (Freigabe durch Markus).
+// ═══════════════════════════════════════════════════════════════
+const ZUGRIFF_MODUS = "test";
+
+// Gruppen je Worker-Endpunkt (any-of). Orientierungsgespräch nutzt
+// /api/mitarbeiter-cockpit mit, daher ist dort die OG-Gruppe ebenfalls zulässig.
+const ENDPUNKT_GRUPPEN = {
+  "meine-klienten":     ["PNW-App-Berichtsgenerator", "PNW-App-Formulare"],
+  "manager-cockpit":    ["PNW-App-ManagerCockpit"],
+  "jugendamt-cockpit":  ["PNW-App-JugendamtCockpit"],
+  "mitarbeiter-cockpit":["PNW-App-MitarbeiterCockpit", "PNW-App-Orientierungsgespraech"],
+  "og-kennzahlen":      ["PNW-App-Orientierungsgespraech"],
+  "scorecard":          ["PNW-App-BusinessScorecard"],
+  "unterschriften":     ["PNW-App-Unterschriften"],
+};
+
+let gruppenCache = new Map(); // upn → { namen:Set, fetchedAt }
+const GRUPPEN_CACHE_MIN = 5;
+
+// Das Graph-Token muss zum Aufrufer gehören (Claims sind unverifiziert lesbar;
+// Graph selbst lehnt gefälschte Token ab — hier geht es nur um Verwechslung).
+function graphTokenGehoertZu(graphToken, caller) {
+  try {
+    const p = JSON.parse(new TextDecoder().decode(b64urlToBytes(graphToken.split(".")[1])));
+    const u = String(p.upn || p.unique_name || p.preferred_username || "").toLowerCase();
+    return !u || u === caller;
+  } catch { return true; }
+}
+
+async function gruppenDesCallers(request, caller) {
+  const hit = gruppenCache.get(caller);
+  if (hit && Date.now() - hit.fetchedAt < GRUPPEN_CACHE_MIN * 60 * 1000) return { namen: hit.namen, fehler: null };
+  const graphToken = request.headers.get("X-Graph-Token");
+  if (!graphToken) return { namen: new Set(), fehler: "Graph-Token fehlt" };
+  if (!graphTokenGehoertZu(graphToken, caller)) return { namen: new Set(), fehler: "Graph-Token gehört nicht zum angemeldeten Konto" };
+  try {
+    const liste = await graphAlleSeiten(
+      "https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?$select=displayName&$top=999",
+      graphToken, "me/transitiveMemberOf"
+    );
+    const namen = new Set(liste.map((g) => String(g.displayName || "").toLowerCase()).filter(Boolean));
+    if (gruppenCache.size > 200) gruppenCache.clear();
+    gruppenCache.set(caller, { namen, fetchedAt: Date.now() });
+    return { namen, fehler: null };
+  } catch (e) {
+    return { namen: new Set(), fehler: e.message };
+  }
+}
+
+const istGfUpn = (caller) => GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+
+// Zugriffsentscheidung für eine Liste zulässiger Gruppen (any-of).
+// Rückgabe: { ok, status, error, wuerdeSperren, grund }
+async function appZugriff(request, caller, gruppen, kontext) {
+  if (istGfUpn(caller)) return { ok: true, wuerdeSperren: false, grund: "gf" };
+  const { namen, fehler } = await gruppenDesCallers(request, caller);
+  if (fehler) {
+    console.warn(`[ZUGRIFF-${ZUGRIFF_MODUS}] ${kontext} ${caller}: Gruppen nicht prüfbar (${fehler})`);
+    if (ZUGRIFF_MODUS !== "scharf") return { ok: true, wuerdeSperren: false, grund: "graph-fehler" };
+    return { ok: false, status: 503, error: "Berechtigung derzeit nicht prüfbar — Microsoft Graph antwortet nicht. Bitte in einer Minute erneut versuchen.", grund: "graph-fehler" };
+  }
+  if (gruppen.some((g) => namen.has(g.toLowerCase()))) return { ok: true, wuerdeSperren: false, grund: "mitglied" };
+  console.warn(`[ZUGRIFF-${ZUGRIFF_MODUS}] ${kontext} ${caller}: kein Mitglied von ${gruppen.join(" | ")}`);
+  if (ZUGRIFF_MODUS !== "scharf") return { ok: true, wuerdeSperren: true, grund: "kein-mitglied" };
+  return { ok: false, status: 403, error: `Kein Zugriff auf diese App (Gruppe ${gruppen[0]})`, wuerdeSperren: true, grund: "kein-mitglied" };
+}
+
+// Kurzform für die Endpunkte: liefert eine Response (Sperre) oder null (weiter).
+async function endpunktGate(request, caller, schluessel, origin) {
+  const z = await appZugriff(request, caller, ENDPUNKT_GRUPPEN[schluessel], `/api/${schluessel}`);
+  return z.ok ? null : json({ error: z.error }, z.status, origin);
+}
+
+// Portal: Ergebnis je Kachel-Gruppe (data-gruppe). Im Testmodus wird das
+// Ergebnis je Konto in KV abgelegt (nur Anzeige — es sperrt nichts).
+async function zugriffPortal(request, env, caller, name, angefragt) {
+  const gf = istGfUpn(caller);
+  let namen = new Set(), fehler = null;
+  if (!gf) ({ namen, fehler } = await gruppenDesCallers(request, caller));
+  const apps = {};
+  for (const g of angefragt) apps[g] = gf || (!fehler && namen.has(g.toLowerCase()));
+  const antwort = { modus: ZUGRIFF_MODUS, gf, fehler, apps };
+  if (ZUGRIFF_MODUS === "test" && !fehler && env.PNW_DATEN) {
+    try {
+      const key = `zugriff:test:${caller}`;
+      const alt = await env.PNW_DATEN.get(key, "json");
+      const neu = { upn: caller, name: name || caller, gf, apps, am: new Date().toISOString() };
+      const gleich = alt && JSON.stringify(alt.apps) === JSON.stringify(apps) && Date.now() - Date.parse(alt.am) < 6 * 3600 * 1000;
+      if (!gleich) await env.PNW_DATEN.put(key, JSON.stringify(neu));
+    } catch (e) { console.warn("Zugriffsbericht nicht speicherbar:", e.message); }
+  }
+  return antwort;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -2624,6 +2733,35 @@ export default {
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+
+    // ── Zugriffssteuerung: Portal fragt, welche Kacheln der Aufrufer sehen darf ──
+    if (url.pathname === "/api/zugriff" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      const angefragt = (url.searchParams.get("apps") || "")
+        .split(",").map((x) => x.trim()).filter((x) => /^PNW-App-[A-Za-z0-9-]{1,60}$/.test(x)).slice(0, 60);
+      return json(await zugriffPortal(request, env, caller, auth.name, angefragt), 200, origin);
+    }
+
+    // Testbericht: wer HÄTTE Zugriff, wer nicht — nur GF, nur Anzeige
+    if (url.pathname === "/api/zugriff/bericht" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!istGfUpn(caller)) return json({ error: "Nur für die Geschäftsführung" }, 403, origin);
+      if (!env.PNW_DATEN) return json({ error: "KV-Speicher PNW_DATEN ist nicht gebunden" }, 503, origin);
+      const eintraege = [];
+      let cursor;
+      do {
+        const l = await env.PNW_DATEN.list({ prefix: "zugriff:test:", cursor });
+        for (const k of l.keys) { const v = await env.PNW_DATEN.get(k.name, "json"); if (v) eintraege.push(v); }
+        cursor = l.list_complete ? null : l.cursor;
+      } while (cursor);
+      eintraege.sort((a, b) => String(a.name).localeCompare(String(b.name), "de"));
+      return json({ modus: ZUGRIFF_MODUS, anzahl: eintraege.length, eintraege }, 200, origin);
     }
 
     // ── Sanity Check: Auffaelligkeiten in den erfassten Leistungen — nur GF ──
@@ -2685,6 +2823,7 @@ export default {
       if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
+      { const gate = await endpunktGate(request, caller, "unterschriften", origin); if (gate) return gate; }
       try {
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
         const dr = istGf
@@ -2880,6 +3019,7 @@ export default {
       if (!auth.upn.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
+      { const gate = await endpunktGate(request, (auth.upn || "").trim().toLowerCase(), "meine-klienten", origin); if (gate) return gate; }
       try {
         const now = new Date();
         // Manuelles Neuladen: Cache verwerfen, aber höchstens einmal pro Minute
@@ -2928,6 +3068,7 @@ export default {
       if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
+      { const gate = await endpunktGate(request, caller, "manager-cockpit", origin); if (gate) return gate; }
       try {
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
         // GF-Vorschau: ?als=<upn> zeigt der GF exakt die Sicht einer Teamleitung
@@ -3016,6 +3157,7 @@ export default {
       if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
+      { const gate = await endpunktGate(request, caller, "jugendamt-cockpit", origin); if (gate) return gate; }
       try {
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
         const dr = istGf ? { reports: [], fehler: null } : await fetchDirectReports(request.headers.get("X-Graph-Token"));
@@ -3049,6 +3191,7 @@ export default {
       }
       try {
         const caller = (auth.upn || "").trim().toLowerCase();
+      { const gate = await endpunktGate(request, caller, "mitarbeiter-cockpit", origin); if (gate) return gate; }
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
         const dr = istGf ? { reports: [], fehler: null } : await fetchDirectReports(request.headers.get("X-Graph-Token"));
         // Hier ist "fk" ein regulaerer Zustand (eigene Daten). Nur bei echtem
@@ -3105,6 +3248,7 @@ export default {
       try {
         // Personalgespräch: nur die eigene Sicht oder die Geschäftsführung — bewusst KEINE Teamleitungs-Sicht
         const caller = (auth.upn || "").trim().toLowerCase();
+      { const gate = await endpunktGate(request, caller, "og-kennzahlen", origin); if (gate) return gate; }
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
         const target = (url.searchParams.get("mitarbeiter") || "").toLowerCase() || caller;
         if (target !== caller && !istGf) {
@@ -3142,6 +3286,7 @@ export default {
       if (!caller.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
+      { const gate = await endpunktGate(request, caller, "scorecard", origin); if (gate) return gate; }
       try {
         const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
         let liste, rolle;
