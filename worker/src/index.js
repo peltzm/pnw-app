@@ -160,7 +160,10 @@ const CLIENT_GRAPH = {
   contacts: {
     kind: { name: 1 },
     custodian: 1,
-    contact: { recName: 1, name: 1, firstName: 1 },
+    contact: {
+      recName: 1, name: 1, firstName: 1, street: 1, zip: 1, city: 1,
+      contactMechanisms: { type: 1, mechanismType: { name: 1 }, value: 1 },
+    },
   },
   actions: {
     recName: 1, mainAction: 1, deletedAt: 1,
@@ -566,6 +569,32 @@ function buildClientProfile(client, action, role, now, qualiMap, kontaktMails) {
       familienname: c.contact.name || "",
     }));
 
+  // Eltern/Geschwister für den Startkompass (Formulare-App): Mutter/Vater unabhängig vom Sorgerecht,
+  // mit Adresse und Telefon aus dem Kontakt (Mobil vor Festnetz; E-Mail/Fax ausgeschlossen)
+  const _telVon = (ct) => {
+    const ms = (ct?.contactMechanisms || []).filter((m) => m.value && !/mail|fax/i.test(m.mechanismType?.name || m.type || ""));
+    const mob = ms.find((m) => /mobil|handy/i.test(m.mechanismType?.name || ""));
+    return String((mob || ms[0])?.value || "").trim();
+  };
+  const _personVon = (c) => ({
+    vorname: c.contact.firstName || "",
+    familienname: c.contact.name || "",
+    adresse: [c.contact.street, [c.contact.zip, c.contact.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    telefon: _telVon(c.contact),
+    sorgeberechtigt: c.custodian === true,
+  });
+  const _elternTeil = (rx) => {
+    const cs = (client.contacts || []).filter((c) => c.contact && rx.test(c.kind?.name || ""));
+    const exakt = cs.filter((c) => rx.test(c.kind?.name || "") && /^(mutter|vater)$/i.test((c.kind?.name || "").trim()));
+    const pick = (exakt.length ? exakt : cs).sort((a, b) => (b.custodian === true) - (a.custodian === true))[0];
+    return pick ? _personVon(pick) : null;
+  };
+  const mutter = _elternTeil(/mutter/i);
+  const vater = _elternTeil(/vater/i);
+  const geschwister = (client.contacts || [])
+    .filter((c) => /geschwister|bruder|schwester/i.test(c.kind?.name || "") && c.contact)
+    .map((c) => ({ ..._personVon(c), beziehung: c.kind?.name || "" }));
+
   // Alle aktiven Betreuer der Maßnahme (HB zuerst, dann MB, dann V) —
   // Namen in Anzeigeform "Vorname Nachname" (passend zur M365-Auswahlliste)
   const betreuerMap = new Map();
@@ -622,6 +651,9 @@ function buildClientProfile(client, action, role, now, qualiMap, kontaktMails) {
     Kind_PLZ_Ort: [client.zip, client.city].filter(Boolean).join(" "),
     Sorgeberechtigte: sorgeberechtigte,
     WeitereKinder: weitereKinder,
+    Mutter: mutter,
+    Vater: vater,
+    Geschwister: geschwister,
   };
 }
 
