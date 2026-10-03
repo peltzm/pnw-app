@@ -487,10 +487,14 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
           <div class="card">
             <div class="card-title">🤝 Details — Schweigepflichtsentbindung</div>
             <div class="fg full"><div class="field"><label>Institution (Name + Ort) *</label><input type="text" id="s_inst" placeholder="z.B. Grundschule Musterstadt, Hauptstraße 1, 85405 Musterstadt"></div></div>
-            <div class="fg">
-              <div class="field"><label>Zweiter Sorgeberechtigter (optional)</label><input type="text" id="s_sorge2" placeholder="Name"></div>
-              <div class="field"><label>Vertretende Fachkraft (aus M365)</label><input type="text" id="s_vertr" readonly style="background:var(--bg);color:var(--text-muted);"></div>
-            </div>
+            <div style="height:1px;background:var(--border);margin:1rem 0 .75rem;"></div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Unterzeichnende (Sorgeberechtigte) — Häkchen entfernen, wenn die Person nicht unterschreibt</div>
+            <div id="schweig_list"></div>
+            <button class="btn-add" onclick="addSchweigPerson()" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+              Weitere Person hinzufügen
+            </button>
+            <input type="hidden" id="s_vertr">
           </div>
         </div>
 
@@ -994,7 +998,8 @@ function buildLeerPre(k){
          geb:k.Kind_Geburtsdatum?fmtDate(k.Kind_Geburtsdatum):'',
          str:_kVal(k.Kind_Strasse||''), plz, ort, sgb, tel:'', email:'',
          fk:M365_USER.displayName, datum:'' },   // Datum + Unterschriften bleiben bewusst leer
-    ids, vollmachtgeber:vg, geschwister:kp.gs
+    ids, vollmachtgeber:vg, geschwister:kp.gs,
+    unterzeichner:schweigKandidaten(k).filter(p=>p.aktiv).map(p=>({name:p.name,rolle:p.rolle}))
   };
 }
 function onLeerKlientSelect(){
@@ -1040,9 +1045,6 @@ function onKilankaKlientSelect(){
   if(sorg[0]){
     _kSet('v_geb', [ _kVal(sorg[0].familienname), _kVal(sorg[0].vorname) ].filter(Boolean).join(', '));
     _kSet('v_geb_ort', k.Kind_PLZ_Ort);
-  }
-  if(sorg[1]){
-    _kSet('s_sorge2', [ _kVal(sorg[1].vorname), _kVal(sorg[1].familienname) ].filter(Boolean).join(' '));
   }
   // Startkompass: Mutter, Vater, Geschwister
   try{ kompassBefuellen(k); }catch(e){ console.warn('Startkompass-Vorbefüllung:',e); }
@@ -1266,6 +1268,7 @@ function goToDetails(){
   // Kind-Name aus Stammdaten vorausfüllen (wenn vorhanden)
   const vkind=document.getElementById('v_kind');
   if(vkind&&!vkind.dataset.manuallyEdited&&kd.name) vkind.value=kd.name;
+  if(selForms.has('schweig')) schweigListeInit();
   showPanel('details');
 }
 
@@ -1566,13 +1569,15 @@ function buildStep(fid,idx){
     </div>`;
   }
   const vGebers2=(fid==='vollm')?getAllVollmachtgeber():[];
-  if(fid==='vollm' && vGebers2.length>1){
+  const sUnt=(fid==='schweig')?getSchweigUnterzeichner():[];
+  const sigPersonen=(fid==='vollm')?vGebers2.map((v,i)=>({titel:'Unterschrift '+(v.name||'Vollmachtgeber '+(i+1))})):sUnt.map(u=>({titel:'Unterschrift '+u.name+' ('+u.rolle+')'}));
+  if((fid==='vollm'&&vGebers2.length>1)||(fid==='schweig'&&sUnt.length>1)){
     // Multiple signature pads: one per Vollmachtgeber
-    vGebers2.forEach((vg,i)=>{
+    sigPersonen.forEach((vg,i)=>{
       const padId=fid+'_'+i;
       html+=`
   <div class="sig-container">
-    <div class="sig-title">Unterschrift ${vg.name||'Vollmachtgeber '+(i+1)}</div>
+    <div class="sig-title">${vg.titel}</div>
     <div class="sig-meta">${kd.datum?fmtDate(kd.datum):''}</div>
     <div class="sig-canvas-wrap" id="sigWrap_${padId}">
       <canvas id="sigCanvas_${padId}" width="600" height="180"></canvas>
@@ -1611,7 +1616,11 @@ function buildStep(fid,idx){
 
 // ── SIGNATURE PAD ──
 function setupPad(fid){
-  if(fid==='vollm'){
+  if(fid==='schweig'){
+    const _u=getSchweigUnterzeichner();
+    const padIds=_u.length>1?_u.map((_,i)=>fid+'_'+i):[fid];
+    padIds.forEach((padId,i)=>setTimeout(()=>_initPad(padId), i*80));
+  } else if(fid==='vollm'){
     const vGebers=getAllVollmachtgeber();
     const padIds=vGebers.length>1 ? vGebers.map((_,i)=>fid+'_'+i) : [fid];
     // Sequenziell initialisieren: jedes Pad 80ms nach dem vorherigen
@@ -1755,6 +1764,8 @@ function klNav(dir){
       padIds=['kompass_eb']; // kompass_kl is optional
     } else if(fid==='vollm'&&vGebers.length>1){
       padIds=vGebers.map((_,i)=>fid+'_'+i);
+    } else if(fid==='schweig'&&getSchweigUnterzeichner().length>1){
+      padIds=getSchweigUnterzeichner().map((_,i)=>fid+'_'+i);
     } else {
       padIds=[fid];
     }
@@ -2031,8 +2042,19 @@ function generatePDF(formId, blank, pre){
     section('Hinweis Schweigepflicht','Ich/Wir wurde/n über die gesetzliche Schweigepflicht gem. § 203 StGB und § 65 SGB VIII umfassend unterrichtet. Die Daten dürfen anderen Stellen nur unter den Voraussetzungen der §§ 61–68 SGB VIII sowie §§ 67–85a SGB X übermittelt werden.');
     section('Widerruf','Diese Entbindungserklärung kann jederzeit schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO).');
     pageCheck(62);hRule();capsSection('ANGABEN & UNTERSCHRIFT');
-    fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',((kdX.plz||'')+' '+(kdX.ort||'')).trim());
-    sigArea2((kdX.ort||'Nandlstadt')+', '+fmtDate(kdX.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigsX['schweig']);
+    const _sUnt=blank?((pre&&pre.unterzeichner)||[]):getSchweigUnterzeichner();
+    const _wohnort=((kdX.plz||'')+' '+(kdX.ort||'')).trim();
+    if(_sUnt.length){
+      _sUnt.forEach((u,i)=>{
+        pageCheck(42);
+        fieldRow2('Name, Vorname'+(_sUnt.length>1?' '+(i+1):''),u.name||'','Rolle',u.rolle||'');
+        fieldRow('Wohnort',_wohnort,CW,ML);
+        sigArea2((kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||''),'Unterschrift '+(u.rolle||'Sorgeberechtigte/r'),sigsX[_sUnt.length>1?'schweig_'+i:'schweig']);
+      });
+    } else {
+      fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',_wohnort);
+      sigArea2((kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigsX['schweig']);
+    }
   }
 
   else if(formId==='datenschutz'){
@@ -2306,7 +2328,7 @@ function _blankoPre(){
   });
   const ids=Object.assign({},base.ids,{ v_kind:name, v_kind_geb:geb?fmtDate(geb):'', v_fk1:M365_USER.displayName });
   const vg=(base.vollmachtgeber&&base.vollmachtgeber.length)?base.vollmachtgeber:[];
-  return {kd:kdB,ids,vollmachtgeber:vg,geschwister:base.geschwister||[]};
+  return {kd:kdB,ids,vollmachtgeber:vg,geschwister:base.geschwister||[],unterzeichner:base.unterzeichner||[]};
 }
 function _blankoSuffix(pre){
   const nn=(pre.kd.nn||'Klient').replace(/\s+/g,'');
@@ -2454,6 +2476,77 @@ function renumberNfk(){
 
 // ── GESCHWISTER: add/remove ──
 let gsCount=0;
+
+// ── SCHWEIGEPFLICHT: Unterzeichnende (Name, Vorname + Rolle) ──
+let _schweigCount=0, _schweigQuelle=null;
+const SCHWEIG_ROLLEN=['Mutter','Vater','Vormund','Sonstige'];
+function _rolleAusBeziehung(bz){
+  const t=String(bz||'').toLowerCase();
+  if(/mutter/.test(t)) return 'Mutter';
+  if(/vater/.test(t)) return 'Vater';
+  if(/vormund|pfleg|amtsvormund/.test(t)) return 'Vormund';
+  return 'Sonstige';
+}
+// Kandidaten aus Kilanka: alle Sorgeberechtigten + Mutter/Vater (auch ohne Sorgerechts-Flag)
+function schweigKandidaten(k){
+  const out=[], seen=new Set();
+  const add=(p,rolle,sorge)=>{
+    if(!p) return;
+    const nm=_elternNameKomma(p); if(!nm) return;
+    const key=nm.toLowerCase(); if(seen.has(key)) return; seen.add(key);
+    out.push({name:nm,rolle,sorge:sorge===true});
+  };
+  (k.Sorgeberechtigte||[]).forEach(s=>add(s,_rolleAusBeziehung(s.beziehung),true));
+  if(k.Mutter) add(k.Mutter,'Mutter',k.Mutter.sorgeberechtigt===true);
+  if(k.Vater)  add(k.Vater,'Vater',k.Vater.sorgeberechtigt===true);
+  // Reihenfolge: Mutter, Vater, übrige
+  const rk={Mutter:0,Vater:1,Vormund:2,Sonstige:3};
+  out.sort((a,b)=>(rk[a.rolle]-rk[b.rolle]));
+  // Aktiv: Sorgeberechtigte; gibt es keine, dann alle Eltern
+  const anySorge=out.some(p=>p.sorge);
+  out.forEach(p=>{ p.aktiv=anySorge?p.sorge:(p.rolle==='Mutter'||p.rolle==='Vater'); });
+  return out;
+}
+function addSchweigPerson(p){
+  const list=document.getElementById('schweig_list'); if(!list) return;
+  p=(p&&typeof p==='object'&&!p.target)?p:{name:'',rolle:'Mutter',aktiv:true};
+  const idx=_schweigCount++;
+  const blk=document.createElement('div');
+  blk.className='extra-block'; blk.id='sp_'+idx;
+  blk.innerHTML=`
+    <div class="extra-block-hd">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;"><input type="checkbox" id="sp_akt_${idx}" ${p.aktiv?'checked':''}> Unterzeichnet</label>
+      <button class="btn-remove-block" type="button" onclick="removeSchweigPerson(${idx})">Entfernen</button>
+    </div>
+    <div class="fg">
+      <div class="field"><label>Name, Vorname</label><input type="text" id="sp_name_${idx}" placeholder="Mustermann, Maria" value="${String(p.name||'').replace(/"/g,'&quot;')}"></div>
+      <div class="field"><label>Rolle</label><select id="sp_rolle_${idx}">${SCHWEIG_ROLLEN.map(r=>`<option${r===p.rolle?' selected':''}>${r}</option>`).join('')}</select></div>
+    </div>`;
+  list.appendChild(blk);
+}
+function removeSchweigPerson(idx){ const el=document.getElementById('sp_'+idx); if(el) el.remove(); }
+function getSchweigUnterzeichner(){
+  const res=[];
+  document.querySelectorAll('#schweig_list .extra-block').forEach(b=>{
+    const id=b.id.replace('sp_','');
+    const akt=document.getElementById('sp_akt_'+id), nm=document.getElementById('sp_name_'+id), ro=document.getElementById('sp_rolle_'+id);
+    if(akt&&akt.checked&&nm&&nm.value.trim()) res.push({name:nm.value.trim(),rolle:ro?ro.value:'Sonstige'});
+  });
+  return res;
+}
+// Liste einmal je Klient aus Kilanka vorbefüllen (manuelle Änderungen bleiben beim Zurückspringen erhalten)
+function schweigListeInit(){
+  const ksel=document.getElementById('kilankaKlient');
+  const k=(ksel&&ksel.value!=='')?_kilankaKlienten[Number(ksel.value)]:null;
+  const quelle=k?('k:'+(k.kilankaId||'')+'|'+((k.massnahme&&k.massnahme.name)||'')):'manuell';
+  if(_schweigQuelle===quelle) return;
+  _schweigQuelle=quelle;
+  const list=document.getElementById('schweig_list'); if(!list) return;
+  list.innerHTML='';
+  const kand=k?schweigKandidaten(k):[];
+  if(kand.length) kand.forEach(p=>addSchweigPerson(p));
+  else addSchweigPerson({name:'',rolle:'Mutter',aktiv:true});
+}
 function addGeschwister(){
   const list=document.getElementById('ki_geschwister_list');
   if(!list) return;
