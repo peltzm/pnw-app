@@ -495,7 +495,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
         <div id="det_unterz" style="display:none;">
           <div class="card">
             <div class="card-title">✍️ Unterzeichnende — Sorgeberechtigte</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Vorbefüllt aus Kilanka (Eltern und Sorgeberechtigte). Nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere Personen hinzufügen. Gilt für Schweigepflichtsentbindung und Datenschutzerklärung.</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Vorbefüllt aus Kilanka (Eltern und Sorgeberechtigte). Nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere Personen hinzufügen. Gilt für Schweigepflichtsentbindung, Datenschutzerklärung und Startkompass.</div>
             <div id="schweig_list"></div>
             <button class="btn-add" onclick="addSchweigPerson()" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -1230,7 +1230,7 @@ function toggleFC(id){
   document.getElementById('dot_formulare').className='tab-dot '+(n>0?'dot-p':'dot-e');
   const _subF = document.getElementById('sub_formulare'); if (_subF) _subF.textContent = n>0?n+' ausgewählt':'Keine ausgewählt';
   // Details-Tab anzeigen wenn Formulare mit Pflichtangaben gewählt
-  const needsDetails=['schweig','vollm','datenschutz'].some(k=>selForms.has(k));
+  const needsDetails=['schweig','vollm','datenschutz','kompass'].some(k=>selForms.has(k));
   const detTab=document.getElementById('tab_details');
   if(detTab) detTab.style.display=needsDetails?'':'none';
 }
@@ -1239,7 +1239,7 @@ function goToDetails(){
   if(!kd.name){alert('Bitte zuerst Stammdaten speichern.');showPanel('stamm');return;}
   document.getElementById('noFormWarn').style.display='none';
   // Braucht irgendein gewähltes Formular Details?
-  const needsDetails=['schweig','vollm','datenschutz'].some(k=>selForms.has(k));
+  const needsDetails=['schweig','vollm','datenschutz','kompass'].some(k=>selForms.has(k));
   if(!needsDetails){
     // Direkt zur Übergabe springen
     buildSummary();
@@ -1255,8 +1255,9 @@ function goToDetails(){
   // Kind-Name aus Stammdaten vorausfüllen (wenn vorhanden)
   const vkind=document.getElementById('v_kind');
   if(vkind&&!vkind.dataset.manuallyEdited&&kd.name) vkind.value=kd.name;
-  document.getElementById('det_unterz').style.display=(selForms.has('schweig')||selForms.has('datenschutz'))?'block':'none';
-  if(selForms.has('schweig')||selForms.has('datenschutz')) schweigListeInit();
+  const _needUnterz=selForms.has('schweig')||selForms.has('datenschutz')||selForms.has('kompass');
+  document.getElementById('det_unterz').style.display=_needUnterz?'block':'none';
+  if(_needUnterz) schweigListeInit();
   if(selForms.has('vollm')) vollmListeInit();
   showPanel('details');
 }
@@ -1277,7 +1278,7 @@ function goToHandover(){
 }
 
 function goBackFromHandover(){
-  const needsDetails=['schweig','vollm','datenschutz'].some(k=>selForms.has(k));
+  const needsDetails=['schweig','vollm','datenschutz','kompass'].some(k=>selForms.has(k));
   showPanel(needsDetails?'details':'formulare');
 }
 
@@ -1523,12 +1524,15 @@ function buildStep(fid,idx){
       </div>
     </div>`;
 
-    // Two signature pads for Kompass
-    const pad1='kompass_eb', pad2='kompass_kl';
+    // Pads für Kompass: je Erziehungsberechtigte/r eines + optional Klient
+    const pad2='kompass_kl';
+    const _kEb=getSchweigUnterzeichner();
+    const _ebList=_kEb.length>1?_kEb.map((u,i)=>({pad:'kompass_eb_'+i,titel:'Unterschrift '+u.name+' ('+u.rolle+')',meta:''})):[{pad:'kompass_eb',titel:_kEb.length===1?'Unterschrift '+_kEb[0].name+' ('+_kEb[0].rolle+')':'Unterschrift Erziehungsberechtigte/r',meta:_kEb.length===1?'':(d.name||'')}];
+    _ebList.forEach(p=>{ const pad1=p.pad;
     html+=`
     <div class="sig-container">
-      <div class="sig-title">Unterschrift Erziehungsberechtigte/r</div>
-      <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
+      <div class="sig-title">${p.titel}</div>
+      <div class="sig-meta">${p.meta}${kd.datum?(p.meta?' · ':'')+fmtDate(kd.datum):''}</div>
       <div class="sig-canvas-wrap" id="sigWrap_${pad1}">
         <canvas id="sigCanvas_${pad1}" width="600" height="180"></canvas>
         <div class="sig-hint" id="sigHint_${pad1}">
@@ -1540,7 +1544,8 @@ function buildStep(fid,idx){
         <span class="sig-status" id="sigStatus_${pad1}">Noch nicht unterschrieben</span>
         <button class="btn btn-secondary btn-sm" onclick="clearSig('${pad1}')">Löschen</button>
       </div>
-    </div>
+    </div>`; });
+    html+=`
     <div class="sig-container">
       <div class="sig-title">Unterschrift Klient (sofern volljährig oder nach Absprache)</div>
       <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
@@ -1616,8 +1621,10 @@ function setupPad(fid){
     padIds.forEach((padId,i)=>setTimeout(()=>_initPad(padId), i*80));
   } else if(fid==='kompass'){
     // Sequenziell: eb zuerst, kl 100ms danach
-    _initPad('kompass_eb');
-    setTimeout(()=>_initPad('kompass_kl'), 100);
+    const _ke=getSchweigUnterzeichner();
+    const _kIds=_ke.length>1?_ke.map((_,i)=>'kompass_eb_'+i):['kompass_eb'];
+    _kIds.forEach((pid,i)=>setTimeout(()=>_initPad(pid), i*80));
+    setTimeout(()=>_initPad('kompass_kl'), _kIds.length*80+20);
   } else {
     _initPad(fid);
   }
@@ -1750,7 +1757,7 @@ function klNav(dir){
     const vGebers=(fid==='vollm')?getAllVollmachtgeber():[];
     let padIds;
     if(fid==='kompass'){
-      padIds=['kompass_eb']; // kompass_kl is optional
+      { const _ke=getSchweigUnterzeichner(); padIds=_ke.length>1?_ke.map((_,i)=>'kompass_eb_'+i):['kompass_eb']; } // kompass_kl is optional
     } else if(fid==='vollm'&&vGebers.length>1){
       padIds=vGebers.map((_,i)=>fid+'_'+i);
     } else if((fid==='schweig'||fid==='datenschutz')&&getSchweigUnterzeichner().length>1){
@@ -2127,7 +2134,7 @@ function generatePDF(formId, blank, pre){
     const _dWohn=((kdX.plz||'')+' '+(kdX.ort||'')).trim();
     if(_dUnt.length){
       _dUnt.forEach((u,i)=>{
-        personBlock(i+1,_dUnt.length,u,_dWohn,(kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||''),sigsX[_dUnt.length>1?'datenschutz_'+i:'datenschutz'],true);
+        personBlock(i+1,_dUnt.length,u,_dWohn,(kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||''),sigsX[_dUnt.length>1?'datenschutz_'+i:'datenschutz'],false);
       });
     } else {
       fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',_dWohn);
@@ -2203,18 +2210,16 @@ function generatePDF(formId, blank, pre){
     noteBox('Notruf wird in gesundheitlichen Notfällen immer von MA PNW abgesetzt.');
     capsSection('EINVERSTÄNDNISSE');
     [['ki_schwimm_frei','Schwimmen ohne Schwimmhilfe'],['ki_schwimm_hilfe','Schwimmen mit Schwimmhilfe'],['ki_schwimm_aufsicht','Schwimmen nur unter Bademeister-Aufsicht'],['ki_zecken_pnw','Zecken: Entfernung durch MA PNW'],['ki_zecken_eltern','Zecken: Eltern holen ab → Arzt'],['ki_einv_erlebn','Erlebnispädagogische Maßnahmen'],['ki_einv_auto','Mitnahme im Auto'],['ki_einv_foto','Fotoaufnahmen trägerintern'],['ki_foto_public','Fotoaufnahmen öffentlich']].forEach(([id,lbl])=>cbRow(id,lbl));
-    pageCheck(blank?70:56);y+=4;capsSection('UNTERSCHRIFTEN');
-    const hw2=(CW-6)/2;
-    fieldRow('Ort, Datum',_od(),hw2,ML);y-=7;
-    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('ORT, DATUM',ML+hw2+6,y-3.5);doc.line(ML+hw2+6,y+1.5,ML+hw2+6+hw2,y+1.5);y+=7;
-    if(sigsX['kompass_eb']&&sigsX['kompass_eb'].length>200)try{doc.addImage(sigsX['kompass_eb'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
-    y+=10;doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y,ML+hw2,y);y+=3;
-    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('Unterschrift Erziehungsberechtigte/r',ML,y);y+=8;
-    if(sigsX['kompass_kl']&&sigsX['kompass_kl'].length>200){
-      try{doc.addImage(sigsX['kompass_kl'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
-      y+=10;doc.line(ML,y,ML+hw2,y);y+=3;doc.text('Unterschrift Klient (optional)',ML,y);
-    } else if(blank){
-      y+=10;doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y,ML+hw2,y);y+=3;doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('Unterschrift Klient (optional)',ML,y);
+    y+=4;capsSection('UNTERSCHRIFTEN');
+    const _kUnt=blank?((pre&&pre.unterzeichner)||[]):getSchweigUnterzeichner();
+    const _kOD=(kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||'');
+    if(_kUnt.length>1){
+      _kUnt.forEach((u,i)=>personBlock(i+1,_kUnt.length,u,'',_kOD,sigsX['kompass_eb_'+i],false));
+    } else {
+      personBlock(1,1,_kUnt[0]||{name:'',rolle:'Erziehungsberechtigte/r'},'',_kOD,sigsX['kompass_eb'],false);
+    }
+    if((sigsX['kompass_kl']&&sigsX['kompass_kl'].length>200)||blank){
+      personBlock(1,1,{name:kdX.name||'',rolle:'Klient/in (optional)'},'',_kOD,sigsX['kompass_kl'],false);
     }
   }
 
