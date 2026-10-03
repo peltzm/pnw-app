@@ -789,24 +789,45 @@ const NM = (function () {
       '<div class="dialog-actions"><button class="btn btn-solid" id="nmPMail">Mentor:in und Teamleitung benachrichtigen</button><button class="btn btn-outline" id="nmPOeffnen">Plan öffnen</button><button class="btn btn-outline" id="nmZu">Schließen</button></div>';
     byId2('nmZu').onclick = () => { schliesse(); render(); };
     byId2('nmPOeffnen').onclick = () => { schliesse(); planOeffnen(m.id); };
-    byId2('nmPMail').onclick = () => planMail(x, m, mentor, tl);
+    byId2('nmPMail').onclick = () => planMail(x, m);
   }
-  async function planMail(x, m, mentor, tl) {
+  /* Benachrichtigung an Mentor:in und Teamleitung. Empfänger sind nur die, die noch nicht freigegeben haben; ist eine Person beides, geht eine Nachricht an sie. */
+  function planEmpfaenger(m) {
+    const f = freigaben(m), ziele = [];
+    const add = (upn, name, rolle, key) => {
+      if (!upn || f[key]) return; const u = String(upn).toLowerCase(); const e = ziele.find(z => z.upn === u);
+      if (e) e.rollen.push(rolle); else ziele.push({ upn: u, name, rollen: [rolle] });
+    };
+    add(m.mentorUpn, m.mentorName, 'Mentor:in', 'mentor'); add(m.tlUpn, m.tlName, 'Teamleitung', 'tl');
+    return ziele;
+  }
+  async function sendePlanMails(m, ziele) {
+    const t = await token(['Mail.Send']); const vorname = String(m.name).split(' ')[0]; const start = m.startDatum ? langDatum(m.startDatum) : '';
+    for (const z of ziele) {
+      const body = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt"><p>Hallo ' + esc(String(z.name).split(' ')[0]) + ',</p><p>für ' + esc(m.name) + (start ? ' (Start am ' + esc(start) + ')' : '') + ' liegt der Einarbeitungsplan zur Abstimmung bereit. Du bist als ' + esc(z.rollen.join(' und ')) + ' eingetragen.</p>' +
+        '<p>Bitte prüfe den Plan, passe ihn bei Bedarf an und gib ihn frei: <a href="https://apps.praxisneuewege.de/einarbeitung-beta.html">Onboarding-App öffnen</a>. Der Plan wird erst für ' + esc(vorname) + ' sichtbar, wenn Mentor:in, Teamleitung und Geschäftsführung freigegeben haben.</p><p>Danke und viele Grüße<br>Markus</p></div>';
+      const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: { subject: 'Einarbeitungsplan für ' + m.name + ' bitte prüfen und freigeben', body: { contentType: 'HTML', content: body }, toRecipients: [{ emailAddress: { address: z.upn, name: z.name } }] }, saveToSentItems: true }) });
+      if (!r.ok) throw new Error('Nachricht an ' + z.name + ' nicht gesendet (' + r.status + ')');
+    }
+  }
+  const empfaengerText = ziele => ziele.map(z => z.name + ' (' + z.rollen.join(' und ') + ')').join(' und ');
+  // Knopf auf der Plan-Karte: jederzeit (erneut) benachrichtigen
+  async function benachrichtigen(mid) {
+    const m = mitarbeiterListe.find(e => e.id === mid); if (!m) return;
+    const ziele = planEmpfaenger(m);
+    if (!ziele.length) { zeigeToast('Mentor:in und Teamleitung haben schon freigegeben.'); return; }
+    if (!confirm('Nachricht zur Freigabe des Plans von ' + m.name + ' senden an: ' + empfaengerText(ziele) + '?')) return;
+    try { await sendePlanMails(m, ziele); zeigeToast('Benachrichtigung gesendet an ' + ziele.map(z => z.name).join(' und ')); }
+    catch (e) { zeigeToast(e.message, true); }
+  }
+  // Knopf im Ergebnisfenster nach „Plan erzeugen“
+  async function planMail(x, m) {
     const err = byId2('nmFehler'), btn = byId2('nmPMail'); err.textContent = '';
-    const empf = mentor.userPrincipalName === tl.userPrincipalName || m.mentorUpn === m.tlUpn ? [[m.mentorUpn, m.mentorName, 'Mentor:in und Teamleitung']] : [[m.mentorUpn, m.mentorName, 'Mentor:in'], [m.tlUpn, m.tlName, 'Teamleitung']];
-    if (!confirm('Nachricht senden an: ' + empf.map(e => e[1]).join(' und ') + '?')) return;
-    try {
-      btn.disabled = true; const t = await token(['Mail.Send']);
-      for (const [upn, name, rolle] of empf) {
-        const body = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt"><p>Hallo ' + esc(String(name).split(' ')[0]) + ',</p><p>für ' + esc(x.name) + ' (Start am ' + esc(langDatum(x.eintritt)) + ') liegt der Einarbeitungsplan zur Abstimmung bereit. Du bist als ' + esc(rolle) + ' eingetragen.</p>' +
-          '<p>Bitte prüfe den Plan, passe ihn bei Bedarf an und gib ihn frei: <a href="https://apps.praxisneuewege.de/einarbeitung-beta.html">Onboarding-App öffnen</a>. Der Plan wird erst für ' + esc(x.vorname) + ' sichtbar, wenn Mentor:in, Teamleitung und Geschäftsführung freigegeben haben.</p><p>Danke und viele Grüße<br>Markus</p></div>';
-        const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: { subject: 'Einarbeitungsplan für ' + x.name + ' bitte prüfen und freigeben', body: { contentType: 'HTML', content: body }, toRecipients: [{ emailAddress: { address: upn, name } }] }, saveToSentItems: true }) });
-        if (!r.ok) throw new Error('Nachricht an ' + name + ' nicht gesendet (' + r.status + ')');
-      }
-      btn.textContent = '✓ Benachrichtigt'; zeigeToast('Benachrichtigung gesendet');
-    } catch (e) { err.textContent = e.message; btn.disabled = false; }
+    const ziele = planEmpfaenger(m);
+    if (!confirm('Nachricht senden an: ' + empfaengerText(ziele) + '?')) return;
+    try { btn.disabled = true; await sendePlanMails(m, ziele); btn.textContent = '✓ Benachrichtigt: ' + ziele.map(z => z.name).join(' und '); zeigeToast('Benachrichtigung gesendet'); }
+    catch (e) { err.textContent = e.message; btn.disabled = false; }
   }
-
-  return { laden, view, vorlagenView, bind, upnVorschlag, gehaltBerechnen, eur, parseZahl, TABELLE };
+  return { laden, view, vorlagenView, bind, upnVorschlag, benachrichtigen, planEmpfaenger, gehaltBerechnen, eur, parseZahl, TABELLE };
 })();
