@@ -861,18 +861,55 @@ function fillLeerKlientSelect(){
   const st=document.getElementById('leerKilankaStatus');
   if(st) st.textContent=_kilankaKlienten.length?(_kilankaKlienten.length+' aktive Zuordnungen (HB/MB/V)'):'Keine aktiven Zuordnungen in Kilanka gefunden.';
 }
+
+// SGB-Paragraph aus „Rechtsgrundlage der Maßnahme“ (Kilanka legalBasis.name, z. B. "§ 27 (2) SGB VIII - Clearing") ermitteln.
+// Liefert {match: vorhandene Option | null, neu: Label für neue Option | null}; ohne Angabe beides null.
+function sgbWahl(hilfeart, optionTexte){
+  const txt=String(hilfeart||'').replace(/\s+/g,' ').trim();
+  if(!txt) return {match:null,neu:null};
+  const norm=t=>String(t||'').replace(/\s+/g,'').toLowerCase();
+  const optTexte=(optionTexte||[]).filter(Boolean);
+  const bez=(txt.indexOf(' - ')>-1)?txt.slice(txt.indexOf(' - ')+3).trim():'';
+  let num='',abs='';
+  const pm=txt.match(/§\s*(\d+)\s*([a-z])?(?![a-z])\s*(?:\(\s*(\d+)\s*\)|Abs\.?\s*(\d+))?/i);
+  if(pm){ num=pm[1]+(pm[2]||'').toLowerCase(); abs=pm[3]||pm[4]||''; }
+  else{
+    // Fallback ohne Paragraphenzeichen: Schlagwörter
+    const t=txt.toLowerCase();
+    if(/einzelbetreuung|clearing/.test(t)){num='27';abs='2';}
+    else if(/familienhilfe|spfh/.test(t)) num='31';
+    else if(/erziehungsbeistand|betreuungshelfer/.test(t)) num='30';
+    else if(/heimerziehung|wohngruppe|betreute wohnform/.test(t)) num='34';
+    else if(/eingliederung|seelisch/.test(t)) num='35a';
+    else if(/volljährig|volljaehrig/.test(t)) num='41';
+  }
+  if(!num) return {match:null,neu:txt};   // keine Zuordnung möglich → Originaltext als Option übernehmen
+  const key='§'+num;
+  const treffer=t=>{ const n=norm(t); return n.startsWith(key) && !/^[0-9a-z]/.test(n.slice(key.length)); };
+  let kand=optTexte.filter(treffer);
+  let match=null;
+  if(kand.length){
+    if(abs) match=kand.find(t=>norm(t).startsWith(key+'('+abs+')'))||null;
+    if(!match) match=kand.find(t=>!/^\(/.test(norm(t).slice(key.length)))||kand[0];
+  }
+  if(match) return {match,neu:null};
+  return {match:null,neu:key+(abs?'('+abs+')':'')+(bez?' — '+bez:' — SGB VIII')};
+}
+function sgbSetzen(selEl, hilfeart){
+  if(!selEl) return '';
+  const r=sgbWahl(hilfeart, Array.from(selEl.options).map(o=>o.text));
+  let val=r.match;
+  if(!val&&r.neu){ const o=document.createElement('option'); o.textContent=r.neu; selEl.appendChild(o); val=r.neu; }
+  if(val) selEl.value=val;
+  return val||'';
+}
 function buildLeerPre(k){
   const nn=_kVal(k.Kind_Familienname||''), vn=_kVal(k.Kind_Vorname||'');
   const m=_kVal(k.Kind_PLZ_Ort||'').match(/^(\d{4,5})\s+(.*)$/);
   const plz=m?m[1]:'', ort=m?m[2]:_kVal(k.Kind_PLZ_Ort||'');
-  // SGB-Paragraph wie in der Stammdaten-Übernahme aus der Hilfeart ableiten
-  let sgb='';
-  const pm=_kVal(k.Hilfeart||'').match(/§\s*(\d+\s*a?)/i);
-  if(pm){
-    const num=pm[1].replace(/\s+/g,'').toLowerCase();
-    const opt=Array.from(document.getElementById('k_sgb').options).find(o=>o.text.replace(/\s+/g,'').toLowerCase().includes('§'+num));
-    if(opt) sgb=opt.value||opt.text;
-  }
+  // SGB-Paragraph aus der Rechtsgrundlage der Maßnahme (Kilanka) ableiten
+  const sgbR=sgbWahl(k.Hilfeart, Array.from(document.getElementById('k_sgb').options).map(o=>o.text));
+  const sgb=sgbR.match||sgbR.neu||'';
   const sorg=k.Sorgeberechtigte||[];
   const vg=sorg.map(s=>({name:[_kVal(s.familienname),_kVal(s.vorname)].filter(Boolean).join(', '),ort:_kVal(k.Kind_PLZ_Ort||'')})).filter(x=>x.name);
   const ids={
@@ -922,14 +959,8 @@ function onKilankaKlientSelect(){
   _kSet('k_str', k.Kind_Strasse);
   const m = _kVal(k.Kind_PLZ_Ort || '').match(/^(\d{4,5})\s+(.*)$/);
   if(m){ _kSet('k_plz', m[1]); _kSet('k_ort', m[2]); } else { _kSet('k_ort', k.Kind_PLZ_Ort); }
-  // SGB-Paragraph aus Hilfeart-Text ableiten (z.B. "§ 31" -> Option mit "§31")
-  const pm = _kVal(k.Hilfeart || '').match(/§\s*(\d+\s*a?)/i);
-  if(pm){
-    const num = pm[1].replace(/\s+/g,'').toLowerCase();
-    const sgb = document.getElementById('k_sgb');
-    const opt = Array.from(sgb.options).find(o => o.text.replace(/\s+/g,'').toLowerCase().includes('§'+num));
-    if(opt) sgb.value = opt.value || opt.text;
-  }
+  // SGB-Paragraph aus „Rechtsgrundlage der Maßnahme“ (Kilanka) ableiten; unbekannte Werte werden als Option ergänzt
+  sgbSetzen(document.getElementById('k_sgb'), k.Hilfeart);
   // Jugendamt: Option finden, deren Name im Kilanka-Text vorkommt; sonst ergaenzen
   const jaText = _kVal(k.Jugendamt || '');
   if(jaText){
