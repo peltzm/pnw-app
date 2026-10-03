@@ -2589,12 +2589,6 @@ async function leseProtokoll(itemId, opts) {
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') schliesseLeseAnsicht(); });
 
-// Fremden Entwurf (GF) bewusst zum Bearbeiten oeffnen – Ansehen geht ueber „Lesen"
-function weiterbearbeitenFremd(itemId, ersteller) {
-  if (!confirm('Dieser Entwurf stammt von ' + (ersteller || 'einer anderen Person') + '.\n\nZum bloßen Ansehen bitte „Lesen" verwenden.\nWirklich zum Bearbeiten öffnen?')) return;
-  loadDraft(itemId);
-}
-
 /* ──────────────────────────────────────
    BEARBEITER KORRIGIEREN (nur Geschäftsführung, einmalig/bei Bedarf)
    Setzt Eintraege zurueck, bei denen eine Person nur „angeschaut" hat und dadurch
@@ -3575,11 +3569,16 @@ function renderArchivTable() {
            border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">👁 Lesen</button>`
       : '';
 
+    // Weiterbearbeiten darf nur der Ersteller des Entwurfs. Die Geschaeftsführung sieht
+    // fremde Entwuerfe ueber „Lesen" (nur lesen, es wird nichts gespeichert).
     const openBtn = r.status === 'Entwurf'
-      ? `<button onclick="${(r.isAdmin && !r.isMine) ? `weiterbearbeitenFremd('${r.id}','${_esc(r.ersteller)}')` : `loadDraft('${r.id}')`}"
+      ? ((r.isAdmin && !r.isMine)
+          ? `<span title="Nur ${_esc(r.ersteller || 'der Ersteller')} kann diesen Entwurf bearbeiten"
+               style="font-size:11px;color:var(--text-muted);white-space:nowrap;">🔒 nur ${_esc(r.ersteller || 'Ersteller')}</span>`
+          : `<button onclick="loadDraft('${r.id}')"
            style="font-size:12px;padding:6px 14px;background:var(--accent);color:white;
            border:none;border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">
-           Weiterbearbeiten</button>`
+           Weiterbearbeiten</button>`)
       : r.spUrl
         ? `<a href="${r.spUrl}" target="_blank"
              style="font-size:12px;padding:6px 14px;background:${st.btnBg};color:${st.btnColor};
