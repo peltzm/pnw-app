@@ -1767,21 +1767,38 @@ function generatePDF(formId, blank, pre){
   let y=0;
   const CODES={schweig:'SW',datenschutz:'DS',vollm:'VM',kompass:'SK'};
   const CATS={schweig:'SCHWEIGEPFLICHT · ENTBINDUNG',datenschutz:'DATENSCHUTZ · ART. 13 DSGVO',vollm:'VOLLMACHT · ELTERLICHE SORGE',kompass:'STARTKOMPASS · ERSTAUFNAHME'};
-  function newPage(){doc.addPage();drawPageHeader(formId);y=38;}
+  function newPage(){doc.addPage();drawPageHeader(formId,false);y=26;}
   function pageCheck(n=20){if(y+n>PH-22)newPage();}
-  function drawPageHeader(fid){
-    const lh=12,lw=Math.round(lh*860/224); // Wortmarken-Logo 860x224
-    try{doc.addImage(PNW_LOGO_B64,'PNG',ML,6,lw,lh);}catch(e){}
-    doc.setFont(F,'bold');doc.setFontSize(7);doc.setTextColor(...ACC);
-    doc.text(CATS[fid]||'',PW-MR,11,{align:'right'});
-    doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,22,PW-MR,22);
+  // Kopf/Fuß wie im PDF der Berichts-App (Produktion): Farben, Linien, Schriftgrößen
+  const _META=[138,133,123],_RSTRK=[216,210,198],_TERRA=[161,95,56],_INK2=[74,70,64];
+  const _PT=0.3528; // 1 pt in mm
+  function _spaced(txt,x,yy,cs){ if(doc.setCharSpace)doc.setCharSpace(cs*_PT); doc.text(txt,x,yy); if(doc.setCharSpace)doc.setCharSpace(0); }
+  function drawPageHeader(fid,first){
+    doc.setDrawColor(..._RSTRK);doc.setLineWidth(0.75*_PT);
+    if(first){
+      // Seite 1: kein Laufkopf — Kategorie links, Wortmarken-Logo rechts, Trennlinie
+      const lh=13,lw=lh*860/224; // Wortmarken-Logo 860x224
+      try{doc.addImage(PNW_LOGO_B64,'PNG',PW-MR-lw,5,lw,lh);}catch(e){}
+      doc.setFont(F,'bold');doc.setFontSize(6.4);doc.setTextColor(..._META);
+      _spaced(CATS[fid]||'',ML,12,1);
+      doc.line(ML,22,PW-MR,22);
+    } else {
+      // ab Seite 2: „PRAXIS NEUEWEGE · TITEL" links, Klientenname rechts, Trennlinie
+      doc.setFont(F,'bold');doc.setFontSize(6.4);doc.setTextColor(..._META);
+      _spaced('PRAXIS NEUEWEGE · '+((FL[fid]&&FL[fid].name)||'').toUpperCase(),ML,11,1);
+      doc.setFont(F,'normal');doc.setFontSize(8);doc.setTextColor(..._INK2);
+      doc.text(kdX.name||'',PW-MR,11,{align:'right'});
+      doc.line(ML,14,PW-MR,14);
+    }
   }
   function drawPageFooter(fid,p,tot){
-    const code=CODES[fid]||'XX';
-    doc.setDrawColor(...BRD);doc.setLineWidth(0.25);doc.line(ML,PH-14,PW-MR,PH-14);
-    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
-    doc.text('Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt',ML,PH-10);
-    doc.text(`Formular ${code}-31 · 0${p} / 0${tot} · Stand: 06/2026`,PW-MR,PH-10,{align:'right'});
+    doc.setDrawColor(..._TERRA);doc.setLineWidth(1.1*_PT);doc.line(ML,PH-14,PW-MR,PH-14);
+    doc.setFont(F,'normal');doc.setTextColor(..._META);
+    doc.setFontSize(7);
+    doc.text('Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach',ML,PH-9.6);
+    doc.text('info@praxisneuewege.de',ML,PH-6.4);
+    doc.setFontSize(8);
+    doc.text(`Seite ${p} von ${tot}`,PW-MR,PH-9.2,{align:'right'});
   }
   function eyebrow(t){doc.setFont(F,'normal');doc.setFontSize(7.5);doc.setTextColor(...ACC);doc.text(t,ML,y);y+=9;}
   function mainTitle(t){doc.setFont(F,'bold');doc.setFontSize(22);doc.setTextColor(...ACC);doc.text(t,ML,y);y+=13;}
@@ -1873,7 +1890,7 @@ function generatePDF(formId, blank, pre){
   }
 
   // ── PAGE 1 ──
-  drawPageHeader(formId);y=34;secN=0;
+  drawPageHeader(formId,true);y=34;secN=0;
 
   if(formId==='schweig'){
     const inst=($id('s_inst')||{}).value||'—';
