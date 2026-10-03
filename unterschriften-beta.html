@@ -45,6 +45,9 @@ h2{font-size:19px;font-weight:600;margin-bottom:4px}
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:18px}
 .panel h3{font-size:14.5px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.seg button{background:var(--surface);border:none;padding:5px 12px;font-size:12px;font-family:inherit;color:var(--text-muted);cursor:pointer}
+.seg button.on{background:var(--accent-light);color:var(--accent);font-weight:600}
 .rolle-badge{font-size:11px;font-weight:600;border-radius:999px;padding:3px 11px;background:var(--accent-light);color:var(--accent)}
 .summary-row{display:flex;gap:12px;flex-wrap:wrap;margin:4px 0 14px}
 .kpi{background:var(--accent-light);border-radius:var(--radius);padding:10px 16px;min-width:120px}
@@ -99,7 +102,7 @@ select{font-family:inherit;font-size:12.5px;border:1px solid var(--border);borde
   <div class="login-card">
     <img src="assets/logo-pnw-neu.png" alt="PNW">
     <div class="login-title">Unterschriften</div>
-    <div class="login-desc">Offene Unterschriften direkt aus Kilanka &mdash; ohne Export. Jeder sieht seine eigenen, Teamleitungen zus&auml;tzlich ihr Team.</div>
+    <div class="login-desc">Offene Unterschriften direkt aus Kilanka &mdash; ohne Export. Jeder sieht seine eigenen Unterschriften; Teamleitungen und Gesch&auml;ftsf&uuml;hrung k&ouml;nnen auf die Teamsicht umschalten.</div>
     <button class="btn btn-outline" id="loginBtn" onclick="login()">Mit Microsoft anmelden</button>
     <div class="alert-error" id="loginError"></div>
   </div>
@@ -114,6 +117,10 @@ select{font-family:inherit;font-size:12.5px;border:1px solid var(--border);borde
 
   <div class="toolbar">
     <span class="rolle-badge" id="rolleBadge">&nbsp;</span>
+    <span class="seg" id="ansichtWahl" style="display:none">
+      <button id="segEigen" onclick="setAnsicht('eigen')">Meine Unterschriften</button>
+      <button id="segTeam" class="on" onclick="setAnsicht('team')">Mein Team</button>
+    </span>
     <label style="font-size:12.5px;color:var(--text-muted)">Zeitraum
       <select id="zeitraumSelect" onchange="ladeDaten()">
         <option value="0">laufender Monat</option>
@@ -181,6 +188,7 @@ const CC_AUSNAHMEN = { 'sonja.peltz@praxisneuewege.de': '', 'markus.peltz@praxis
 let daten = null;      // Antwort des Workers
 let gruppen = [];      // Teamsicht: [{name, upn, mail, cc, count, rows, selected}]
 let eigenGruppe = null;
+let ansicht = 'team';   // TL/GF: 'team' (Standard) oder 'eigen'
 
 /* ============================================================ AUTH */
 let msalInstance, currentAccount = null;
@@ -338,6 +346,21 @@ function istDAH(leistung) {
   return /\bDAH\b/i.test(String(leistung || ''));
 }
 
+// Teamleitungen und GF wählen: eigene Unterschriften oder Team (GF: alle Mitarbeitenden).
+// Fachkräfte sehen immer nur ihre eigenen.
+function setAnsicht(a) { ansicht = a; wendeAnsichtAn(); }
+function wendeAnsichtAn() {
+  const istLeitung = !!daten && (daten.rolle === 'tl' || daten.rolle === 'gf');
+  const zeigeTeam = istLeitung && ansicht === 'team';
+  document.getElementById('eigenPanel').style.display = zeigeTeam ? 'none' : 'block';
+  document.getElementById('teamPanel').style.display = zeigeTeam ? 'block' : 'none';
+  document.getElementById('dashPanel').style.display = zeigeTeam ? 'block' : 'none';
+  document.getElementById('ansichtWahl').style.display = istLeitung ? 'inline-flex' : 'none';
+  document.getElementById('segEigen').className = zeigeTeam ? '' : 'on';
+  document.getElementById('segTeam').className = zeigeTeam ? 'on' : '';
+  document.getElementById('segTeam').textContent = (daten && daten.rolle === 'gf') ? 'Alle Mitarbeitenden' : 'Mein Team';
+}
+
 function verteileDaten() {
   const meineUpn = (daten.nutzer || '').toLowerCase();
   const rolleText = { gf: 'Geschäftsführung — alle Mitarbeitenden', tl: 'Teamleitung — eigenes Team', fk: 'Eigene Ansicht' };
@@ -362,8 +385,7 @@ function verteileDaten() {
   renderEigen();
 
   const istLeitung = daten.rolle === 'tl' || daten.rolle === 'gf';
-  document.getElementById('teamPanel').style.display = istLeitung ? 'block' : 'none';
-  document.getElementById('dashPanel').style.display = istLeitung ? 'block' : 'none';
+  wendeAnsichtAn();
   document.getElementById('subLine').textContent = istLeitung
     ? '' : 'Hier siehst du, welche Unterschriften deiner Klienten noch fehlen.';
 
