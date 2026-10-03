@@ -2636,12 +2636,11 @@ async function sanityStatusLesen(env, monat) {
 // bei Graph-Ausfall oder fehlender Gruppe.
 // Umschalten = diese Konstante ändern und pushen (Freigabe durch Markus).
 // ═══════════════════════════════════════════════════════════════
-const ZUGRIFF_MODUS = "test";
+const ZUGRIFF_MODUS = "scharf";
 
 // Gruppen je Worker-Endpunkt (any-of). Orientierungsgespräch nutzt
 // /api/mitarbeiter-cockpit mit, daher ist dort die OG-Gruppe ebenfalls zulässig.
 const ENDPUNKT_GRUPPEN = {
-  "meine-klienten":     ["PNW-App-Berichtsgenerator", "PNW-App-Formulare"],
   "manager-cockpit":    ["PNW-App-ManagerCockpit"],
   "jugendamt-cockpit":  ["PNW-App-JugendamtCockpit"],
   "mitarbeiter-cockpit":["PNW-App-MitarbeiterCockpit", "PNW-App-Orientierungsgespraech"],
@@ -3021,7 +3020,8 @@ export default {
       if (!auth.upn.endsWith(`@${MAIL_DOMAIN}`)) {
         return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
       }
-      { const gate = await endpunktGate(request, (auth.upn || "").trim().toLowerCase(), "meine-klienten", origin); if (gate) return gate; }
+      // Kein Gruppen-Gate: Berichtsgenerator und Formulare rufen den Endpunkt mit einem API-Token (ohne Graph-Token) auf;
+      // der Endpunkt liefert ohnehin nur die eigenen Klienten des Aufrufers (Need-to-know).
       try {
         const now = new Date();
         // Manuelles Neuladen: Cache verwerfen, aber höchstens einmal pro Minute

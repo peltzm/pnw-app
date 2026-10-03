@@ -570,7 +570,7 @@ async function holeKennzahlen(zielUpn){
 async function holeErweitert(zielUpn, t, personName){
   try{
     const url = CFG.workerUrl+'/api/og-kennzahlen'+(zielUpn && zielUpn!==upn ? '?mitarbeiter='+encodeURIComponent(zielUpn) : '');
-    const r = await fetch(url,{headers:{Authorization:'Bearer '+t.id}});
+    const r = await fetch(url,{headers:{Authorization:'Bearer '+t.id,'X-Graph-Token':t.graph}});
     if(!r.ok) throw new Error('HTTP '+r.status);
     const e = await r.json();
     if(e.fahrzeug?.vorhanden) e.fahrzeug.stamm = await fuhrparkStamm(e.fahrzeug.carName, personName);
