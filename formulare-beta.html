@@ -1845,7 +1845,37 @@ function generatePDF(formId, blank, pre){
     doc.setFont(F,'bold');doc.setFontSize(10);doc.setTextColor(26,25,22);doc.text(val||'',fx,y);
     doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(fx,y+1.5,fx+fw,y+1.5);y+=7;
   }
-  function fieldRow2(l1,v1,l2,v2){pageCheck(12);const hw=(CW-6)/2;fieldRow(l1,v1,hw,ML);y-=7;fieldRow(l2,v2,hw,ML+hw+6);}
+  function fieldRow2(l1,v1,l2,v2){pageCheck(12);const hw=(CW-6)/2;fieldRow(l1,v1,hw,ML);y-=10.5;fieldRow(l2,v2,hw,ML+hw+6);}
+  // Schreibfeld (Label, Wert, x, Breite) auf getönter Fläche — Linie etwas dunkler, damit sie sichtbar bleibt
+  function wf(lbl,val,x,w){
+    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text(lbl.toUpperCase(),x,y);
+    doc.setFont(F,'bold');doc.setFontSize(10);doc.setTextColor(26,25,22);doc.text(val||'',x,y+4.5);
+    doc.setDrawColor(190,180,170);doc.setLineWidth(0.3);doc.line(x,y+6,x+w,y+6);
+  }
+  // Getönte Box mit Beschriftung und n freien Schreibzeilen (z. B. Institution)
+  function writeBox(lbl,n){
+    const bh=9+n*8;pageCheck(bh+6);
+    doc.setFillColor(...LIGHT);doc.rect(ML,y,CW,bh,'F');
+    doc.setFillColor(...ACC);doc.rect(ML,y,1.5,bh,'F');
+    doc.setFont(F,'bold');doc.setFontSize(7);doc.setTextColor(...ACC);doc.text(lbl,ML+4,y+5);
+    doc.setDrawColor(190,180,170);doc.setLineWidth(0.3);
+    for(let i=0;i<n;i++){const ly=y+9+(i+1)*8-1.5;doc.line(ML+4,ly,ML+CW-4,ly);}
+    y+=bh+5;
+  }
+  // Startkompass: Hilfeempfänger-Box mit Schreibfeldern (Werte aus Kilanka, falls vorbefüllt)
+  function hilfeBoxBlank(){
+    const bh=43;pageCheck(bh+6);
+    doc.setFillColor(...LIGHT);doc.rect(ML,y,CW,bh,'F');
+    doc.setFillColor(...ACC);doc.rect(ML,y,1.5,bh,'F');
+    doc.setFont(F,'bold');doc.setFontSize(7);doc.setTextColor(...ACC);doc.text('HILFEEMPFÄNGER',ML+4,y+5);
+    const y0=y,x0=ML+5,iw=CW-10,g=6;
+    const adr=((kdX.str||'')+', '+(kdX.plz||'')+' '+(kdX.ort||'')).replace(/^, /,'').replace(/, $/,'').trim();
+    y=y0+11;wf('Name',kdX.name||'',x0,iw*0.64-g/2);wf('Geburtsdatum',kdX.geb||'',x0+iw*0.64+g/2,iw*0.36-g/2);
+    y=y0+22;wf('Straße, PLZ Ort',adr==','?'':adr,x0,iw);
+    y=y0+33;wf('Telefon',kdX.tel||'',x0,iw/2-g/2);wf('Krankenkasse','',x0+iw/2+g/2,iw/2-g/2);
+    y=y0+bh+5;
+  }
+  const _od=()=>((kdX.ort?kdX.ort+', ':'')+fmtDate(kdX.datum||''));
   function sigBlock(lbl,sub,dataURL,w,x){
     pageCheck(25);const sw=w||CW,sx=x||ML;y+=4;
     if(dataURL&&dataURL.length>200){try{doc.addImage(dataURL,'PNG',sx,y-8,Math.min(sw*0.6,70),14);}catch(e){}}
@@ -1896,19 +1926,19 @@ function generatePDF(formId, blank, pre){
     const inst=($id('s_inst')||{}).value||'—';
     const vertr=($id('s_vertr')||{}).value||kdX.fk||'';
     eyebrow('EINWILLIGUNG & ENTBINDUNG');mainTitle('Schweigepflichtsentbindung');
-    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kdX.nn||''}.`);
-    hRule();highlightSection('BETROFFENE INSTITUTION',inst);
+    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kdX.nn||'____________________'}.`);
+    hRule();if(blank){writeBox('BETROFFENE INSTITUTION',2);}else{highlightSection('BETROFFENE INSTITUTION',inst);}
     section('Inhalt der Entbindung',`Ich/Wir gebe/n ${vertr} gemäß ${kdX.sgb||'§ SGB VIII'} als Mitarbeiter/in der Praxis NeueWege die Erlaubnis, alle zur gezielten Unterstützung erforderlichen Daten (Gutachten, Diagnosen, Therapiepläne etc.) von der oben genannten Institution einzuholen und zu übermitteln.`);
     section('Hinweis Schweigepflicht','Ich/Wir wurde/n über die gesetzliche Schweigepflicht gem. § 203 StGB und § 65 SGB VIII umfassend unterrichtet. Die Daten dürfen anderen Stellen nur unter den Voraussetzungen der §§ 61–68 SGB VIII sowie §§ 67–85a SGB X übermittelt werden.');
     section('Widerruf','Diese Entbindungserklärung kann jederzeit schriftlich widerrufen werden (Art. 7 Abs. 3 DSGVO).');
-    hRule();capsSection('ANGABEN & UNTERSCHRIFT');
+    pageCheck(62);hRule();capsSection('ANGABEN & UNTERSCHRIFT');
     fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',((kdX.plz||'')+' '+(kdX.ort||'')).trim());
     sigArea2((kdX.ort||'Nandlstadt')+', '+fmtDate(kdX.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigsX['schweig']);
   }
 
   else if(formId==='datenschutz'){
     eyebrow('INFORMATION & EINWILLIGUNG');mainTitle('Datenschutzerklärung');
-    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kdX.nn||''}.`);
+    subtitle(`Zwischen der Praxis NeueWege, Hausmehring 19½, 85405 Nandlstadt, und Familie ${kdX.nn||'____________________'}.`);
     hRule();
     highlightSection('1 · VERANTWORTLICHE STELLE (ART. 13 DSGVO)','Praxis NeueWege · Hausmehring 19½ · 85405 Nandlstadt\nTel.: +49 173 2875 212 · E-Mail: datenschutz@praxisneuewege.de');
     section('Zweck und Rechtsgrundlage der Datenverarbeitung',`Die Erhebung und Verarbeitung Ihrer personenbezogenen Daten erfolgt zur Erfüllung der beauftragten Hilfe nach ${kdX.sgb||'SGB VIII'} durch das ${kdX.ja||''}. Rechtsgrundlagen: Art. 6 Abs. 1 lit. c), d) und f) DSGVO i.V.m. §§ 61–68 SGB VIII sowie §§ 67–85a SGB X (Sozialdatenschutz).`);
@@ -1958,14 +1988,14 @@ function generatePDF(formId, blank, pre){
       y+=3;
     }
     y+=2;noteBox('Mit Ihrer Unterschrift bestätigen Sie, dass Sie diese Datenschutzerklärung erhalten und die angekreuzten Einwilligungen erteilt haben.');
-    y+=4;capsSection('ANGABEN & UNTERSCHRIFT');
+    pageCheck(60);y+=4;capsSection('ANGABEN & UNTERSCHRIFT');
     fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',((kdX.plz||'')+' '+(kdX.ort||'')).trim());
     y+=4;sigArea2((kdX.ort||'Nandlstadt')+', '+fmtDate(kdX.datum||''),'Unterschrift Klient/in oder Sorgeberechtigte/r',sigsX['datenschutz']);
   }
 
   else if(formId==='vollm'){
     const vGebers=(blank ? ((pre&&pre.vollmachtgeber&&pre.vollmachtgeber.length)?pre.vollmachtgeber:[{name:'',ort:''}]) : getAllVollmachtgeber());
-    const vKind=($id('v_kind')||{}).value||'—';
+    const vKind=($id('v_kind')||{}).value||(blank?'':'—');
     const vKindGeb=fmtDate(($id('v_kind_geb')||{}).value||'');
     const vFk1=($id('v_fk1')||{}).value||kdX.fk||'';
     const vFk2=($id('v_fk2_sel')||{}).value||'';
@@ -1974,16 +2004,16 @@ function generatePDF(formId, blank, pre){
     hRule();capsSection('VOLLMACHTGEBER/IN');
     vGebers.forEach((vg,i)=>fieldRow2(`Name${vGebers.length>1?' '+(i+1):''}`,vg.name||'','Wohnort',vg.ort||''));
     y+=2;capsSection('BEVOLLMÄCHTIGTE FACHKRÄFTE');
-    fieldRow2('Vollmachtnehmer/in 1',vFk1,'Vollmachtnehmer/in 2',vFk2||'—');
+    fieldRow2('Vollmachtnehmer/in 1',vFk1,'Vollmachtnehmer/in 2',vFk2||(blank?'':'—'));
     y+=2;capsSection('KIND');
     fieldRow2('Name',vKind,'Geburtsdatum',vKindGeb);
     y+=2;capsSection('AUFGABENKREISE');
     doc.setFont(F,'normal');doc.setFontSize(8.5);doc.setTextColor(60,55,50);doc.text('Gilt sofern angekreuzt:',ML,y);y+=6;
     [['ki_v_alle','Alle Angelegenheiten der elterlichen Sorge'],['ki_v_gesund','Gesundheitsfürsorge'],['ki_v_aufenth','Aufenthaltsbestimmung'],['ki_v_beh','Behördenangelegenheiten, insb. Hilfe zur Erziehung'],['ki_v_verm','Vermögensrechtliche Angelegenheiten'],['ki_v_schule','Schulische Angelegenheiten']].forEach(([id,lbl])=>cbRow(id,lbl));
     y+=2;noteBox('Diese Vollmacht gilt bis auf Widerruf und kann jederzeit schriftlich widerrufen werden.');
-    y+=2;capsSection('UNTERSCHRIFT');
+    pageCheck(56);y+=2;capsSection('UNTERSCHRIFT');
     const hw=(CW-6)/2;
-    fieldRow('Ort, Datum',(kdX.ort||'')+', '+fmtDate(kdX.datum||''),hw,ML);y-=7;
+    fieldRow('Ort, Datum',_od(),hw,ML);y-=7;
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('ORT, DATUM',ML+hw+6,y-3.5);doc.line(ML+hw+6,y+1.5,ML+hw+6+hw,y+1.5);y+=7;
     if(vGebers.length>1){
       const p1=sigsX['vollm_0'],p2=sigsX['vollm_1'];
@@ -1993,7 +2023,7 @@ function generatePDF(formId, blank, pre){
       doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
       doc.text(vGebers[0]?.name||'',ML,y);doc.text(vGebers[1]?.name||'',ML+hw+6,y);
     } else {
-      sigArea2((kdX.ort||'')+', '+fmtDate(kdX.datum||''),'Unterschrift Vollmachtgeber/in',sigsX['vollm']||sigsX['vollm_0']);
+      sigArea2(_od(),'Unterschrift Vollmachtgeber/in',sigsX['vollm']||sigsX['vollm_0']);
     }
   }
 
@@ -2001,7 +2031,9 @@ function generatePDF(formId, blank, pre){
     eyebrow('STAMMDATEN · EINVERSTÄNDNIS · NOTFALL');mainTitle('Startkompass');
     subtitle('Erstaufnahme-Dokumentation für die Hilfe zur Erziehung nach SGB VIII.');
     hRule();
+    if(blank){hilfeBoxBlank();}else{
     highlightSection('HILFEEMPFÄNGER',`${kdX.name||'—'}  ·  geb. ${kdX.geb||'—'}  ·  ${((kdX.str||'')+', '+(kdX.plz||'')+' '+(kdX.ort||'')).replace(/^, /,'')||'—'}\nTel.: ${kdX.tel||'—'}  ·  Krankenkasse: ${(($id('ki_k_kk')||{}).value)||'—'}`);
+    }
     capsSection('ELTERN');
     fieldRow2('Mutter',(($id('ki_m_name')||{}).value)||'','Tel. Mutter',(($id('ki_m_tel')||{}).value)||'');
     fieldRow('Adresse Mutter',(($id('ki_m_adr')||{}).value)||'',CW,ML);
@@ -2016,6 +2048,7 @@ function generatePDF(formId, blank, pre){
         if(sw||br)fieldRow2('Schwester',(sw&&sw.value)||'','Bruder',(br&&br.value)||'');
       });
     }
+    if(blank&&gsBlocks.length===0){capsSection('GESCHWISTER');fieldRow2('Schwester','','Bruder','');fieldRow2('Schwester','','Bruder','');}
     capsSection('GESUNDHEIT & NOTFALL');
     const kr=(($id('ki_krankheiten')||{}).value)||'';if(kr)fieldRow('Krankheiten',kr,CW,ML);
     const al=(($id('ki_allergien')||{}).value)||'';if(al)fieldRow('Allergien',al,CW,ML);
@@ -2027,12 +2060,13 @@ function generatePDF(formId, blank, pre){
       const n=b.querySelector('[id^="nfk_name"]'),t2=b.querySelector('[id^="nfk_tel"]');
       if(n&&n.value)fieldRow2(`Notfallkontakt ${i+1}`,n.value,'Telefon',(t2&&t2.value)||'');
     });
+    if(blank){fieldRow('Krankheiten','',CW,ML);fieldRow('Allergien','',CW,ML);fieldRow('Medikament 1 (Name, Dosierung, Art)','',CW,ML);fieldRow('Medikament 2 (Name, Dosierung, Art)','',CW,ML);fieldRow2('Notfallkontakt 1','','Telefon','');fieldRow2('Notfallkontakt 2','','Telefon','');}
     noteBox('Notruf wird in gesundheitlichen Notfällen immer von MA PNW abgesetzt.');
     capsSection('EINVERSTÄNDNISSE');
     [['ki_schwimm_frei','Schwimmen ohne Schwimmhilfe'],['ki_schwimm_hilfe','Schwimmen mit Schwimmhilfe'],['ki_schwimm_aufsicht','Schwimmen nur unter Bademeister-Aufsicht'],['ki_zecken_pnw','Zecken: Entfernung durch MA PNW'],['ki_zecken_eltern','Zecken: Eltern holen ab → Arzt'],['ki_einv_erlebn','Erlebnispädagogische Maßnahmen'],['ki_einv_auto','Mitnahme im Auto'],['ki_einv_foto','Fotoaufnahmen trägerintern'],['ki_foto_public','Fotoaufnahmen öffentlich']].forEach(([id,lbl])=>cbRow(id,lbl));
-    y+=4;capsSection('UNTERSCHRIFTEN');
+    pageCheck(blank?70:56);y+=4;capsSection('UNTERSCHRIFTEN');
     const hw2=(CW-6)/2;
-    fieldRow('Ort, Datum',(kdX.ort||'')+', '+fmtDate(kdX.datum||''),hw2,ML);y-=7;
+    fieldRow('Ort, Datum',_od(),hw2,ML);y-=7;
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('ORT, DATUM',ML+hw2+6,y-3.5);doc.line(ML+hw2+6,y+1.5,ML+hw2+6+hw2,y+1.5);y+=7;
     if(sigsX['kompass_eb']&&sigsX['kompass_eb'].length>200)try{doc.addImage(sigsX['kompass_eb'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
     y+=10;doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y,ML+hw2,y);y+=3;
@@ -2040,6 +2074,8 @@ function generatePDF(formId, blank, pre){
     if(sigsX['kompass_kl']&&sigsX['kompass_kl'].length>200){
       try{doc.addImage(sigsX['kompass_kl'],'PNG',ML,y-8,hw2*0.7,14);}catch(e){}
       y+=10;doc.line(ML,y,ML+hw2,y);y+=3;doc.text('Unterschrift Klient (optional)',ML,y);
+    } else if(blank){
+      y+=10;doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y,ML+hw2,y);y+=3;doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('Unterschrift Klient (optional)',ML,y);
     }
   }
 
