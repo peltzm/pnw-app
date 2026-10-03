@@ -2386,6 +2386,9 @@ function renderFreigabe() {
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
         <span style="font-size:11px;font-weight:600;color:#92400e;white-space:nowrap;">⏳ Ausstehend</span>
+        ${_isAdminUser() ? `<button onclick="aendernVorFreigabe('${it.id}')" title="Protokoll vor der Freigabe ändern oder ergänzen"
+          style="font-size:12px;padding:6px 14px;background:white;color:var(--accent);border:1px solid var(--accent);
+          border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">✏ Ändern</button>` : ''}
         <button onclick="leseProtokoll('${it.id}', {freigabe:true})" title="Nur lesen – es wird nichts verändert"
           style="font-size:12px;padding:6px 14px;background:white;color:#92400e;border:1px solid #fde68a;
           border-radius:var(--radius);cursor:pointer;font-weight:600;min-height:36px;">👁 Lesen</button>
@@ -2577,7 +2580,10 @@ async function leseProtokoll(itemId, opts) {
     o.innerHTML = `
       <div style="width:100%;max-width:840px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius) var(--radius) 0 0;padding:8px 14px;box-sizing:border-box;">
         <div style="font-size:12px;color:#92400e;"><strong>Nur lesen</strong> · Status: ${_esc(f.Status || '—')}${bearbeiter ? ' · Protokollant: ' + _esc(bearbeiter) : ''}</div>
-        <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="schliesseLeseAnsicht()">Schließen</button>
+        <div style="display:flex;gap:6px;">
+          ${(_isAdminUser() && f.Status === 'Eingereicht') ? `<button class="btn btn-primary" style="padding:5px 12px;font-size:12px;" onclick="aendernVorFreigabe('${itemId}')">✏ Vor Freigabe ändern</button>` : ''}
+          <button class="btn btn-secondary" style="padding:5px 12px;font-size:12px;" onclick="schliesseLeseAnsicht()">Schließen</button>
+        </div>
       </div>
       <div style="width:100%;max-width:840px;flex:1;overflow:auto;background:white;border-radius:0 0 var(--radius) var(--radius);">
         ${protokollHtml(data, 'Entwurf')}
@@ -2671,6 +2677,17 @@ async function korrigiereBearbeiter() {
 ────────────────────────────────────── */
 let _freigabeModeItemId = null;
 
+// Geschaeftsfuehrung: Protokoll vor der Freigabe aendern/ergaenzen. Oeffnet es im Editor
+// (Status bleibt „Eingereicht“, Ersteller bleibt Ersteller) mit dem Freigabe-Banner,
+// sodass direkt danach freigegeben werden kann. Aenderungen werden automatisch gespeichert.
+async function aendernVorFreigabe(itemId) {
+  if (!_isAdminUser()) { showToast('Nur für die Geschäftsführung.', 'info'); return; }
+  schliesseLeseAnsicht();
+  await loadDraft(itemId, 's-meta');
+  activateFreigabeModus(itemId);
+  showToast('Änderungen werden automatisch gespeichert – danach oben „Freigeben“.', 'info');
+}
+
 function activateFreigabeModus(itemId) {
   _freigabeModeItemId = itemId;
   if (!document.getElementById('reviewFrame')) {
@@ -2686,7 +2703,7 @@ function activateFreigabeModus(itemId) {
     banner.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">'
       + '<div style="text-align:center;font-size:13px;">'
       + '<strong>&#128269; FREIGABE-MODUS &#8211; Protokoll zur Pr&#252;fung und Freigabe</strong><br>'
-      + '<span style="font-size:12px;opacity:.95;">Pr&#252;fe das Protokoll durch, dann freigeben oder ablehnen.</span>'
+      + '<span style="font-size:12px;opacity:.95;">Pr&#252;fe das Protokoll durch. &#196;nderungen und Erg&#228;nzungen sind m&#246;glich (werden automatisch gespeichert), dann freigeben oder ablehnen.</span>'
       + '</div>'
       + '<div style="display:flex;gap:8px;flex-shrink:0;">'
       + '<button id="btnBannerFreigeben" style="background:#166534;color:white;border:none;border-radius:4px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;min-height:38px;">&#10003; Freigeben</button>'
@@ -2727,18 +2744,17 @@ async function freigabeAction(itemId, newStatus) {
     const token         = await getToken();
     const freigeberName = currentAccount?.name || currentAccount?.username || 'Teamleitung';
 
-    // Protokolldaten aus Cache oder direkt aus SP laden
-    let _cachedItem = _freigabeData.find(i => i.id === itemId);
-    if (!_cachedItem) {
-      // Deep-Link-Fall: direkt aus SP laden
-      try {
-        const _r = await fetch(
-          'https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + itemId + '?expand=fields',
-          { headers: { Authorization: 'Bearer ' + token } }
-        );
-        _cachedItem = await _r.json();
-      } catch(e) { console.warn('Item load failed:', e); }
-    }
+    // Protokolldaten IMMER frisch aus SP laden – das Protokoll kann vor der Freigabe
+    // noch geaendert/ergaenzt worden sein; der Zwischenspeicher waere dann veraltet.
+    let _cachedItem = null;
+    try {
+      const _r = await fetch(
+        'https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + itemId + '?expand=fields',
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      if (_r.ok) _cachedItem = await _r.json();
+    } catch(e) { console.warn('Item load failed:', e); }
+    if (!_cachedItem || !_cachedItem.fields) _cachedItem = _freigabeData.find(i => i.id === itemId) || _cachedItem;
     const f    = _cachedItem?.fields || {};
     const data = (() => { try { return JSON.parse(f.ProtokollDaten || '{}'); } catch(e) { return {}; } })();
     const cfg   = data.type ? TYPES[data.type] : null;
