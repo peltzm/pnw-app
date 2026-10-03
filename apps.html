@@ -178,6 +178,23 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   pointer-events:none;
 }
 
+/* UPDATE banner (neue Version einer bestehenden App) */
+.app-card.upd{position:relative;overflow:hidden;}
+.app-card.upd::after{
+  content:'UPDATE';
+  position:absolute;
+  top:16px;right:-18px;
+  width:72px;
+  text-align:center;
+  font-size:8px;font-weight:700;letter-spacing:.1em;
+  color:#fff;
+  background:#1f6aa5;
+  padding:4px 0;
+  transform:rotate(45deg);
+  box-shadow:0 1px 4px rgba(0,0,0,.22);
+  pointer-events:none;
+}
+
 /* NEU banner */
 .app-card.neu{position:relative;overflow:hidden;}
 .app-card.neu::after{
@@ -303,10 +320,10 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
       <div class="card-desc">Offizielle Signatur erstellen — Name/E-Mail fest, Position/Telefon änderbar</div>
     </a>
 
-    <a class="app-card" href="https://apps.praxisneuewege.de/formulare.html">
+    <a class="app-card upd" data-gruppe="PNW-App-Formulare" href="https://apps.praxisneuewege.de/formulare.html">
       <div class="card-icon">🧭</div>
       <div class="card-name">Formulare</div>
-      <div class="card-desc">Klientenformulare digital erfassen und unterzeichnen</div>
+      <div class="card-desc">Klientenformulare erfassen, unterzeichnen und drucken — neu mit Kilanka-Vorbefüllung</div>
     </a>
 
     <a class="app-card" href="https://apps.praxisneuewege.de/meetingprotokoll.html">
