@@ -12,9 +12,9 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-<script src="assets/nm-pdf.js?v=20261003i"></script>
-<script src="assets/nm-docx.js?v=20261003i"></script>
-<script src="assets/neue-mitarbeiter.js?v=20261003i"></script>
+<script src="assets/nm-pdf.js?v=20261003j"></script>
+<script src="assets/nm-docx.js?v=20261003j"></script>
+<script src="assets/neue-mitarbeiter.js?v=20261003j"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
@@ -334,7 +334,9 @@ const SCHEMA_MITARBEITER = [
   {sp:'MentorName', key:'mentorName', typ:'text'},
   {sp:'MentorUPN', key:'mentorUpn', typ:'text'},
   {sp:'TeamleitungName', key:'tlName', typ:'text'},
-  {sp:'TeamleitungUPN', key:'tlUpn', typ:'text'}
+  {sp:'TeamleitungUPN', key:'tlUpn', typ:'text'},
+  {sp:'PlanStatus', key:'planStatus', typ:'text'},       // '' (Altbestand) | 'abstimmung' | 'freigegeben'
+  {sp:'PlanFreigaben', key:'planFreigaben', typ:'text'}  // JSON {mentor,tl,gf} mit Zeitstempeln
 ];
 const SCHEMA_FAHRPLAN = [
   {sp:'Title', key:'titel', typ:'text'},
@@ -351,7 +353,8 @@ const SCHEMA_FAHRPLAN = [
   {sp:'Optionen', key:'optionen', typ:'text'},
   {sp:'RessourceTyp', key:'ressourceTyp', typ:'text'},   // '' | 'link' | 'pdf'
   {sp:'RessourceName', key:'ressourceName', typ:'text'}, // Dateiname bei PDF
-  {sp:'RessourceId', key:'ressourceId', typ:'text'}      // DriveItem-ID bei PDF
+  {sp:'RessourceId', key:'ressourceId', typ:'text'},     // DriveItem-ID bei PDF
+  {sp:'MitarbeiterId', key:'mitarbeiterId', typ:'text'}  // leer = Vorlage für alle; gesetzt = individueller Plan dieser Person
 ];
 const SCHEMA_FORTSCHRITT = [
   {sp:'Title', key:'kombi', typ:'text'},
@@ -586,6 +589,8 @@ const DEMO_MITARBEITER = [
 let msalInstance, currentAccount, currentUpn = '';
 let demoMode = false;
 let mitarbeiterListe = [], fahrplanListe = [];
+let planKontext = null;      // Mitarbeiter-ID, deren individueller Plan gerade bearbeitet wird (null = Vorlage)
+let planAnsicht = false;     // true = Plan-Editor einer Person ist geöffnet
 let fortschrittMap = {}, reflexionMap = {}; // kombi -> {...}
 let rolle = null, sichtbareIds = [], aktiverMitarbeiterId = null;
 let gfTab = 'faelligkeiten';
@@ -759,7 +764,7 @@ async function ladeAllesUndStarte(){
 
   const gfKonto = GF_ERLAUBT.includes(currentUpn);
   document.getElementById('setupBar').style.display = Object.values(listenVorhanden).some(v=>!v) ? (gfKonto ? 'flex' : 'none') : 'none';
-  document.getElementById('seedBar').style.display = (listenVorhanden.fahrplan && fahrplanListe.length===0 && gfKonto) ? 'flex' : 'none';
+  document.getElementById('seedBar').style.display = (listenVorhanden.fahrplan && vorlageZeilen().length===0 && gfKonto) ? 'flex' : 'none';
 
   bestimmeRolle(gfKonto);
   render();
@@ -812,6 +817,21 @@ async function ergaenzeFahrplanSpalten(){
     if (!r.ok) throw new Error('Spalte '+s.sp+' konnte nicht angelegt werden ('+r.status+'): '+await r.text());
   }
 }
+async function fehlendeSpalten(listName, schema){
+  const cols = await graphAlle('/sites/'+CFG.spHost+'/lists/'+listName+'/columns?$select=name');
+  const da = new Set(cols.map(c=>c.name));
+  return schema.filter(s=>s.sp!=='Title' && !da.has(s.sp));
+}
+async function ergaenzeSpalten(listName, schema){
+  const fehlen = await fehlendeSpalten(listName, schema);
+  if (!fehlen.length) return 0;
+  const t = await token(['Sites.Manage.All']);
+  for (const s of fehlen){
+    const r = await fetch('https://graph.microsoft.com/v1.0/sites/'+CFG.spHost+'/lists/'+listName+'/columns', {method:'POST', headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}, body:JSON.stringify(spaltenDefinition(s))});
+    if (!r.ok && r.status!==409) throw new Error('Spalte '+s.sp+' konnte nicht angelegt werden ('+r.status+'): '+await r.text());
+  }
+  return fehlen.length;
+}
 async function legeListeAn(name, schema){
   const t = await token(['Sites.Manage.All']);
   const columns = schema.filter(s=>s.sp!=='Title').map(spaltenDefinition);
@@ -856,8 +876,8 @@ function standardZuEintrag(it){
 }
 function heftAbgleichPlan(){
   const heftKeys = new Set(DEFAULT_FAHRPLAN.map(x=>x.schluessel));
-  const vorhanden = new Map(fahrplanListe.map(x=>[x.schluessel, x]));
-  const entfallen = fahrplanListe.filter(x=>x.schluessel && !String(x.schluessel).startsWith('custom-') && !heftKeys.has(x.schluessel));
+  const vorhanden = new Map(vorlageZeilen().map(x=>[x.schluessel, x]));
+  const entfallen = vorlageZeilen().filter(x=>x.schluessel && !String(x.schluessel).startsWith('custom-') && !heftKeys.has(x.schluessel));
   const neu = DEFAULT_FAHRPLAN.filter(x=>!vorhanden.has(x.schluessel));
   const aktualisieren = DEFAULT_FAHRPLAN.filter(x=>vorhanden.has(x.schluessel));
   return {entfallen, neu, aktualisieren, vorhanden};
@@ -865,10 +885,10 @@ function heftAbgleichPlan(){
 let heftAbgleichNoetig = false;
 async function pruefeHeftStand(){
   heftAbgleichNoetig = false;
-  if (!listenVorhanden.fahrplan || !fahrplanListe.length) return;
+  if (!listenVorhanden.fahrplan || !vorlageZeilen().length) return;
   const plan = heftAbgleichPlan();
   let spaltenFehlen = false;
-  try{ spaltenFehlen = (await fehlendeFahrplanSpalten()).length > 0; }catch(e){}
+  try{ spaltenFehlen = (await fehlendeFahrplanSpalten()).filter(s=>s.sp!=='MitarbeiterId').length > 0; }catch(e){}
   heftAbgleichNoetig = spaltenFehlen || plan.neu.length>0 || plan.entfallen.length>0;
   const bar = document.getElementById('heftBar');
   bar.style.display = heftAbgleichNoetig ? 'flex' : 'none';
@@ -952,9 +972,15 @@ async function neuerMitarbeiter(daten){
 }
 async function neuerFahrplanPunkt(daten){
   const f = {titel:daten.titel, schluessel:'custom-'+Date.now(), phase:daten.phase, owner:daten.owner, typ:daten.typ, reihenfolge:Date.now()};
-  if (demoMode){ fahrplanListe.push({...f, id:'demo-item-'+Date.now()}); return; }
-  const id = await schreibeItem(CFG.listFahrplan, SCHEMA_FAHRPLAN, f);
-  fahrplanListe.push({...f, id});
+  const mid = daten.mitarbeiterId || planKontext || null; if (mid) f.mitarbeiterId = mid;
+  const kontextAlt = planKontext; if (mid) planKontext = mid;
+  if (demoMode){ fahrplanListe.push({...f, id:'demo-item-'+Date.now()}); planKontext = kontextAlt; return; }
+  try{
+    if (mid) await spaltenSichern();
+    const id = await schreibeItem(CFG.listFahrplan, SCHEMA_FAHRPLAN, f);
+    fahrplanListe.push({...f, id});
+    await planGeaendert();
+  } finally { planKontext = kontextAlt; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1012,6 +1038,7 @@ async function speicherReihenfolge(items, okText){
     for (const x of items){
       await graph(basis+'/items/'+x.id+'/fields', {method:'PATCH', body:JSON.stringify({Phase:x.phase, Reihenfolge:x.reihenfolge})});
     }
+    await planGeaendert();
     zeigeToast(okText+' ✓');
   }catch(e){
     zeigeToast('Speichern fehlgeschlagen — Stand wird neu geladen. ('+e.message+')', true);
@@ -1071,7 +1098,7 @@ function aktualisiereResFelder(){
 }
 function kurzUrl(u){ try{ const x=new URL(u); const pfad=decodeURIComponent(x.pathname); return x.hostname.replace(/^www\./,'')+(pfad.length>1 ? (pfad.length>40 ? pfad.slice(0,40)+'…' : pfad) : ''); }catch(e){ return u; } }
 function naechsteReihenfolge(phase, ohne){
-  const max = fahrplanListe.filter(x=>x.phase===phase && x!==ohne).reduce((m,x)=>Math.max(m, Number(x.reihenfolge||x.order||0)), 0);
+  const max = planZeilen(planKontext).filter(x=>x.phase===phase && x!==ohne).reduce((m,x)=>Math.max(m, Number(x.reihenfolge||x.order||0)), 0);
   return max + 10;
 }
 let dlgItemId = null;
@@ -1185,9 +1212,11 @@ async function speichereItemDialog(){
       Object.assign(it, d, {fristTage: frist==null ? '' : frist, reihenfolge: neueReihenfolge});
     } else {
       const neu = Object.assign({}, d, {schluessel:'custom-'+Date.now(), reihenfolge: naechsteReihenfolge(d.phase), fristTage: frist==null ? '' : frist});
+      if (planKontext) neu.mitarbeiterId = planKontext;
       if (demoMode) neu.id = 'demo-item-'+Date.now();
       else {
         const f = Object.assign({}, felder, {Schluessel:neu.schluessel, Reihenfolge:neu.reihenfolge});
+        if (planKontext) f.MitarbeiterId = planKontext;
         if (frist==null) delete f.FristTageZumStart;
         const res = await graph(basis+'/items', {method:'POST', body:JSON.stringify({fields:f})});
         neu.id = res.id;
@@ -1195,6 +1224,7 @@ async function speichereItemDialog(){
       fahrplanListe.push(neu);
     }
     schliesseItemDialog();
+    await planGeaendert();
     render();
     zeigeToast('Gespeichert ✓'+(demoMode?' (Demo)':''));
   }catch(e){
@@ -1204,18 +1234,20 @@ async function speichereItemDialog(){
 async function loescheItemDialog(){
   const it = fahrplanListe.find(x=>String(x.id)===String(dlgItemId));
   if (!it) return;
-  if (!confirm('„'+it.titel+'“ aus dem Fahrplan löschen?\n\nDer Punkt verschwindet bei allen Mitarbeitenden.')) return;
+  const mitName = planKontext ? ((mitarbeiter(planKontext)||{}).name||'dieser Person') : null;
+  if (!confirm('„'+it.titel+'“ aus dem '+(mitName ? 'Plan von '+mitName : 'Fahrplan')+' löschen?\n\n'+(mitName ? 'Nur dieser Plan ist betroffen.' : 'Der Punkt verschwindet bei allen Mitarbeitenden.'))) return;
   try{
     if (!demoMode) await graph('/sites/'+CFG.spHost+'/lists/'+CFG.listFahrplan+'/items/'+it.id, {method:'DELETE'});
     fahrplanListe = fahrplanListe.filter(x=>x!==it);
     schliesseItemDialog();
+    await planGeaendert();
     render();
     zeigeToast('Gelöscht'+(demoMode?' (Demo)':''));
   }catch(e){ byId('dlgFehler').textContent = 'Löschen fehlgeschlagen: '+e.message; }
 }
 
 function gfLinks(){
-  const alle = fahrplanListe.filter(it=>it.typ==='link' || sichereUrl(it.url));
+  const alle = vorlageZeilen().filter(it=>it.typ==='link' || sichereUrl(it.url));
   const pdfs = alle.filter(it=>ressourceArt(it)==='pdf').length;
   const ohne = alle.filter(it=>!sichereUrl(it.url)).length;
   let h = '<div class="ea-card ea-card-head"><div><h3>Links &amp; Ressourcen</h3>'
@@ -1224,7 +1256,7 @@ function gfLinks(){
     + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-solid" data-new-item="link">+ Neue Ressource</button></div></div>';
   if (!alle.length) return h + '<div class="ea-card"><p class="ea-item-desc">Noch keine Ressourcen hinterlegt.</p></div>';
   PHASEN.forEach(p=>{
-    const liste = itemsFuerPhase(p.key).filter(it=>alle.includes(it));
+    const liste = itemsFuerPhase(p.key, null).filter(it=>alle.includes(it));
     if (!liste.length) return;
     h += '<div class="ea-card"><h3>'+esc(p.label)+'</h3>';
     liste.forEach(it=>{
@@ -1245,7 +1277,78 @@ function gfLinks(){
  * RENDERING
  * ═══════════════════════════════════════════════════════════ */
 function mitarbeiter(id){ return mitarbeiterListe.find(m=>m.id===id) || null; }
-function itemsFuerPhase(phaseKey){ return fahrplanListe.filter(it=>it.phase===phaseKey).sort((a,b)=>(a.reihenfolge||a.order||0)-(b.reihenfolge||b.order||0)); }
+/* Plan je Person: Jede neue Mitarbeiterin bekommt beim „Plan erzeugen“ eine eigene Kopie der Vorlage (Zeilen mit MitarbeiterId).
+   Altbestand ohne eigene Kopie nutzt weiter die gemeinsame Vorlage (Zeilen ohne MitarbeiterId). */
+function vorlageZeilen(){ return fahrplanListe.filter(x=>!x.mitarbeiterId); }
+function hatEigenenPlan(mid){ return !!mid && fahrplanListe.some(x=>x.mitarbeiterId===mid); }
+function planZeilen(mid){ return mid && hatEigenenPlan(mid) ? fahrplanListe.filter(x=>x.mitarbeiterId===mid) : vorlageZeilen(); }
+function itemsFuerPhase(phaseKey, mid){
+  const k = mid===undefined ? planKontext : mid;
+  return planZeilen(k).filter(it=>it.phase===phaseKey).sort((a,b)=>(a.reihenfolge||a.order||0)-(b.reihenfolge||b.order||0));
+}
+function freigaben(m){ try{ return JSON.parse(m.planFreigaben||'{}')||{}; }catch(e){ return {}; } }
+function meineRollen(m){
+  const me = (currentUpn||'').toLowerCase(), r = [];
+  if ((m.mentorUpn||'').toLowerCase()===me) r.push('mentor');
+  if ((m.tlUpn||'').toLowerCase()===me) r.push('tl');
+  if (GF_ERLAUBT.includes(me)) r.push('gf');
+  return r;
+}
+async function planGeaendert(){
+  // Jede Änderung am individuellen Plan macht bereits erteilte Freigaben ungültig
+  if (!planKontext) return;
+  const m = mitarbeiter(planKontext); if (!m) return;
+  const hatFreigabe = Object.keys(freigaben(m)).length>0 || m.planStatus==='freigegeben';
+  if (!hatFreigabe) return;
+  m.planStatus = 'abstimmung'; m.planFreigaben = '{}';
+  if (!demoMode) await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, {id:m.id, planStatus:'abstimmung', planFreigaben:'{}'});
+  zeigeToast('Plan geändert – bisherige Freigaben wurden zurückgesetzt');
+}
+async function planFreigeben(mid){
+  const m = mitarbeiter(mid); if (!m) return;
+  const rollen = meineRollen(m); if (!rollen.length) return;
+  const f = freigaben(m); const jetzt = new Date().toISOString();
+  rollen.forEach(r=>{ if (!f[r]) f[r] = jetzt; });
+  const komplett = !!(f.mentor && f.tl && f.gf);
+  m.planFreigaben = JSON.stringify(f); m.planStatus = komplett ? 'freigegeben' : 'abstimmung';
+  if (!demoMode) await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, {id:m.id, planFreigaben:m.planFreigaben, planStatus:m.planStatus});
+  render(); zeigeToast(komplett ? 'Plan vollständig freigegeben ✓' : 'Freigabe gespeichert ✓');
+}
+async function freigabenZuruecksetzen(mid){
+  const m = mitarbeiter(mid); if (!m || !confirm('Alle Freigaben für den Plan von '+m.name+' zurücksetzen?')) return;
+  m.planFreigaben = '{}'; m.planStatus = 'abstimmung';
+  if (!demoMode) await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, {id:m.id, planFreigaben:'{}', planStatus:'abstimmung'});
+  render(); zeigeToast('Freigaben zurückgesetzt');
+}
+function planOeffnen(mid){ if (!hatEigenenPlan(mid)) return; planKontext = mid; planAnsicht = true; aktiverMitarbeiterId = mid; render(); }
+function planSchliessen(){ planKontext = null; planAnsicht = false; render(); }
+function darfPlanAendern(m){ const r = meineRollen(m); return r.includes('gf') || (m.planStatus!=='freigegeben' && (r.includes('mentor')||r.includes('tl'))); }
+function planKarte(m){
+  if (!m.planStatus || !hatEigenenPlan(m.id)) return '';
+  const f = freigaben(m), rollen = meineRollen(m), fertig = m.planStatus==='freigegeben';
+  const zeile = (key, label, wer)=>{
+    const ts = f[key]; const meine = rollen.includes(key);
+    return '<tr><td>'+label+'</td><td>'+esc(wer||'–')+'</td><td>'+(ts ? '<span style="color:var(--success)">✓ '+fmtDatum(ts.slice(0,10))+'</span>' : '<span class="ea-item-desc">offen</span>')+'</td><td>'
+      + (meine && !ts ? '<button class="btn btn-sm btn-solid" data-plan-freigabe="'+m.id+'">Freigeben</button>' : '')+'</td></tr>';
+  };
+  let h = '<div class="ea-card"><div class="ea-card-head"><div><h3>Einarbeitungsplan '+(fertig?'– freigegeben ✓':'– in Abstimmung')+'</h3>'
+    + '<p class="ea-item-desc" style="margin-top:4px">'+(fertig?'Alle drei Freigaben liegen vor.':'Mentor:in, Teamleitung und Geschäftsführung prüfen den Plan, passen ihn an und geben ihn frei. Jede Änderung setzt die Freigaben zurück.')+'</p></div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + '<button class="btn btn-sm btn-outline" data-plan-open="'+m.id+'">'+(darfPlanAendern(m)?'Plan ansehen und anpassen':'Plan ansehen')+'</button>'
+    + (rollen.includes('gf') && Object.keys(f).length ? '<button class="btn btn-sm btn-outline" data-plan-reset="'+m.id+'">Freigaben zurücksetzen</button>' : '')+'</div></div>'
+    + '<table class="ea-tbl" style="margin-top:10px"><thead><tr><th>Rolle</th><th>Person</th><th>Freigabe</th><th></th></tr></thead><tbody>'
+    + zeile('mentor','Mentor:in', m.mentorName) + zeile('tl','Teamleitung', m.tlName) + zeile('gf','Geschäftsführung', 'Markus oder Sonja Peltz')+'</tbody></table></div>';
+  return h;
+}
+function planEditor(){
+  const m = mitarbeiter(planKontext);
+  if (!m) { planKontext = null; planAnsicht = false; return ''; }
+  let h = '<div class="ea-card ea-card-head"><div><h3>Plan von '+esc(m.name)+'</h3><p class="ea-item-desc" style="margin-top:4px">Individueller Einarbeitungsplan · Start '+fmtDatum(m.startDatum)+'. Änderungen betreffen nur diese Person.</p></div>'
+    + '<button class="btn btn-sm btn-outline" data-plan-close="1">← Zurück</button></div>' + planKarte(m);
+  if (darfPlanAendern(m)) h += gfFahrplan();
+  else h += '<div class="ea-card"><p class="ea-item-desc">Der Plan ist freigegeben. Änderungen kann nur die Geschäftsführung vornehmen.</p></div>';
+  return h;
+}
 function fortschrittFuer(mitarbeiterId, items){
   const relevant = items.filter(it=>it.typ!=='reflection' && it.typ!=='auswahl');
   if (!relevant.length) return null;
@@ -1265,13 +1368,13 @@ function render(){
     vb.style.display = 'flex';
     vb.innerHTML = '<div class="pill-group">' + [['faelligkeiten','Fälligkeiten'],['mitarbeitende','Mitarbeitende'],['neue','Neue Mitarbeiter'],['vorlagen','Vorlagen'],['fahrplan','Fahrplan verwalten'],['links','Links & Ressourcen'],['einzelansicht','Einzelansicht']]
       .map(t=>'<button class="pill '+(gfTab===t[0]?'active':'')+'" data-gftab="'+t[0]+'">'+t[1]+'</button>').join('') + '</div>';
-    Array.from(vb.querySelectorAll('[data-gftab]')).forEach(b=>b.onclick=()=>{ gfTab=b.getAttribute('data-gftab'); render(); });
+    Array.from(vb.querySelectorAll('[data-gftab]')).forEach(b=>b.onclick=()=>{ gfTab=b.getAttribute('data-gftab'); planKontext=null; planAnsicht=false; render(); });
     sub.textContent = 'Geschäftsführung';
   } else if (rolle === 'mentor_tl'){
     vb.style.display = sichtbareIds.length>1 ? 'flex' : 'none';
     if (sichtbareIds.length>1){
       vb.innerHTML = '<select class="ea-select" id="empSelect">' + sichtbareIds.map(id=>{ const m=mitarbeiter(id); return '<option value="'+id+'" '+(id===aktiverMitarbeiterId?'selected':'')+'>'+esc(m.name)+'</option>'; }).join('') + '</select>';
-      document.getElementById('empSelect').onchange = function(){ aktiverMitarbeiterId=this.value; render(); };
+      document.getElementById('empSelect').onchange = function(){ aktiverMitarbeiterId=this.value; planKontext=null; planAnsicht=false; render(); };
     }
     sub.textContent = 'Mentor:in / Teamleitung';
   } else {
@@ -1281,7 +1384,8 @@ function render(){
   }
 
   const content = document.getElementById('content');
-  if (rolle === 'mitarbeiter') content.innerHTML = viewMitarbeiter();
+  if (planAnsicht && planKontext && (rolle==='gf' || rolle==='mentor_tl')) content.innerHTML = planEditor();
+  else if (rolle === 'mitarbeiter') content.innerHTML = viewMitarbeiter();
   else if (rolle === 'mentor_tl') content.innerHTML = viewMentorTl();
   else content.innerHTML = viewGf();
   bindContentEvents();
@@ -1292,12 +1396,13 @@ function metaItem(l, v){ return '<div><div class="l">'+esc(l)+'</div><div class=
 function viewMitarbeiter(){
   const m = mitarbeiter(aktiverMitarbeiterId);
   if (!m) return '<div class="ea-card">Kein Mitarbeiter-Datensatz gefunden.</div>';
+  if (m.planStatus==='abstimmung') return '<div class="ea-card"><h3>Willkommen bei Praxis NeueWege, '+esc(vorname(m.name))+'! 🌱</h3><p class="ea-item-desc" style="margin-top:8px">Dein Einarbeitungsplan wird gerade von deinem Team abgestimmt und ist in Kürze für dich freigeschaltet.</p></div>';
   const d = tageZwischen(m.startDatum, todayISO());
   if (d < 0) return mitarbeiterVorab(m, -d);
   return mitarbeiterFahrplan(m, d);
 }
 function mitarbeiterVorab(m, tageNoch){
-  const vorabItems = itemsFuerPhase('vorab').filter(it=>it.owner==='mitarbeiter');
+  const vorabItems = itemsFuerPhase('vorab', m.id).filter(it=>it.owner==='mitarbeiter');
   let h = '<div class="ea-card"><h3>Willkommen bei Praxis NeueWege, '+esc(vorname(m.name))+'! 🌱</h3>';
   h += '<p class="ea-item-desc" style="margin-top:8px">Noch <b style="color:var(--text)">'+tageNoch+' Tag'+(tageNoch===1?'':'e')+'</b> bis zu deinem ersten Arbeitstag am '+fmtDatum(m.startDatum)+'.</p>';
   h += '<div class="ea-meta">'+metaItem('Bereich',m.bereich)+metaItem('Mentor:in',m.mentorName)+metaItem('Teamleitung',m.tlName)+'</div></div>';
@@ -1315,7 +1420,7 @@ function mitarbeiterVorab(m, tageNoch){
 }
 function mitarbeiterFahrplan(m, tageSeit){
   const curPhase = aktuellePhase(m.startDatum);
-  const overall = fortschrittFuer(m.id, fahrplanListe.filter(it=>it.phase!=='vorab'));
+  const overall = fortschrittFuer(m.id, planZeilen(m.id).filter(it=>it.phase!=='vorab'));
   let h = '<div class="ea-card ea-profile-row"><div><h3>Hallo '+esc(vorname(m.name))+' 👋</h3>';
   h += '<p class="ea-item-desc" style="margin-top:4px">Tag '+tageSeit+' bei Praxis NeueWege · Start am '+fmtDatum(m.startDatum)+'</p>';
   h += '<div class="ea-meta">'+metaItem('Bereich',m.bereich)+metaItem('Mentor:in',m.mentorName)+metaItem('Teamleitung',m.tlName)+'</div></div>';
@@ -1326,7 +1431,7 @@ function mitarbeiterFahrplan(m, tageSeit){
   return h;
 }
 function renderWaypoint(phase, idx, curPhaseKey, m, ansicht){
-  const items = itemsFuerPhase(phase.key);
+  const items = itemsFuerPhase(phase.key, m.id);
   const prog = fortschrittFuer(m.id, items);
   const istAktuell = phase.key===curPhaseKey, istFertig = prog && prog.pct===100;
   const klasse = (istFertig?'done ':'')+(istAktuell?'current ':'')+(istAktuell?'open':'');
@@ -1401,8 +1506,8 @@ function viewMentorTl(){
   if (!m) return '<div class="ea-card">Keine Mitarbeitenden zugeordnet.</div>';
   const d = tageZwischen(m.startDatum, todayISO());
   const curPhase = aktuellePhase(m.startDatum);
-  const overall = fortschrittFuer(m.id, fahrplanListe.filter(it=>it.phase!=='vorab'));
-  let h = '<div class="ea-card ea-profile-row"><div><h3>'+esc(m.name)+'</h3>';
+  const overall = fortschrittFuer(m.id, planZeilen(m.id).filter(it=>it.phase!=='vorab'));
+  let h = planKarte(m) + '<div class="ea-card ea-profile-row"><div><h3>'+esc(m.name)+'</h3>';
   h += '<p class="ea-item-desc" style="margin-top:4px">'+(d<0?('Start in '+(-d)+' Tagen'):('Tag '+d+' seit Start'))+' · '+fmtDatum(m.startDatum)+'</p>';
   h += '<div class="ea-meta">'+metaItem('Bereich',m.bereich)+metaItem('Mentor:in',m.mentorName)+metaItem('Teamleitung',m.tlName)+'</div></div>';
   if (overall) h += '<div class="ea-pct">'+overall.pct+' % Fortschritt</div>';
@@ -1414,7 +1519,7 @@ function viewMentorTl(){
     PHASEN.filter(p=>p.key!=='vorab').forEach((p,i)=>h+=renderWaypoint(p, i+1, curPhase, m, 'mentor_tl'));
     h += '</div>';
   }
-  h += addFahrplanForm(['mentor','tl']);
+  h += addFahrplanForm(['mentor','tl'], hatEigenenPlan(m.id) ? m.id : null);
   return h;
 }
 
@@ -1435,12 +1540,12 @@ function gfEinzelansicht(){
 }
 let faelligFilter = 'offen';
 function gfFaelligkeiten(){
-  const gfItems = fahrplanListe.filter(it=>it.owner==='gf' && it.fristTage!=null && it.fristTage!=='')
+  const gfItemsFuer = m => planZeilen(m.id).filter(it=>it.owner==='gf' && it.fristTage!=null && it.fristTage!=='')
     .sort((a,b)=>Number(a.fristTage)-Number(b.fristTage) || (a.reihenfolge||0)-(b.reihenfolge||0));
-  if (!gfItems.length || !mitarbeiterListe.length) return '<div class="ea-card"><p class="ea-item-desc">Keine GF-Aufgaben mit Fristen hinterlegt.</p></div>';
+  if (!mitarbeiterListe.length || !mitarbeiterListe.some(m=>gfItemsFuer(m).length)) return '<div class="ea-card"><p class="ea-item-desc">Keine GF-Aufgaben mit Fristen hinterlegt.</p></div>';
   const heute = todayISO();
   const gruppen = mitarbeiterListe.map(m=>{
-    const rows = gfItems.map(it=>{
+    const rows = gfItemsFuer(m).map(it=>{
       const faellig = addTageISO(m.startDatum, Number(it.fristTage));
       const e = fortschrittMap[m.id+'__'+it.schluessel];
       return {it, faellig, erledigt: !!(e && e.erledigt), off: tageZwischen(heute, faellig)};
@@ -1492,7 +1597,7 @@ function gfMitarbeitende(){
     h += '<table class="ea-tbl" style="margin-top:10px"><thead><tr><th>Name</th><th>Bereich</th><th>Start</th><th>Mentor:in</th><th>Teamleitung</th><th>Status</th></tr></thead><tbody>';
     mitarbeiterListe.forEach(m=>{
       const d = tageZwischen(m.startDatum, todayISO());
-      h += '<tr><td><button class="ea-namebtn" data-open-emp="'+m.id+'">'+esc(m.name)+'</button></td><td>'+esc(m.bereich)+'</td><td>'+fmtDatum(m.startDatum)+'</td><td>'+esc(m.mentorName)+'</td><td>'+esc(m.tlName)+'</td><td class="ea-item-desc">'+(d<0?('startet in '+(-d)+' Tg.'):('Tag '+d))+'</td></tr>';
+      h += '<tr><td><button class="ea-namebtn" data-open-emp="'+m.id+'">'+esc(m.name)+'</button></td><td>'+esc(m.bereich)+'</td><td>'+fmtDatum(m.startDatum)+'</td><td>'+esc(m.mentorName)+'</td><td>'+esc(m.tlName)+'</td><td class="ea-item-desc">'+(m.planStatus==='abstimmung' ? 'Plan in Abstimmung · ' : '')+(d<0?('startet in '+(-d)+' Tg.'):('Tag '+d))+'</td></tr>';
     });
     h += '</tbody></table>';
   }
@@ -1541,13 +1646,13 @@ function gfFahrplan(){
     });
     h += '</div>';
   });
-  h += '<div class="ea-card ea-card-head"><div><h3>Neuen Punkt anlegen</h3><p class="ea-item-desc">Aufgabe, Link, Meilenstein oder Reflexionsfrage — erscheint sofort bei allen Mitarbeitenden.</p></div>'
+  h += '<div class="ea-card ea-card-head"><div><h3>Neuen Punkt anlegen</h3><p class="ea-item-desc">Aufgabe, Link, Meilenstein oder Reflexionsfrage — '+(planKontext?'erscheint nur in diesem Plan.':'erscheint sofort bei allen Mitarbeitenden.')+'</p></div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-outline" data-new-item="link">+ Link / Ressource</button><button class="btn btn-sm btn-solid" data-new-item="task">+ Punkt</button></div></div>';
   return h;
 }
-function addFahrplanForm(ownerOptions){
-  let h = '<div class="ea-card"><h3>Neuen Fahrplan-Punkt hinzufügen</h3><p class="ea-item-desc" style="margin-top:6px">Erscheint sofort bei allen Mitarbeitenden in der passenden Phase.</p>';
-  h += '<form class="addItemForm"><div class="ea-form-grid">';
+function addFahrplanForm(ownerOptions, mid){
+  let h = '<div class="ea-card"><h3>Neuen Fahrplan-Punkt hinzufügen</h3><p class="ea-item-desc" style="margin-top:6px">'+(mid ? 'Erscheint im Plan dieser Person in der passenden Phase.' : 'Erscheint sofort bei allen Mitarbeitenden in der passenden Phase.')+'</p>';
+  h += '<form class="addItemForm" '+(mid ? 'data-mid="'+esc(mid)+'"' : '')+'><div class="ea-form-grid">';
   h += '<div><label>Phase</label><select name="phase">' + PHASEN.filter(p=>p.key!=='vorab').map(p=>'<option value="'+p.key+'">'+esc(p.label)+'</option>').join('') + '</select></div>';
   h += '<div><label>Zuständig</label><select name="owner">' + ownerOptions.map(o=>'<option value="'+o+'">'+OWNER_LABEL[o]+'</option>').join('') + '</select></div>';
   h += '<div><label>Art</label><select name="typ"><option value="task">Aufgabe</option><option value="link">Link / Ressource</option><option value="milestone">Meilenstein</option></select></div>';
@@ -1609,6 +1714,10 @@ function bindFahrplanVerschieben(){
 
 function bindContentEvents(){
   if (rolle==='gf' && (gfTab==='neue' || gfTab==='vorlagen')) NM.bind();
+  document.querySelectorAll('[data-plan-open]').forEach(b=>b.onclick=()=>planOeffnen(b.getAttribute('data-plan-open')));
+  document.querySelectorAll('[data-plan-close]').forEach(b=>b.onclick=()=>planSchliessen());
+  document.querySelectorAll('[data-plan-freigabe]').forEach(b=>b.onclick=()=>planFreigeben(b.getAttribute('data-plan-freigabe')));
+  document.querySelectorAll('[data-plan-reset]').forEach(b=>b.onclick=()=>freigabenZuruecksetzen(b.getAttribute('data-plan-reset')));
   Array.from(document.querySelectorAll('[data-toggle-item]')).forEach(el=>{
     el.onclick = ()=>{ const [empId, schluessel] = el.getAttribute('data-toggle-item').split('|'); toggleItem(empId, schluessel); };
   });
@@ -1654,7 +1763,7 @@ function bindContentEvents(){
   Array.from(document.querySelectorAll('.addItemForm')).forEach(f=>{
     f.onsubmit = async (ev)=>{
       ev.preventDefault();
-      await neuerFahrplanPunkt({phase:f.phase.value, owner:f.owner.value, typ:f.typ.value, titel:f.titel.value.trim()});
+      await neuerFahrplanPunkt({phase:f.phase.value, owner:f.owner.value, typ:f.typ.value, titel:f.titel.value.trim(), mitarbeiterId:f.getAttribute('data-mid')||null});
       render();
     };
   });

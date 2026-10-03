@@ -131,14 +131,14 @@ const NM = (function () {
     const b = (act, text, solid) => '<button class="btn btn-sm ' + (solid ? 'btn-solid' : 'btn-outline') + '" data-nm="' + act + ':' + x.id + '">' + text + '</button>';
     const out = [];
     if (x.status === 'plan') {
-      return '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="ea-item-desc">in der Einarbeitung</span>' + b('edit', 'Bearbeiten') + b('reset', 'Zurücksetzen') +
+      return '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="ea-item-desc">in der Einarbeitung</span>' + (x.mitarbeiterId && hatEigenenPlan(x.mitarbeiterId) ? b('planoeffnen', 'Plan und Freigabe', true) : b('plan', 'Einarbeitungsplan erzeugen', true)) + b('edit', 'Bearbeiten') + b('reset', 'Zurücksetzen') +
         '<button class="btn btn-sm btn-outline" style="color:var(--error);border-color:var(--error)" data-nm="del:' + x.id + '">Löschen</button></div>';
     }
     out.push(b('paket', x.status === 'entwurf' || !x.status ? 'Vertragspaket erzeugen' : 'Vertragspaket neu', x.status === 'entwurf' || !x.status));
     if (x.status === 'mail_bereit') out.push(b('stat-versendet', 'Als versendet markieren', true));
     if (x.status === 'versendet') out.push(b('stat-zurueck', 'Vertrag zurück erhalten', true));
     if (x.status === 'zurueck') out.push(b('konto', 'M365-Konto anlegen', true));
-    if (x.status === 'konto') { out.push(b('uebernehmen', 'In Einarbeitung übernehmen', true)); out.push(b('konto', 'Konto prüfen')); }
+    if (x.status === 'konto') { out.push(b('plan', 'Einarbeitungsplan erzeugen', true)); out.push(b('konto', 'Konto prüfen')); }
     out.push(b('edit', 'Bearbeiten'));
     if (x.status && x.status !== 'entwurf') out.push(b('reset', 'Zurücksetzen'));
     out.push('<button class="btn btn-sm btn-outline" style="color:var(--error);border-color:var(--error)" data-nm="del:' + x.id + '">Löschen</button>');
@@ -163,7 +163,7 @@ const NM = (function () {
       liste.slice().sort((a, b) => String(b.eintritt || '').localeCompare(String(a.eintritt || ''))).forEach(x => {
         const verg = x.manuell ? 'manuell' : (x.eg ? x.eg.replace(' ', '') + ' / ' + x.stufe : '–');
         h += '<tr><td><b>' + esc(x.name) + '</b><div class="ea-item-desc">' + esc(x.beruf || '') + '</div>' + (x.upn ? '<div class="ea-item-desc">' + esc(x.upn) + '</div>' : '') + '</td><td>' + fmtDatum(x.eintritt) + '</td><td>' + esc(zahlDe(x.stunden || '')) + '</td><td>' + esc(verg) +
-          (x.grundgehalt ? '<div class="ea-item-desc">' + eur(x.grundgehalt) + ' + ' + eur(x.sue || 0) + '</div>' : '') + '</td><td>' + badge(x.status || 'entwurf') + '</td><td>' + aktionen(x) + '</td></tr>';
+          (x.grundgehalt ? '<div class="ea-item-desc">' + eur(x.grundgehalt) + ' + ' + eur(x.sue || 0) + '</div>' : '') + '</td><td>' + badge(x.status || 'entwurf') + planStatusText(x) + '</td><td>' + aktionen(x) + '</td></tr>';
       });
       h += '</tbody></table>';
     }
@@ -200,6 +200,8 @@ const NM = (function () {
         else if (act === 'uebernehmen') uebernehmen(id);
         else if (act === 'reset') zuruecksetzen(id);
         else if (act === 'konto') kontoDialog(id);
+        else if (act === 'plan') planDialog(id);
+        else if (act === 'planoeffnen') { const x = eintrag(id); if (x && x.mitarbeiterId) planOeffnen(x.mitarbeiterId); }
         else if (act === 'del') loeschen(id);
       };
     });
@@ -638,6 +640,120 @@ const NM = (function () {
     h += '<div class="dialog-actions"><button class="btn btn-solid" id="nmZu">Schließen</button></div>';
     byId2('nmInhalt').innerHTML = h; byId2('nmZu').onclick = () => { schliesse(); render(); };
     const k = byId2('nmKKopie'); if (k) k.onclick = () => { try { navigator.clipboard.writeText(kennwort); zeigeToast('Kennwort kopiert'); } catch (e) { zeigeToast('Kopieren nicht möglich', true); } };
+  }
+
+
+  /* ═══ Einarbeitungsplan erzeugen: Mentor + Teamleitung festlegen, eigene Plan-Kopie je Person, Vorgesetzte in M365, Benachrichtigung ═══ */
+  function planStatusText(x) {
+    const m = x.mitarbeiterId && mitarbeiterListe.find(e => e.id === x.mitarbeiterId); if (!m || !m.planStatus) return '';
+    return '<div class="ea-item-desc" style="margin-top:3px">' + (m.planStatus === 'freigegeben' ? 'Plan freigegeben ✓' : 'Plan in Abstimmung') + '</div>';
+  }
+  async function vorschlaege() {
+    const out = new Map();
+    mitarbeiterListe.forEach(m => { if (m.upn) out.set(m.upn.toLowerCase(), m.name); });
+    for (const gname of ['TL-Ambulant', 'Team']) {
+      try {
+        const g = await ga('GET', '/groups?$filter=' + encodeURIComponent("displayName eq '" + gname + "'") + '&$select=id');
+        const id = g.ok && g.json.value && g.json.value[0] && g.json.value[0].id; if (!id) continue;
+        (await gaAlle('/groups/' + id + '/members/microsoft.graph.user?$select=displayName,userPrincipalName&$top=200')).forEach(u => out.set(String(u.userPrincipalName).toLowerCase(), u.displayName));
+      } catch (e) { /* Verteilerlisten sind nicht lesbar: dann nur die übrigen Vorschläge */ }
+    }
+    return Array.from(out.entries()).map(([upn, name]) => ({ upn, name })).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  }
+  function planDialog(id) {
+    const x = eintrag(id); if (!x || demoMode) return;
+    ensureOverlay(); byId2('nmTitel').textContent = 'Einarbeitungsplan: ' + x.name;
+    const m = x.mitarbeiterId && mitarbeiterListe.find(e => e.id === x.mitarbeiterId);
+    const f = (idn, label, wert, hint, ph, liste) => '<div class="feld feld-voll"><label for="' + idn + '">' + label + '</label><input id="' + idn + '" value="' + esc(wert || '') + '" placeholder="' + esc(ph || '') + '"' + (liste ? ' list="' + liste + '"' : '') + '>' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+    byId2('nmInhalt').innerHTML = '<div class="felder">' +
+      f('nmPMentor', 'Mentor:in (Anmeldename)', m && m.mentorUpn, 'Wähle aus der Liste oder tippe die Adresse.', 'vorname.nachname@' + MAIL_DOMAIN, 'nmPListe') +
+      f('nmPTl', 'Teamleitung (Anmeldename)', m && m.tlUpn, '', 'vorname.nachname@' + MAIL_DOMAIN, 'nmPListe') + '<datalist id="nmPListe"></datalist>' +
+      '<div class="feld feld-voll"><label class="chk"><input type="checkbox" id="nmPMgr" checked> Teamleitung in Microsoft 365 als Vorgesetzte setzen' + (x.upn ? ' (' + esc(x.upn) + ')' : ' (erst möglich, wenn ein M365-Konto angelegt ist)') + '</label></div></div>' +
+      '<p class="ea-item-desc" style="margin:10px 0">Aus der Vorlage entsteht ein <b>eigener Plan für ' + esc(x.vorname) + '</b>, den Mentor:in, Teamleitung und Geschäftsführung anpassen und freigeben. Bis dahin sieht ' + esc(x.vorname) + ' den Plan nicht.' + (m && hatEigenenPlan(m.id) ? ' <b>Für diese Person besteht schon ein Plan, er wird nicht neu erzeugt.</b>' : '') + '</p>' +
+      '<div class="dlg-err" id="nmFehler"></div><div class="dialog-actions"><button class="btn btn-solid" id="nmPGo">Plan erzeugen</button><button class="btn btn-outline" id="nmKAbbr">Abbrechen</button></div>';
+    byId2('nmKAbbr').onclick = schliesse; byId2('nmPGo').onclick = () => planErzeugen(id);
+    byId2('nmOverlay').classList.add('open');
+    vorschlaege().then(l => { const dl = byId2('nmPListe'); if (dl) dl.innerHTML = l.map(e => '<option value="' + esc(e.upn) + '">' + esc(e.name) + '</option>').join(''); }).catch(() => {});
+  }
+  async function kopiereVorlage(mid) {
+    const vorlage = vorlageZeilen(); if (!vorlage.length) throw new Error('Die Vorlage („Fahrplan verwalten“) ist leer.');
+    const basis = '/sites/' + CFG.spHost + '/lists/' + CFG.listFahrplan + '/items';
+    let offen = vorlage.map((z, i) => { const kopie = Object.assign({}, z); delete kopie.id; kopie.mitarbeiterId = mid; return { id: String(i), kopie }; });
+    const neu = [];
+    for (let runde = 0; runde < 5 && offen.length; runde++) {
+      const naechste = [];
+      for (let i = 0; i < offen.length; i += 20) {
+        const teil = offen.slice(i, i + 20); const t = await token();
+        const r = await fetch('https://graph.microsoft.com/v1.0/$batch', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests: teil.map(o => ({ id: o.id, method: 'POST', url: basis, headers: { 'Content-Type': 'application/json' }, body: { fields: zuFeldern(o.kopie, SCHEMA_FAHRPLAN) } })) }) });
+        if (!r.ok) throw new Error('Plan konnte nicht kopiert werden (' + r.status + '): ' + (await r.text()).slice(0, 200));
+        const j = await r.json();
+        (j.responses || []).forEach(a => { const o = teil.find(q => q.id === String(a.id)); if (!o) return;
+          if (a.status === 201 || a.status === 200) neu.push(Object.assign({}, o.kopie, { id: a.body.id })); else if (a.status === 429 || a.status >= 500) naechste.push(o);
+          else throw new Error('Punkt „' + o.kopie.titel + '“ nicht kopiert (' + a.status + '): ' + JSON.stringify(a.body).slice(0, 160)); });
+        teil.forEach(o => { if (!(j.responses || []).some(a => String(a.id) === o.id)) naechste.push(o); });
+      }
+      offen = naechste; if (offen.length) await pause(3000);
+    }
+    if (offen.length) throw new Error(offen.length + ' Punkte konnten wegen Drosselung nicht kopiert werden – bitte „Plan erzeugen“ erneut starten.');
+    neu.forEach(z => fahrplanListe.push(z));
+    return neu.length;
+  }
+  async function planErzeugen(id) {
+    const x = eintrag(id); const err = byId2('nmFehler'); const btn = byId2('nmPGo'); err.textContent = '';
+    const mUpn = byId2('nmPMentor').value.trim().toLowerCase(), tUpn = byId2('nmPTl').value.trim().toLowerCase(), setzeMgr = byId2('nmPMgr').checked;
+    const gueltig = u => /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(u);
+    if (!gueltig(mUpn) || !gueltig(tUpn)) { err.textContent = 'Bitte Mentor:in und Teamleitung als gültigen Anmeldenamen angeben.'; return; }
+    const schritte = []; const ok = (a, b, st) => schritte.push({ a, b, st: st || 'ok' });
+    try {
+      btn.disabled = true; btn.textContent = 'Arbeite …';
+      const holen = async upn => { const r = await ga('GET', '/users/' + encodeURIComponent(upn) + '?$select=id,displayName'); if (!r.ok) throw new Error('„' + upn + '“ wurde in Microsoft 365 nicht gefunden.'); return r.json; };
+      const mentor = await holen(mUpn), tl = mUpn === tUpn ? mentor : await holen(tUpn);
+      btn.textContent = 'Spalten prüfen …';
+      const neuSp = (await ergaenzeSpalten(CFG.listMitarbeiter, SCHEMA_MITARBEITER)) + (await ergaenzeSpalten(CFG.listFahrplan, SCHEMA_FAHRPLAN));
+      if (neuSp) ok('SharePoint', neuSp + ' neue Spalte(n) angelegt');
+      let m = x.mitarbeiterId && mitarbeiterListe.find(e => e.id === x.mitarbeiterId);
+      const felder = { name: x.name, bereich: 'ambulant', startDatum: x.eintritt, upn: x.upn || '', mentorName: mentor.displayName, mentorUpn: mUpn, tlName: tl.displayName, tlUpn: tUpn };
+      if (!m || !hatEigenenPlan(m.id)) felder.planStatus = 'abstimmung', felder.planFreigaben = '{}';
+      if (m) { await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, Object.assign({ id: m.id }, felder)); Object.assign(m, felder); }
+      else { const mid = await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, felder); m = Object.assign({ id: mid }, felder); mitarbeiterListe.push(m); }
+      ok('Mitarbeitende', 'Mentor:in ' + mentor.displayName + ', Teamleitung ' + tl.displayName);
+      if (hatEigenenPlan(m.id)) ok('Plan', 'bestand schon, nicht neu erzeugt');
+      else { btn.textContent = 'Kopiere Plan …'; const n = await kopiereVorlage(m.id); ok('Plan', n + ' Punkte aus der Vorlage kopiert, Status „in Abstimmung“'); }
+      if (setzeMgr) {
+        if (!x.upn) ok('Vorgesetzte(r)', 'kein M365-Konto hinterlegt – bitte später setzen', 'manuell');
+        else { const u = await ga('GET', '/users/' + encodeURIComponent(x.upn) + '?$select=id'); if (!u.ok) ok('Vorgesetzte(r)', 'Konto ' + x.upn + ' nicht gefunden', 'manuell');
+          else { const r = await ga('PUT', '/users/' + u.json.id + '/manager/$ref', { '@odata.id': 'https://graph.microsoft.com/v1.0/users/' + tl.id }); ok('Vorgesetzte(r)', r.ok ? tl.displayName + ' in M365 gesetzt' : gaFehlerKurz(r), r.ok ? 'ok' : 'fehler'); } }
+      }
+      await schreibeItem(LIST, SCHEMA, { id: x.id, status: 'plan', mitarbeiterId: m.id }); x.status = 'plan'; x.mitarbeiterId = m.id;
+      ok('Gespeichert', 'Status „In Einarbeitung“');
+      planErgebnis(x, m, schritte, mentor, tl);
+    } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Plan erzeugen'; }
+  }
+  function planErgebnis(x, m, schritte, mentor, tl) {
+    const farbe = { ok: 'var(--success, #2D6A4F)', manuell: '#B7791F', fehler: 'var(--error)' }, sym = { ok: '✓', manuell: '!', fehler: '✗' };
+    byId2('nmInhalt').innerHTML = '<table class="ea-tbl"><thead><tr><th>Schritt</th><th>Ergebnis</th></tr></thead><tbody>' + schritte.map(s => '<tr><td>' + esc(s.a) + '</td><td style="color:' + farbe[s.st] + '">' + sym[s.st] + ' ' + esc(s.b) + '</td></tr>').join('') + '</tbody></table>' +
+      '<p class="ea-item-desc" style="margin:10px 0">Nächster Schritt: Mentor:in und Teamleitung benachrichtigen. Sie prüfen den Plan, passen ihn an und geben ihn frei. Du gibst als Geschäftsführung ebenfalls frei.</p><div class="dlg-err" id="nmFehler"></div>' +
+      '<div class="dialog-actions"><button class="btn btn-solid" id="nmPMail">Mentor:in und Teamleitung benachrichtigen</button><button class="btn btn-outline" id="nmPOeffnen">Plan öffnen</button><button class="btn btn-outline" id="nmZu">Schließen</button></div>';
+    byId2('nmZu').onclick = () => { schliesse(); render(); };
+    byId2('nmPOeffnen').onclick = () => { schliesse(); planOeffnen(m.id); };
+    byId2('nmPMail').onclick = () => planMail(x, m, mentor, tl);
+  }
+  async function planMail(x, m, mentor, tl) {
+    const err = byId2('nmFehler'), btn = byId2('nmPMail'); err.textContent = '';
+    const empf = mentor.userPrincipalName === tl.userPrincipalName || m.mentorUpn === m.tlUpn ? [[m.mentorUpn, m.mentorName, 'Mentor:in und Teamleitung']] : [[m.mentorUpn, m.mentorName, 'Mentor:in'], [m.tlUpn, m.tlName, 'Teamleitung']];
+    if (!confirm('Nachricht senden an: ' + empf.map(e => e[1]).join(' und ') + '?')) return;
+    try {
+      btn.disabled = true; const t = await token(['Mail.Send']);
+      for (const [upn, name, rolle] of empf) {
+        const body = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt"><p>Hallo ' + esc(String(name).split(' ')[0]) + ',</p><p>für ' + esc(x.name) + ' (Start am ' + esc(langDatum(x.eintritt)) + ') liegt der Einarbeitungsplan zur Abstimmung bereit. Du bist als ' + esc(rolle) + ' eingetragen.</p>' +
+          '<p>Bitte prüfe den Plan, passe ihn bei Bedarf an und gib ihn frei: <a href="https://apps.praxisneuewege.de/einarbeitung-beta.html">Onboarding-App öffnen</a>. Der Plan wird erst für ' + esc(x.vorname) + ' sichtbar, wenn Mentor:in, Teamleitung und Geschäftsführung freigegeben haben.</p><p>Danke und viele Grüße<br>Markus</p></div>';
+        const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: { subject: 'Einarbeitungsplan für ' + x.name + ' bitte prüfen und freigeben', body: { contentType: 'HTML', content: body }, toRecipients: [{ emailAddress: { address: upn, name } }] }, saveToSentItems: true }) });
+        if (!r.ok) throw new Error('Nachricht an ' + name + ' nicht gesendet (' + r.status + ')');
+      }
+      btn.textContent = '✓ Benachrichtigt'; zeigeToast('Benachrichtigung gesendet');
+    } catch (e) { err.textContent = e.message; btn.disabled = false; }
   }
 
   return { laden, view, vorlagenView, bind, upnVorschlag, gehaltBerechnen, eur, parseZahl, TABELLE };
