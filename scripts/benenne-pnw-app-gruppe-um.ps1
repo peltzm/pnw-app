@@ -38,8 +38,8 @@ function Find-Gruppe([string]$Name) {
     return @((Invoke-MgGraphRequest -Method GET -Uri ('https://graph.microsoft.com/v1.0/groups?$filter=' + $f + '&$select=id,displayName,description')).value)
 }
 
-$alt = Find-Gruppe $AltName
-$neu = Find-Gruppe $NeuName
+$alt = @(Find-Gruppe $AltName)
+$neu = @(Find-Gruppe $NeuName)
 
 if ($neu.Count -gt 0 -and $alt.Count -eq 0) {
     Write-Host ("Gruppe '" + $NeuName + "' existiert bereits, '" + $AltName + "' gibt es nicht mehr. Nichts zu tun.") -ForegroundColor Yellow
@@ -48,14 +48,15 @@ if ($neu.Count -gt 0 -and $alt.Count -eq 0) {
 } elseif ($alt.Count -eq 0) {
     Write-Host ("Gruppe '" + $AltName + "' nicht gefunden.") -ForegroundColor Red
 } else {
-    $id = $alt[0].id
+    $id = [string]$alt[0].id
+    if (-not $id) { Write-Host 'ABBRUCH: Gruppen-ID konnte nicht gelesen werden, nichts wurde geändert.' -ForegroundColor Red; Disconnect-MgGraph -WarningAction SilentlyContinue | Out-Null; return }
     $body = '{"displayName":"' + $NeuName + '"}'
     Invoke-MgGraphRequest -Method PATCH -Uri ('https://graph.microsoft.com/v1.0/groups/' + $id) -Body $body -ContentType 'application/json' | Out-Null
     Write-Host ("Gruppe umbenannt: '" + $AltName + "' -> '" + $NeuName + "'") -ForegroundColor Green
 }
 
 Write-Host ''
-$jetzt = Find-Gruppe $NeuName
+$jetzt = @(Find-Gruppe $NeuName)
 if ($jetzt.Count -gt 0) {
     $m = @((Invoke-MgGraphRequest -Method GET -Uri ('https://graph.microsoft.com/v1.0/groups/' + $jetzt[0].id + '/members?$select=displayName,userPrincipalName&$top=999')).value)
     Write-Host ('Gruppe ' + $NeuName + ' – Mitglieder: ' + $m.Count) -ForegroundColor Cyan
