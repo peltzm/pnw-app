@@ -2713,7 +2713,8 @@ function deactivateFreigabeModus() {
 
 async function freigabeModusAction(newStatus) {
   if (!_freigabeModeItemId) { showToast('Kein Protokoll geladen', 'info'); return; }
-  await freigabeAction(_freigabeModeItemId, newStatus);
+  const res = await freigabeAction(_freigabeModeItemId, newStatus);
+  if (res === 'abbruch') return;   // Rueckfrage verneint: Banner und Ansicht bleiben stehen
   deactivateFreigabeModus();
 }
 
@@ -2766,6 +2767,20 @@ async function freigabeAction(itemId, newStatus) {
 
     // ── FREIGEBEN → automatisch hochladen + versenden ─────────────────────
     } else {
+      // Sicherheitsabfrage: Freigeben loest sofort Ablage + Mailversand aus und ist nicht rueckholbar
+      {
+        let _pt = []; try { _pt = JSON.parse(data.participants || '[]'); } catch(e) {}
+        let _mails = _pt.filter(p => p.mail).map(p => p.mail);
+        if (data.type === 'team' && data.thema === 'kleinteam') { try { _mails = kleinteamVerteiler(data.kleinteamTeam, _pt); } catch(e) {} }
+        const _n = new Set(_mails.map(m => String(m).toLowerCase())).size;
+        const _ok = confirm('⚠ „' + label + '" vom ' + datumDE + ' jetzt freigeben?\n\n'
+          + 'Das Protokoll wird SOFORT\n'
+          + '• als PDF in SharePoint abgelegt und\n'
+          + '• per Mail an ' + (_n ? _n + ' Teilnehmer' : 'die Teilnehmer') + ' versendet (Geschäftsführung in CC),\n'
+          + '• der Ersteller und die Teamleitungen werden benachrichtigt.\n\n'
+          + 'Das lässt sich nicht zurücknehmen. Fortfahren?');
+        if (!_ok) return 'abbruch';
+      }
       showToast('Wird hochgeladen und versendet …', 'info');
 
       // Dokument aufbauen
