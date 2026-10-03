@@ -315,23 +315,75 @@ const NM = (function () {
     try { x.status = s; await schreibeItem(LIST, SCHEMA, { id: x.id, status: s }); render(); }
     catch (e) { zeigeToast('Status nicht gespeichert: ' + e.message, true); }
   }
+  /* Entfernt eine Person vollständig aus der Einarbeitung: Eintrag unter „Mitarbeitende“, individueller Plan, Haken/Fortschritt, private Reflexionen */
+  function einarbeitungUmfang(mid) {
+    return {
+      plan: fahrplanListe.filter(z => z.mitarbeiterId === mid),
+      fortschritt: Object.values(fortschrittMap).filter(e => e.mitarbeiterId === mid),
+      reflexionen: Object.values(reflexionMap).filter(e => e.mitarbeiterId === mid),
+    };
+  }
+  async function zeilenLoeschen(listName, ids) {
+    if (!ids.length) return;
+    let offen = ids.map(String); const basis = '/sites/' + CFG.spHost + '/lists/' + listName + '/items/';
+    for (let runde = 0; runde < 5 && offen.length; runde++) {
+      const wieder = [];
+      for (let i = 0; i < offen.length; i += 20) {
+        const teil = offen.slice(i, i + 20); const t = await token();
+        const r = await fetch('https://graph.microsoft.com/v1.0/$batch', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requests: teil.map((id, k) => ({ id: String(k), method: 'DELETE', url: basis + id })) }) });
+        if (!r.ok) throw new Error('Löschen fehlgeschlagen (' + r.status + '): ' + (await r.text()).slice(0, 200));
+        const antw = (await r.json()).responses || [];
+        teil.forEach((id, k) => { const a = antw.find(q => String(q.id) === String(k)); if (!a || a.status === 429 || a.status >= 500) wieder.push(id); else if (a.status >= 300 && a.status !== 404) throw new Error('Eintrag ' + id + ' nicht gelöscht (' + a.status + ')'); });
+      }
+      offen = wieder; if (offen.length) await pause(3000);
+    }
+    if (offen.length) throw new Error(offen.length + ' Einträge konnten wegen Drosselung nicht gelöscht werden – bitte erneut versuchen.');
+  }
+  async function ausEinarbeitungEntfernen(mid) {
+    const u = einarbeitungUmfang(mid);
+    await zeilenLoeschen(CFG.listFahrplan, u.plan.map(z => z.id));
+    await zeilenLoeschen(CFG.listFortschritt, u.fortschritt.map(z => z.id));
+    await zeilenLoeschen(CFG.listReflexion, u.reflexionen.map(z => z.id));
+    if (mitarbeiterListe.some(m => m.id === mid)) await graph('/sites/' + CFG.spHost + '/lists/' + CFG.listMitarbeiter + '/items/' + mid, { method: 'DELETE' });
+    // lokalen Stand bereinigen
+    fahrplanListe = fahrplanListe.filter(z => z.mitarbeiterId !== mid);
+    Object.keys(fortschrittMap).forEach(k => { if (fortschrittMap[k].mitarbeiterId === mid) delete fortschrittMap[k]; });
+    Object.keys(reflexionMap).forEach(k => { if (reflexionMap[k].mitarbeiterId === mid) delete reflexionMap[k]; });
+    mitarbeiterListe = mitarbeiterListe.filter(m => m.id !== mid);
+    sichtbareIds = sichtbareIds.filter(i => i !== mid);
+    if (aktiverMitarbeiterId === mid) aktiverMitarbeiterId = sichtbareIds[0] || null;
+    if (planKontext === mid) { planKontext = null; planAnsicht = false; }
+  }
+  function entfernenHinweis(x) {
+    const u = einarbeitungUmfang(x.mitarbeiterId);
+    return '\n\nDie Person wird dabei auch aus der Einarbeitung entfernt:\n– Eintrag unter „Mitarbeitende“\n– individueller Einarbeitungsplan (' + u.plan.length + ' Punkte)\n– Haken und Fortschritt (' + u.fortschritt.length + ') sowie private Reflexionen (' + u.reflexionen.length + ')\n\nDas Microsoft-365-Konto bleibt bestehen.';
+  }
   async function zuruecksetzen(id) {
     const x = eintrag(id); if (!x) return;
+    const inEinarbeitung = !!x.mitarbeiterId;
     let hinweis = 'Status von „' + x.name + '“ auf „Entwurf“ zurücksetzen?\nDie erfassten Daten bleiben erhalten, das Vertragspaket kann neu erzeugt werden.';
-    if (x.status === 'plan') hinweis += '\n\nDie Person bleibt unter „Mitarbeitende“ in der Einarbeitung bestehen.';
+    if (inEinarbeitung) hinweis += entfernenHinweis(x);
     if (!confirm(hinweis)) return;
-    try { await schreibeItem(LIST, SCHEMA, { id: x.id, status: 'entwurf' }); x.status = 'entwurf'; render(); zeigeToast('Zurückgesetzt'); }
-    catch (e) { zeigeToast('Zurücksetzen fehlgeschlagen: ' + e.message, true); }
+    try {
+      if (inEinarbeitung) await ausEinarbeitungEntfernen(x.mitarbeiterId);
+      // Null statt leerem Text, damit die Spalte in SharePoint wirklich geleert wird
+      await graph('/sites/' + CFG.spHost + '/lists/' + LIST + '/items/' + x.id + '/fields', { method: 'PATCH', body: JSON.stringify(inEinarbeitung ? { Status: 'entwurf', MitarbeiterId: null } : { Status: 'entwurf' }) });
+      x.status = 'entwurf'; if (inEinarbeitung) x.mitarbeiterId = '';
+      render(); zeigeToast(inEinarbeitung ? 'Zurückgesetzt und aus der Einarbeitung entfernt' : 'Zurückgesetzt');
+    } catch (e) { render(); zeigeToast('Zurücksetzen fehlgeschlagen: ' + e.message, true); }
   }
   async function loeschen(id) {
     const x = eintrag(id); if (!x) return;
+    const inEinarbeitung = !!x.mitarbeiterId;
     let hinweis = '„' + x.name + '“ endgültig löschen?\nAdresse, Geburtsdatum und Gehaltsangaben werden aus der Liste entfernt. Ein bereits angelegter Mailentwurf in Outlook bleibt bestehen und muss dort gelöscht werden.';
-    if (x.status === 'plan') hinweis += '\n\nDie Person bleibt unter „Mitarbeitende“ in der Einarbeitung bestehen und muss dort separat entfernt werden.';
+    if (inEinarbeitung) hinweis += entfernenHinweis(x);
     if (!confirm(hinweis)) return;
     try {
+      if (inEinarbeitung) await ausEinarbeitungEntfernen(x.mitarbeiterId);
       await graph('/sites/' + CFG.spHost + '/lists/' + LIST + '/items/' + x.id, { method: 'DELETE' });
-      liste = liste.filter(e => e.id !== id); render(); zeigeToast('Gelöscht');
-    } catch (e) { zeigeToast('Löschen fehlgeschlagen: ' + e.message, true); }
+      liste = liste.filter(e => e.id !== id); render(); zeigeToast(inEinarbeitung ? 'Gelöscht und aus der Einarbeitung entfernt' : 'Gelöscht');
+    } catch (e) { render(); zeigeToast('Löschen fehlgeschlagen: ' + e.message, true); }
   }
   async function uebernehmen(id) {
     const x = eintrag(id); if (!x) return;
