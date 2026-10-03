@@ -907,6 +907,7 @@ function kompassKilankaDaten(k){
   });
   return out;
 }
+let _kompassK=null; // gewählter Kilanka-Klient für die Startkompass-Vorbefüllung (Felder entstehen erst im Klient-Modus)
 function kompassBefuellen(k){
   const d=kompassKilankaDaten(k);
   const set=(id,v)=>{const el=document.getElementById(id); if(el&&v) el.value=v;};
@@ -1019,7 +1020,7 @@ function _kSet(id, v){ const el = document.getElementById(id); if(el && v != nul
 function onKilankaKlientSelect(){
   const sel = document.getElementById('kilankaKlient');
   const k = _kilankaKlienten[Number(sel.value)];
-  if(!k) return;
+  if(!k){ _kompassK=null; return; }
   // Klient / Familie
   _kSet('k_nn', k.Kind_Familienname);
   _kSet('k_vn', k.Kind_Vorname);
@@ -1040,7 +1041,7 @@ function onKilankaKlientSelect(){
   // Sorgeberechtigte -> Vollmacht / Schweigepflicht
   const sorg = k.Sorgeberechtigte || [];
   // Startkompass: Mutter, Vater, Geschwister
-  try{ kompassBefuellen(k); }catch(e){ console.warn('Startkompass-Vorbefüllung:',e); }
+  _kompassK=k; // Startkompass-Felder existieren erst im Klient-Modus → dort befüllen (startKlientMode)
   // Kind in der Vollmacht
   _kSet('v_kind', [ _kVal(k.Kind_Familienname), _kVal(k.Kind_Vorname) ].filter(Boolean).join(', '));
   _kSet('v_kind_geb', k.Kind_Geburtsdatum);
@@ -1308,6 +1309,8 @@ function startKlientMode(){
     div.innerHTML=buildStep(fid,i);
     reader.appendChild(div);
   });
+  // Startkompass: Mutter, Vater, Geschwister aus Kilanka eintragen, sobald die Felder im DOM stehen
+  if(selForms.has('kompass')&&_kompassK){ try{ kompassBefuellen(_kompassK); }catch(e){ console.warn('Startkompass-Vorbefüllung:',e); } }
   document.getElementById('fkScreen').classList.remove('active');
   document.getElementById('klientScreen').classList.add('active');
   // Init only the first (active) step pad AFTER screen is visible so BoundingClientRect is correct
