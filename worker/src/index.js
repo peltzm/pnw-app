@@ -100,7 +100,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-10-03.1 (Unterschriften: Klient fehlt ausgeblendet)";
+const WORKER_VERSION = "2026-10-03.2 (Unterschriften: Filter Klient fehlt zurückgenommen)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
