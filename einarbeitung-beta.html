@@ -954,22 +954,6 @@ function speicherReflexion(mitarbeiterId, schluessel, text){
     }catch(e){ console.error('reflexion speichern fehlgeschlagen', e); }
   }, 600);
 }
-let letzterLink = null;
-async function neuerMitarbeiter(daten){
-  const f = {name:daten.name, bereich:daten.bereich||'ambulant', startDatum:daten.startDatum, mentorName:daten.mentorName, tlName:daten.tlName};
-  if (demoMode){
-    const id = 'demo-'+Date.now();
-    mitarbeiterListe.push({...f, id, upn:''});
-    aktiverMitarbeiterId = id;
-    letzterLink = 'https://apps.praxisneuewege.de/einarbeitung/?demo=1';
-    return;
-  }
-  const id = await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, f);
-  mitarbeiterListe.push({...f, id});
-  sichtbareIds.push(id);
-  aktiverMitarbeiterId = id;
-  letzterLink = 'https://apps.praxisneuewege.de/einarbeitung/?e=' + id;
-}
 async function neuerFahrplanPunkt(daten){
   const f = {titel:daten.titel, schluessel:'custom-'+Date.now(), phase:daten.phase, owner:daten.owner, typ:daten.typ, reihenfolge:Date.now()};
   const mid = daten.mitarbeiterId || planKontext || null; if (mid) f.mitarbeiterId = mid;
@@ -1592,7 +1576,7 @@ function gfFaelligkeiten(){
 }
 function gfMitarbeitende(){
   let h = '<div class="ea-card"><h3>Mitarbeitende</h3>';
-  if (!mitarbeiterListe.length) h += '<p class="ea-item-desc" style="margin-top:8px">Noch niemand angelegt.</p>';
+  if (!mitarbeiterListe.length) h += '<p class="ea-item-desc" style="margin-top:8px">Noch niemand in der Einarbeitung.</p>';
   else {
     h += '<table class="ea-tbl" style="margin-top:10px"><thead><tr><th>Name</th><th>Bereich</th><th>Start</th><th>Mentor:in</th><th>Teamleitung</th><th>Status</th></tr></thead><tbody>';
     mitarbeiterListe.forEach(m=>{
@@ -1601,18 +1585,7 @@ function gfMitarbeitende(){
     });
     h += '</tbody></table>';
   }
-  h += '</div><div class="ea-card"><h3>Neue:n Mitarbeiter:in anlegen</h3><form id="addEmpForm"><div class="ea-form-grid">';
-  h += '<div><label>Name</label><input name="name" required placeholder="Vorname Nachname"></div>';
-  h += '<div><label>Bereich</label><input name="bereich" value="ambulant"></div>';
-  h += '<div><label>Startdatum</label><input name="startDatum" type="date" required></div>';
-  h += '<div><label>Mentor:in</label><input name="mentorName" required></div>';
-  h += '<div><label>Teamleitung</label><input name="tlName" required></div>';
-  h += '</div><button class="btn btn-solid btn-sm" type="submit">Anlegen</button></form>';
-  if (letzterLink){
-    h += '<div class="ea-link-copy"><code id="lastLinkCode">'+esc(letzterLink)+'</code><button class="btn btn-sm btn-outline" id="copyLinkBtn">Kopieren</button></div>';
-    h += '<p class="ea-item-desc" style="margin-top:6px">Sobald der Zugang vor Start per Magic-Link steht, wird hier automatisch der persönliche Link erzeugt — aktuell bitte UPN nachtragen, sobald das M365-Konto steht.</p>';
-  }
-  h += '</div>';
+  h += '<p class="ea-item-desc" style="margin-top:12px">Neue Mitarbeitende legst du im Menü „Neue Mitarbeiter“ an, dort läuft der Weg vom Vertrag bis zum Einarbeitungsplan.</p></div>';
   return h;
 }
 function gfFahrplan(){
@@ -1744,19 +1717,6 @@ function bindContentEvents(){
   document.querySelectorAll('[data-ffilter]').forEach(b=>{ b.onclick = ()=>{ faelligFilter = b.getAttribute('data-ffilter'); render(); }; });
   const gfEmpSelect = document.getElementById('gfEmpSelect');
   if (gfEmpSelect) gfEmpSelect.onchange = function(){ aktiverMitarbeiterId = this.value; render(); };
-  const addEmpForm = document.getElementById('addEmpForm');
-  if (addEmpForm) addEmpForm.onsubmit = async (ev)=>{
-    ev.preventDefault();
-    const f = ev.target;
-    await neuerMitarbeiter({name:f.name.value.trim(), bereich:f.bereich.value.trim(), startDatum:f.startDatum.value, mentorName:f.mentorName.value.trim(), tlName:f.tlName.value.trim()});
-    render();
-  };
-  const copyBtn = document.getElementById('copyLinkBtn');
-  if (copyBtn) copyBtn.onclick = ()=>{
-    const code = document.getElementById('lastLinkCode').textContent;
-    if (navigator.clipboard) navigator.clipboard.writeText(code).catch(()=>{});
-    copyBtn.textContent = 'Kopiert ✓'; setTimeout(()=>copyBtn.textContent='Kopieren', 1500);
-  };
   bindFahrplanVerschieben();
   document.querySelectorAll('[data-edit-item]').forEach(b=>{ b.onclick = ()=>oeffneItemDialog(b.getAttribute('data-edit-item')); });
   document.querySelectorAll('[data-new-item]').forEach(b=>{ b.onclick = ()=>oeffneItemDialog(null, {typ:b.getAttribute('data-new-item'), phase: b.getAttribute('data-new-item')==='link' ? 'vorab' : 'woche1'}); });
