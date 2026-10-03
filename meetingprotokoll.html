@@ -9,6 +9,7 @@
 <title>Meetingprotokoll — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root {
@@ -2256,7 +2257,7 @@ async function executePublish() {
     const directData = collectDraftData();
     const pdfFileName = fileName.replace('.txt', '.pdf');
     const spPath = `${spFolder}/${pdfFileName}`;
-    const pdfBytes = await generateProtokollPDF(directData, currentAccount?.name || 'Direkt versendet');
+    const pdfBytes = await generateProtokollPDF(directData, currentAccount?.name || 'Direkt versendet', { freigegeben: true });
     await uploadToSharePoint(spPath, pdfBytes, 'application/pdf');
     showToast('✓ PDF in SharePoint gespeichert', 'success');
 
@@ -2512,7 +2513,234 @@ function protokollHtml(data, freigeberName) {
   return html;
 }
 
-async function generateProtokollPDF(data, freigeberName) {
+/* ──────────────────────────────────────
+   PROTOKOLL-PDF IM BERICHTS-DESIGN (pdfmake)
+   Kopf- und Fusszeile, Schriften (Kodchasan/Libre Baskerville), Farben und Linien
+   entsprechen dem PDF des Berichtsgenerators. Echter Text statt Bildausschnitten,
+   saubere Seitenumbrueche, „Seite x von y".
+────────────────────────────────────── */
+let _protPdfAssets = null;
+async function _ladeProtokollPdfAssets() {
+  if (_protPdfAssets) return _protPdfAssets;
+  const basis = window.location.pathname.replace(/[^/]*$/, '');
+  async function b64(pfad) {
+    const r = await fetch(basis + pfad);
+    if (!r.ok) throw new Error(pfad + ' nicht gefunden (' + r.status + ')');
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    let bin = ''; const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    return btoa(bin);
+  }
+  const namen = ['Kodchasan-Regular.ttf','Kodchasan-Medium.ttf','Kodchasan-SemiBold.ttf','Kodchasan-Bold.ttf','Kodchasan-Italic.ttf',
+                 'LibreBaskerville-Regular.ttf','LibreBaskerville-Bold.ttf','LibreBaskerville-Italic.ttf'];
+  const geladen = await Promise.all(namen.map(n => b64('assets/fonts/' + n)));
+  const vfs = {}; namen.forEach((n, i) => vfs[n] = geladen[i]);
+  const fonts = {
+    Kodchasan:       { normal: 'Kodchasan-Regular.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+    KodchasanMedium: { normal: 'Kodchasan-Medium.ttf', bold: 'Kodchasan-SemiBold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-SemiBold.ttf' },
+    KodchasanSemi:   { normal: 'Kodchasan-SemiBold.ttf', bold: 'Kodchasan-Bold.ttf', italics: 'Kodchasan-Italic.ttf', bolditalics: 'Kodchasan-Bold.ttf' },
+    Baskerville:     { normal: 'LibreBaskerville-Regular.ttf', bold: 'LibreBaskerville-Bold.ttf', italics: 'LibreBaskerville-Italic.ttf', bolditalics: 'LibreBaskerville-Bold.ttf' },
+  };
+  let logo = null;
+  try { logo = 'data:image/png;base64,' + await b64('assets/logo-praxisneuewege.png'); }
+  catch(e) { console.warn('Logo nicht gefunden – PDF ohne Logo:', e.message); }
+  _protPdfAssets = { vfs, fonts, logo };
+  return _protPdfAssets;
+}
+
+function buildProtokollDocDefinition(data, freigeberName, opts, logoDataUrl) {
+  opts = opts || {};
+  // Design-Tokens wie im Berichts-PDF
+  const C = { dunkelbraun:'#5A2D15', wood:'#7B3F1E', terra:'#A15F38', creme:'#F5F0EA', papier:'#FFFEFB',
+              ink:'#211F1B', muted:'#4A4640', meta:'#8A857B', rahmenStark:'#D8D2C6', rahmenMittel:'#E4DED2', erreicht:'#2D6A4F' };
+  const F = { titel:19.5, untertitel:9.75, eyebrow:6.4, h2:10.1, label:6, wert:8.25, fliess:10.5, fuss:8 };
+  const LINE = { fussAkzent:1.1, trenner:0.75 };
+  const PAGE_W = 595.28, MARGIN_X = 34.5;
+  const has = v => v != null && String(v).trim() !== '';
+  const dash = v => has(v) ? String(v).trim() : '—';
+  const upper = v => String(v || '').toUpperCase();
+  const fmt = iso => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}.${m[2]}.${m[1]}` : (iso || ''); };
+
+  const cfg      = data.type ? TYPES[data.type] : null;
+  const thema    = data.thema && cfg ? cfg.themen?.[data.thema] : null;
+  const typLabel = cfg ? cfg.label : (data.label || 'Protokoll');
+  const themaLbl = thema ? thema.label : '';
+  const datumDE  = fmt(data.datum) || '—';
+  const zeit     = [data.zeitVon, data.zeitBis].filter(has).join(' – ');
+  const erstelltAm = new Date().toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+  const freigegebenVon = opts.freigegeben ? String(freigeberName || '').trim() : '';
+
+  let approverFull = '';
+  if (data.approver) {
+    const allTL = [...(TL_LISTS.ambulant||[]), ...(TL_LISTS.nordstern||[])];
+    const found = allTL.find(t => t.value === data.approver);
+    approverFull = found ? found.full : data.approver;
+  }
+  let participants = []; try { participants = JSON.parse(data.participants || '[]'); } catch(e) {}
+  let tops = [];         try { tops = JSON.parse(data.tops || '[]'); } catch(e) {}
+  const anwesend = participants.filter(p => p.present).map(p => p.name).join(', ');
+  const abwesend = participants.filter(p => !p.present).map(p => p.name).join(', ');
+
+  // ── Bausteine (wie Berichte) ──
+  const badge = n => ({
+    svg: `<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="7" fill="${C.terra}"/><text x="7" y="9.6" font-size="7.5" font-weight="bold" fill="${C.papier}" text-anchor="middle" font-family="sans-serif">${n}</text></svg>`,
+    width: 14, margin: [0, 0.5, 0, 0],
+  });
+  const sectionHeading = (n, title) => ({
+    columns: [ { width: 20, stack: [badge(n)] },
+               { width: '*', text: title, font: 'Baskerville', bold: true, fontSize: F.h2, color: C.dunkelbraun, margin: [0, 1, 0, 0] } ],
+    margin: [0, 14, 0, 5], keepWithNext: true,
+  });
+  const subLabel = t => ({ text: upper(t), font: 'KodchasanSemi', fontSize: F.label + 0.5, characterSpacing: 0.6, color: C.meta, margin: [20, 6, 0, 2], keepWithNext: true });
+  const bodyText = t => ({ text: String(t || '').trim(), fontSize: F.fliess, lineHeight: 1.45, color: C.ink, margin: [20, 0, 0, 4] });
+  const stammCell = (label, value) => ({
+    stack: [ { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta, margin: [0, 0, 0, 1.5] },
+             { text: dash(value), font: 'KodchasanMedium', fontSize: F.wert, color: C.ink, lineHeight: 1.2 } ],
+    margin: [6, 5, 6, 5],
+  });
+  const stammBox = rows => ({
+    table: { widths: ['*', '*'], body: rows.map(([l, r]) => [stammCell(l[0], l[1]), stammCell(r[0], r[1])]) },
+    layout: {
+      hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 0.9 : LINE.trenner,
+      vLineWidth: (i, node) => (i === 0 || i === node.table.widths.length) ? 0.9 : 0,
+      hLineColor: (i, node) => (i === 0 || i === node.table.body.length) ? C.rahmenStark : C.rahmenMittel,
+      vLineColor: () => C.rahmenStark,
+      paddingLeft: () => 8, paddingRight: () => 8, paddingTop: () => 2, paddingBottom: () => 2,
+    },
+    margin: [0, 10, 0, 4],
+  });
+
+  // TOP als Karte: Kopf (Titel + Beschluss/Aufgabe) und Text; Kopf bleibt beim Text
+  const topCard = (t, i) => {
+    const art = t.type === 'beschluss' ? 'BESCHLUSS' : (t.type === 'aufgabe' ? 'AUFGABE' : '');
+    const artColor = t.type === 'beschluss' ? '#92400E' : C.erreicht;
+    const kopf = { columns: [
+      { width: '*', text: `${i + 1}. ${t.title || ''}`, font: 'Baskerville', bold: true, fontSize: 9.5, color: C.dunkelbraun },
+      art ? { width: 'auto', text: art, font: 'KodchasanSemi', fontSize: F.label + 0.5, characterSpacing: 0.6, color: artColor, margin: [8, 1, 0, 0] } : { width: 0, text: '' },
+    ] };
+    const inhalt = [{ text: has(t.text) ? String(t.text).trim() : 'Kein Text eingetragen', fontSize: 9.5, lineHeight: 1.4,
+                      color: has(t.text) ? C.ink : C.meta, italics: !has(t.text) }];
+    const meta = [];
+    if (has(t.owner) && t.type === 'aufgabe') meta.push('Verantwortlich: ' + String(t.owner).trim());
+    if (has(t.frist)) meta.push('Frist: ' + fmt(t.frist));
+    if (meta.length) inhalt.push({ text: meta.join('  ·  '), font: 'KodchasanMedium', fontSize: 8, color: C.terra, margin: [0, 5, 0, 0] });
+    return {
+      table: { widths: ['*'], dontBreakRows: false, keepWithHeaderRows: 1,
+        body: [ [{ ...kopf, fillColor: C.creme, margin: [8, 5, 8, 5] }], [{ stack: inhalt, margin: [8, 6, 8, 7] }] ] },
+      layout: { hLineWidth: () => LINE.trenner, vLineWidth: () => LINE.trenner, hLineColor: () => C.rahmenMittel, vLineColor: () => C.rahmenMittel },
+      margin: [20, 0, 0, 7],
+    };
+  };
+
+  const sig = (label, value) => ({
+    stack: [ { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: LINE.trenner, lineColor: C.ink }], margin: [0, 26, 0, 3] },
+             { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta },
+             { text: dash(value), font: 'KodchasanMedium', fontSize: F.wert, color: C.ink, margin: [0, 1.5, 0, 0] } ],
+  });
+
+  // ── Inhalt ──
+  const content = [];
+  const kopfLinks = [
+    { text: 'Meetingprotokoll', font: 'Baskerville', bold: true, fontSize: F.titel, color: C.dunkelbraun, margin: [0, 0, 0, 3] },
+    { text: typLabel + (themaLbl ? ' · ' + themaLbl : ''), font: 'Baskerville', italics: true, fontSize: F.untertitel, color: C.terra, margin: [0, 0, 0, 4] },
+    { text: `ERSTELLT AM ${erstelltAm}`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta, margin: [0, 2, 0, 2] },
+  ];
+  content.push({
+    columns: [ { width: '*', stack: kopfLinks },
+               ...(logoDataUrl ? [{ image: logoDataUrl, fit: [210, 55], width: 210, margin: [12, 0, 0, 0] }] : []) ],
+    margin: [0, 0, 0, 4],
+  });
+  content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.trenner, lineColor: C.rahmenStark }], margin: [0, 4, 0, 0] });
+
+  content.push(stammBox([
+    [['Meeting-Typ', typLabel], ['Thema / Anlass', themaLbl]],
+    [['Datum', datumDE], ['Zeit', zeit ? zeit + ' Uhr' : '']],
+    [['Ort', data.ort], ['Protokollführung', data.protokoll]],
+  ]));
+
+  let nr = 0;
+  content.push(sectionHeading(++nr, 'Teilnehmer'));
+  content.push(subLabel('Anwesend')); content.push(bodyText(dash(anwesend)));
+  if (has(abwesend)) { content.push(subLabel('Abwesend')); content.push(bodyText(abwesend)); }
+
+  content.push(sectionHeading(++nr, 'Protokoll'));
+  if (tops.length) tops.forEach((t, i) => content.push(topCard(t, i)));
+  else content.push({ text: 'Keine TOPs erfasst', italics: true, fontSize: 9.5, color: C.meta, margin: [20, 0, 0, 4] });
+
+  if (has(data.nextDatum)) {
+    content.push(sectionHeading(++nr, 'Nächster Termin'));
+    content.push(subLabel('Datum / Uhrzeit'));
+    content.push(bodyText(fmt(data.nextDatum) + (has(data.nextZeit) ? ' · ' + data.nextZeit + ' Uhr' : '')));
+    if (has(data.nextHinweis)) { content.push(subLabel('Hinweise')); content.push(bodyText(data.nextHinweis)); }
+  }
+
+  content.push({
+    unbreakable: true,
+    columns: [ sig('Protokollführung', data.protokoll), { width: 18, text: '' },
+               sig('Freigabe Teamleitung', approverFull), { width: 18, text: '' },
+               sig('Datum der Freigabe', '') ],
+    margin: [0, 16, 0, 0],
+  });
+
+  const titelKurz = typLabel + (themaLbl ? ' – ' + themaLbl : '');
+  return {
+    pageSize: 'A4',
+    pageMargins: [MARGIN_X, 46, MARGIN_X, 62],
+    defaultStyle: { font: 'Kodchasan', fontSize: F.fliess, color: C.ink },
+    background: () => ({ canvas: [{ type: 'rect', x: 0, y: 0, w: PAGE_W, h: 841.89, color: C.papier }] }),
+    info: { title: `Meetingprotokoll ${titelKurz} ${datumDE}`.trim(), author: 'Praxis NeueWege' },
+
+    header: (page) => page === 1 ? null : {
+      margin: [MARGIN_X, 18, MARGIN_X, 0],
+      stack: [
+        { columns: [
+            { text: `PRAXIS NEUEWEGE · MEETINGPROTOKOLL`, font: 'KodchasanSemi', fontSize: F.eyebrow, characterSpacing: 1, color: C.meta },
+            { text: `${titelKurz} · ${datumDE}`, alignment: 'right', font: 'KodchasanMedium', fontSize: F.fuss, color: C.muted },
+        ] },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.trenner, lineColor: C.rahmenStark }], margin: [0, 4, 0, 0] },
+      ],
+    },
+
+    footer: (page, pages) => ({
+      margin: [MARGIN_X, 8, MARGIN_X, 0],
+      stack: [
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: PAGE_W - 2 * MARGIN_X, y2: 0, lineWidth: LINE.fussAkzent, lineColor: C.terra }] },
+        { columns: [
+            { width: 232, stack: [
+              { text: 'Praxis NeueWege · Hausmehring 19½, 85405 Nandlstadt', fontSize: F.fuss - 1, color: C.meta },
+              { text: 'info@praxisneuewege.de · 0152 3713 0321 · praxisneuewege.de', fontSize: F.fuss - 1, color: C.meta },
+            ] },
+            { width: '*', alignment: 'center', stack: [
+              { text: `Erstellt am ${erstelltAm}`, fontSize: F.fuss - 1, color: C.meta },
+              freigegebenVon ? { text: `Freigegeben von ${freigegebenVon}`, fontSize: F.fuss - 1, color: C.meta } : { text: '' },
+            ] },
+            { width: 62, alignment: 'right', margin: [0, 2, 0, 0],
+              text: [ { text: `Seite ${page}`, fontSize: F.fuss, color: C.terra, font: 'KodchasanSemi' },
+                      { text: ` von ${pages}`, fontSize: F.fuss, color: C.meta } ] },
+          ], margin: [0, 5, 0, 0] },
+      ],
+    }),
+    content,
+  };
+}
+
+async function generateProtokollPDF(data, freigeberName, opts) {
+  try {
+    if (typeof pdfMake === 'undefined') throw new Error('pdfmake nicht geladen');
+    const assets = await _ladeProtokollPdfAssets();
+    pdfMake.vfs = assets.vfs;
+    pdfMake.fonts = assets.fonts;
+    const dd = buildProtokollDocDefinition(data, freigeberName, opts, assets.logo);
+    const buf = await new Promise((res, rej) => { try { pdfMake.createPdf(dd).getBuffer(res); } catch(e) { rej(e); } });
+    return buf;   // Uint8Array
+  } catch(e) {
+    // Sicherheitsnetz: altes Verfahren, damit eine Freigabe nie an der PDF-Erzeugung scheitert
+    console.warn('Berichts-Design nicht moeglich, nutze Altverfahren:', e);
+    return generateProtokollPDFLegacy(data, freigeberName);
+  }
+}
+
+async function generateProtokollPDFLegacy(data, freigeberName) {
   const html = protokollHtml(data, freigeberName);
   // Render HTML to canvas, then to PDF
   const container = document.createElement('div');
@@ -2836,7 +3064,7 @@ async function freigabeAction(itemId, newStatus) {
       // PDF generieren
       const pdfFileName = fileName.replace('.txt', '.pdf');
       const spPath = spFolder + '/' + pdfFileName;
-      const pdfBytes = await generateProtokollPDF(data, freigeberName);
+      const pdfBytes = await generateProtokollPDF(data, freigeberName, { freigegeben: true });
       await uploadToSharePoint(spPath, pdfBytes, 'application/pdf');
       showToast('\u2713 PDF in SharePoint gespeichert', 'success');
       const spUrl = CFG.siteUrl + '/Freigegebene Dokumente/' + spPath;
