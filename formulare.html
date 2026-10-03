@@ -502,18 +502,9 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
         <div id="det_vollm" style="display:none;">
           <div class="card">
             <div class="card-title">⚖️ Details — Vollmacht Sorgerecht</div>
-            <div id="vgeber_list">
-              <div class="extra-block" id="vgeber_0">
-                <div class="extra-block-hd">
-                  <span class="extra-block-label">Vollmachtgeber 1</span>
-                </div>
-                <div class="fg">
-                  <div class="field"><label>Name, Vorname</label><input type="text" id="v_geb" placeholder="Mustermann, Maria" oninput="this.dataset.manuallyEdited='1'"></div>
-                  <div class="field"><label>Wohnort</label><input type="text" id="v_geb_ort" placeholder="85405 Nandlstadt" oninput="this.dataset.manuallyEdited='1'"></div>
-                </div>
-              </div>
-            </div>
-            <button class="btn-add" onclick="addVollmachtgeber()" id="btnAddVG">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Vollmachtgeber (Sorgeberechtigte) — vorbefüllt aus Kilanka; nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere hinzufügen</div>
+            <div id="vgeber_list"></div>
+            <button class="btn-add" onclick="addVollmachtgeber()" id="btnAddVG" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
               Weiteren Vollmachtgeber hinzufügen
             </button>
@@ -984,7 +975,7 @@ function buildLeerPre(k){
   const sgbR=sgbWahl(k.Hilfeart, Array.from(document.getElementById('k_sgb').options).map(o=>o.text));
   const sgb=sgbR.match||sgbR.neu||'';
   const sorg=k.Sorgeberechtigte||[];
-  const vg=sorg.map(s=>({name:[_kVal(s.familienname),_kVal(s.vorname)].filter(Boolean).join(', '),ort:_kVal(k.Kind_PLZ_Ort||'')})).filter(x=>x.name);
+  const vg=schweigKandidaten(k).map(p=>({name:p.name,rolle:p.rolle,ort:p.ort||_kVal(k.Kind_PLZ_Ort||'')})).filter(x=>x.name);
   const ids={
     v_kind:[nn,vn].filter(Boolean).join(', '),
     v_kind_geb:k.Kind_Geburtsdatum||'',
@@ -1042,10 +1033,6 @@ function onKilankaKlientSelect(){
   }
   // Sorgeberechtigte -> Vollmacht / Schweigepflicht
   const sorg = k.Sorgeberechtigte || [];
-  if(sorg[0]){
-    _kSet('v_geb', [ _kVal(sorg[0].familienname), _kVal(sorg[0].vorname) ].filter(Boolean).join(', '));
-    _kSet('v_geb_ort', k.Kind_PLZ_Ort);
-  }
   // Startkompass: Mutter, Vater, Geschwister
   try{ kompassBefuellen(k); }catch(e){ console.warn('Startkompass-Vorbefüllung:',e); }
   // Kind in der Vollmacht
@@ -1186,12 +1173,6 @@ function onKlientChange(){
   const name=getKlientName();
   const sgb=document.getElementById('k_sgb').value;
   const ja=document.getElementById('k_ja').value;
-  // Auto-populate Vollmacht: Vollmachtgeber = Klientname
-  const vGeb=document.getElementById('v_geb');
-  if(vGeb && name && !vGeb.dataset.manuallyEdited) vGeb.value=name;
-  const vGebOrt=document.getElementById('v_geb_ort');
-  const ort=(document.getElementById('k_plz').value+' '+document.getElementById('k_ort').value).trim();
-  if(vGebOrt && ort && !vGebOrt.dataset.manuallyEdited) vGebOrt.value=ort;
   if(name){
     document.getElementById('klientBoxSidebar').style.display='block';
     document.getElementById('sbName').textContent=name;
@@ -1269,6 +1250,7 @@ function goToDetails(){
   const vkind=document.getElementById('v_kind');
   if(vkind&&!vkind.dataset.manuallyEdited&&kd.name) vkind.value=kd.name;
   if(selForms.has('schweig')) schweigListeInit();
+  if(selForms.has('vollm')) vollmListeInit();
   showPanel('details');
 }
 
@@ -1419,7 +1401,7 @@ function buildStep(fid,idx){
   else if(fid==='vollm'){
     const vGebers=getAllVollmachtgeber();
     const vGeberHtml=vGebers.length>0
-      ? vGebers.map(vg=>`<div class="inst-highlight" style="margin-bottom:6px;"><strong>${vg.name}</strong>${vg.ort?' · '+vg.ort:''}</div>`).join('')
+      ? vGebers.map(vg=>`<div class="inst-highlight" style="margin-bottom:6px;"><strong>${vg.name}</strong>${vg.rolle?' ('+vg.rolle+')':''}${vg.ort?' · '+vg.ort:''}</div>`).join('')
       : '<div class="inst-highlight">_______________</div>';
     const vKind=document.getElementById('v_kind').value||'_______________';
     const vKindGeb=fmtDate(document.getElementById('v_kind_geb').value);
@@ -1570,7 +1552,7 @@ function buildStep(fid,idx){
   }
   const vGebers2=(fid==='vollm')?getAllVollmachtgeber():[];
   const sUnt=(fid==='schweig')?getSchweigUnterzeichner():[];
-  const sigPersonen=(fid==='vollm')?vGebers2.map((v,i)=>({titel:'Unterschrift '+(v.name||'Vollmachtgeber '+(i+1))})):sUnt.map(u=>({titel:'Unterschrift '+u.name+' ('+u.rolle+')'}));
+  const sigPersonen=(fid==='vollm')?vGebers2.map((v,i)=>({titel:'Unterschrift '+(v.name||'Vollmachtgeber '+(i+1))+(v.rolle?' ('+v.rolle+')':'')})):sUnt.map(u=>({titel:'Unterschrift '+u.name+' ('+u.rolle+')'}));
   if((fid==='vollm'&&vGebers2.length>1)||(fid==='schweig'&&sUnt.length>1)){
     // Multiple signature pads: one per Vollmachtgeber
     sigPersonen.forEach((vg,i)=>{
@@ -2115,7 +2097,7 @@ function generatePDF(formId, blank, pre){
   }
 
   else if(formId==='vollm'){
-    const vGebers=(blank ? ((pre&&pre.vollmachtgeber&&pre.vollmachtgeber.length)?pre.vollmachtgeber:[{name:'',ort:''}]) : getAllVollmachtgeber());
+    const vGebers=(blank ? ((pre&&pre.vollmachtgeber&&pre.vollmachtgeber.length)?pre.vollmachtgeber:[{name:'',ort:'',rolle:''}]) : getAllVollmachtgeber());
     const vKind=($id('v_kind')||{}).value||(blank?'':'—');
     const vKindGeb=fmtDate(($id('v_kind_geb')||{}).value||'');
     const vFk1=($id('v_fk1')||{}).value||kdX.fk||'';
@@ -2123,7 +2105,7 @@ function generatePDF(formId, blank, pre){
     eyebrow('VOLLMACHT & BEVOLLMÄCHTIGUNG');mainTitle('Vollmacht Sorgerecht');
     subtitle('Praxis NeueWege GmbH, Hopfenstr. 22, 85283 Wolnzach.');
     hRule();capsSection('VOLLMACHTGEBER/IN');
-    vGebers.forEach((vg,i)=>fieldRow2(`Name${vGebers.length>1?' '+(i+1):''}`,vg.name||'','Wohnort',vg.ort||''));
+    vGebers.forEach((vg,i)=>fieldRow2(`Name, Vorname${vGebers.length>1?' '+(i+1):''}${vg.rolle?' ('+vg.rolle+')':''}`,vg.name||'','Wohnort',vg.ort||''));
     y+=2;capsSection('BEVOLLMÄCHTIGTE FACHKRÄFTE');
     fieldRow2('Vollmachtnehmer/in 1',vFk1,'Vollmachtnehmer/in 2',vFk2||(blank?'':'—'));
     y+=2;capsSection('KIND');
@@ -2133,18 +2115,10 @@ function generatePDF(formId, blank, pre){
     [['ki_v_alle','Alle Angelegenheiten der elterlichen Sorge'],['ki_v_gesund','Gesundheitsfürsorge'],['ki_v_aufenth','Aufenthaltsbestimmung'],['ki_v_beh','Behördenangelegenheiten, insb. Hilfe zur Erziehung'],['ki_v_verm','Vermögensrechtliche Angelegenheiten'],['ki_v_schule','Schulische Angelegenheiten']].forEach(([id,lbl])=>cbRow(id,lbl));
     y+=2;noteBox('Diese Vollmacht gilt bis auf Widerruf und kann jederzeit schriftlich widerrufen werden.');
     pageCheck(56);y+=2;capsSection('UNTERSCHRIFT');
-    const hw=(CW-6)/2;
-    fieldRow('Ort, Datum',_od(),hw,ML);y-=7;
-    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('ORT, DATUM',ML+hw+6,y-3.5);doc.line(ML+hw+6,y+1.5,ML+hw+6+hw,y+1.5);y+=7;
     if(vGebers.length>1){
-      const p1=sigsX['vollm_0'],p2=sigsX['vollm_1'];
-      if(p1&&p1.length>200)try{doc.addImage(p1,'PNG',ML,y-8,hw*0.7,14);}catch(e){}
-      if(p2&&p2.length>200)try{doc.addImage(p2,'PNG',ML+hw+6,y-8,hw*0.7,14);}catch(e){}
-      y+=10;doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.line(ML,y,ML+hw,y);doc.line(ML+hw+6,y,ML+hw+6+hw,y);y+=3;
-      doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
-      doc.text(vGebers[0]?.name||'',ML,y);doc.text(vGebers[1]?.name||'',ML+hw+6,y);
+      vGebers.forEach((vg,i)=>sigArea2(_od(),'Unterschrift '+(vg.name||'Vollmachtgeber/in')+(vg.rolle?' ('+vg.rolle+')':''),sigsX['vollm_'+i]));
     } else {
-      sigArea2(_od(),'Unterschrift Vollmachtgeber/in',sigsX['vollm']||sigsX['vollm_0']);
+      sigArea2(_od(),'Unterschrift '+((vGebers[0]&&vGebers[0].rolle)||'Vollmachtgeber/in'),sigsX['vollm']||sigsX['vollm_0']);
     }
   }
 
@@ -2260,7 +2234,7 @@ function addWaPerson(prefill){
   // Erste Zeile mit Sorgeberechtigtem/Klient + Telefon vorbelegen
   let nm = '', tel = '';
   if(prefill){
-    nm = ((document.getElementById('v_geb')||{}).value) || (typeof kd!=='undefined' && kd.name) || '';
+    nm = ((typeof getAllVollmachtgeber==='function'&&(getAllVollmachtgeber()[0]||{}).name) || (typeof getSchweigUnterzeichner==='function'&&(getSchweigUnterzeichner()[0]||{}).name) || (typeof kd!=='undefined' && kd.name) || '');
     tel = (typeof kd!=='undefined' && kd.tel) || '';
   }
   const row = document.createElement('div');
@@ -2490,11 +2464,19 @@ function _rolleAusBeziehung(bz){
 // Kandidaten aus Kilanka: alle Sorgeberechtigten + Mutter/Vater (auch ohne Sorgerechts-Flag)
 function schweigKandidaten(k){
   const out=[], seen=new Set();
+  const _ortVon=a=>{ const t=String(a||'').split(',').pop().trim(); return /\d{4,5}\s+\S/.test(t)?t:''; };
   const add=(p,rolle,sorge)=>{
     if(!p) return;
     const nm=_elternNameKomma(p); if(!nm) return;
-    const key=nm.toLowerCase(); if(seen.has(key)) return; seen.add(key);
-    out.push({name:nm,rolle,sorge:sorge===true});
+    const key=nm.toLowerCase();
+    const ort=_ortVon(p.adresse);
+    if(seen.has(key)){
+      const ex=out.find(o=>o.name.toLowerCase()===key);
+      if(ex){ if(!ex.ort&&ort) ex.ort=ort; if(ex.rolle==='Sonstige'&&rolle!=='Sonstige') ex.rolle=rolle; if(sorge===true) ex.sorge=true; }
+      return;
+    }
+    seen.add(key);
+    out.push({name:nm,rolle,sorge:sorge===true,ort});
   };
   (k.Sorgeberechtigte||[]).forEach(s=>add(s,_rolleAusBeziehung(s.beziehung),true));
   if(k.Mutter) add(k.Mutter,'Mutter',k.Mutter.sorgeberechtigt===true);
@@ -2581,23 +2563,25 @@ function renumberGS(){
     if(lbl)lbl.textContent='Geschwister '+(i+1);
   });
 }
-let vgCount=1;
-function addVollmachtgeber(){
-  const list=document.getElementById('vgeber_list');
+let vgCount=0, _vollmQuelle=null;
+function addVollmachtgeber(p){
+  const list=document.getElementById('vgeber_list'); if(!list) return;
+  p=(p&&typeof p==='object'&&!p.target)?p:{name:'',rolle:'Mutter',ort:''};
   const idx=vgCount++;
+  const esc=v=>String(v||'').replace(/"/g,'&quot;');
   const block=document.createElement('div');
   block.className='extra-block';block.id='vgeber_'+idx;
   block.innerHTML=`
     <div class="extra-block-hd">
-      <span class="extra-block-label">Vollmachtgeber ${idx+1}</span>
-      <button class="btn-remove-block" onclick="removeVG(${idx})">Entfernen</button>
+      <span class="extra-block-label">Vollmachtgeber</span>
+      <button class="btn-remove-block" type="button" onclick="removeVG(${idx})">Entfernen</button>
     </div>
     <div class="fg">
-      <div class="field"><label>Name, Vorname</label><input type="text" id="v_geb_${idx}" placeholder="Musterfrau, Maria"></div>
-      <div class="field"><label>Wohnort</label><input type="text" id="v_geb_ort_${idx}" placeholder="85405 Nandlstadt"></div>
-    </div>`;
+      <div class="field"><label>Name, Vorname</label><input type="text" id="v_geb_${idx}" placeholder="Mustermann, Maria" value="${esc(p.name)}"></div>
+      <div class="field"><label>Rolle</label><select id="v_geb_rolle_${idx}">${SCHWEIG_ROLLEN.map(r=>`<option${r===p.rolle?' selected':''}>${r}</option>`).join('')}</select></div>
+    </div>
+    <div class="fg full"><div class="field"><label>Wohnort</label><input type="text" id="v_geb_ort_${idx}" placeholder="85283 Wolnzach" value="${esc(p.ort)}"></div></div>`;
   list.appendChild(block);
-  // Re-number labels
   renumberVG();
 }
 function removeVG(idx){
@@ -2614,12 +2598,26 @@ function renumberVG(){
 // Collect all Vollmachtgeber for form rendering
 function getAllVollmachtgeber(){
   const result=[];
-  document.querySelectorAll('#vgeber_list .extra-block').forEach((b,i)=>{
-    const nameEl=b.querySelector('input[id^="v_geb"]');
-    const ortEl=b.querySelector('input[id^="v_geb_ort"]');
-    if(nameEl&&nameEl.value.trim())result.push({name:nameEl.value.trim(),ort:ortEl?ortEl.value.trim():''});
+  document.querySelectorAll('#vgeber_list .extra-block').forEach(b=>{
+    const id=b.id.replace('vgeber_','');
+    const nameEl=document.getElementById('v_geb_'+id), ortEl=document.getElementById('v_geb_ort_'+id), roEl=document.getElementById('v_geb_rolle_'+id);
+    if(nameEl&&nameEl.value.trim())result.push({name:nameEl.value.trim(),ort:ortEl?ortEl.value.trim():'',rolle:roEl?roEl.value:''});
   });
   return result;
+}
+// Liste einmal je Klient aus Kilanka vorbefüllen (Eltern + Sorgeberechtigte); Wohnort = Adresse der Person, sonst Wohnort des Kindes
+function vollmListeInit(){
+  const ksel=document.getElementById('kilankaKlient');
+  const k=(ksel&&ksel.value!=='')?_kilankaKlienten[Number(ksel.value)]:null;
+  const quelle=k?('k:'+(k.kilankaId||'')+'|'+((k.massnahme&&k.massnahme.name)||'')):'manuell';
+  if(_vollmQuelle===quelle) return;
+  _vollmQuelle=quelle;
+  const list=document.getElementById('vgeber_list'); if(!list) return;
+  list.innerHTML=''; vgCount=0;
+  const kindOrt=((kd&&kd.plz||'')+' '+(kd&&kd.ort||'')).trim();
+  const kand=k?schweigKandidaten(k):[];
+  if(kand.length) kand.forEach(p=>addVollmachtgeber({name:p.name,rolle:p.rolle,ort:p.ort||kindOrt}));
+  else addVollmachtgeber({name:'',rolle:'Mutter',ort:kindOrt});
 }
 </script>
 </body>
