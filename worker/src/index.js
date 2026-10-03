@@ -7,6 +7,8 @@
  *                               (HB/MB/V), vorbefüllungsfertig für S1/S2
  *   GET /api/health           → Statuscheck ohne Auth (kein Datenzugriff)
  *
+ * Deploy-Marker 03.10.2026: Neustart des Worker-Builds nach Cloudflare-Störung (Zugriffssteuerung, Testmodus)
+ *
  * Sicherheit:
  *   - Kilanka-Token liegt NUR als Worker-Secret (KILANKA_TOKEN)
  *   - Jeder Datenzugriff erfordert ein gültiges Entra-ID-Token
