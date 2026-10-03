@@ -428,7 +428,7 @@ body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-se
   </footer>
 </div>
 
-<script src="assets/zugriff-portal.js"></script>
+<script src="assets/zugriff-portal.js?v=83f021a"></script>
 <script>
 // HTTPS erzwingen — MSAL funktioniert nicht über HTTP
 if (location.protocol === 'http:' && location.hostname !== 'localhost') {
@@ -445,7 +445,7 @@ const msalConfig = {
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true },
   system: { allowNativeBroker: false }
 };
-const APP_VERSION = 'v5d121bd'; // auto-updated on deploy
+const APP_VERSION = 'v83f021a'; // auto-updated on deploy
 
 function applyVersionBadge() {
   document.querySelectorAll('#versionBadge').forEach(el => { if (el) el.textContent = APP_VERSION; });
