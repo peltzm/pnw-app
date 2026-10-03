@@ -41,11 +41,12 @@ const NM = (function () {
     { sp: 'Vertragsdatum', key: 'vertragsdatum', typ: 'datum' },
     { sp: 'Status', key: 'status', typ: 'text' },
     { sp: 'MitarbeiterId', key: 'mitarbeiterId', typ: 'text' },
+    { sp: 'UPN', key: 'upn', typ: 'text' },
   ];
   const DOCX_TYP = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   const STATUS = [
     ['entwurf', 'Entwurf'], ['mail_bereit', 'Mailentwurf liegt vor'], ['versendet', 'Vertrag versendet'],
-    ['zurueck', 'Vertrag zurück'], ['plan', 'In Einarbeitung'],
+    ['zurueck', 'Vertrag zurück'], ['konto', 'M365-Konto angelegt'], ['plan', 'In Einarbeitung'],
   ];
   const STATUS_LABEL = Object.fromEntries(STATUS);
 
@@ -123,7 +124,7 @@ const NM = (function () {
 
   /* ── Ansicht ── */
   function badge(s) {
-    const farbe = s === 'zurueck' || s === 'plan' ? 'var(--success, #2D6A4F)' : 'var(--accent)';
+    const farbe = s === 'zurueck' || s === 'konto' || s === 'plan' ? 'var(--success, #2D6A4F)' : 'var(--accent)';
     return '<span style="display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;border:1px solid ' + farbe + ';color:' + farbe + '">' + esc(STATUS_LABEL[s] || s || '–') + '</span>';
   }
   function aktionen(x) {
@@ -136,7 +137,8 @@ const NM = (function () {
     out.push(b('paket', x.status === 'entwurf' || !x.status ? 'Vertragspaket erzeugen' : 'Vertragspaket neu', x.status === 'entwurf' || !x.status));
     if (x.status === 'mail_bereit') out.push(b('stat-versendet', 'Als versendet markieren', true));
     if (x.status === 'versendet') out.push(b('stat-zurueck', 'Vertrag zurück erhalten', true));
-    if (x.status === 'zurueck') out.push(b('uebernehmen', 'In Einarbeitung übernehmen', true));
+    if (x.status === 'zurueck') out.push(b('konto', 'M365-Konto anlegen', true));
+    if (x.status === 'konto') { out.push(b('uebernehmen', 'In Einarbeitung übernehmen', true)); out.push(b('konto', 'Konto prüfen')); }
     out.push(b('edit', 'Bearbeiten'));
     if (x.status && x.status !== 'entwurf') out.push(b('reset', 'Zurücksetzen'));
     out.push('<button class="btn btn-sm btn-outline" style="color:var(--error);border-color:var(--error)" data-nm="del:' + x.id + '">Löschen</button>');
@@ -160,7 +162,7 @@ const NM = (function () {
       h += '<table class="ea-tbl" style="margin-top:12px"><thead><tr><th>Name</th><th>Eintritt</th><th>Std.</th><th>Vergütung</th><th>Status</th><th></th></tr></thead><tbody>';
       liste.slice().sort((a, b) => String(b.eintritt || '').localeCompare(String(a.eintritt || ''))).forEach(x => {
         const verg = x.manuell ? 'manuell' : (x.eg ? x.eg.replace(' ', '') + ' / ' + x.stufe : '–');
-        h += '<tr><td><b>' + esc(x.name) + '</b><div class="ea-item-desc">' + esc(x.beruf || '') + '</div></td><td>' + fmtDatum(x.eintritt) + '</td><td>' + esc(zahlDe(x.stunden || '')) + '</td><td>' + esc(verg) +
+        h += '<tr><td><b>' + esc(x.name) + '</b><div class="ea-item-desc">' + esc(x.beruf || '') + '</div>' + (x.upn ? '<div class="ea-item-desc">' + esc(x.upn) + '</div>' : '') + '</td><td>' + fmtDatum(x.eintritt) + '</td><td>' + esc(zahlDe(x.stunden || '')) + '</td><td>' + esc(verg) +
           (x.grundgehalt ? '<div class="ea-item-desc">' + eur(x.grundgehalt) + ' + ' + eur(x.sue || 0) + '</div>' : '') + '</td><td>' + badge(x.status || 'entwurf') + '</td><td>' + aktionen(x) + '</td></tr>';
       });
       h += '</tbody></table>';
@@ -197,6 +199,7 @@ const NM = (function () {
         else if (act === 'stat-zurueck') statusSetzen(id, 'zurueck');
         else if (act === 'uebernehmen') uebernehmen(id);
         else if (act === 'reset') zuruecksetzen(id);
+        else if (act === 'konto') kontoDialog(id);
         else if (act === 'del') loeschen(id);
       };
     });
@@ -335,7 +338,7 @@ const NM = (function () {
     if (vorhandenM) { try { await schreibeItem(LIST, SCHEMA, { id: x.id, status: 'plan' }); x.status = 'plan'; render(); zeigeToast('Die Person ist bereits in der Einarbeitung angelegt.'); } catch (e) { zeigeToast(e.message, true); } return; }
     if (!confirm(x.name + ' mit Start ' + fmtDatum(x.eintritt) + ' in die Einarbeitung übernehmen?\nMentor:in und Teamleitung trägst du danach unter „Mitarbeitende“ ein.')) return;
     try {
-      const m = { name: x.name, bereich: 'ambulant', startDatum: x.eintritt };
+      const m = { name: x.name, bereich: 'ambulant', startDatum: x.eintritt, upn: x.upn || '' };
       const mid = await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, m);
       mitarbeiterListe.push({ ...m, id: mid });
       await schreibeItem(LIST, SCHEMA, { id: x.id, status: 'plan', mitarbeiterId: mid });
@@ -464,5 +467,178 @@ const NM = (function () {
     } catch (e) { err.textContent = e.message; btn.disabled = false; }
   }
 
-  return { laden, view, vorlagenView, bind, gehaltBerechnen, eur, parseZahl, TABELLE };
+
+  /* ═══ M365-Konto anlegen — mit den Rechten der angemeldeten Person (delegiert); die App selbst hat keine eigenen Verwaltungsrechte ═══ */
+  const M365_SCOPES = ['User.ReadWrite.All', 'Group.ReadWrite.All', 'Directory.Read.All', 'LicenseAssignment.ReadWrite.All'];
+  const STANDARD_GRUPPEN = 'All Company, Ambulante Familienhilfe, PNW-App-Onboarding, Team';
+  const LIZENZ_SKU = 'O365_BUSINESS_PREMIUM';
+  const MAIL_DOMAIN = 'praxisneuewege.de';
+  let kontoPlan = null;
+
+  async function ga(methode, pfad, body) {
+    const t = await token(M365_SCOPES);
+    const r = await fetch('https://graph.microsoft.com/v1.0' + pfad, { method: methode, headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (e) { /* kein JSON */ }
+    return { ok: r.ok, status: r.status, json: j, text: txt, fehler: (j && j.error && j.error.message) || txt || ('HTTP ' + r.status) };
+  }
+  async function gaAlle(pfad) {
+    const alle = []; let p = pfad;
+    for (let i = 0; p && i < 20; i++) {
+      const r = await ga('GET', p); if (!r.ok) throw new Error(r.fehler);
+      alle.push.apply(alle, r.json.value || []); p = r.json['@odata.nextLink'] ? r.json['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0', '') : null;
+    }
+    return alle;
+  }
+  function upnVorschlag(vorname, nachname) {
+    const n = t => String(t).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return n(vorname) + '.' + n(nachname) + '@' + MAIL_DOMAIN;
+  }
+  function zufallsKennwort() {
+    const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789', '%&*+-=?!#']; const alle = sets.join('');
+    const zufall = n => { const b = new Uint32Array(n); crypto.getRandomValues(b); return Array.from(b); };
+    const z = sets.map((st, i) => st[zufall(1)[0] % st.length]).concat(zufall(16).map(v => alle[v % alle.length]));
+    for (let i = z.length - 1; i > 0; i--) { const j = zufall(1)[0] % (i + 1); const t = z[i]; z[i] = z[j]; z[j] = t; }
+    return z.join('');
+  }
+  const gaFehlerKurz = r => String(r.fehler).replace(/\s+/g, ' ').slice(0, 160);
+  const pause = ms => new Promise(res => setTimeout(res, ms));
+
+  function kontoDialog(id) {
+    const x = eintrag(id); if (!x) return;
+    if (demoMode) return;
+    ensureOverlay(); kontoPlan = null;
+    byId2('nmTitel').textContent = 'M365-Konto: ' + x.name;
+    const f = (idn, label, wert, hint, ph) => '<div class="feld feld-voll"><label for="' + idn + '">' + label + '</label><input id="' + idn + '" value="' + esc(wert || '') + '" placeholder="' + esc(ph || '') + '">' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+    byId2('nmInhalt').innerHTML = '<div class="felder">' +
+      f('nmKUpn', 'Anmeldename / E-Mail', x.upn || upnVorschlag(x.vorname, x.nachname), 'Existiert das Konto schon, wird es nicht verändert; es werden nur fehlende Gruppen, Lizenz und Vorgesetzte ergänzt.') +
+      f('nmKGruppen', 'Gruppen (kommagetrennt, Namen in Entra)', STANDARD_GRUPPEN, 'Exchange-Verteilerlisten (z. B. „Team“) lassen sich nicht per Graph befüllen und werden als „manuell“ gekennzeichnet.') +
+      f('nmKVorbild', 'Zusätzlich Gruppen übernehmen von (optional)', '', 'Anmeldename einer Person mit gleichen Gruppen. Du siehst im nächsten Schritt jede Gruppe und kannst sie abwählen.', 'vorname.nachname@' + MAIL_DOMAIN) +
+      f('nmKMgr', 'Vorgesetzte(r) (optional)', '', 'Anmeldename der Teamleitung. Kann auch später gesetzt werden.', 'nadine.grund@' + MAIL_DOMAIN) +
+      f('nmKMobil', 'Mobil geschäftlich (optional)', '', '') + '</div>' +
+      '<p class="ea-item-desc" style="margin:10px 0">Die App arbeitet mit deinen Administratorrechten, sie selbst hat keine eigenen. Beim ersten Mal fragt Microsoft die Zustimmung für dein Konto ab.</p>' +
+      '<div class="dlg-err" id="nmFehler"></div><div class="dialog-actions"><button class="btn btn-solid" id="nmKPruefen">Prüfen</button><button class="btn btn-outline" id="nmKAbbr">Abbrechen</button></div>';
+    byId2('nmKAbbr').onclick = schliesse; byId2('nmKPruefen').onclick = () => kontoPruefen(id);
+    byId2('nmOverlay').classList.add('open');
+  }
+
+  async function kontoPruefen(id) {
+    const x = eintrag(id); const err = byId2('nmFehler'); const btn = byId2('nmKPruefen'); err.textContent = '';
+    const ein = { upn: byId2('nmKUpn').value.trim().toLowerCase(), gruppen: byId2('nmKGruppen').value, vorbild: byId2('nmKVorbild').value.trim().toLowerCase(), mgr: byId2('nmKMgr').value.trim().toLowerCase(), mobil: byId2('nmKMobil').value.trim() };
+    if (!/^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(ein.upn)) { err.textContent = 'Der Anmeldename ist ungültig.'; return; }
+    try {
+      btn.disabled = true; btn.textContent = 'Prüfe …';
+      const plan = { x, ein, gruppen: [], lizenz: null, mgr: null };
+      const u = await ga('GET', '/users/' + encodeURIComponent(ein.upn) + '?$select=id,displayName,accountEnabled,assignedLicenses,usageLocation');
+      if (u.ok) plan.vorhanden = u.json; else if (u.status !== 404) throw new Error('Konto nicht prüfbar: ' + gaFehlerKurz(u));
+      // Gruppen: Namen + optional Vorbild
+      const namen = Array.from(new Set(ein.gruppen.split(/[,;\n]/).map(t => t.trim()).filter(Boolean)));
+      const gewaehlt = [];
+      for (const n of namen) {
+        const r = await ga('GET', '/groups?$filter=' + encodeURIComponent("displayName eq '" + n.replace(/'/g, "''") + "'") + '&$select=id,displayName,groupTypes,mailEnabled,securityEnabled');
+        if (!r.ok) throw new Error('Gruppe „' + n + '“ nicht abrufbar: ' + gaFehlerKurz(r));
+        const g = (r.json.value || [])[0]; gewaehlt.push(g ? Object.assign({ quelle: 'Liste' }, g) : { displayName: n, fehlt: true, quelle: 'Liste' });
+      }
+      if (ein.vorbild) {
+        const vg = await gaAlle('/users/' + encodeURIComponent(ein.vorbild) + '/memberOf/microsoft.graph.group?$select=id,displayName,groupTypes,mailEnabled,securityEnabled&$top=100');
+        vg.forEach(g => { if (!gewaehlt.some(e => e.id === g.id)) gewaehlt.push(Object.assign({ quelle: 'Vorbild' }, g)); });
+      }
+      gewaehlt.forEach(g => {
+        const dyn = (g.groupTypes || []).includes('DynamicMembership');
+        const verteiler = g.mailEnabled && !g.securityEnabled && !(g.groupTypes || []).includes('Unified');
+        g.status = g.fehlt ? 'nicht in Entra gefunden' : dyn ? 'dynamische Gruppe – nicht möglich' : verteiler ? 'Exchange-Verteilerliste – manuell' : 'wird eingetragen';
+        g.auswahl = !g.fehlt && !dyn && !verteiler; g.sperre = !g.auswahl;
+      });
+      plan.gruppen = gewaehlt;
+      // Lizenz
+      const sku = (await gaAlle('/subscribedSkus')).find(k => k.skuPartNumber === LIZENZ_SKU);
+      const bereitsLizenziert = plan.vorhanden && (plan.vorhanden.assignedLicenses || []).length > 0;
+      plan.lizenz = bereitsLizenziert ? { text: 'bereits lizenziert', ok: false } : !sku ? { text: LIZENZ_SKU + ' nicht im Tenant gefunden', ok: false }
+        : (sku.prepaidUnits.enabled - sku.consumedUnits) > 0 ? { text: LIZENZ_SKU + ': ' + (sku.prepaidUnits.enabled - sku.consumedUnits) + ' frei – wird zugewiesen', ok: true, skuId: sku.skuId } : { text: 'keine freie Lizenz (' + LIZENZ_SKU + ') – bitte im Admin Center nachkaufen und zuweisen', ok: false };
+      // Vorgesetzte
+      if (ein.mgr) { const m = await ga('GET', '/users/' + encodeURIComponent(ein.mgr) + '?$select=id,displayName'); plan.mgr = m.ok ? { id: m.json.id, name: m.json.displayName } : { fehlt: true }; }
+      kontoPlan = plan; kontoPlanAnzeigen(id);
+    } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Prüfen'; }
+  }
+
+  function kontoPlanAnzeigen(id) {
+    const pl = kontoPlan, x = pl.x; const zeile = (a, b) => '<tr><td style="white-space:nowrap;vertical-align:top"><b>' + a + '</b></td><td>' + b + '</td></tr>';
+    let h = '<table class="ea-tbl"><tbody>';
+    h += zeile('Konto', pl.vorhanden ? 'existiert bereits: ' + esc(pl.vorhanden.displayName) + ' (' + esc(pl.ein.upn) + ') – <b>wird nicht verändert</b>' : 'wird angelegt: <b>' + esc(x.name) + '</b>, ' + esc(pl.ein.upn) + ', ' + esc(x.beruf || '') + '<div class="ea-item-desc">Alternative E-Mail: ' + esc(x.privatmail) + ' · Anschrift und Firma werden übernommen · Kennwortwechsel beim ersten Login</div>');
+    h += zeile('Gruppen', pl.gruppen.length ? pl.gruppen.map((g, i) => '<label class="chk" style="margin:2px 0"><input type="checkbox" data-nm-gr="' + i + '"' + (g.auswahl ? ' checked' : '') + (g.sperre ? ' disabled' : '') + '> ' + esc(g.displayName) + ' <span class="ea-item-desc">(' + esc(g.quelle) + ' · ' + esc(g.status) + ')</span></label>').join('') : '<span class="ea-item-desc">keine</span>');
+    h += zeile('Lizenz', (pl.lizenz.ok ? '' : '<span style="color:var(--error)">') + esc(pl.lizenz.text) + (pl.lizenz.ok ? '' : '</span>'));
+    h += zeile('Vorgesetzte(r)', pl.ein.mgr ? (pl.mgr && !pl.mgr.fehlt ? esc(pl.mgr.name) : '<span style="color:var(--error)">nicht gefunden: ' + esc(pl.ein.mgr) + '</span>') : '<span class="ea-item-desc">nicht angegeben</span>');
+    h += '</tbody></table><div class="dlg-err" id="nmFehler"></div><div class="dialog-actions"><button class="btn btn-solid" id="nmKGo">' + (pl.vorhanden ? 'Fehlendes ergänzen' : 'Konto jetzt anlegen') + '</button><button class="btn btn-outline" id="nmKZurueck">Zurück</button><button class="btn btn-outline" id="nmKAbbr">Abbrechen</button></div>';
+    byId2('nmInhalt').innerHTML = h;
+    Array.from(document.querySelectorAll('[data-nm-gr]')).forEach(c => c.onchange = () => { pl.gruppen[Number(c.getAttribute('data-nm-gr'))].auswahl = c.checked; });
+    byId2('nmKGo').onclick = () => kontoAusfuehren(id); byId2('nmKZurueck').onclick = () => kontoDialog(id); byId2('nmKAbbr').onclick = schliesse;
+  }
+
+  async function kontoAusfuehren(id) {
+    const pl = kontoPlan, x = pl.x, ein = pl.ein, schritte = []; const ok = (a, b, st) => schritte.push({ a, b, st: st || 'ok' });
+    const btn = byId2('nmKGo'); const err = byId2('nmFehler'); btn.disabled = true; btn.textContent = 'Arbeite …'; err.textContent = '';
+    let userId = pl.vorhanden ? pl.vorhanden.id : null, kennwort = null;
+    try {
+      if (!userId) {
+        kennwort = zufallsKennwort();
+        const plz = String(x.plzOrt || '').match(/^(\d{5})\s+(.*)$/);
+        const body = { accountEnabled: true, displayName: x.name, givenName: x.vorname, surname: x.nachname, mailNickname: ein.upn.split('@')[0], userPrincipalName: ein.upn,
+          jobTitle: x.beruf, companyName: 'Praxis NeueWege GmbH', streetAddress: x.strasse, postalCode: plz ? plz[1] : undefined, city: plz ? plz[2] : x.plzOrt, state: 'Bayern', country: 'Deutschland',
+          usageLocation: 'DE', preferredLanguage: 'de-DE', otherMails: [x.privatmail], passwordProfile: { forceChangePasswordNextSignIn: true, password: kennwort } };
+        if (ein.mobil) body.mobilePhone = ein.mobil;
+        const r = await ga('POST', '/users', body);
+        if (!r.ok) throw new Error('Konto nicht angelegt: ' + gaFehlerKurz(r));
+        userId = r.json.id; ok('Konto', 'angelegt: ' + ein.upn);
+      } else ok('Konto', 'existierte bereits, unverändert');
+      // Gruppen (bei neuem Konto kurz warten: Replikation)
+      for (const g of pl.gruppen) {
+        if (!g.auswahl) { ok('Gruppe ' + g.displayName, g.status, g.sperre ? 'manuell' : 'uebersprungen'); continue; }
+        let r = null;
+        for (let v = 0; v < 4; v++) { r = await ga('POST', '/groups/' + g.id + '/members/$ref', { '@odata.id': 'https://graph.microsoft.com/v1.0/directoryObjects/' + userId }); if (r.status !== 404 || !kennwort) break; await pause(2500); }
+        if (r.ok) ok('Gruppe ' + g.displayName, 'eingetragen');
+        else if (r.status === 400 && /already exist/i.test(r.fehler)) ok('Gruppe ' + g.displayName, 'war schon Mitglied');
+        else ok('Gruppe ' + g.displayName, gaFehlerKurz(r), 'fehler');
+      }
+      // Lizenz
+      if (pl.lizenz.ok) {
+        const r = await ga('POST', '/users/' + userId + '/assignLicense', { addLicenses: [{ skuId: pl.lizenz.skuId, disabledPlans: [] }], removeLicenses: [] });
+        ok('Lizenz', r.ok ? LIZENZ_SKU + ' zugewiesen' : gaFehlerKurz(r), r.ok ? 'ok' : 'fehler');
+      } else ok('Lizenz', pl.lizenz.text, pl.lizenz.text.startsWith('bereits') ? 'ok' : 'manuell');
+      // Vorgesetzte
+      if (ein.mgr) {
+        if (pl.mgr && !pl.mgr.fehlt) { const r = await ga('PUT', '/users/' + userId + '/manager/$ref', { '@odata.id': 'https://graph.microsoft.com/v1.0/users/' + pl.mgr.id }); ok('Vorgesetzte(r)', r.ok ? pl.mgr.name : gaFehlerKurz(r), r.ok ? 'ok' : 'fehler'); }
+        else ok('Vorgesetzte(r)', 'nicht gefunden – bitte später setzen', 'manuell');
+      }
+      // Ergebnis merken (UPN + Status)
+      try { await speichereKonto(x, ein.upn); ok('Gespeichert', 'Status „M365-Konto angelegt“'); } catch (e) { ok('Gespeichert', 'Status nicht gespeichert: ' + e.message, 'fehler'); }
+    } catch (e) {
+      err.textContent = e.message; btn.disabled = false; btn.textContent = pl.vorhanden ? 'Fehlendes ergänzen' : 'Konto jetzt anlegen';
+      if (!userId) return;
+      ok('Abbruch', e.message, 'fehler');
+    }
+    ergebnisAnzeigen(schritte, kennwort);
+  }
+  async function speichereKonto(x, upn) {
+    try { await schreibeItem(LIST, SCHEMA, { id: x.id, upn, status: 'konto' }); }
+    catch (e) {
+      // Spalte „UPN“ fehlt in der bestehenden Liste: einmalig anlegen und wiederholen
+      const t = await token(['Sites.Manage.All']);
+      const r = await fetch('https://graph.microsoft.com/v1.0/sites/' + CFG.spHost + '/lists/' + LIST + '/columns', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'UPN', text: {} }) });
+      if (!r.ok && r.status !== 409) throw new Error('Spalte UPN konnte nicht angelegt werden (' + r.status + ')');
+      await schreibeItem(LIST, SCHEMA, { id: x.id, upn, status: 'konto' });
+    }
+    x.upn = upn; x.status = 'konto';
+  }
+  function ergebnisAnzeigen(schritte, kennwort) {
+    const farbe = { ok: 'var(--success, #2D6A4F)', manuell: '#B7791F', fehler: 'var(--error)', uebersprungen: 'var(--text-hint)' };
+    const sym = { ok: '✓', manuell: '!', fehler: '✗', uebersprungen: '–' };
+    let h = '<table class="ea-tbl"><thead><tr><th>Schritt</th><th>Ergebnis</th></tr></thead><tbody>' + schritte.map(s => '<tr><td>' + esc(s.a) + '</td><td style="color:' + farbe[s.st] + '">' + sym[s.st] + ' ' + esc(s.b) + '</td></tr>').join('') + '</tbody></table>';
+    if (kennwort) h += '<div class="ea-card" style="margin:12px 0 0;background:var(--bg)"><b>Initialkennwort (wird nur hier angezeigt und nirgends gespeichert)</b><div class="ea-link-copy" style="margin-top:6px"><code id="nmKennwort">' + esc(kennwort) + '</code><button class="btn btn-sm btn-outline" id="nmKKopie">Kopieren</button></div>' +
+      '<p class="ea-item-desc" style="margin-top:6px">Beim ersten Anmelden muss ein neues Kennwort vergeben werden. Später soll die neue Mitarbeiterin ihr Kennwort über den Zugangslink selbst setzen.</p></div>';
+    if (schritte.some(s => s.st === 'manuell')) h += '<p class="ea-item-desc" style="margin-top:10px">Mit „!“ gekennzeichnete Schritte musst du im Microsoft Admin Center bzw. Exchange Admin Center von Hand erledigen.</p>';
+    h += '<div class="dialog-actions"><button class="btn btn-solid" id="nmZu">Schließen</button></div>';
+    byId2('nmInhalt').innerHTML = h; byId2('nmZu').onclick = () => { schliesse(); render(); };
+    const k = byId2('nmKKopie'); if (k) k.onclick = () => { try { navigator.clipboard.writeText(kennwort); zeigeToast('Kennwort kopiert'); } catch (e) { zeigeToast('Kopieren nicht möglich', true); } };
+  }
+
+  return { laden, view, vorlagenView, bind, upnVorschlag, gehaltBerechnen, eur, parseZahl, TABELLE };
 })();
