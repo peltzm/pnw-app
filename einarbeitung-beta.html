@@ -9,6 +9,9 @@
 <meta name="theme-color" content="#ffffff">
 <title>Onboarding — Praxis NeueWege</title>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
+<script src="assets/nm-pdf.js?v=20261003a"></script>
+<script src="assets/neue-mitarbeiter.js?v=20261003a"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
@@ -757,6 +760,7 @@ async function ladeAllesUndStarte(){
 
   bestimmeRolle(gfKonto);
   render();
+  if (gfKonto && !demoMode) NM.laden();
   if (gfKonto) pruefeHeftStand();
 }
 function bestimmeRolle(gfKonto){
@@ -1256,7 +1260,7 @@ function render(){
   }
   if (rolle === 'gf'){
     vb.style.display = 'flex';
-    vb.innerHTML = '<div class="pill-group">' + [['faelligkeiten','Fälligkeiten'],['mitarbeitende','Mitarbeitende'],['fahrplan','Fahrplan verwalten'],['links','Links & Ressourcen'],['einzelansicht','Einzelansicht']]
+    vb.innerHTML = '<div class="pill-group">' + [['faelligkeiten','Fälligkeiten'],['mitarbeitende','Mitarbeitende'],['neue','Neue Mitarbeiter'],['fahrplan','Fahrplan verwalten'],['links','Links & Ressourcen'],['einzelansicht','Einzelansicht']]
       .map(t=>'<button class="pill '+(gfTab===t[0]?'active':'')+'" data-gftab="'+t[0]+'">'+t[1]+'</button>').join('') + '</div>';
     Array.from(vb.querySelectorAll('[data-gftab]')).forEach(b=>b.onclick=()=>{ gfTab=b.getAttribute('data-gftab'); render(); });
     sub.textContent = 'Geschäftsführung';
@@ -1414,6 +1418,7 @@ function viewMentorTl(){
 function viewGf(){
   if (gfTab==='faelligkeiten') return gfFaelligkeiten();
   if (gfTab==='mitarbeitende') return gfMitarbeitende();
+  if (gfTab==='neue') return NM.view();
   if (gfTab==='fahrplan') return gfFahrplan();
   if (gfTab==='links') return gfLinks();
   return gfEinzelansicht();
@@ -1599,6 +1604,7 @@ function bindFahrplanVerschieben(){
 }
 
 function bindContentEvents(){
+  if (rolle==='gf' && gfTab==='neue') NM.bind();
   Array.from(document.querySelectorAll('[data-toggle-item]')).forEach(el=>{
     el.onclick = ()=>{ const [empId, schluessel] = el.getAttribute('data-toggle-item').split('|'); toggleItem(empId, schluessel); };
   });
