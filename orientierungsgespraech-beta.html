@@ -374,7 +374,18 @@ let akt = null;                 // aktuell geöffneter Bogen {spId, f:{...}, ant
 let leseModus = false, gfSicht = false, dirty = false, saveTimer = null;
 const P = new URLSearchParams(location.search);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const aktRunde = () => P.get('r') || new Date().toISOString().slice(0,7);
+/* Runde = Jahr + Halbjahr (Schlüssel „2026-H2“). Ältere Schlüssel im Monatsformat („2026-09“) werden dem Halbjahr zugeordnet,
+ * damit bestehende Bögen und bereits versendete Links weiter funktionieren (nur im Speicher, SharePoint bleibt unverändert). */
+const rundeNorm = r => { const m=/^(\d{4})-(\d{2})$/.exec(r||''); return m ? m[1]+'-H'+(+m[2]<=6?1:2) : (r||''); };
+const halbjahrJetzt = () => { const d=new Date(); return d.getFullYear()+'-H'+(d.getMonth()<6?1:2); };
+const aktRunde = () => rundeNorm(P.get('r')) || halbjahrJetzt();
+const rundenAuswahl = (runde, ziel) => {
+  const [jahr,hj]=(/^(\d{4})-H([12])$/.exec(runde)||[]).slice(1), j0=2026, j1=Math.max(new Date().getFullYear()+1, +jahr||0);
+  const jahre=[]; for(let y=j0;y<=j1;y++) jahre.push(y);
+  const nav="location.search='"+ziel+"'+document.getElementById('rJahr').value+'-H'+(document.getElementById('rJahr').value==='2026'?'2':document.getElementById('rHj').value)";
+  return `<div style="display:flex;gap:6px"><select id="rJahr" onchange="${nav}" style="width:90px" aria-label="Jahr">${jahre.map(y=>`<option value="${y}"${String(y)===jahr?' selected':''}>${y}</option>`).join('')}</select>`
+       + `<select id="rHj" onchange="${nav}" style="width:80px" aria-label="Halbjahr"><option value="1"${hj==='1'?' selected':''}${jahr==='2026'?' disabled':''}>H1</option><option value="2"${hj==='2'?' selected':''}>H2</option></select></div>`;
+};
 const fmtDT = iso => iso ? new Date(iso).toLocaleString('de-DE',{dateStyle:'medium',timeStyle:'short'}) : '';
 const num = (v, einheit='') => v == null || v === '' ? '—' : String(v).replace('.', ',') + einheit;
 
@@ -491,6 +502,7 @@ async function start(){
     return meldung('warn','Die Orientierungsgespräche sind noch nicht eingerichtet. Bitte wende dich an die Verwaltung.');
   }
   items = roh.map(i=>({spId:i.id, f:i.fields||{}}));
+  items.forEach(x=>{ if(x.f.Runde) x.f.Runde=rundeNorm(x.f.Runde); const u=x.f.MitarbeiterUpn||''; if(u.startsWith('__runde__:')) x.f.MitarbeiterUpn='__runde__:'+rundeNorm(u.slice(10)); });
 
   /* Fail-closed: Sieht ein:e Mitarbeiter:in fremde Elemente (oder das GF-Sentinel),
    * sind die Listenberechtigungen falsch — dann wird NICHT gespeichert. */
@@ -671,7 +683,7 @@ function entpacke(i){
   return { spId:i.spId, f:i.f, antworten:{skala:{},themen:[],text:{},kommentar:{},...(j(i.f.AntwortenJSON)||{})}, kennzahlen:j(i.f.KennzahlenJSON), leitung:{manuell:{},vereinbarungen:[],naechster:'',gemeinsam:{},intern:{},gemeinsamKopie:{},gespraech:{am:'',teilnehmer:[]},...(j(i.f.LeitungJSON)||{})} };
 }
 async function oeffneEigenen(){
-  const runde=P.get('r'), v=P.get('v');
+  const runde=aktRunde(), v=P.get('v');
   let i = items.find(x => (x.f.MitarbeiterUpn||'').toLowerCase()===upn && x.f.Runde===runde);
   if(!i){
     lade('Dein Bogen wird angelegt und mit deinen Kennzahlen aus Kilanka vorbefüllt …');
@@ -1073,7 +1085,7 @@ async function zeigeTeamleitung(){
   app().innerHTML=`<div class="card">
     <div class="bogen-kopf"><div><h1>Mein Team einschätzen</h1><div class="unter">Einschätzung der Teamleitung zu Teil 1</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräche · Runde ${esc(runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
     <div class="hinweis" style="margin-bottom:14px"><b>So geht’s:</b> Für jedes Teammitglied schätzt du dieselben Aussagen ein, die die Person in Teil 1 für sich selbst beantwortet – aus deiner Sicht als Teamleitung. Was du nicht beurteilen kannst: „k. A.“. Im Kommentarfeld kannst du Beispiele notieren. <b>Deine Einschätzung sehen nur du sowie Sonja und Markus Peltz</b>; sie wird im Gespräch neben die Selbsteinschätzung gelegt. <b>Die Selbsteinschätzung der Person bekommst du erst zu sehen, nachdem du deine eigene abgegeben hast</b> – danach ist deine Einschätzung nicht mehr änderbar. Bitte spätestens zwei Tage vor dem jeweiligen Gespräch abgeben. <a href="${ANLEITUNG.tl}" target="_blank" rel="noopener" style="color:var(--terra);font-weight:600;white-space:nowrap">📄 Kurzanleitung für Teamleitungen</a></div>
-    <div class="adminbar no-print"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?tl=1&r='+this.value" style="width:170px"></div></div>
+    <div class="adminbar no-print"><div><label>Runde</label>${rundenAuswahl(runde,'?tl=1&r=')}</div></div>
     <div style="overflow-x:auto"><table class="admin"><tr><th>Teammitglied</th><th>Meine Einschätzung</th><th></th></tr>${zeilen}</table></div></div>`;
   document.getElementById('leiste').style.display='none';
 }
@@ -1215,7 +1227,7 @@ async function zeigeAdmin(){
   const zahl = s => items.filter(x=>x.f.Runde===runde && x.f.OGStatus===s && !(x.f.MitarbeiterUpn||'').startsWith('__')).length;
   app().className='wrap wide';
   app().innerHTML=`<div class="card">
-    <div class="adminbar"><div><label>Runde</label><input type="month" value="${esc(runde)}" onchange="location.search='?r='+this.value" style="width:170px"></div>
+    <div class="adminbar"><div><label>Runde</label>${rundenAuswahl(runde,'?r=')}</div>
       <div style="font-size:12.5px"><label>Anleitungen</label><a href="${ANLEITUNG.ma}" target="_blank" rel="noopener" style="color:var(--terra)">Mitarbeitende</a> · <a href="${ANLEITUNG.tl}" target="_blank" rel="noopener" style="color:var(--terra)">Teamleitung</a></div>
       <div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(CFG.redirectUri+'?tl=1&r='+aktRunde()).then(()=>{const e=document.getElementById('adminMsg');e.className='msg ok';e.textContent='Link für Teamleitungen kopiert.';})">Link für Teamleitungen kopieren</button></div>
       <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${dabei.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
