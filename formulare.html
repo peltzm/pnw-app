@@ -1967,6 +1967,33 @@ function generatePDF(formId, blank, pre){
     y=y0+33;wf('Telefon',kdX.tel||'',x0,iw/2-g/2);wf('Krankenkasse','',x0+iw/2+g/2,iw/2-g/2);
     y=y0+bh+5;
   }
+  // Unterschriftsblock je Person mit Rahmen: Kopfband (Rolle), Name, Rolle, Wohnort, Ort/Datum, Unterschrift
+  // full=true: alle Angaben im Block (Schweigepflicht); full=false: Kopf + Ort/Datum + Unterschrift (Vollmacht)
+  function personBlock(nr,total,u,wohnort,ortDatum,dataURL,full){
+    const bh=full?54:38; pageCheck(bh+6);
+    const y0=y,x0=ML+5,iw=CW-10,g=6;
+    doc.setFillColor(...LIGHT);doc.rect(ML+0.3,y0+0.3,CW-0.6,7.4,'F');
+    doc.setDrawColor(...BRD);doc.setLineWidth(0.4);doc.roundedRect(ML,y0,CW,bh,1.6,1.6,'S');
+    doc.setFont(F,'bold');doc.setFontSize(7);doc.setTextColor(...ACC);
+    const kopf='UNTERZEICHNENDE/R'+(total>1?' '+nr:'')+(u.rolle?' · '+String(u.rolle).toUpperCase():'');
+    if(doc.setCharSpace)doc.setCharSpace(0.6*0.3528); doc.text(kopf,x0,y0+5.2); if(doc.setCharSpace)doc.setCharSpace(0);
+    const sigImg=(sx,sy,sw)=>{ if(dataURL&&dataURL.length>200){try{doc.addImage(dataURL,'PNG',sx,sy,Math.min(sw*0.8,65),12);}catch(e){}} };
+    if(full){
+      y=y0+12;wf('Name, Vorname',u.name||'',x0,iw*0.64-g/2);wf('Rolle',u.rolle||'',x0+iw*0.64+g/2,iw*0.36-g/2);
+      y=y0+23;wf('Wohnort',wohnort||'',x0,iw*0.64-g/2);wf('Ort, Datum',ortDatum||'',x0+iw*0.64+g/2,iw*0.36-g/2);
+      const sy=y0+34;
+      doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('UNTERSCHRIFT',x0,sy);
+      sigImg(x0,sy+1.5,iw*0.6);
+      doc.setDrawColor(190,180,170);doc.setLineWidth(0.3);doc.line(x0,sy+15.5,x0+iw,sy+15.5);
+    } else {
+      y=y0+12;wf('Name, Vorname',u.name||'',x0,iw*0.64-g/2);wf('Ort, Datum',ortDatum||'',x0+iw*0.64+g/2,iw*0.36-g/2);
+      const sy=y0+22;
+      doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);doc.text('UNTERSCHRIFT',x0,sy);
+      sigImg(x0,sy+1.2,iw*0.6);
+      doc.setDrawColor(190,180,170);doc.setLineWidth(0.3);doc.line(x0,sy+14,x0+iw,sy+14);
+    }
+    y=y0+bh+5;
+  }
   const _od=()=>((kdX.ort?kdX.ort+', ':'')+fmtDate(kdX.datum||''));
   function sigBlock(lbl,sub,dataURL,w,x){
     pageCheck(25);const sw=w||CW,sx=x||ML;y+=4;
@@ -2028,10 +2055,7 @@ function generatePDF(formId, blank, pre){
     const _wohnort=((kdX.plz||'')+' '+(kdX.ort||'')).trim();
     if(_sUnt.length){
       _sUnt.forEach((u,i)=>{
-        pageCheck(42);
-        fieldRow2('Name, Vorname'+(_sUnt.length>1?' '+(i+1):''),u.name||'','Rolle',u.rolle||'');
-        fieldRow('Wohnort',_wohnort,CW,ML);
-        sigArea2((kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||''),'Unterschrift '+(u.rolle||'Sorgeberechtigte/r'),sigsX[_sUnt.length>1?'schweig_'+i:'schweig']);
+        personBlock(i+1,_sUnt.length,u,_wohnort,(kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||''),sigsX[_sUnt.length>1?'schweig_'+i:'schweig'],true);
       });
     } else {
       fieldRow2('Name Klient/in oder Sorgeberechtigte/r',kdX.name||'','Wohnort',_wohnort);
@@ -2116,9 +2140,9 @@ function generatePDF(formId, blank, pre){
     y+=2;noteBox('Diese Vollmacht gilt bis auf Widerruf und kann jederzeit schriftlich widerrufen werden.');
     pageCheck(56);y+=2;capsSection('UNTERSCHRIFT');
     if(vGebers.length>1){
-      vGebers.forEach((vg,i)=>sigArea2(_od(),'Unterschrift '+(vg.name||'Vollmachtgeber/in')+(vg.rolle?' ('+vg.rolle+')':''),sigsX['vollm_'+i]));
+      vGebers.forEach((vg,i)=>personBlock(i+1,vGebers.length,vg,vg.ort,_od(),sigsX['vollm_'+i],false));
     } else {
-      sigArea2(_od(),'Unterschrift '+((vGebers[0]&&vGebers[0].rolle)||'Vollmachtgeber/in'),sigsX['vollm']||sigsX['vollm_0']);
+      personBlock(1,1,vGebers[0]||{name:'',rolle:''},(vGebers[0]||{}).ort,_od(),sigsX['vollm']||sigsX['vollm_0'],false);
     }
   }
 
