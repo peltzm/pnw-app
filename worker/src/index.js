@@ -100,7 +100,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-10-03.2 (Unterschriften: Filter Klient fehlt zurückgenommen)";
+const WORKER_VERSION = "2026-10-03.3 (Unterschriften: gelöschte Nachweise ausgeblendet)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -1933,6 +1933,7 @@ const SIG_ERLEDIGT = new Set(["unterschrieben", "nicht erforderlich"]);
 const TIMESHEET_GRAPH = {
   id: 1, date: 1, start: 1, end: 1, total: 1, state: 1, comment: 1,
   signatureStatus: 1,
+  deletedAt: 1, // gelöschte Nachweise liefert die API weiter mit — sonst "fehlende Unterschrift" für Gelöschtes
   client: { id: 1 },
   user: { id: 1 },
   service: { id: 1 },
@@ -2020,6 +2021,7 @@ async function offeneNachweise(env, von) {
   if (!rows) throw fehler || new Error("clients/timeSheets nicht abrufbar");
 
   const offen = rows.filter((t) => {
+    if (kDate(t.deletedAt)) return false; // in Kilanka gelöscht (Soft-Delete) → nie offen
     const st = String(t.signatureStatus || "").trim().toLowerCase();
     return st && !SIG_ERLEDIGT.has(st);
   });
