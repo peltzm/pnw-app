@@ -558,7 +558,19 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
       <!-- LEERFORMULARE -->
       <div class="panel" id="panel_leer">
         <div class="panel-title">Leerformulare</div>
-        <div class="panel-sub">Formulare ohne Klientdaten herunterladen oder drucken — für Papiervorlage oder externe Ablage.</div>
+        <div class="panel-sub">Formulare herunterladen oder drucken — leer oder mit Klientendaten aus Kilanka vorbefüllt (ohne Datum und Unterschrift).</div>
+        <div class="card" style="border-color:#e8c4a8; background:var(--accent-light);">
+          <div class="card-title">Aus Kilanka vorbefüllen (optional)</div>
+          <div class="fg full">
+            <div class="field">
+              <label>Klient auswählen</label>
+              <select id="leerKilankaKlient" onchange="onLeerKlientSelect()">
+                <option value="">— ohne Vorbefüllung (komplett leer) —</option>
+              </select>
+            </div>
+          </div>
+          <div id="leerKilankaStatus" style="font-size:12px;color:var(--text-muted);margin-top:4px;">Kilanka wird geladen…</div>
+        </div>
         <div class="dl-grid">
           <div class="dl-card">
             <div class="dl-card-info">
@@ -637,7 +649,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
             </div>
           </div>
         </div>
-        <div class="alert alert-info">Die Leerformulare werden direkt in der App erzeugt — identisches Layout wie die ausgefüllten PDFs, Felder bleiben zum handschriftlichen Ausfüllen frei.</div>
+        <div class="alert alert-info">Die Formulare werden direkt in der App erzeugt — identisches Layout wie die ausgefüllten PDFs. Übernommen werden nur die Stammdaten aus Kilanka; alle weiteren Felder, Datum und Unterschriften bleiben zum handschriftlichen Ausfüllen frei.</div>
       </div>
 
     </div><!-- /fk-content -->
@@ -819,10 +831,80 @@ async function loadKilankaKlienten(){
     status.textContent = _kilankaKlienten.length
       ? _kilankaKlienten.length + ' aktive Zuordnungen (HB/MB/V)'
       : 'Keine aktiven Zuordnungen in Kilanka gefunden — Formular manuell ausfüllbar.';
+    fillLeerKlientSelect();
   }catch(e){
     status.textContent = 'Kilanka nicht erreichbar — Formular manuell ausfüllbar.';
     console.warn('Kilanka:', e);
   }
+}
+
+// ── LEERFORMULARE MIT KILANKA-VORBEFÜLLUNG ──
+let _leerPre = null; // null = komplett leer; sonst {kd, ids, vollmachtgeber, name}
+function _leerFileSuffix(){
+  if(!_leerPre) return '';
+  const nn=(_leerPre.kd.nn||'Klient').replace(/\s+/g,'');
+  const vv=(_leerPre.kd.vn||'').replace(/\s+/g,'').substring(0,2);
+  return '_'+nn+vv;
+}
+function fillLeerKlientSelect(){
+  const sel=document.getElementById('leerKilankaKlient');
+  if(!sel) return;
+  const nameCount={};
+  _kilankaKlienten.forEach(k=>{ nameCount[k.anzeigeName]=(nameCount[k.anzeigeName]||0)+1; });
+  sel.innerHTML='<option value="">— ohne Vorbefüllung (komplett leer) —</option>';
+  _kilankaKlienten.forEach((k,i)=>{
+    const opt=document.createElement('option');
+    opt.value=String(i);
+    opt.textContent=k.anzeigeName+' · '+(k.rolleKurz||'')+(nameCount[k.anzeigeName]>1?' · '+(k.massnahme?.name||'Maßnahme'):'');
+    sel.appendChild(opt);
+  });
+  const st=document.getElementById('leerKilankaStatus');
+  if(st) st.textContent=_kilankaKlienten.length?(_kilankaKlienten.length+' aktive Zuordnungen (HB/MB/V)'):'Keine aktiven Zuordnungen in Kilanka gefunden.';
+}
+function buildLeerPre(k){
+  const nn=_kVal(k.Kind_Familienname||''), vn=_kVal(k.Kind_Vorname||'');
+  const m=_kVal(k.Kind_PLZ_Ort||'').match(/^(\d{4,5})\s+(.*)$/);
+  const plz=m?m[1]:'', ort=m?m[2]:_kVal(k.Kind_PLZ_Ort||'');
+  // SGB-Paragraph wie in der Stammdaten-Übernahme aus der Hilfeart ableiten
+  let sgb='';
+  const pm=_kVal(k.Hilfeart||'').match(/§\s*(\d+\s*a?)/i);
+  if(pm){
+    const num=pm[1].replace(/\s+/g,'').toLowerCase();
+    const opt=Array.from(document.getElementById('k_sgb').options).find(o=>o.text.replace(/\s+/g,'').toLowerCase().includes('§'+num));
+    if(opt) sgb=opt.value||opt.text;
+  }
+  const sorg=k.Sorgeberechtigte||[];
+  const vg=sorg.map(s=>({name:[_kVal(s.familienname),_kVal(s.vorname)].filter(Boolean).join(', '),ort:_kVal(k.Kind_PLZ_Ort||'')})).filter(x=>x.name);
+  const ids={
+    v_kind:[nn,vn].filter(Boolean).join(', '),
+    v_kind_geb:k.Kind_Geburtsdatum||'',
+    v_fk1:M365_USER.displayName
+  };
+  sorg.forEach(s=>{
+    const nm=[_kVal(s.vorname),_kVal(s.familienname)].filter(Boolean).join(' ');
+    const bz=(s.beziehung||'').toLowerCase();
+    if(/mutter/.test(bz)&&!ids.ki_m_name) ids.ki_m_name=nm;
+    else if(/vater/.test(bz)&&!ids.ki_v_name) ids.ki_v_name=nm;
+  });
+  return {
+    kd:{ name:[nn,vn].filter(Boolean).join(', '), nn, vn,
+         geb:k.Kind_Geburtsdatum?fmtDate(k.Kind_Geburtsdatum):'',
+         str:_kVal(k.Kind_Strasse||''), plz, ort, sgb, tel:'', email:'',
+         fk:M365_USER.displayName, datum:'' },   // Datum + Unterschriften bleiben bewusst leer
+    ids, vollmachtgeber:vg
+  };
+}
+function onLeerKlientSelect(){
+  const sel=document.getElementById('leerKilankaKlient');
+  const st=document.getElementById('leerKilankaStatus');
+  const k=_kilankaKlienten[Number(sel.value)];
+  if(sel.value===''||!k){
+    _leerPre=null;
+    if(st) st.textContent=_kilankaKlienten.length?(_kilankaKlienten.length+' aktive Zuordnungen (HB/MB/V)'):'';
+    return;
+  }
+  _leerPre=buildLeerPre(k);
+  if(st) st.textContent='Vorbefüllt für '+_leerPre.kd.name+' — Datum und Unterschriften bleiben leer.';
 }
 
 // Zeilenumbrueche aus Kilanka-Werten entfernen (Inputs verschlucken sie sonst)
@@ -1667,11 +1749,11 @@ async function mockSend(){
   }
 }
 // ── PDF GENERATION (Designer Style) ──
-function generatePDF(formId, blank){
+function generatePDF(formId, blank, pre){
   // blank=true: Leerformular ohne Klientdaten, Formularfelder und Unterschriften
-  const kdX = blank ? {} : kd;
+  const kdX = blank ? ((pre&&pre.kd)||{}) : kd;
   const sigsX = blank ? {} : sigs;
-  const $id = blank ? (()=>null) : document.getElementById.bind(document);
+  const $id = blank ? ((id)=>(pre&&pre.ids&&pre.ids[id]!=null)?{value:pre.ids[id]}:null) : document.getElementById.bind(document);
   const $qsa = blank ? (()=>[]) : document.querySelectorAll.bind(document);
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
@@ -1865,7 +1947,7 @@ function generatePDF(formId, blank){
   }
 
   else if(formId==='vollm'){
-    const vGebers=(blank ? [{name:'',ort:''}] : getAllVollmachtgeber());
+    const vGebers=(blank ? ((pre&&pre.vollmachtgeber&&pre.vollmachtgeber.length)?pre.vollmachtgeber:[{name:'',ort:''}]) : getAllVollmachtgeber());
     const vKind=($id('v_kind')||{}).value||'—';
     const vKindGeb=fmtDate(($id('v_kind_geb')||{}).value||'');
     const vFk1=($id('v_fk1')||{}).value||kdX.fk||'';
@@ -2019,14 +2101,14 @@ function getWaPersonen(){
 }
 function _blankName(fid){
   const map={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass'};
-  return 'PNW_Leer_'+(map[fid]||fid)+'.pdf';
+  return _leerPre ? 'PNW_'+(map[fid]||fid)+_leerFileSuffix()+'.pdf' : 'PNW_Leer_'+(map[fid]||fid)+'.pdf';
 }
 function blankPrint(fid){
-  try{ const doc=generatePDF(fid,true); window.open(URL.createObjectURL(doc.output('blob')),'_blank'); }
+  try{ const doc=generatePDF(fid,true,_leerPre); window.open(URL.createObjectURL(doc.output('blob')),'_blank'); }
   catch(e){ alert('PDF-Fehler: '+e.message); }
 }
 function blankDownload(fid){
-  try{ generatePDF(fid,true).save(_blankName(fid)); showToast('⬇️ '+_blankName(fid)); }
+  try{ generatePDF(fid,true,_leerPre).save(_blankName(fid)); showToast('⬇️ '+_blankName(fid)); }
   catch(e){ alert('PDF-Fehler: '+e.message); }
 }
 async function blankDownloadAll(){
@@ -2035,15 +2117,15 @@ async function blankDownloadAll(){
     if(typeof PDFLib==='undefined'){ fids.forEach(f=>blankDownload(f)); return; }
     const merged=await PDFLib.PDFDocument.create();
     for(const fid of fids){
-      const buf=generatePDF(fid,true).output('arraybuffer');
+      const buf=generatePDF(fid,true,_leerPre).output('arraybuffer');
       const src=await PDFLib.PDFDocument.load(buf);
       (await merged.copyPages(src,src.getPageIndices())).forEach(p=>merged.addPage(p));
     }
     const bytes=await merged.save();
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
-    a.download='PNW_Leerformulare_Komplett.pdf'; a.click();
-    showToast('⬇️ PNW_Leerformulare_Komplett.pdf');
+    const _kn=_leerPre?_leerFileSuffix():''; a.download='PNW_'+(_leerPre?'Formulare':'Leerformulare')+'_Komplett'+_kn+'.pdf'; a.click();
+    showToast('⬇️ '+a.download);
   }catch(e){ alert('PDF-Fehler: '+e.message); }
 }
 function mockPrint(name){
