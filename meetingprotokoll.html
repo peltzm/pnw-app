@@ -1870,6 +1870,8 @@ async function onEinrichtungChange(einrKey) {
 }
 
 function printPreview() {
+  const _pf = document.querySelector('#previewContainer iframe.pdfFrame');
+  if (_pf && _pf.contentWindow) { try { _pf.contentWindow.focus(); _pf.contentWindow.print(); return; } catch(e) { /* Fallback unten */ } }
   const container = document.getElementById('previewContainer');
   if (!container || !container.innerHTML.trim()) {
     buildPreview();
@@ -2624,7 +2626,10 @@ function buildProtokollDocDefinition(data, freigeberName, opts, logoDataUrl) {
     if (has(t.owner) && t.type === 'aufgabe') meta.push('Verantwortlich: ' + String(t.owner).trim());
     if (has(t.frist)) meta.push('Frist: ' + fmt(t.frist));
     if (meta.length) inhalt.push({ text: meta.join('  ·  '), font: 'KodchasanMedium', fontSize: 8, color: C.terra, margin: [0, 5, 0, 0] });
+    // Kurze Karten nie trennen; sehr lange TOPs duerfen ueber die Seite laufen (Kopf bleibt beim Text)
+    const kurz = String(t.text || '').length < 700;
     return {
+      ...(kurz ? { unbreakable: true } : {}),
       table: { widths: ['*'], dontBreakRows: false, keepWithHeaderRows: 1,
         body: [ [{ ...kopf, fillColor: C.creme, margin: [8, 5, 8, 5] }], [{ stack: inhalt, margin: [8, 6, 8, 7] }] ] },
       layout: { hLineWidth: () => LINE.trenner, vLineWidth: () => LINE.trenner, hLineColor: () => C.rahmenMittel, vLineColor: () => C.rahmenMittel },
@@ -2740,6 +2745,29 @@ async function generateProtokollPDF(data, freigeberName, opts) {
   }
 }
 
+// Zeigt das Protokoll als PDF im Berichts-Design in einem Container an (identisch zum erzeugten PDF)
+function _approverVoll(data) {
+  if (!data || !data.approver) return '';
+  const all = [...(TL_LISTS.ambulant||[]), ...(TL_LISTS.nordstern||[])];
+  const f = all.find(t => t.value === data.approver);
+  return f ? f.full : data.approver;
+}
+async function zeigePdfIn(container, data, freigeberName, opts) {
+  if (!container) return;
+  container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--text-muted);font-size:13px;"><span class="spin"></span> PDF wird erstellt …</div>';
+  try {
+    const bytes = await generateProtokollPDF(data, freigeberName, opts);
+    if (container._pdfUrl) URL.revokeObjectURL(container._pdfUrl);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    container._pdfUrl = url;
+    container.innerHTML = `<div style="text-align:right;padding:4px 6px;font-size:12px;"><a href="${url}" target="_blank" style="color:var(--accent);">PDF in neuem Tab öffnen ↗</a></div>`
+      + `<iframe class="pdfFrame" src="${url}" title="Protokoll-PDF" style="width:100%;height:calc(100vh - 150px);min-height:480px;border:0;background:#fff;"></iframe>`;
+  } catch(e) {
+    console.warn('PDF-Anzeige nicht moeglich, zeige HTML:', e);
+    container.innerHTML = protokollHtml(data, freigeberName);
+  }
+}
+
 async function generateProtokollPDFLegacy(data, freigeberName) {
   const html = protokollHtml(data, freigeberName);
   // Render HTML to canvas, then to PDF
@@ -2823,9 +2851,11 @@ async function leseProtokoll(itemId, opts) {
         </div>
       </div>
       <div style="width:100%;max-width:840px;flex:1;overflow:auto;background:white;border-radius:0 0 var(--radius) var(--radius);">
-        ${protokollHtml(data, 'Entwurf')}
+        <div id="leseInhalt"></div>
       </div>`;
     document.body.appendChild(o);
+    const _frei = ['Freigegeben','Versendet'].includes(f.Status);
+    zeigePdfIn(document.getElementById('leseInhalt'), data, _frei ? (data.freigegebenVon || _approverVoll(data)) : 'Entwurf', { freigegeben: _frei });
   } catch(e) {
     showToast('Protokoll konnte nicht geöffnet werden: ' + e.message, 'info');
   }
@@ -3192,6 +3222,12 @@ function buildPreview() {
   const _isExternPrev = S.type === 'allgemein' && S.thema === 'besprechung';
   const _blankBtn = document.getElementById('btnBlankoPrint');
   if (_blankBtn) _blankBtn.style.display = _isExternPrev ? '' : 'none';
+
+  // Vorschau = das echte PDF im Berichts-Design (Ausnahme: externe Besprechung mit Blanko-Variante)
+  if (!_isExternPrev) {
+    zeigePdfIn(document.getElementById('previewContainer'), collectDraftData(), currentAccount?.name || 'Entwurf', { freigegeben: false });
+    return;
+  }
 
   const cfg      = TYPES[S.type];
   const thema    = S.thema ? cfg.themen[S.thema] : null;
