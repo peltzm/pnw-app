@@ -90,7 +90,7 @@
     return { columns: cols, columnGap: 2, margin: [0, 1, 0, 2] };
   }
   // Formularzellen: {l:Beschriftung, v:Wert, ag:true (Arbeitgeber, grau), opts:[{t,on}], proZeile:n, kopf:true, h:Extrahöhe}
-  function zelle(c) {
+  function zelle(c, kompakt) {
     const stack = [];
     if (c.kopf) stack.push({ text: c.l || '', font: 'KodchasanSemi', fontSize: 8.6, color: C.braun });
     else if (c.l) stack.push({ text: c.l, fontSize: 7.4, color: C.meta, margin: [0, 0, 0, 1.5] });
@@ -98,13 +98,13 @@
     if (hat) stack.push({ text: String(c.v), font: 'KodchasanSemi', fontSize: 9.6, color: C.ink });
     if (c.opts && c.opts.length) { const n = c.proZeile || c.opts.length; for (let i = 0; i < c.opts.length; i += n) stack.push(optZeile(c.opts.slice(i, i + n))); }
     const leer = !hat && !(c.opts && c.opts.length) && !c.kopf;
-    const z = { stack, margin: [6, 4, 6, leer ? 15 + (c.h || 0) : 4] };
+    const z = { stack, margin: [6, kompakt ? 3 : 4, 6, leer ? (kompakt ? 9 : 15) + (c.h || 0) : (kompakt ? 3 : 4)] };
     if (c.ag) z.fillColor = AG_GRAU;
     return z;
   }
   function zeilen(b) {
     const n = b.rows[0].length; const w = b.widths || b.rows[0].map(() => 1 / n);
-    return { unbreakable: true, margin: [0, 0, 0, 10], table: { widths: w.map(f => f * (TEXT_W - 1.6)), body: b.rows.map(r => r.map(zelle)) },
+    return { unbreakable: true, margin: [0, 0, 0, b.kompakt ? 7 : 10], table: { widths: w.map(f => f * (TEXT_W - 1.6)), body: b.rows.map(r => r.map(c => zelle(c, b.kompakt))) },
              layout: { hLineWidth: () => 0.7, vLineWidth: () => 0.7, hLineColor: () => C.ink, vLineColor: () => C.ink } };
   }
   function sek(text) {
@@ -153,6 +153,10 @@
         if (vor && vor._sek) { content.pop(); content.push({ unbreakable: true, stack: [vor, z] }); } else content.push(z);
       }
       else if (b.t === 'sek') content.push(sek(t));
+      else if (b.t === 'frage') content.push({ text: laeufe(t), fontSize: 9.2, lineHeight: 1.3, color: C.ink, margin: [0, 0, 0, 3] });
+      else if (b.t === 'h1') content.push({ text: t, font: 'Baskerville', fontSize: 14, color: C.braun, margin: [0, 0, 0, 10] });
+      else if (b.t === 'umbruch') content.push({ text: '', pageBreak: 'before' });
+      else if (b.t === 'punkt') content.push({ columns: [{ width: 12, text: '–' }, { width: '*', text: laeufe(t), alignment: 'left' }], fontSize: 9.8, lineHeight: 1.4, color: C.ink, margin: [4, 0, 0, 6] });
       else if (b.t === 'klein') content.push({ text: t, fontSize: 8, color: C.muted, margin: [0, 0, 0, b.after != null ? b.after : 6], lineHeight: 1.3 });
     });
     return {

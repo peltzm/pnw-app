@@ -12,6 +12,9 @@ const NM = (function () {
     { key: 'vertrag', datei: 'arbeitsvertrag.json', titel: 'Arbeitsvertrag (Vorlage)', accept: '.json,application/json' },
     { key: 'fz', datei: 'fuehrungszeugnis.json', titel: 'Antrag erweitertes Führungszeugnis (Vorlage)', accept: '.json,application/json' },
     { key: 'pf', datei: 'Personalfragebogen_DATEV.docx', titel: 'Personalfragebogen (DATEV-Standarddokument)', accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    { key: 'vt', datei: 'verfassungstreue.json', titel: 'Verpflichtung Verfassungstreue (Vorlage, Seiten 1–2)', accept: '.json,application/json' },
+    { key: 'vta', datei: 'Verfassungstreue_Verzeichnis_Belehrung.pdf', titel: 'Verfassungstreue: Verzeichnis und Belehrung (amtlich, 5 Seiten, wird angehängt)', accept: '.pdf,application/pdf', angehaengt: true },
+    { key: 'ds', datei: 'PNW_Datenschutzerklaerung_Mitarbeiter.pdf', titel: 'Datenschutzerklärung Mitarbeiter', accept: '.pdf,application/pdf' },
     { key: 'az', datei: 'PNW_Arbeitszeitrichtlinie.pdf', titel: 'Arbeitszeitrichtlinie', accept: '.pdf,application/pdf' },
     { key: 'fb', datei: 'PNW_Unternehmensrichtlinie_Fortbildung.pdf', titel: 'Unternehmensrichtlinie Fortbildung', accept: '.pdf,application/pdf' },
     { key: 'dr', datei: 'PNW_Unternehmensrichtlinie_Dienstreisen.pdf', titel: 'Unternehmensrichtlinie Dienstreisen', accept: '.pdf,application/pdf' },
@@ -351,15 +354,29 @@ const NM = (function () {
         beruf: x.beruf, stunden: zahlDe(x.stunden), vollzeit, grundgehalt: eur(x.grundgehalt), sue: eur(x.sue), vertragsdatum: kurzDatum(x.vertragsdatum) };
       const pfB64 = await NM_DOCX.personalfragebogen(await vorlageHolen('Personalfragebogen_DATEV.docx', false), pfVals, { JSZip: window.JSZip, DOMParser: window.DOMParser, XMLSerializer: window.XMLSerializer });
       const pfName = ('Personalfragebogen_' + x.nachname + '_' + x.vorname + '.docx').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
+      // Verpflichtung Verfassungstreue: Seiten 1–2 personalisiert (pdfmake) + amtliche Seiten 3–7 unverändert (pdf-lib)
+      if (typeof PDFLib === 'undefined') throw new Error('PDF-Bibliothek (pdf-lib) nicht geladen (CDN blockiert?).');
+      const vtTpl = JSON.parse(await vorlageHolen('verfassungstreue.json', true));
+      const vtVals = { name: x.name, vorname: x.vorname, nachname: x.nachname, geburtsdatum: fzVals.geburtsdatum };
+      const vtOffen = NM_PDF.fehlende(vtTpl, vtVals); if (vtOffen.length) throw new Error('Platzhalter ohne Wert: ' + vtOffen.join(', '));
+      const vtEigen = await new Promise((res, rej) => { try { pdfMake.createPdf(NM_PDF.docDefinition(vtTpl, vtVals, { titel: vtTpl.name, titelGroesse: 16, kopfLabel: 'Verfassungstreue', kopfRechts: x.name, logo: a.logo })).getBuffer(res); } catch (e) { rej(e); } });
+      const vtDoc = await PDFLib.PDFDocument.create();
+      const vtA = await PDFLib.PDFDocument.load(vtEigen), vtB = await PDFLib.PDFDocument.load(await vorlageHolen('Verfassungstreue_Verzeichnis_Belehrung.pdf', false));
+      (await vtDoc.copyPages(vtA, vtA.getPageIndices())).forEach(pg => vtDoc.addPage(pg));
+      (await vtDoc.copyPages(vtB, vtB.getPageIndices())).forEach(pg => vtDoc.addPage(pg));
+      vtDoc.setTitle('Verpflichtung Verfassungstreue – ' + x.name); vtDoc.setAuthor('Praxis NeueWege GmbH');
+      const vtB64 = await vtDoc.saveAsBase64();
+      const vtName = ('Verpflichtung_Verfassungstreue_' + x.nachname + '_' + x.vorname + '.pdf').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
       const richtlinien = [];
-      for (const v of VORLAGEN.filter(v => v.datei.endsWith('.pdf'))) richtlinien.push({ name: v.datei, b64: bufZuB64(await vorlageHolen(v.datei, false)) });
+      for (const v of VORLAGEN.filter(v => v.datei.endsWith('.pdf') && !v.angehaengt)) richtlinien.push({ name: v.datei, b64: bufZuB64(await vorlageHolen(v.datei, false)) });
       const dateiname = ('Arbeitsvertrag_' + x.nachname + '_' + x.vorname + '.pdf').replace(/[^\wÄÖÜäöüß.\-]/g, '_');
-      paket = { id, vertrag: { name: dateiname, b64: vertragB64 }, fz: { name: fzName, b64: fzB64 }, pf: { name: pfName, b64: pfB64, typ: DOCX_TYP }, richtlinien };
+      paket = { id, vertrag: { name: dateiname, b64: vertragB64 }, fz: { name: fzName, b64: fzB64 }, pf: { name: pfName, b64: pfB64, typ: DOCX_TYP }, vt: { name: vtName, b64: vtB64 }, richtlinien };
       const kb = n => Math.round(n * 0.75 / 1024) + ' KB';
       inh.innerHTML = '<p style="font-size:13px;margin-bottom:10px">Das Paket ist fertig. Prüfe den Vertrag, bevor du den Mailentwurf anlegst.</p>' +
         '<table class="ea-tbl"><thead><tr><th>Anlage</th><th>Größe</th><th></th></tr></thead><tbody>' +
         '<tr><td>' + esc(dateiname) + '</td><td>' + kb(vertragB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschau">Vertrag ansehen</button></td></tr>' +
         '<tr><td>' + esc(fzName) + '</td><td>' + kb(fzB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschauFz">Antrag ansehen</button></td></tr>' +
+        '<tr><td>' + esc(vtName) + '</td><td>' + kb(vtB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschauVt">Erklärung ansehen</button></td></tr>' +
         '<tr><td>' + esc(pfName) + '</td><td>' + kb(pfB64.length) + '</td><td><button class="btn btn-sm btn-outline" id="nmVorschauPf">Fragebogen laden</button></td></tr>' +
         richtlinien.map(r => '<tr><td>' + esc(r.name) + '</td><td>' + kb(r.b64.length) + '</td><td></td></tr>').join('') + '</tbody></table>' +
         '<p class="ea-item-desc" style="margin:10px 0">Empfänger: ' + esc(x.privatmail) + ' · Gehalt im Vertrag: ' + eur(x.grundgehalt) + ' + ' + eur(x.sue) + ' SuE-Zulage (' + esc(zahlDe(x.stunden)) + ' Std.)</p>' +
@@ -367,6 +384,7 @@ const NM = (function () {
         '<button class="btn btn-outline" id="nmDownload">Vertrag herunterladen</button><button class="btn btn-outline" id="nmZu">Schließen</button></div>';
       byId2('nmVorschau').onclick = () => window.open(URL.createObjectURL(b64Blob(vertragB64)));
       byId2('nmVorschauFz').onclick = () => window.open(URL.createObjectURL(b64Blob(fzB64)));
+      byId2('nmVorschauVt').onclick = () => window.open(URL.createObjectURL(b64Blob(vtB64)));
       byId2('nmVorschauPf').onclick = () => { const a3 = document.createElement('a'); a3.href = URL.createObjectURL(b64Blob(pfB64, DOCX_TYP)); a3.download = pfName; a3.click(); };
       byId2('nmDownload').onclick = () => { const a2 = document.createElement('a'); a2.href = URL.createObjectURL(b64Blob(vertragB64)); a2.download = dateiname; a2.click(); };
       byId2('nmZu').onclick = schliesse;
@@ -384,12 +402,12 @@ const NM = (function () {
     try {
       btn.disabled = true; err.textContent = '';
       const t = await token(['Mail.ReadWrite']);
-      const anlagen = [paket.vertrag, paket.fz, paket.pf].concat(paket.richtlinien).map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.typ || 'application/pdf', contentBytes: a.b64 }));
+      const anlagen = [paket.vertrag, paket.fz, paket.pf, paket.vt].concat(paket.richtlinien).map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.typ || 'application/pdf', contentBytes: a.b64 }));
       const gruss = 'Guten Tag ' + esc(x.vorname) + ' ' + esc(x.nachname) + ',';
       const body = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' +
         '<p>' + gruss + '</p>' +
         '<p>herzlich willkommen bei Praxis NeueWege! Wir freuen uns, dass du ab dem ' + esc(langDatum(x.eintritt)) + ' bei uns startest.</p>' +
-        '<p>Anbei erhältst du deinen Arbeitsvertrag sowie unsere Richtlinien zu Arbeitszeit, Fortbildung und Dienstreisen. Bitte lies alles in Ruhe durch, unterschreibe den Vertrag und sende ihn uns unterschrieben zurück.</p>' +
+        '<p>Anbei erhältst du deinen Arbeitsvertrag, die Verpflichtung zur Verfassungstreue, die Datenschutzerklärung sowie unsere Richtlinien zu Arbeitszeit, Fortbildung und Dienstreisen. Bitte lies alles in Ruhe durch, unterschreibe den Vertrag, die Verpflichtung zur Verfassungstreue (mit dem Fragebogen) und die Datenschutzerklärung und sende uns diese unterschrieben zurück.</p>' +
         '<p>Bitte fülle außerdem den beigefügten Personalfragebogen (Word) aus, am besten am Computer (Bankverbindung, Steuer-ID, Sozialversicherungsnummer, Krankenkasse usw.), und sende ihn mit dem Vertrag zurück. Die grau hinterlegten Felder füllen wir aus.</p>' +
         '<p>Für die Tätigkeit in der Kinder- und Jugendhilfe benötigen wir außerdem ein erweitertes Führungszeugnis. Mit dem beigefügten Schreiben kannst du es bei deiner Meldebehörde beantragen. Es wird dir direkt zugesandt, bitte lege es uns dann im Original vor.</p>' +
         '<p>Bei Fragen melde dich jederzeit gern.</p>' +
