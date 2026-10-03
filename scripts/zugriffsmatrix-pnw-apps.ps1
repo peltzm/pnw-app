@@ -6,8 +6,8 @@ Erzeugt eine Excel-Datei mit der Zugriffsmatrix der PNW-Apps:
   - weitere Spalten: je App eine Spalte (Überschrift = Gruppenname ohne "PNW-App-")
   - Zelle mit X: Mitarbeiter ist (auch über verschachtelte Rollengruppen wie
     Team, TL-Ambulant, GF) Mitglied der App-Gruppe und hat damit Zugriff
-  - Geschäftsführung (Markus, Sonja) hat im Worker immer Zugriff und steht
-    deshalb bei jeder App mit X
+  - Markus Peltz hat im Worker immer Zugriff und steht deshalb bei jeder App mit X;
+    alle anderen (auch Sonja) nur bei Mitgliedschaft in der App-Gruppe
 Nur lesend: es wird nichts in Entra geändert. Die Excel-Datei wird ohne
 installiertes Excel erzeugt (reine .xlsx-Datei) und im aktuellen Ordner
 gespeichert, zusätzlich erscheint eine Übersicht in der Konsole.
@@ -43,8 +43,9 @@ $Erwartet = @(
     "PNW-App-BusinessScorecard", "PNW-App-Unterschriften", "PNW-App-Mobilfunk", "PNW-App-OPAbgleich",
     "PNW-App-Sanity", "PNW-App-Onboarding", "PNW-App-Fuhrpark"
 )
-# Geschäftsführung wird im Worker nie gesperrt (feste Liste)
-$GF = @("markus.peltz@praxisneuewege.de", "sonja.peltz@praxisneuewege.de")
+# Nur Markus wird von der Gruppenprüfung im Worker nie betroffen (ZUGRIFF_IMMER_UPNS);
+# Sonja Peltz unterliegt der Gruppenprüfung wie alle anderen
+$GF = @("markus.peltz@praxisneuewege.de")
 
 # Transitive Mitglieder einer Gruppe (nur Benutzer) als Liste von Objekten Upn/Name
 function Get-GruppenBenutzer($GruppenId) {
@@ -207,6 +208,6 @@ try {
 
 Write-Host ""
 Write-Host "Excel-Datei erstellt: $pfad" -ForegroundColor Green
-Write-Host "Geschäftsführung ist im Worker fest hinterlegt und wird nie ausgesperrt (X bei jeder App)." -ForegroundColor Green
+Write-Host "Markus Peltz ist im Worker fest ausgenommen und hat bei jeder App ein X; alle anderen nur über ihre Gruppen." -ForegroundColor Green
 Disconnect-MgGraph | Out-Null
 Invoke-Item $pfad

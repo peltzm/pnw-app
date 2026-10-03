@@ -540,19 +540,21 @@ function tokenAblauf(jwt){
   try{ return JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000; }
   catch(e){ return 0; }
 }
+let graphToken = null;   // Graph-Access-Token für die Gruppenprüfung im Worker (X-Graph-Token)
 async function idToken(){
   const req = {scopes:SCOPES, account:currentAccount};
   let r = await msalInstance.acquireTokenSilent(req).catch(async ()=>msalInstance.acquireTokenPopup(req));
   if(tokenAblauf(r.idToken) < Date.now()+60000){
     r = await msalInstance.acquireTokenSilent({...req, forceRefresh:true});
   }
+  graphToken = r.accessToken;
   return r.idToken;
 }
 async function ladeRelution(){
   relutionGeraete = null; relutionFehler = null;
   try{
     const t = await idToken();
-    const r = await fetch(CFG.workerUrl+'/api/relution/geraete', {headers:{Authorization:'Bearer '+t}});
+    const r = await fetch(CFG.workerUrl+'/api/relution/geraete', {headers:{Authorization:'Bearer '+t,'X-Graph-Token':graphToken}});
     const d = await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
     relutionGeraete = d.geraete || [];
