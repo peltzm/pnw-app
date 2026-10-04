@@ -100,7 +100,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-10-04.1 (temp-buchungen)";
+const WORKER_VERSION = "2026-10-04.2 (cleanup)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -2983,54 +2983,6 @@ export default {
     // Liefert alle nicht gelöschten Rechnungen inkl. Saldo/Zahlungen für
     // den Bank-Abgleich in op-abgleich-beta.html. Bankdaten selbst bleiben
     // im Browser — hier fließt nur Kilanka → Client.
-    // ── TEMPORÄR: Buchungsabruf für Zahlungsmoral-Statistik ─────────
-    // Schlüsselgeschützter Lese-Endpunkt, WIRD NACH NUTZUNG ENTFERNT.
-    if (url.pathname === "/api/temp-buchungen" && request.method === "GET") {
-      if (url.searchParams.get("key") !== "LzZqOYQ8sP0BSGua9x_HkDJ8JcX5XfY5") {
-        return json({ error: "unauthorized" }, 401, origin);
-      }
-      const unwrap = (v) => (v && typeof v === "object" ? (v.$date ?? v.$datetime ?? v.$decimal ?? null) : v);
-      try {
-        const graph = {
-          number: 1, date: 1, dueDate: 1, deletedAt: 1,
-          stateType: { name: 1 }, client: { recName: 1 },
-          recipient: { recName: 1 }, recipientName: 1,
-          totalWithTax: 1, depositsTotal: 1, balance: 1,
-          deposits: { date: 1, amount: 1 },
-          $limit: 500,
-        };
-        const alle = [];
-        for (let offset = 0; offset < 30000; offset += 500) {
-          const batch = await kilankaPost(env, "accounting/invoices", { ...graph, $offset: offset });
-          const arr = Array.isArray(batch) ? batch : [];
-          alle.push(...arr);
-          if (arr.length < 500) break;
-        }
-        const rechnungen = [];
-        for (const inv of alle) {
-          if (unwrap(inv.deletedAt)) continue;
-          const d = String(unwrap(inv.date) || "").slice(0, 10);
-          if (!d || d < OP_STICHTAG) continue;
-          rechnungen.push({
-            nummer: inv.number, datum: d,
-            faellig: String(unwrap(inv.dueDate) || "").slice(0, 10),
-            status: inv.stateType?.name || null,
-            klient: inv.client?.recName || null,
-            empfaenger: inv.recipient?.recName || inv.recipientName || null,
-            summe: Number(unwrap(inv.totalWithTax)) || 0,
-            saldo: Number(unwrap(inv.balance)) || 0,
-            zahlungen: (inv.deposits || []).map((z) => ({
-              datum: String(unwrap(z.date) || "").slice(0, 10),
-              betrag: Number(unwrap(z.amount)) || 0,
-            })),
-          });
-        }
-        return json({ ok: true, stand: new Date().toISOString(), anzahl: rechnungen.length, rechnungen }, 200, origin);
-      } catch (e) {
-        return json({ ok: false, error: String(e && e.message || e) }, 502, origin);
-      }
-    }
-
     if (url.pathname === "/api/op-liste" && request.method === "GET") {
       const auth = await validateEntraToken(request.headers.get("Authorization"));
       if (!auth.ok) return json({ error: auth.error }, 401, origin);
