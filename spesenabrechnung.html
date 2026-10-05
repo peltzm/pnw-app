@@ -3505,7 +3505,7 @@ async function ladeReviewBelege() {
     }
     // Mit Kommentarfeldern rendern (Cache für lokale Updates ohne Re-Fetch)
     _cachedReviewBelege = belege;
-    renderHomeReview(regular);
+    renderHomeReview(belege);
     if (belege.length) clearHomeStatus();
   } catch(e) {
     setHomeStatus('error', 'Fehler: ' + e.message);
@@ -3535,22 +3535,26 @@ async function ladeMonatsdatenMitKommentaren() {
 }
 
 function renderHomeReview(belege) {
-  const fahrt   = belege.find(b => b.Kategorie === 'fahrtenbuch');
+  // Nur das neueste Fahrtenbuch zählt (Duplikate nicht doppelt summieren)
+  const fahrt   = belege.filter(b => b.Kategorie === 'fahrtenbuch')
+                        .sort((a, b) => parseInt(b.id) - parseInt(a.id))[0] || null;
   const regular = belege.filter(b => b.Kategorie !== 'fahrtenbuch');
-  const total   = belege.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
+  const total   = (fahrt ? parseFloat(fahrt.Betrag || 0) : 0)
+                + regular.reduce((s, b) => s + parseFloat(b.Betrag || 0), 0);
+  const anzahl  = regular.length + (fahrt ? 1 : 0);
 
   // Stats — safe access (Elemente nur im home-Screen vorhanden)
   const safeSet = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   safeSet('homeTotal', fmt(total));
-  safeSet('homeSub',   `${belege.length} Positionen · Eingereicht`);
+  safeSet('homeSub',   `${anzahl} Positionen · Eingereicht`);
   safeSet('statFahrt', fahrt ? fmt(fahrt.Betrag) : '—');
   safeSet('statSonst', fmt(regular.reduce((s,b)=>s+parseFloat(b.Betrag||0),0)));
   safeSet('statSonstSub', `${regular.length} Belege`);
-  safeSet('statFahrtSub', fahrt ? 'Fahrtenbuch ✓' : 'Nicht hochgeladen');
+  safeSet('statFahrtSub', fahrt ? (() => { try { const k = fahrt.FahrtDaten ? JSON.parse(fahrt.FahrtDaten).gesamtKm : ''; return (k ? k + ' km · ' : '') + 'Fahrtenbuch ✓'; } catch(e) { return 'Fahrtenbuch ✓'; } })() : 'Nicht hochgeladen');
 
   // Beleg-Liste mit Kommentarfeldern
   const list = document.getElementById('belegList');
-  if (regular.length === 0) { list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-hint)">Keine Belege</div>'; return; }
+  if (regular.length === 0) { list.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-hint)">${fahrt ? 'Keine weiteren Belege — nur Fahrtenbuch' : 'Keine Belege'}</div>`; return; }
 
   list.innerHTML = regular.map(b => {
     const fotos = JSON.parse(b.FotoUrls || '[]');
