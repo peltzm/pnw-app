@@ -2134,7 +2134,7 @@ async function einreichen() {
     const fachkraftMail = currentAccount?.username || '';
     const anmerkung = document.getElementById('txtAnmerkung').value;
     // Direkter Review-Link für Teamleiter
-    const reviewUrl = `${CFG.redirectUri}?review=${_currentMonat}:${fachkraftMail}`;
+    const reviewUrl = `${CFG.redirectUri}?review=${_currentMonat}:${fachkraftMail}` + (meineOid() ? `&oid=${meineOid()}` : '');
     const html = `<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
       <div style="border-left:4px solid #7b3f1e;padding-left:16px;margin-bottom:24px">
         <h2 style="color:#7b3f1e;margin:0 0 4px">Spesenabrechnung zur Freigabe</h2>
@@ -2282,6 +2282,7 @@ async function downloadTLPdf(g) {
 
 function oeffneReviewModus(g) {
   _reviewFkMail = g.mail;
+  _reviewFkOid  = '';
   _reviewMonat  = g.monat;
   _currentMonat = g.monat;
   aktiviereReviewModus(g.mail);
@@ -3370,6 +3371,7 @@ function handleReviewLink() {
     // TL öffnet Prüfmodus via Link — kein _isTL Check nötig, URL ist vertrauenswürdig
     _reviewFkMail = fkMail;
     _reviewMonat  = monat;
+    _reviewFkOid  = (params.get('oid') || '').toLowerCase();
     aktiviereReviewModus(fkMail);
   } else {
     // Fachkraft öffnet Korrekturmodus
@@ -3381,6 +3383,14 @@ function handleReviewLink() {
 // REVIEW-MODUS — Teamleiter-Prüfung
 // ══════════════════════════════════════════════════════════════════
 let _reviewFkMail  = '';
+let _reviewFkOid   = '';   // Entra-Objekt-ID der geprüften Fachkraft (stabil bei Namens-/UPN-Änderung)
+// Gehört der Beleg zur geprüften Fachkraft? Mail exakt ODER Objekt-ID (_ownerOid in FormularDaten).
+function istReviewBeleg(b, monat) {
+  if (!b || !(b.Monat || '').startsWith(monat || _reviewMonat || _currentMonat)) return false;
+  const mail = (b.Fachkraft_Mail || '').toLowerCase();
+  if (mail && mail === (_reviewFkMail || '').toLowerCase()) return true;
+  return !!_reviewFkOid && belegOid(b) === _reviewFkOid.toLowerCase();
+}
 let _reviewMonat   = '';
 let _belegKommentare = {}; // { belegId: { text, von, datum, status:'offen'|'erledigt' } }
 let _isReviewMode  = false;
@@ -3454,10 +3464,8 @@ async function ladeReviewBelege() {
     const items = await fetchAlleListItems(token, siteId, listId);
     const alle = items.map(i => ({ id: i.id, ...i.fields }));
     // Nach FK-Mail und Monat filtern
-    const belege = alle.filter(b =>
-      (b.Monat || '').startsWith(_reviewMonat || _currentMonat) &&
-      (b.Fachkraft_Mail || '').toLowerCase() === _reviewFkMail.toLowerCase()
-    );
+    const belege = alle.filter(b => istReviewBeleg(b));
+    if (!belege.length) console.warn('Prüfmodus: keine Belege für', _reviewFkMail, _reviewMonat || _currentMonat, '(oid:', _reviewFkOid || '—', ')');
     // Vorhandene TL-Kommentare einlesen
     belege.forEach(b => {
       if (b.TLKommentar && !_belegKommentare[b.id]) {
@@ -3502,10 +3510,7 @@ async function ladeMonatsdatenMitKommentaren() {
     const items = await fetchAlleListItems(token, siteId, listId);
     const alle = items.map(i => ({ id: i.id, ...i.fields }));
     const monat = _reviewMonat || _currentMonat;
-    const belege = alle.filter(b =>
-      (b.Monat || '').startsWith(monat) &&
-      ((b.Fachkraft_Mail || '').toLowerCase() === (_reviewFkMail||'').toLowerCase())
-    );
+    const belege = alle.filter(b => istReviewBeleg(b, monat));
     // TL-Kommentare aus SharePoint laden — nur wenn noch nicht im State
     belege.forEach(b => {
       if (b.TLKommentar && !_belegKommentare[b.id]) {
@@ -3658,7 +3663,7 @@ async function freigebenUndPDF() {
     // Status aller Belege auf Genehmigt setzen
     const items = await fetchAlleListItems(token, siteId, listId);
     const roh = items.map(i=>({id:i.id,...i.fields}))
-      .filter(b => (b.Monat||'').startsWith(_reviewMonat) && (b.Fachkraft_Mail||'').toLowerCase()===_reviewFkMail.toLowerCase());
+      .filter(b => istReviewBeleg(b, _reviewMonat));
     // Fahrtenbuch-Duplikate (z.B. nach Papierkorb-Wiederherstellung) erkennen:
     // nur das neueste bleibt, aeltere werden geloescht — eng begrenzt auf DIESE Fachkraft + DIESEN Monat
     const { belege, duplikate } = dedupeFahrtenbuch(roh);
@@ -3709,7 +3714,7 @@ async function ablehnen() {
       monat  = _reviewMonat || _currentMonat;
       const items = await fetchAlleListItems(token, siteId, listId);
       belege = items.map(i=>({id:i.id,...i.fields}))
-        .filter(b => (b.Monat||'').startsWith(monat) && (b.Fachkraft_Mail||'').toLowerCase()===fkMail.toLowerCase());
+        .filter(b => istReviewBeleg(b, monat));
     } else if (_currentReviewId) {
       fkMail = _currentReviewId.mail  || '';
       monat  = _currentReviewId.monat || _currentMonat;
