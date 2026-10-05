@@ -2283,6 +2283,7 @@ async function downloadTLPdf(g) {
 function oeffneReviewModus(g) {
   _reviewFkMail = g.mail;
   _reviewFkOid  = '';
+  _reviewIds    = new Set((g.belege || []).map(b => String(b.id)));
   _reviewMonat  = g.monat;
   _currentMonat = g.monat;
   aktiviereReviewModus(g.mail);
@@ -3372,6 +3373,7 @@ function handleReviewLink() {
     _reviewFkMail = fkMail;
     _reviewMonat  = monat;
     _reviewFkOid  = (params.get('oid') || '').toLowerCase();
+    _reviewIds    = null;
     aktiviereReviewModus(fkMail);
   } else {
     // Fachkraft öffnet Korrekturmodus
@@ -3383,9 +3385,11 @@ function handleReviewLink() {
 // REVIEW-MODUS — Teamleiter-Prüfung
 // ══════════════════════════════════════════════════════════════════
 let _reviewFkMail  = '';
-let _reviewFkOid   = '';   // Entra-Objekt-ID der geprüften Fachkraft (stabil bei Namens-/UPN-Änderung)
+let _reviewFkOid   = '';
+let _reviewIds     = null;  // Beleg-IDs der in der Teamübersicht gewählten Gruppe (Set) — Vorrang vor Mail-/Monatsfilter   // Entra-Objekt-ID der geprüften Fachkraft (stabil bei Namens-/UPN-Änderung)
 // Gehört der Beleg zur geprüften Fachkraft? Mail exakt ODER Objekt-ID (_ownerOid in FormularDaten).
 function istReviewBeleg(b, monat) {
+  if (b && _reviewIds && _reviewIds.has(String(b.id))) return true;
   if (!b || !(b.Monat || '').startsWith(monat || _reviewMonat || _currentMonat)) return false;
   const mail = (b.Fachkraft_Mail || '').toLowerCase();
   if (mail && mail === (_reviewFkMail || '').toLowerCase()) return true;
@@ -3465,7 +3469,13 @@ async function ladeReviewBelege() {
     const alle = items.map(i => ({ id: i.id, ...i.fields }));
     // Nach FK-Mail und Monat filtern
     const belege = alle.filter(b => istReviewBeleg(b));
-    if (!belege.length) console.warn('Prüfmodus: keine Belege für', _reviewFkMail, _reviewMonat || _currentMonat, '(oid:', _reviewFkOid || '—', ')');
+    if (!belege.length) {
+      const mon = _reviewMonat || _currentMonat;
+      const imMonat = alle.filter(b => (b.Monat || '').startsWith(mon));
+      const mails = [...new Set(imMonat.map(b => b.Fachkraft_Mail || '(leer)'))].join(', ');
+      console.warn('Prüfmodus: keine Belege für', _reviewFkMail, mon, '| Monat-Treffer:', imMonat.length, '| Mails:', mails);
+      setHomeStatus('error', `Keine Belege gefunden (Liste: ${alle.length}, Monat ${mon}: ${imMonat.length}). Gesucht: ${_reviewFkMail}. Im Monat vorhanden: ${mails || '—'}`);
+    }
     // Vorhandene TL-Kommentare einlesen
     belege.forEach(b => {
       if (b.TLKommentar && !_belegKommentare[b.id]) {
@@ -3496,7 +3506,7 @@ async function ladeReviewBelege() {
     // Mit Kommentarfeldern rendern (Cache für lokale Updates ohne Re-Fetch)
     _cachedReviewBelege = belege;
     renderHomeReview(regular);
-    clearHomeStatus();
+    if (belege.length) clearHomeStatus();
   } catch(e) {
     setHomeStatus('error', 'Fehler: ' + e.message);
   }
