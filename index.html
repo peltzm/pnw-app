@@ -590,7 +590,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 'v8b26aac'; // auto-updated on deploy
+const APP_VERSION = 'vfc0b9a6'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -1911,6 +1911,15 @@ function isTLUser() {
   if (_tlMembers.some(m => (m.mail || '').toLowerCase() === mail || m.displayName === name)) return true;
   if (_stationaerFreigeber.some(m => (m.mail || '').toLowerCase() === mail || m.displayName === name)) return true;
   return false;
+}
+
+// Darf die angemeldete Person Berichte in JEDEM Status löschen?
+// Nur Geschäftsführung und Teamleitungen ambulant (nicht die stationären Freigeber).
+function darfJedenBerichtLoeschen() {
+  if (isAdmin()) return true;
+  const mail = (currentAccount?.username || '').toLowerCase();
+  const name = currentAccount?.name || '';
+  return _tlMembers.some(m => (m.mail || '').toLowerCase() === mail || m.displayName === name);
 }
 
 // ─── GF-ROLLE & STATUS-GUARDS ────────────────────────────────────────────────
@@ -3828,8 +3837,8 @@ function renderStatusBerichte() {
         ${st === 'TL angenommen' && isTLUser() && item.Assigned_Reviewer && item.Assigned_Reviewer !== (currentAccount?.name || '')
           ? `<button onclick="tlUebernehmenAusListe('${itemId}')" title="Prüfung von ${(item.Assigned_Reviewer||'').replace(/"/g,'&quot;')} übernehmen (Vertretung)"
               style="font-size:12px; padding:6px 12px; background:white; color:#1d4ed8; border:1px solid #1d4ed8; border-radius:var(--radius); cursor:pointer; min-height:36px;">↪ Übernehmen</button>` : ''}
-        ${st === 'Entwurf'
-          ? `<button onclick="deleteDraft('${itemId}')" title="Entwurf löschen"
+        ${(st === 'Entwurf' || darfJedenBerichtLoeschen())
+          ? `<button onclick="deleteDraft('${itemId}')" title="${st === 'Entwurf' ? 'Entwurf löschen' : 'Bericht löschen (Teamleitung/Geschäftsführung)'}"
               style="font-size:12px; padding:6px 12px; background:white; color:var(--error); border:1px solid var(--error); border-radius:var(--radius); cursor:pointer; min-height:36px;">🗑 Löschen</button>` : ''}
         <button onclick="loadDraft('${itemId}')"
           style="font-size:12px; padding:6px 14px; background:${hpg.btnBg}; color:${hpg.btnColor};
@@ -5627,7 +5636,6 @@ function validateRequiredFields() {
 // ─── DELETE DRAFT ────────────────────────────────────────────────────────────
 
 async function deleteDraft(id) {
-  if (!confirm('Entwurf wirklich löschen?')) return;
   try {
     // Berechtigung: TL/Admin oder am Bericht beteiligt
     try { await _groupLoadPromise; } catch(e) {}
@@ -5635,6 +5643,21 @@ async function deleteDraft(id) {
     if (!isTLUser() && !isUserInvolvedInItem(item)) {
       alert('Keine Berechtigung — dieser Bericht ist Ihnen nicht zugeordnet.');
       return;
+    }
+    // Berichte außerhalb des Entwurfsstatus dürfen nur GF und Teamleitung ambulant löschen
+    const st = item?.Status || 'Entwurf';
+    if (st !== 'Entwurf' && !darfJedenBerichtLoeschen()) {
+      alert('Dieser Bericht befindet sich bereits im Freigabe-Workflow (' + statusLabel(st) + ') und kann nur von der Teamleitung ambulant oder der Geschäftsführung gelöscht werden.');
+      return;
+    }
+    if (st === 'Entwurf') {
+      if (!confirm('Entwurf wirklich löschen?')) return;
+    } else {
+      const kind = [item?.Kind_Vorname, item?.Kind_Familienname].filter(Boolean).join(' ') || 'ohne Namen';
+      const l = _lockParse(item?.Bearbeitung);
+      const sperre = _lockAktiv(l) ? '\n\nAchtung: Der Bericht wird gerade von ' + (l.name || 'jemandem') + ' bearbeitet.' : '';
+      const ablage = st === 'Genehmigt' ? '\n\nDas bereits in SharePoint abgelegte PDF bleibt erhalten.' : '';
+      if (!confirm('Bericht „' + kind + '“ im Status „' + statusLabel(st) + '“ endgültig löschen?\n\nDer Eintrag wird mit allen Inhalten und Kommentaren aus dem Freigabe-Workflow entfernt und kann nicht wiederhergestellt werden.' + ablage + sperre)) return;
     }
     const token = await getToken();
     const { siteId, listId } = await getGraphListIds();
