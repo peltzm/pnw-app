@@ -2664,6 +2664,8 @@ function resetForm() {
   if (ekc) { ekc.innerHTML = ''; }
   _extraFachkraftCount = 0;
   _unterschriftCount = 1;
+  // Container leeren, sonst übernimmt der Neuaufbau die Werte des zuvor geöffneten Berichts
+  { const uw = document.getElementById('unterschriftFachkraefte'); if (uw) uw.innerHTML = ''; }
   renderUnterschriftFachkraefte();
   setzeSachbearbeitungListe('', []);
   _entwurfFreigegeben = false;
@@ -5290,18 +5292,51 @@ function removeUnterschriftFachkraft(n) {
   });
 }
 
-// Zeilenanzahl aus gespeicherten Daten ableiten (Bestandsberichte) und aufbauen
+// Unterschriftszeilen aus den gespeicherten Daten wiederherstellen. Gespeichert wird unter
+// Fachkraft{i}_Name/_Quali1/_Quali2 (collectData); FK{i}_… nur als Altbestand-Rückfall.
+// Zeile 1 wird nur übernommen, wenn die Person am Bericht beteiligt ist (Fachkraft 1–4 der
+// Stammdaten oder Einreicherin) — sonst bleibt sie leer und syncUnterschriftNamen() belegt sie
+// mit der Fachkraft des Berichts. So werden Berichte repariert, in denen noch die Fachkraft
+// eines zuvor geöffneten Berichts gespeichert wurde.
 function unterschriftAusDaten(data) {
-  let n = 1;
-  for (let i = 2; i <= 4; i++) if ((data['FK' + i + '_Name'] || '').trim()) n = i;
-  _unterschriftCount = n;
-  renderUnterschriftFachkraefte();
-  // gespeicherte Namen wählbar machen (Bestand: Person evtl. nicht mehr im Team / nicht Betreuerin)
-  for (let i = 1; i <= n; i++) {
-    const nm = (data['FK' + i + '_Name'] || '').trim();
-    const sel = document.getElementById('FK' + i + '_Name');
-    if (sel && nm && !Array.from(sel.options).some(o => o.value === nm)) sel.add(new Option(nm, nm));
+  const wert = (i, feld) => String(data['Fachkraft' + i + '_' + feld] || data['FK' + i + '_' + feld] || '').trim();
+  const beteiligt = [data.Fachkraft_NeueWege, data.Fachkraft_2, data.Fachkraft_3, data.Fachkraft_4, nameZuMail(data._eingereichtVon)]
+    .map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+  const zeilen = [];
+  for (let i = 1; i <= 4; i++) {
+    const name = wert(i, 'Name');
+    if (!name) { if (i === 1) zeilen.push(null); continue; }
+    if (i === 1 && !beteiligt.includes(name.toLowerCase())) { zeilen.push(null); continue; }
+    zeilen.push({ name, q1: wert(i, 'Quali1'), q2: wert(i, 'Quali2') });
   }
+  // Zeile 1 muss an erster Stelle bleiben; weitere Zeilen rücken lückenlos auf
+  _unterschriftCount = Math.max(1, Math.min(4, zeilen.length));
+  const uw = document.getElementById('unterschriftFachkraefte'); if (uw) uw.innerHTML = '';
+  renderUnterschriftFachkraefte();
+  zeilen.slice(0, 4).forEach((z, idx) => {
+    if (!z) return;
+    const i = idx + 1;
+    const sel = document.getElementById('FK' + i + '_Name');
+    if (sel) {
+      // gespeicherte Namen wählbar machen (Bestand: Person evtl. nicht mehr im Team / nicht Betreuerin)
+      if (!Array.from(sel.options).some(o => o.value === z.name)) sel.add(new Option(z.name, z.name));
+      sel.value = z.name;
+    }
+    const q1 = document.getElementById('FK' + i + '_Quali1');
+    if (q1 && z.q1) {
+      if (!Array.from(q1.options).some(o => o.value === z.q1)) q1.add(new Option(z.q1, z.q1), Math.max(0, q1.options.length - 1));
+      q1.value = z.q1;
+    }
+    const q2 = document.getElementById('FK' + i + '_Quali2');
+    if (q2 && z.q2) {
+      if (Array.from(q2.options).some(o => o.value === z.q2)) q2.value = z.q2;
+      else {
+        q2.value = '__custom__';
+        const c = document.getElementById('FK' + i + '_Quali2Custom'); if (c) c.value = z.q2;
+        toggleQuali2Custom(i);
+      }
+    }
+  });
 }
 
 // "Andere…" bei Qualifikation 2 -> Freitextfeld einblenden
@@ -5996,22 +6031,25 @@ renderUnterschriftFachkraefte();
   // ── Unterschriftenblock ──
   function signatureBlock(data, freigegebenVon) {
     // Eintrag steht auf der Linie, die Bezeichnung darunter — wie bei einer
-    // handschriftlichen Unterschrift. Ort mit dem Datum der PDF-Erzeugung,
-    // Namen ohne Berufsbezeichnung.
-    function sig(label, value) {
-      return {
-        stack: [
-          { text: dash(value), font: 'KodchasanMedium', fontSize: F.fliess, color: C.ink, margin: [0, 22, 0, 2] },
-          { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: LINE.trenner, lineColor: C.ink }], margin: [0, 0, 0, 3] },
-          { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta },
-        ],
-      };
+    // handschriftlichen Unterschrift. Ort mit dem Datum der PDF-Erzeugung.
+    // Die Qualifikation der Fachkraft steht nicht mehr fett beim Namen, sondern
+    // in normaler Schrift unter der Bezeichnung.
+    function sig(label, value, zusatz) {
+      const stack = [
+        { text: dash(value), font: 'KodchasanMedium', fontSize: F.fliess, color: C.ink, margin: [0, 22, 0, 2] },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: LINE.trenner, lineColor: C.ink }], margin: [0, 0, 0, 3] },
+        { text: upper(label), font: 'KodchasanSemi', fontSize: F.label, characterSpacing: 0.5, color: C.meta },
+      ];
+      // Zusatzzeile (Qualifikation) in normaler Schrift unter der Bezeichnung
+      if (has(zusatz)) stack.push({ text: zusatz, fontSize: F.label, color: C.ink, margin: [0, 2, 0, 0] });
+      return { stack };
     }
     const ortDatum = [dash(data.Ort), fmtDateLong(new Date())].filter(v => v !== '—').join(', ');
-    const fk = [data.Fachkraft1_Name || data.Fachkraft_NeueWege, data.Fachkraft1_Quali1].filter(has).join(', ');   // Name, Position (M365)
+    const fk = data.Fachkraft1_Name || data.Fachkraft_NeueWege;
+    const fkQuali = data.Fachkraft1_Quali1 || '';   // Position (M365)
     return {
       unbreakable: true,
-      columns: [sig('Ort, Datum', ortDatum), { width: 18, text: '' }, sig('Fachkraft / Qualifikation', fk), { width: 18, text: '' }, sig('Freigabe Leitung', freigegebenVon || 'Entwurf')],
+      columns: [sig('Ort, Datum', ortDatum), { width: 18, text: '' }, sig('Fachkraft', fk, fkQuali), { width: 18, text: '' }, sig('Freigabe Leitung', freigegebenVon || 'Entwurf')],
       margin: [0, 16, 0, 0],
     };
   }
