@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f7f6f2">
+<title>Lernapp Soziale Arbeit · Praxis NeueWege</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848; --terra:#a15f38; --creme:#f5f0ea;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2; --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px; --nav-h:60px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit;color:inherit}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer;min-width:0}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all .12s;border:none;min-height:40px;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#68351a}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--border-strong);color:var(--text)}
+.btn-sm{padding:5px 12px;min-height:32px;font-size:12.5px}
+.btn-gross{width:100%;min-height:52px;font-size:16px;font-weight:600;border-radius:var(--radius-lg)}
+.btn:focus-visible,.opt:focus-visible,.note:focus-visible,.tab:focus-visible{outline:2px solid var(--accent-mid);outline-offset:2px}
+.tabs{display:flex;gap:4px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;position:sticky;top:var(--hdr-h);z-index:90}
+.tab{background:none;border:none;border-bottom:3px solid transparent;padding:12px 14px 9px;font-size:14px;font-weight:500;color:var(--text-muted);cursor:pointer}
+.tab.aktiv{color:var(--accent);border-bottom-color:var(--accent)}
+.tab .zahl{display:inline-block;min-width:20px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center}
+.wrap{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:14px}
+.card h2{font-size:16px;font-weight:600;margin-bottom:4px}
+.card h3{font-size:13.5px;font-weight:600;margin:14px 0 6px}
+.muted{color:var(--text-muted);font-size:13px}
+.hint{color:var(--text-hint);font-size:12px}
+.msg{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:12px;display:none}
+.msg.zeigen{display:block}
+.msg.info{background:var(--blue-bg);color:var(--blue)}
+.msg.fehler{background:var(--error-bg);color:var(--error)}
+.msg.ok{background:var(--ok-bg);color:var(--ok)}
+.msg.warn{background:var(--warn-bg);color:var(--warn)}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(0,0,0,.15);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2s}}
+.gate{max-width:460px;margin:70px auto;text-align:center;padding:0 16px}
+.gate .g-icon{font-size:44px;margin-bottom:10px}
+.gate h1{font-size:20px;margin-bottom:6px}
+.gate p{font-size:14px;color:var(--text-muted);margin-bottom:18px}
+.kacheln{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.kachel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 10px;text-align:center}
+.kachel .wert{font-size:26px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.kachel .lab{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.kachel.betont .wert{color:var(--accent)}
+.syncband{display:flex;gap:10px;align-items:center;background:var(--creme);border-radius:var(--radius);padding:9px 14px;font-size:13px;color:var(--text-muted);margin-bottom:14px}
+.syncband .txt{flex:1;min-width:0}
+.syncband.fehler{background:var(--error-bg);color:var(--error)}
+.fach{display:block;width:100%;text-align:left;cursor:pointer}
+.fach:hover{border-color:var(--border-strong)}
+.fach .kopf{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.code{font-size:11px;font-weight:700;color:var(--terra);text-transform:uppercase;letter-spacing:.5px}
+.fach .titel{font-size:16px;font-weight:600;line-height:1.35}
+.balken{height:8px;border-radius:999px;background:var(--creme);overflow:hidden;display:flex;margin:10px 0 6px}
+.balken i{display:block;height:100%}
+.balken .sicher{background:var(--ok)}
+.balken .lernt{background:var(--accent-mid)}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.pill.faellig{background:var(--accent);color:#fff}
+.pill.neu{background:var(--blue-bg);color:var(--blue)}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.fehler{background:var(--error-bg);color:var(--error)}
+.pill.grau{background:var(--bg);color:var(--text-muted);border:1px solid var(--border)}
+.reihe{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.reihe.rechts{justify-content:flex-end}
+.zurueck{background:none;border:none;color:var(--text-muted);font-size:13px;cursor:pointer;padding:4px 0;margin-bottom:8px}
+.pruefung{background:var(--warn-bg);border-radius:var(--radius);padding:10px 14px;font-size:13.5px;white-space:pre-wrap;margin-top:8px}
+.liste{list-style:none}
+.liste li{padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
+.liste li:last-child{border-bottom:none}
+.liste .f{font-weight:500}
+.liste .a{color:var(--text-muted);font-size:13.5px;margin-top:2px;white-space:pre-wrap}
+.liste .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--text-hint)}
+.liste li.aus .f,.liste li.aus .a{opacity:.45;text-decoration:line-through}
+.link{background:none;border:none;color:var(--terra);font-size:12.5px;cursor:pointer;text-decoration:underline;padding:0}
+input[type=search],textarea,select,input[type=text]{font-size:15px;padding:10px 12px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);width:100%;line-height:1.5}
+textarea{min-height:96px;resize:vertical}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent-mid);outline-offset:1px;border-color:var(--accent-mid)}
+.quelle{padding:12px 0;border-bottom:1px solid var(--border)}
+.quelle:last-child{border-bottom:none}
+.quelle .qn{font-weight:500;font-size:14px;overflow-wrap:anywhere}
+.log{font-size:12px;color:var(--text-muted);max-height:180px;overflow:auto;background:var(--bg);border-radius:var(--radius);padding:8px 12px;margin-top:10px;white-space:pre-wrap}
+.page-footer{text-align:center;font-size:11px;color:var(--text-hint);margin-top:24px}
+.page-footer a{color:var(--text-muted)}
+
+/* Lernsitzung */
+.sitzung{position:fixed;inset:0;background:var(--bg);z-index:200;display:none;flex-direction:column}
+.sitzung.offen{display:flex}
+.s-kopf{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.s-kopf .schliessen{background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:var(--text-muted);padding:6px}
+.s-fortschritt{flex:1;height:6px;border-radius:999px;background:var(--creme);overflow:hidden}
+.s-fortschritt i{display:block;height:100%;background:var(--accent-mid);transition:width .25s}
+.s-zaehler{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.s-inhalt{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.s-innen{max-width:680px;margin:0 auto;padding:20px 16px 24px}
+.s-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:var(--text-muted)}
+.s-frage{font-size:19px;font-weight:600;line-height:1.45;margin-bottom:16px;white-space:pre-wrap;overflow-wrap:anywhere}
+.s-frage .luecke{display:inline-block;min-width:90px;border-bottom:2px solid var(--accent-mid);color:var(--accent);text-align:center;padding:0 6px}
+.s-antwort{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--accent-mid);border-radius:var(--radius);padding:14px 16px;margin-top:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.s-antwort .lab,.s-ki .lab{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.s-erkl{font-size:13.5px;color:var(--text-muted);margin-top:10px;white-space:pre-wrap}
+.s-ki{border-radius:var(--radius);padding:12px 16px;margin-top:12px;font-size:14px}
+.s-ki.p0{background:var(--error-bg)} .s-ki.p1{background:var(--warn-bg)} .s-ki.p2,.s-ki.p3{background:var(--ok-bg)}
+.s-quelle{font-size:12px;color:var(--text-hint);margin-top:12px}
+.s-quelle a{color:var(--text-muted)}
+.opts{display:grid;gap:8px}
+.opt{text-align:left;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 14px;font-size:15px;cursor:pointer;min-height:48px}
+.opt:hover:not(:disabled){border-color:var(--accent-mid)}
+.opt.richtig{background:var(--ok-bg);border-color:var(--ok);color:var(--ok);font-weight:600}
+.opt.falsch{background:var(--error-bg);border-color:var(--error);color:var(--error)}
+.opt:disabled{cursor:default}
+.s-fuss{background:var(--surface);border-top:1px solid var(--border);padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+.s-fuss .innen{max-width:680px;margin:0 auto;display:flex;gap:8px}
+.s-fuss .btn{flex:1}
+.note{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:54px;border-radius:var(--radius);border:1px solid var(--border-strong);background:var(--surface);cursor:pointer;font-size:14px;font-weight:600;padding:4px}
+.note small{font-size:11px;font-weight:400;color:var(--text-muted)}
+.note.n0{color:var(--error)} .note.n1{color:var(--warn)} .note.n2{color:var(--ok)} .note.n3{color:var(--blue)}
+.note.vorschlag{border-width:2px;border-color:currentColor;background:var(--creme)}
+.ende{text-align:center;padding:40px 0}
+.ende .gross{font-size:44px}
+@media(max-width:560px){
+  .kacheln{grid-template-columns:repeat(2,1fr)}
+  .user-badge span:last-child{display:none}
+  .tabs{position:fixed;top:auto;bottom:0;left:0;right:0;border-bottom:none;border-top:1px solid var(--border);padding:0 0 env(safe-area-inset-bottom);justify-content:space-around}
+  .tab{flex:1;border-bottom:none;border-top:3px solid transparent;padding:10px 4px 12px}
+  .tab.aktiv{border-top-color:var(--accent)}
+  .wrap{padding:14px 12px calc(var(--nav-h) + 40px)}
+  .card{padding:16px}
+  .s-frage{font-size:17.5px}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand" onclick="location.href='https://apps.praxisneuewege.de/apps.html'">
+    <img src="https://apps.praxisneuewege.de/assets/logo-pnw-neu.png" alt="PNW" onerror="this.style.display='none'">
+    <span>Lernapp Soziale Arbeit</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge"><span class="user-dot"></span><span id="userName"></span></div>
+    <button class="btn btn-ghost btn-sm" id="btnLogout" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<div class="gate" id="gate">
+  <div class="g-icon">🎓</div>
+  <h1>Lernapp Soziale Arbeit</h1>
+  <p>Lernkarten aus deinen Studienunterlagen im Ordner ISBA – Folien, Skripte und OneNote-Notizen. Neue Unterlagen werden beim Öffnen automatisch eingelesen.</p>
+  <button class="btn btn-primary" id="btnLogin">Mit Microsoft anmelden</button>
+  <div class="msg fehler" id="gateMsg"></div>
+</div>
+
+<div id="app" style="display:none">
+  <nav class="tabs" id="tabs">
+    <button class="tab aktiv" data-tab="heute">Heute<span class="zahl" id="tabZahl" style="display:none"></span></button>
+    <button class="tab" data-tab="faecher">Fächer</button>
+    <button class="tab" data-tab="quellen">Unterlagen</button>
+  </nav>
+  <div class="wrap">
+    <div id="view"></div>
+    <div class="page-footer">
+      Praxis NeueWege GmbH · Lernapp <span id="versionBadge"></span> ·
+      <a href="https://apps.praxisneuewege.de/apps.html">App-Übersicht</a>
+    </div>
+  </div>
+</div>
+
+<div class="sitzung" id="sitzung" role="dialog" aria-label="Lernsitzung">
+  <div class="s-kopf">
+    <button class="schliessen" id="sSchliessen" aria-label="Lernsitzung beenden">✕</button>
+    <div class="s-fortschritt"><i id="sBalken" style="width:0"></i></div>
+    <div class="s-zaehler" id="sZaehler"></div>
+  </div>
+  <div class="s-inhalt"><div class="s-innen" id="sInhalt"></div></div>
+  <div class="s-fuss"><div class="innen" id="sFuss"></div></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/lernapp.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev',
+  /* Quelle der Unterlagen: Ordner ISBA im OneDrive von Sonja Peltz */
+  driveId: 'b!f7uxF10jA0-RUH7Gt7e1aFVimAAkpLhGqO8Zs9_BmTfQT-izV-7wRJ4sWE1h7QJD',
+  ordner: 'ISBA',
+  besitzer: 'sonja.peltz@praxisneuewege.de',
+};
+/* Files.ReadWrite.All ist für die App-Registrierung bereits zugestimmt; die Lernapp liest nur.
+   Notes.Read wird getrennt angefordert (nur beim Einlesen des Notizbuchs). */
+const SCOPES = ['User.Read', 'Files.ReadWrite.All'];
+const SCOPES_NOTIZ = ['Notes.Read'];
+const APP_VERSION = 'vdev'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+
+const TEIL_SEITEN = 10;            // Seiten je Abschnitt bei PDF
+const TEIL_MAX_BYTES = 3200000;    // größere Abschnitte werden halbiert
+const DATEI_MAX_BYTES = 60000000;
+const BILD_KANTE = 1568;           // Bilder werden auf diese Kantenlänge verkleinert
+const NOTIZ_RUHE_MIN = 20;         // OneNote-Seiten erst einlesen, wenn so lange unverändert
+const ENDUNG_PDF = ['pdf'];
+const ENDUNG_OFFICE = ['doc','docx','odt','rtf','ppt','pptx','pps','ppsx','odp'];
+const ENDUNG_TEXT = ['txt','md'];
+const ENDUNG_BILD = ['jpg','jpeg','png','webp','gif'];
+
+/* ═══════════════════════════════════════════════════════════
+ * ZUSTAND
+ * ═══════════════════════════════════════════════════════════ */
+const S = {
+  quellen: new Map(),   // id → Angaben der Quelle (aus dem Worker, ergänzt um Sync-Status)
+  karten: new Map(),    // quelleId → Karten
+  stand: null,          // Lernstand des Kontos
+  kiBereit: true,
+  tab: 'heute', fach: null, suche: '',
+  sync: { laeuft: false, stopp: false, text: '', fehler: '', log: [], uebersprungen: [], zuletzt: null, neu: 0 },
+  sitzung: null,
+};
+
+/* ═══════════════════════════════════════════════════════════
+ * HELFER
+ * ═══════════════════════════════════════════════════════════ */
+const $ = (id) => document.getElementById(id);
+function esc(s){ const d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
+function zeige(id, text, art){ const el=$(id); el.className='msg zeigen '+(art||'info'); el.innerHTML=text; }
+function zahlDe(n){ return (n==null||!isFinite(n)) ? '–' : Number(n).toLocaleString('de-DE'); }
+function datumDe(d){ return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+function zeitDe(iso){ const d=new Date(iso); return isNaN(d) ? '' : datumDe(d)+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); }
+const warte = (ms) => new Promise((r) => setTimeout(r, ms));
+function zufallsId(){ return Math.random().toString(36).slice(2, 8); }
+function mische(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function endung(name){ const m=/\.([A-Za-z0-9]{1,5})$/.exec(name||''); return m ? m[1].toLowerCase() : ''; }
+function ohneEndung(name){ return String(name||'').replace(/\.[A-Za-z0-9]{1,5}$/, ''); }
+function b64(bytes){ let s=''; const n=0x8000; for(let i=0;i<bytes.length;i+=n) s+=String.fromCharCode.apply(null, bytes.subarray(i,i+n)); return btoa(s); }
+/* Tage seit 1970 nach lokalem Kalender — der Lerntag wechselt um Mitternacht Ortszeit */
+function tagNr(d){ d=d||new Date(); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())/864e5); }
+function tagZuDatum(nr){ return new Date(nr*864e5); }
+function intervallText(tage){
+  if (tage<=0) return 'gleich';
+  if (tage===1) return '1 Tag';
+  if (tage<30) return tage+' Tage';
+  if (tage<365) return zahlDe(Math.round(tage/30))+' Mon.';
+  return (Math.round(tage/36.5)/10).toLocaleString('de-DE')+' J.';
+}
+/* Modulkürzel aus einem Namen: „B01_Part_I…“ → B01, „B2 - Titel“ → B02; sonst null */
+function modulKuerzel(name){
+  const m = /^\s*([A-Za-z]{1,3})[\s_\-]?(\d{1,2}(?:\.\d{1,2}){0,2})(?=[\s_\-–.:]|$)/.exec(name||'');
+  if (!m) return null;
+  const nr = (!m[2].includes('.') && m[2].length===1) ? '0'+m[2] : m[2];
+  return m[1].toUpperCase()+nr;
+}
+function ohneKuerzel(name){
+  return String(name||'').replace(/^\s*[A-Za-z]{1,3}[\s_\-]?\d{1,2}(?:\.\d{1,2}){0,2}[\s_\-–.:]*/, '').trim();
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * MSAL — defensiv nach dem Mobilfunk-Muster.
+ * Abweichung: Anmeldung bleibt im localStorage, damit die App auf dem
+ * Handy nicht bei jedem Öffnen neu nach dem Konto fragt.
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance = null, currentAccount = null;
+function initMsal(){
+  if (msalInstance) return true;
+  if (typeof msal === 'undefined'){
+    zeige('gateMsg', 'MSAL-Bibliothek konnte nicht geladen werden — bitte Seite neu laden (ggf. Netzwerk/Adblocker prüfen).', 'fehler');
+    return false;
+  }
+  msalInstance = new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'localStorage' }
+  });
+  return true;
+}
+async function login(){
+  try{
+    if (!initMsal()) return;
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account;
+    msalInstance.setActiveAccount(currentAccount);
+    nachLogin();
+  }catch(e){ zeige('gateMsg', 'Anmeldung fehlgeschlagen: '+esc(e.message||e), 'fehler'); }
+}
+function upn(){ return (currentAccount?.username||'').toLowerCase(); }
+function istBesitzer(){ return upn() === CFG.besitzer; }
+function tokenAblauf(jwt){
+  try{ return JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000; }
+  catch(e){ return 0; }
+}
+async function tokens(scopes){
+  const req = {scopes:scopes||SCOPES, account:currentAccount};
+  let r = await msalInstance.acquireTokenSilent(req).catch(async ()=>msalInstance.acquireTokenPopup(req));
+  if (tokenAblauf(r.idToken) < Date.now()+60000){
+    r = await msalInstance.acquireTokenSilent({...req, forceRefresh:true});
+  }
+  return { id:r.idToken, graph:r.accessToken };
+}
+async function worker(pfad, opt){
+  const t = await tokens();
+  const res = await fetch(CFG.workerUrl + pfad, {
+    ...(opt||{}),
+    headers:{ Authorization:'Bearer '+t.id, 'X-Graph-Token':t.graph, ...(opt && opt.body ? {'Content-Type':'application/json'} : {}) }
+  });
+  let d = null;
+  try{ d = await res.json(); }catch(e){}
+  if (!res.ok){ const f = new Error((d && d.error) || ('HTTP '+res.status)); f.status = res.status; f.wiederholbar = !!(d && d.wiederholbar); throw f; }
+  return d;
+}
+async function workerDatei(itemId, alsPdf){
+  const t = await tokens();
+  const res = await fetch(CFG.workerUrl+'/api/lernapp/inhalt?item='+encodeURIComponent(itemId)+(alsPdf?'&pdf=1':''), {
+    headers:{ Authorization:'Bearer '+t.id, 'X-Graph-Token':t.graph }
+  });
+  if (!res.ok){ let d=null; try{ d=await res.json(); }catch(e){} throw new Error((d && d.error) || ('HTTP '+res.status)); }
+  return new Uint8Array(await res.arrayBuffer());
+}
+/* Graph direkt aus dem Browser (Listen, OneNote). 429/503 werden nach Retry-After wiederholt. */
+async function graph(url, scopes, opt){
+  for (let versuch=0; ; versuch++){
+    const t = await tokens(scopes);
+    const res = await fetch(url.startsWith('http') ? url : GRAPH+url, { ...(opt||{}), headers:{ Authorization:'Bearer '+t.graph, ...((opt&&opt.headers)||{}) } });
+    if ((res.status===429 || res.status===503) && versuch<3){
+      await warte(Math.min(30, Number(res.headers.get('Retry-After'))||3*(versuch+1))*1000);
+      continue;
+    }
+    if (!res.ok){ const f = new Error('Microsoft Graph: HTTP '+res.status); f.status = res.status; throw f; }
+    return res;
+  }
+}
+async function graphAlle(url, scopes){
+  const alle = [];
+  for (let seite=0; url && seite<40; seite++){
+    const j = await (await graph(url, scopes)).json();
+    alle.push(...(j.value||[]));
+    url = j['@odata.nextLink'] || null;
+  }
+  return alle;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * LERNSTAND — Wiederholungsplan (angelehnt an SM-2)
+ * Eintrag je Karte: [fälligTag, Intervall in Tagen, Leichtigkeit×100, Wiederholungen, Fehlversuche]
+ * ═══════════════════════════════════════════════════════════ */
+function leererStand(){ return { v:1, karten:{}, aus:[], tage:{}, einst:{ neuProTag:15 }, geaendert:0 }; }
+function standSchluessel(){ return 'lernapp:stand:'+upn(); }
+function standNormal(s){
+  const l = leererStand();
+  if (!s || typeof s!=='object') return l;
+  return { v:1, karten:(s.karten && typeof s.karten==='object') ? s.karten : {}, aus:Array.isArray(s.aus)?s.aus:[],
+    tage:(s.tage && typeof s.tage==='object') ? s.tage : {}, einst:{ ...l.einst, ...(s.einst||{}) }, geaendert:Number(s.geaendert)||0 };
+}
+async function ladeStand(){
+  let lokal = null, server = null;
+  try{ lokal = JSON.parse(localStorage.getItem(standSchluessel())||'null'); }catch(e){}
+  try{ server = (await worker('/api/lernapp/stand')).stand; }catch(e){ console.warn('Lernstand vom Server nicht lesbar:', e.message); }
+  lokal = lokal ? standNormal(lokal) : null; server = server ? standNormal(server) : null;
+  /* der jüngere Stand gewinnt — so geht nichts verloren, wenn das letzte Speichern offline war */
+  S.stand = (lokal && (!server || lokal.geaendert > server.geaendert)) ? lokal : (server || leererStand());
+  if (lokal && server && lokal.geaendert > server.geaendert) speichereStandServer();
+}
+let standTimer = null, standOffen = false;
+function standGeaendert(){
+  S.stand.geaendert = Date.now();
+  try{ localStorage.setItem(standSchluessel(), JSON.stringify(S.stand)); }catch(e){}
+  standOffen = true;
+  clearTimeout(standTimer);
+  standTimer = setTimeout(speichereStandServer, 15000);
+}
+async function speichereStandServer(){
+  clearTimeout(standTimer);
+  if (!S.stand) return;
+  standOffen = false;
+  try{ await worker('/api/lernapp/stand', { method:'POST', body:JSON.stringify({ stand:S.stand }) }); }
+  catch(e){ standOffen = true; console.warn('Lernstand nicht gespeichert:', e.message); }
+}
+function tagStat(){
+  const k = String(tagNr());
+  if (!S.stand.tage[k]) {
+    S.stand.tage[k] = { neu:0, wdh:0 };
+    const grenze = tagNr()-120;
+    for (const t of Object.keys(S.stand.tage)) if (Number(t) < grenze) delete S.stand.tage[t];
+  }
+  return S.stand.tage[k];
+}
+/* Nächster Eintrag nach einer Bewertung: 0 Nochmal, 1 Schwer, 2 Gut, 3 Leicht */
+function naechster(e, note){
+  const h = tagNr();
+  let [, iv, ef, n, l] = e || [h, 0, 250, 0, 0];
+  if (note===0){
+    return [h, 0, Math.max(130, ef-20), 0, l + (e && e[3]>0 ? 1 : 0)];
+  }
+  if (n===0){ iv = note===3 ? 4 : 1; }
+  else if (note===1){ iv = Math.max(iv+1, Math.round(iv*1.2)); ef = Math.max(130, ef-15); }
+  else if (note===2){ iv = Math.max(iv+1, Math.round(iv*ef/100)); }
+  else { iv = Math.max(iv+2, Math.round(iv*ef/100*1.3)); ef = Math.min(320, ef+15); }
+  return [h+iv, iv, ef, n+1, l];
+}
+function serie(){
+  let s = 0; const h = tagNr();
+  for (let t = S.stand.tage[String(h)] ? h : h-1; S.stand.tage[String(t)]; t--) s++;
+  return s;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * KARTEN UND FÄCHER
+ * ═══════════════════════════════════════════════════════════ */
+function alleKarten(){
+  const aus = new Set(S.stand.aus);
+  const liste = [];
+  for (const q of [...S.quellen.values()].sort((a,b)=>a.fach.localeCompare(b.fach,'de')||a.name.localeCompare(b.name,'de',{numeric:true}))){
+    for (const k of (S.karten.get(q.id)||[])) if (!aus.has(k.id)) liste.push(k);
+  }
+  return liste;
+}
+function faecher(){
+  const m = new Map();
+  for (const q of S.quellen.values()){
+    let f = m.get(q.fach);
+    if (!f){ f = { key:q.fach, titel:'', quellen:[], karten:[] }; m.set(q.fach, f); }
+    if (!f.titel && q.fachTitel) f.titel = q.fachTitel;
+    f.quellen.push(q);
+  }
+  const aus = new Set(S.stand.aus);
+  for (const f of m.values()){
+    f.quellen.sort((a,b)=>a.name.localeCompare(b.name,'de',{numeric:true}));
+    for (const q of f.quellen) for (const k of (S.karten.get(q.id)||[])) if (!aus.has(k.id)) f.karten.push(k);
+  }
+  return [...m.values()].sort((a,b)=>a.key.localeCompare(b.key,'de',{numeric:true}));
+}
+function zaehle(karten){
+  const h = tagNr(); let faellig=0, neu=0, lernt=0, sicher=0;
+  for (const k of karten){
+    const e = S.stand.karten[k.id];
+    if (!e){ neu++; continue; }
+    if (e[0] <= h) faellig++;
+    if (e[1] >= 21) sicher++; else lernt++;
+  }
+  return { gesamt:karten.length, faellig, neu, lernt, sicher };
+}
+function neuHeuteFrei(){ return Math.max(0, (S.stand.einst.neuProTag||15) - (S.stand.tage[String(tagNr())]?.neu||0)); }
+function fachName(f){ return f.titel ? f.titel : f.key; }
+
+/* ═══════════════════════════════════════════════════════════
+ * LERNSITZUNG
+ * ═══════════════════════════════════════════════════════════ */
+function baueSitzung(opt){
+  opt = opt || {};
+  let karten = alleKarten();
+  if (opt.fach) karten = karten.filter((k) => S.quellen.get(k.qid)?.fach === opt.fach);
+  let folge;
+  if (opt.frei){
+    folge = mische(karten);
+  } else {
+    const h = tagNr();
+    const faellig = mische(karten.filter((k) => S.stand.karten[k.id] && S.stand.karten[k.id][0] <= h))
+      .sort((a,b) => S.stand.karten[a.id][0] - S.stand.karten[b.id][0]);
+    const neu = karten.filter((k) => !S.stand.karten[k.id]).slice(0, opt.mehrNeu ? opt.mehrNeu : neuHeuteFrei());
+    /* Neue Karten zwischen die Wiederholungen streuen */
+    folge = [];
+    const schritt = neu.length ? Math.max(1, Math.floor(faellig.length/neu.length)) : 0;
+    let ni = 0;
+    faellig.forEach((k, i) => { folge.push(k); if (schritt && (i+1)%schritt===0 && ni<neu.length) folge.push(neu[ni++]); });
+    while (ni < neu.length) folge.push(neu[ni++]);
+  }
+  return { folge, pos:0, frei:!!opt.frei, fach:opt.fach||null, erledigt:0, gesamt:folge.length, gewusst:0, zustand:null, wieder:new Set() };
+}
+function starteSitzung(opt){
+  const s = baueSitzung(opt);
+  if (!s.folge.length) return false;
+  S.sitzung = s;
+  $('sitzung').classList.add('offen');
+  document.body.style.overflow = 'hidden';
+  zeigeKarte();
+  return true;
+}
+function beendeSitzung(){
+  S.sitzung = null;
+  $('sitzung').classList.remove('offen');
+  document.body.style.overflow = '';
+  if (standOffen) speichereStandServer();
+  render();
+}
+function frageHtml(k, loesung){
+  if (k.typ !== 'luecke') return esc(k.frage);
+  return esc(k.frage).replace(/_{3,}/, '<span class="luecke">'+(loesung ? esc(k.antwort) : '&nbsp;')+'</span>');
+}
+function typName(t){ return { frage:'Frage', luecke:'Lückentext', mc:'Auswahl', fall:'Fallfrage' }[t] || 'Frage'; }
+function zeigeKarte(){
+  const s = S.sitzung;
+  if (s.pos >= s.folge.length) return zeigeEnde();
+  const k = s.folge[s.pos];
+  const q = S.quellen.get(k.qid);
+  const e = S.stand.karten[k.id];
+  s.zustand = { offen:false, vorschlag:null, ki:null, wahl:null, reihenfolge:null };
+  $('sBalken').style.width = Math.round(100*s.erledigt/Math.max(1,s.gesamt))+'%';
+  $('sZaehler').textContent = s.erledigt+' / '+s.gesamt;
+  let h = '<div class="s-meta"><span class="pill '+(e?'grau':'neu')+'">'+(e?typName(k.typ):'Neu · '+typName(k.typ))+'</span>'
+        + (q ? '<span>'+esc(q.fach)+(k.thema ? ' · '+esc(k.thema) : '')+'</span>' : '')+'</div>'
+        + '<div class="s-frage" id="sFrage">'+frageHtml(k, false)+'</div><div id="sEingabe"></div><div id="sLoesung"></div>';
+  $('sInhalt').innerHTML = h;
+  document.querySelector('.s-inhalt').scrollTop = 0;
+  const ein = $('sEingabe'), fuss = $('sFuss');
+  if (k.typ === 'mc' && k.optionen){
+    s.zustand.reihenfolge = mische(k.optionen.map((_, i) => i));
+    ein.innerHTML = '<div class="opts">'+s.zustand.reihenfolge.map((i) => '<button class="opt" data-i="'+i+'">'+esc(k.optionen[i])+'</button>').join('')+'</div>';
+    ein.querySelectorAll('.opt').forEach((b) => b.onclick = () => waehleOption(Number(b.dataset.i)));
+    fuss.innerHTML = '<button class="btn btn-ghost" id="sZeigen">Antwort zeigen</button>';
+    $('sZeigen').onclick = () => decke();
+  } else if (k.typ === 'luecke'){
+    ein.innerHTML = '<input type="text" id="sText" placeholder="Fehlender Begriff" autocomplete="off" autocapitalize="off" spellcheck="false">';
+    fuss.innerHTML = '<button class="btn btn-ghost" id="sZeigen">Antwort zeigen</button><button class="btn btn-primary" id="sPruefen">Prüfen</button>';
+    $('sZeigen').onclick = () => decke();
+    $('sPruefen').onclick = pruefeLuecke;
+    $('sText').addEventListener('keydown', (ev) => { if (ev.key==='Enter'){ ev.preventDefault(); pruefeLuecke(); } });
+  } else {
+    ein.innerHTML = '<textarea id="sText" placeholder="Deine Antwort in eigenen Worten (freiwillig) – Claude gibt dir eine Rückmeldung dazu."></textarea>';
+    fuss.innerHTML = '<button class="btn btn-ghost" id="sZeigen">Antwort zeigen</button><button class="btn btn-primary" id="sPruefen">Antwort prüfen</button>';
+    $('sZeigen').onclick = () => decke();
+    $('sPruefen').onclick = pruefeFrei;
+  }
+}
+function normal(t){ return String(t||'').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/ß/g,'ss').replace(/[^a-z0-9§]+/g,' ').trim(); }
+function abstand(a, b){
+  const d = Array.from({length:b.length+1}, (_, i) => i);
+  for (let i=1;i<=a.length;i++){ let vor=d[0]; d[0]=i; for (let j=1;j<=b.length;j++){ const t=d[j]; d[j]=Math.min(d[j]+1, d[j-1]+1, vor+(a[i-1]===b[j-1]?0:1)); vor=t; } }
+  return d[b.length];
+}
+function pruefeLuecke(){
+  const s = S.sitzung, k = s.folge[s.pos];
+  const ein = normal($('sText').value), soll = normal(k.antwort);
+  if (!ein) return decke();
+  const ok = ein===soll || (soll.length>5 && abstand(ein, soll)<=1);
+  s.zustand.vorschlag = ok ? 2 : 0;
+  decke(ok ? { art:'ok', text:'Richtig.' } : { art:'fehler', text:'Nicht ganz – gesucht war: '+k.antwort });
+}
+function waehleOption(i){
+  const s = S.sitzung, k = s.folge[s.pos];
+  if (s.zustand.offen) return;
+  s.zustand.wahl = i;
+  s.zustand.vorschlag = i===k.richtig ? 2 : 0;
+  decke();
+}
+async function pruefeFrei(){
+  const s = S.sitzung, k = s.folge[s.pos];
+  const text = $('sText').value.trim();
+  if (!text) return decke();
+  const knopf = $('sPruefen');
+  knopf.disabled = true; $('sZeigen').disabled = true;
+  knopf.innerHTML = '<span class="spinner"></span>Claude liest …';
+  try{
+    const r = await worker('/api/lernapp/bewerten', { method:'POST', body:JSON.stringify({ frage:k.frage, antwort:k.antwort, erklaerung:k.erklaerung, thema:k.thema, eingabe:text }) });
+    if (S.sitzung !== s || s.folge[s.pos] !== k) return;
+    s.zustand.ki = r;
+    s.zustand.vorschlag = [0,1,2,2][r.punkte] ?? null;
+    decke();
+  }catch(e){
+    if (S.sitzung !== s || s.folge[s.pos] !== k) return;
+    decke({ art:'warn', text:'Die Rückmeldung von Claude ist gerade nicht möglich ('+e.message+'). Vergleiche selbst mit der Musterantwort.' });
+  }
+}
+function decke(hinweis){
+  const s = S.sitzung, k = s.folge[s.pos], q = S.quellen.get(k.qid), z = s.zustand;
+  if (z.offen) return;
+  z.offen = true;
+  const t = $('sText'); if (t) t.readOnly = true;
+  if (k.typ === 'luecke') $('sFrage').innerHTML = frageHtml(k, true);
+  if (k.typ === 'mc'){
+    document.querySelectorAll('#sEingabe .opt').forEach((b) => {
+      const i = Number(b.dataset.i); b.disabled = true;
+      if (i === k.richtig) b.classList.add('richtig'); else if (i === z.wahl) b.classList.add('falsch');
+    });
+  }
+  let h = '';
+  if (hinweis) h += '<div class="msg zeigen '+hinweis.art+'" style="margin-top:0">'+esc(hinweis.text)+'</div>';
+  if (z.ki){
+    const lab = ['Noch nicht richtig','Teilweise richtig','Im Kern richtig','Richtig'][z.ki.punkte];
+    h += '<div class="s-ki p'+z.ki.punkte+'"><div class="lab">Rückmeldung · '+lab+'</div>'+esc(z.ki.feedback)+'</div>';
+  }
+  if (k.typ !== 'luecke') h += '<div class="s-antwort"><div class="lab">'+(k.typ==='fall'?'Erwartete Kernpunkte':'Musterantwort')+'</div>'+esc(k.antwort)+'</div>';
+  if (k.erklaerung) h += '<div class="s-erkl">'+esc(k.erklaerung)+'</div>';
+  if (q){
+    const ort = esc(q.name)+(k.seite ? ', Seite '+k.seite : '');
+    h += '<div class="s-quelle">Quelle: '+(q.webUrl ? '<a href="'+esc(q.webUrl)+'" target="_blank" rel="noopener">'+ort+'</a>' : ort)
+       + ' · <button class="link" id="sAus">Karte ausblenden</button></div>';
+  }
+  $('sLoesung').innerHTML = h;
+  const aus = $('sAus'); if (aus) aus.onclick = () => { if (confirm('Diese Karte nicht mehr abfragen? Du kannst sie im Fach wieder einblenden.')){ S.stand.aus.push(k.id); standGeaendert(); weiter(); } };
+  const fuss = $('sFuss');
+  if (s.frei){
+    fuss.innerHTML = '<button class="btn btn-ghost" id="sNochmal">Später nochmal</button><button class="btn btn-primary" id="sWeiter">Weiter</button>';
+    $('sNochmal').onclick = () => { s.folge.push(k); s.gesamt++; weiter(); };
+    $('sWeiter').onclick = () => { s.gewusst++; weiter(); };
+  } else {
+    const e = S.stand.karten[k.id];
+    fuss.innerHTML = ['Nochmal','Schwer','Gut','Leicht'].map((name, n) =>
+      '<button class="note n'+n+(z.vorschlag===n?' vorschlag':'')+'" data-n="'+n+'">'+name+'<small>'+intervallText(naechster(e, n)[1])+'</small></button>').join('');
+    fuss.querySelectorAll('.note').forEach((b) => b.onclick = () => bewerte(Number(b.dataset.n)));
+  }
+  const lo = $('sLoesung'); if (lo.scrollIntoView) lo.scrollIntoView({ block:'nearest', behavior:'smooth' });
+}
+function bewerte(note){
+  const s = S.sitzung, k = s.folge[s.pos];
+  const alt = S.stand.karten[k.id];
+  const st = tagStat();
+  if (!alt) st.neu++; else if (!s.wieder.has(k.id)) st.wdh++;
+  S.stand.karten[k.id] = naechster(alt, note);
+  standGeaendert();
+  if (note === 0){
+    /* in dieser Sitzung noch einmal zeigen, einige Karten später */
+    s.wieder.add(k.id);
+    s.folge.splice(Math.min(s.folge.length, s.pos+1+4), 0, k);
+    s.gesamt++;
+  } else if (!s.wieder.has(k.id)) s.gewusst++;
+  weiter();
+}
+function weiter(){ const s = S.sitzung; s.pos++; s.erledigt++; zeigeKarte(); }
+function zeigeEnde(){
+  const s = S.sitzung;
+  $('sBalken').style.width = '100%';
+  $('sZaehler').textContent = s.gesamt+' / '+s.gesamt;
+  const rest = baueSitzung({ fach:s.fach });
+  const neuOffen = alleKarten().filter((k) => !S.stand.karten[k.id] && (!s.fach || S.quellen.get(k.qid)?.fach===s.fach)).length;
+  $('sInhalt').innerHTML = '<div class="ende"><div class="gross">🎉</div><h2 style="margin:8px 0 4px">Geschafft</h2>'
+    + '<p class="muted">'+s.erledigt+' Karten bearbeitet'+(s.gesamt ? ', davon '+s.gewusst+' auf Anhieb gewusst' : '')+'.</p>'
+    + (!s.frei && !rest.folge.length && neuOffen ? '<p class="muted" style="margin-top:10px">Für heute ist alles erledigt. Es warten noch '+zahlDe(neuOffen)+' neue Karten.</p>' : '')+'</div>';
+  $('sFuss').innerHTML = (!s.frei && !rest.folge.length && neuOffen ? '<button class="btn btn-ghost" id="sMehr">10 weitere neue Karten</button>' : '')
+    + '<button class="btn btn-primary" id="sFertig">Fertig</button>';
+  $('sFertig').onclick = beendeSitzung;
+  const mehr = $('sMehr'); if (mehr) mehr.onclick = () => { const f = s.fach; S.sitzung = null; starteSitzung({ fach:f, mehrNeu:10 }); };
+  speichereStandServer();
+}
+document.addEventListener('keydown', (ev) => {
+  const s = S.sitzung; if (!s || !s.zustand || ev.target.tagName==='TEXTAREA' || ev.target.tagName==='INPUT') return;
+  if (ev.key === 'Escape') return beendeSitzung();
+  if (s.pos >= s.folge.length) return;
+  if (!s.zustand.offen && (ev.key===' ' || ev.key==='Enter')){ ev.preventDefault(); decke(); }
+  else if (s.zustand.offen && !s.frei && ['1','2','3','4'].includes(ev.key)) bewerte(Number(ev.key)-1);
+});
+
+/* ═══════════════════════════════════════════════════════════
+ * ANSICHTEN
+ * ═══════════════════════════════════════════════════════════ */
+function syncBand(){
+  const y = S.sync;
+  if (y.laeuft) return '<div class="syncband"><span class="spinner"></span><div class="txt">'+esc(y.text||'Unterlagen werden abgeglichen …')+'</div></div>';
+  if (y.fehler) return '<div class="syncband fehler"><div class="txt">'+esc(y.fehler)+'</div><button class="btn btn-ghost btn-sm" data-akt="sync">Erneut</button></div>';
+  if (!S.kiBereit) return '<div class="syncband fehler"><div class="txt">Neue Unterlagen können noch nicht eingelesen werden: Der Claude-API-Schlüssel fehlt im Worker (Secret ANTHROPIC_API_KEY).</div></div>';
+  return '';
+}
+function viewHeute(){
+  const karten = alleKarten(), z = zaehle(karten), st = S.stand.tage[String(tagNr())] || { neu:0, wdh:0 };
+  const neuHeute = Math.min(z.neu, neuHeuteFrei()), anstehend = z.faellig + neuHeute;
+  let h = syncBand();
+  if (!karten.length){
+    h += '<div class="card"><h2>Noch keine Karten</h2><p class="muted">'
+      + (S.sync.laeuft ? 'Deine Unterlagen aus dem Ordner ISBA werden gerade eingelesen. Die ersten Karten erscheinen hier, sobald der erste Abschnitt fertig ist.'
+                       : 'Lege Folien, Skripte oder Notizen in den OneDrive-Ordner ISBA. Beim nächsten Öffnen werden daraus Lernkarten.')
+      + '</p></div>';
+    return h;
+  }
+  h += '<div class="kacheln">'
+    + '<div class="kachel betont"><div class="wert">'+zahlDe(z.faellig)+'</div><div class="lab">Fällig</div></div>'
+    + '<div class="kachel"><div class="wert">'+zahlDe(neuHeute)+'</div><div class="lab">Neu heute</div></div>'
+    + '<div class="kachel"><div class="wert">'+zahlDe(st.neu+st.wdh)+'</div><div class="lab">Heute gelernt</div></div>'
+    + '<div class="kachel"><div class="wert">'+zahlDe(serie())+'</div><div class="lab">Tage in Folge</div></div></div>';
+  h += '<div class="card">'
+    + (anstehend ? '<h2>'+zahlDe(anstehend)+' Karten für heute</h2><p class="muted" style="margin-bottom:14px">'+zahlDe(z.faellig)+' Wiederholungen und '+zahlDe(neuHeute)+' neue Karten aus allen Fächern.</p><button class="btn btn-primary btn-gross" data-akt="lernen">Lernen starten</button>'
+                 : '<h2>Für heute ist alles erledigt</h2><p class="muted" style="margin-bottom:14px">'+(z.neu ? 'Es warten noch '+zahlDe(z.neu)+' neue Karten. Wenn du magst, nimm noch ein paar dazu.' : 'Alle Karten sind eingeplant. Im Reiter Fächer kannst du frei üben.')+'</p>'
+                   + (z.neu ? '<button class="btn btn-ghost btn-gross" data-akt="mehr">10 weitere neue Karten</button>' : ''))
+    + '</div>';
+  h += '<div class="card"><h2>Bestand</h2><p class="muted">'+zahlDe(z.gesamt)+' Karten · '+zahlDe(z.sicher)+' sicher · '+zahlDe(z.lernt)+' in Arbeit · '+zahlDe(z.neu)+' neu</p>'
+    + '<div class="balken"><i class="sicher" style="width:'+(100*z.sicher/z.gesamt)+'%"></i><i class="lernt" style="width:'+(100*z.lernt/z.gesamt)+'%"></i></div>'
+    + '<div class="reihe" style="margin-top:12px"><label class="muted" for="selNeu">Neue Karten pro Tag</label>'
+    + '<select id="selNeu" style="width:auto">'+[5,10,15,20,30,50].map((n) => '<option'+(n===S.stand.einst.neuProTag?' selected':'')+'>'+n+'</option>').join('')+'</select></div></div>';
+  return h;
+}
+function viewFaecher(){
+  if (S.fach) return viewFach();
+  const fs = faecher().filter((f) => f.karten.length);   // Fächer ohne Karten (leere Seiten, Fehler) nicht zeigen
+  let h = syncBand();
+  if (!fs.length) return h+'<div class="card"><h2>Noch keine Fächer</h2><p class="muted">Fächer entstehen automatisch aus den Modulkürzeln der Dateinamen (z. B. B01), den Unterordnern und den Abschnitten deines Notizbuchs.</p></div>';
+  for (const f of fs){
+    const z = zaehle(f.karten);
+    h += '<button class="card fach" data-fach="'+esc(f.key)+'"><div class="kopf"><div>'
+      + (f.titel ? '<div class="code">'+esc(f.key)+'</div>' : '')+'<div class="titel">'+esc(fachName(f))+'</div></div>'
+      + (z.faellig ? '<span class="pill faellig">'+zahlDe(z.faellig)+' fällig</span>' : (z.neu ? '<span class="pill neu">'+zahlDe(z.neu)+' neu</span>' : '<span class="pill ok">aktuell</span>'))+'</div>'
+      + '<div class="balken"><i class="sicher" style="width:'+(z.gesamt?100*z.sicher/z.gesamt:0)+'%"></i><i class="lernt" style="width:'+(z.gesamt?100*z.lernt/z.gesamt:0)+'%"></i></div>'
+      + '<div class="muted">'+zahlDe(z.gesamt)+' Karten · '+zahlDe(z.sicher)+' sicher · '+zahlDe(z.lernt)+' in Arbeit · '+zahlDe(z.neu)+' neu</div></button>';
+  }
+  return h;
+}
+function viewFach(){
+  const f = faecher().find((x) => x.key === S.fach);
+  if (!f){ S.fach = null; return viewFaecher(); }
+  const z = zaehle(f.karten), aus = new Set(S.stand.aus), h0 = tagNr();
+  const pruefung = f.quellen.map((q) => q.pruefungText).filter(Boolean);
+  let h = '<button class="zurueck" data-akt="zurueck">‹ Alle Fächer</button>';
+  h += '<div class="card">'+(f.titel ? '<div class="code">'+esc(f.key)+'</div>' : '')+'<h2>'+esc(fachName(f))+'</h2>'
+    + '<p class="muted">'+zahlDe(z.gesamt)+' Karten · '+zahlDe(z.faellig)+' fällig · '+zahlDe(z.neu)+' neu</p>'
+    + '<div class="reihe" style="margin-top:14px"><button class="btn btn-primary" data-akt="lernenFach"'+(z.faellig+Math.min(z.neu,neuHeuteFrei()) ? '' : ' disabled')+'>Fällige lernen</button>'
+    + '<button class="btn btn-ghost" data-akt="freiFach"'+(z.gesamt ? '' : ' disabled')+'>Alle Karten üben</button></div>'
+    + '<p class="hint" style="margin-top:8px">„Alle Karten üben“ fragt das ganze Fach gemischt ab und verändert den Wiederholungsplan nicht – gut vor einer Prüfung.</p>'
+    + (pruefung.length ? '<h3>Prüfungsleistung</h3>'+pruefung.map((p) => '<div class="pruefung">'+esc(p)+'</div>').join('') : '')
+    + '</div>';
+  const alle = [];
+  for (const q of f.quellen) for (const k of (S.karten.get(q.id)||[])) alle.push(k);
+  const such = normal(S.suche);
+  const treffer = such ? alle.filter((k) => normal(k.frage+' '+k.antwort+' '+k.thema).includes(such)) : alle;
+  h += '<div class="card"><h2>Karten</h2><input type="search" id="suche" placeholder="In Fragen und Antworten suchen" value="'+esc(S.suche)+'" style="margin:8px 0 4px">'
+    + '<ul class="liste">'+treffer.slice(0, 200).map((k) => {
+        const e = S.stand.karten[k.id], weg = aus.has(k.id), q = S.quellen.get(k.qid);
+        const status = weg ? '<span class="pill grau">ausgeblendet</span>' : !e ? '<span class="pill neu">neu</span>'
+          : e[0] <= h0 ? '<span class="pill faellig">fällig</span>' : '<span class="pill '+(e[1]>=21?'ok':'grau')+'">'+datumDe(tagZuDatum(e[0]))+'</span>';
+        return '<li class="'+(weg?'aus':'')+'"><div class="f">'+frageHtml(k, false)+'</div><div class="a">'+esc(k.antwort)+'</div>'
+          + '<div class="meta">'+status+'<span>'+typName(k.typ)+(q ? ' · '+esc(q.name)+(k.seite?', S. '+k.seite:'') : '')+'</span>'
+          + '<button class="link" data-aus="'+esc(k.id)+'">'+(weg?'einblenden':'ausblenden')+'</button></div></li>';
+      }).join('')+'</ul>'
+    + (treffer.length > 200 ? '<p class="hint">'+zahlDe(treffer.length-200)+' weitere Karten – bitte Suche eingrenzen.</p>' : '')
+    + (!treffer.length ? '<p class="muted">Keine Karten gefunden.</p>' : '')+'</div>';
+  return h;
+}
+function quelleStatus(q){
+  if (q.lokal === 'laeuft') return '<span class="pill warn"><span class="spinner"></span>wird eingelesen'+(q.teileGesamt>1 ? ' · '+q.teileFertig+'/'+q.teileGesamt : '')+'</span>';
+  if (q.lokal === 'wartet') return '<span class="pill grau">wartet</span>';
+  if (q.fehler) return '<span class="pill fehler">Fehler</span>';
+  if (q.verwaist) return '<span class="pill grau">nicht mehr im Ordner</span>';
+  if (q.teileGesamt && q.teileFertig < q.teileGesamt) return '<span class="pill warn">unvollständig · '+q.teileFertig+'/'+q.teileGesamt+'</span>';
+  return '<span class="pill ok">eingelesen</span>';
+}
+function viewQuellen(){
+  const y = S.sync;
+  let h = syncBand();
+  h += '<div class="card"><h2>Abgleich mit dem Ordner '+esc(CFG.ordner)+'</h2>'
+    + '<p class="muted">Beim Öffnen der App werden neue und geänderte Dateien sowie Seiten deines Notizbuchs eingelesen. '
+    + (y.zuletzt ? 'Letzter Abgleich: '+zeitDe(y.zuletzt)+'.' : '')+'</p>'
+    + '<div class="reihe" style="margin-top:12px">'
+    + (y.laeuft ? '<button class="btn btn-ghost" data-akt="stopp">Anhalten</button>' : '<button class="btn btn-primary" data-akt="sync">Jetzt abgleichen</button>')+'</div>'
+    + (y.log.length ? '<div class="log">'+esc(y.log.slice(-40).join('\n'))+'</div>' : '')+'</div>';
+  const qs = [...S.quellen.values()].sort((a,b)=>a.fach.localeCompare(b.fach,'de',{numeric:true})||a.name.localeCompare(b.name,'de',{numeric:true}));
+  h += '<div class="card"><h2>Eingelesene Unterlagen</h2>'
+    + (qs.length ? qs.map((q) => '<div class="quelle"><div class="qn">'+(q.webUrl ? '<a href="'+esc(q.webUrl)+'" target="_blank" rel="noopener" style="color:inherit">'+esc(q.name)+'</a>' : esc(q.name))+'</div>'
+        + '<div class="reihe" style="margin-top:4px">'+quelleStatus(q)+'<span class="muted">'+esc(q.fach)+' · '+(q.art==='onenote'?'Notizbuch':'Datei')+' · '+zahlDe(q.karten)+' Karten</span></div>'
+        + (q.fehlerText ? '<div class="hint" style="color:var(--error)">'+esc(q.fehlerText)+'</div>' : '')
+        + '<div class="reihe" style="margin-top:4px">'
+        + (q.verwaist ? '' : '<button class="link" data-neu="'+esc(q.id)+'"'+(y.laeuft?' disabled':'')+'>neu einlesen</button>')
+        + '<button class="link" data-weg="'+esc(q.id)+'"'+(y.laeuft?' disabled':'')+'>entfernen</button></div></div>').join('')
+              : '<p class="muted">Noch nichts eingelesen.</p>')+'</div>';
+  if (y.uebersprungen.length){
+    h += '<div class="card"><h2>Nicht eingelesen</h2><ul class="liste">'+y.uebersprungen.map((u) => '<li><div class="f">'+esc(u.name)+'</div><div class="a">'+esc(u.grund)+'</div></li>').join('')+'</ul></div>';
+  }
+  return h;
+}
+function render(){
+  if (!S.stand) return;
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('aktiv', t.dataset.tab === S.tab));
+  const z = zaehle(alleKarten()), an = z.faellig + Math.min(z.neu, neuHeuteFrei());
+  $('tabZahl').style.display = an ? 'inline-block' : 'none';
+  $('tabZahl').textContent = an > 99 ? '99+' : an;
+  /* Eingabefeld der Suche nicht unter dem Tippen austauschen */
+  const aktiv = document.activeElement && document.activeElement.id === 'suche' ? document.activeElement.selectionStart : null;
+  $('view').innerHTML = S.tab === 'heute' ? viewHeute() : S.tab === 'faecher' ? viewFaecher() : viewQuellen();
+  if (aktiv != null && $('suche')){ $('suche').focus(); $('suche').setSelectionRange(aktiv, aktiv); }
+}
+/* Während einer Sitzung oder beim Tippen nicht dazwischenzeichnen */
+let renderTimer = null;
+function renderBald(){ clearTimeout(renderTimer); renderTimer = setTimeout(() => { if (!S.sitzung) render(); }, 150); }
+
+$('tabs').addEventListener('click', (ev) => {
+  const t = ev.target.closest('.tab'); if (!t) return;
+  S.tab = t.dataset.tab; S.fach = null; S.suche = ''; render(); window.scrollTo(0, 0);
+});
+$('view').addEventListener('click', async (ev) => {
+  const el = ev.target.closest('[data-akt],[data-fach],[data-aus],[data-neu],[data-weg]'); if (!el || el.disabled) return;
+  if (el.dataset.fach){ S.fach = el.dataset.fach; S.suche = ''; render(); window.scrollTo(0, 0); return; }
+  if (el.dataset.aus){
+    const id = el.dataset.aus, i = S.stand.aus.indexOf(id);
+    if (i >= 0) S.stand.aus.splice(i, 1); else S.stand.aus.push(id);
+    standGeaendert(); render(); return;
+  }
+  if (el.dataset.neu){
+    const q = S.quellen.get(el.dataset.neu);
+    if (q && confirm('„'+q.name+'“ vollständig neu einlesen? Die bisherigen Karten dieser Unterlage und ihr Lernstand werden ersetzt.')){ q.version = ''; q.erzwungen = true; sync(true); }
+    return;
+  }
+  if (el.dataset.weg){
+    const q = S.quellen.get(el.dataset.weg);
+    if (q && confirm('„'+q.name+'“ mit '+q.karten+' Karten entfernen?'+(q.verwaist ? '' : ' Liegt die Unterlage noch im Ordner, wird sie beim nächsten Abgleich wieder eingelesen.'))){
+      try{ await worker('/api/lernapp/quelle/loeschen', { method:'POST', body:JSON.stringify({ id:q.id }) }); S.quellen.delete(q.id); S.karten.delete(q.id); }
+      catch(e){ alert('Entfernen fehlgeschlagen: '+e.message); }
+      render();
+    }
+    return;
+  }
+  const a = el.dataset.akt;
+  if (a === 'lernen') starteSitzung({});
+  else if (a === 'mehr') starteSitzung({ mehrNeu:10 });
+  else if (a === 'lernenFach') starteSitzung({ fach:S.fach });
+  else if (a === 'freiFach') starteSitzung({ fach:S.fach, frei:true });
+  else if (a === 'zurueck'){ S.fach = null; S.suche = ''; render(); }
+  else if (a === 'sync') sync(true);
+  else if (a === 'stopp'){ S.sync.stopp = true; S.sync.text = 'Wird nach dem laufenden Abschnitt angehalten …'; render(); }
+});
+$('view').addEventListener('input', (ev) => { if (ev.target.id === 'suche'){ S.suche = ev.target.value; renderBald(); } });
+$('view').addEventListener('change', (ev) => { if (ev.target.id === 'selNeu'){ S.stand.einst.neuProTag = Number(ev.target.value)||15; standGeaendert(); render(); } });
+$('sSchliessen').onclick = beendeSitzung;
+
+/* ═══════════════════════════════════════════════════════════
+ * LADEN
+ * ═══════════════════════════════════════════════════════════ */
+function uebernehmeQuelle(voll){
+  const m = voll.meta || {};
+  const alt = S.quellen.get(voll.id) || {};
+  const karten = (voll.karten||[]).map((k) => ({ ...k, qid:voll.id }));
+  S.karten.set(voll.id, karten);
+  S.quellen.set(voll.id, { ...alt, id:voll.id, name:m.name||alt.name||'', fach:m.fach||alt.fach||'Allgemein', fachTitel:m.fachTitel||'',
+    art:m.art||'datei', version:m.version||'', teileFertig:m.teileFertig||0, teileGesamt:m.teileGesamt||0, karten:karten.length,
+    stand:voll.stand||alt.stand||null, fehler:!!m.fehler, fehlerText:m.fehler||'', pruefungText:m.pruefung||'', webUrl:m.webUrl||'', seiten:m.seiten||0 });
+}
+async function ladeBestand(){
+  const r = await worker('/api/lernapp/quellen');
+  S.kiBereit = r.kiBereit !== false;
+  S.quellen.clear(); S.karten.clear();
+  for (const q of r.quellen) S.quellen.set(q.id, { ...q, fehlerText:'', pruefungText:'', webUrl:'' });
+  const ids = r.quellen.map((q) => q.id);
+  for (let i=0; i<ids.length; i+=25){
+    const teil = await worker('/api/lernapp/karten?ids='+ids.slice(i, i+25).map(encodeURIComponent).join(','));
+    for (const voll of teil.quellen) uebernehmeQuelle(voll);
+  }
+}
+async function nachLogin(){
+  $('gate').style.display = 'none';
+  $('app').style.display = 'block';
+  $('userBadge').style.display = 'flex';
+  $('userName').textContent = currentAccount.name || upn();
+  const lo = $('btnLogout');
+  lo.style.display = 'inline-flex';
+  lo.onclick = () => msalInstance.logoutPopup({account:currentAccount}).then(()=>location.reload());
+  $('view').innerHTML = '<div class="card"><span class="spinner"></span>Karten werden geladen …</div>';
+  try{
+    await Promise.all([ladeStand(), ladeBestand()]);
+  }catch(e){
+    $('view').innerHTML = '<div class="card"><h2>Die Lernapp konnte nicht geladen werden</h2><div class="msg zeigen fehler">'+esc(e.message)+'</div>'
+      + '<div class="reihe" style="margin-top:12px"><button class="btn btn-primary" onclick="location.reload()">Erneut versuchen</button></div></div>';
+    return;
+  }
+  render();
+  sync(false);
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * ABGLEICH MIT DEM ORDNER (Dateien und OneNote)
+ * ═══════════════════════════════════════════════════════════ */
+function logge(t){ S.sync.log.push(new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+'  '+t); if (S.sync.log.length>200) S.sync.log.shift(); }
+function status(t){ S.sync.text = t; renderBald(); }
+
+/* Alle Dateien unter ISBA auflisten. Ordner, die mit „z_“ oder „_“ beginnen, bleiben außen vor. */
+async function listeDateien(){
+  const dateien = [], notizbuecher = [];
+  const feld = '$select=id,name,size,file,folder,package,cTag,eTag,lastModifiedDateTime,webUrl&$top=200';
+  async function ordner(url, pfad, tiefe){
+    for (const it of await graphAlle(url)){
+      if (it.package){ if ((it.package.type||'').toLowerCase()==='onenote') notizbuecher.push({ name:it.name, webUrl:it.webUrl }); continue; }
+      if (/^(z_|_|\.|~\$)/i.test(it.name)){ if (it.folder) S.sync.uebersprungen.push({ name:[...pfad, it.name].join(' / '), grund:'Ordner ist ausgeschlossen (beginnt mit „z_“ oder „_“).' }); continue; }
+      if (it.folder){ if (tiefe < 5) await ordner('/drives/'+CFG.driveId+'/items/'+it.id+'/children?'+feld, [...pfad, it.name], tiefe+1); continue; }
+      if (!it.file) continue;
+      const e = endung(it.name);
+      if (e === 'one' || e === 'onetoc2') continue;
+      const bekannt = [...ENDUNG_PDF, ...ENDUNG_OFFICE, ...ENDUNG_TEXT, ...ENDUNG_BILD].includes(e);
+      if (!bekannt){ S.sync.uebersprungen.push({ name:[...pfad, it.name].join(' / '), grund:'Dateityp .'+(e||'?')+' wird nicht unterstützt.' }); continue; }
+      if (it.size > DATEI_MAX_BYTES){ S.sync.uebersprungen.push({ name:[...pfad, it.name].join(' / '), grund:'Datei ist größer als 60 MB.' }); continue; }
+      const kuerzel = modulKuerzel(it.name) || pfad.map(modulKuerzel).find(Boolean);
+      dateien.push({ id:'d_'+it.id, itemId:it.id, art:'datei', name:it.name, endung:e, groesse:it.size||0,
+        version:String(it.cTag || it.eTag || (it.lastModifiedDateTime+'|'+it.size)), webUrl:it.webUrl||'', pfad:pfad.join(' / '),
+        fach:kuerzel || pfad[0] || 'Allgemein', fachTitel:'' });
+    }
+  }
+  await ordner('/drives/'+CFG.driveId+'/root:/'+encodeURIComponent(CFG.ordner)+':/children?'+feld, [], 0);
+  return { dateien, notizbuecher };
+}
+
+/* Seiten der Notizbücher im Ordner auflisten (nur mit der Anmeldung der Besitzerin möglich). */
+async function listeNotizen(notizbuecher){
+  const basis = '/me/onenote';
+  let nbs = await graphAlle(basis+'/notebooks?$select=id,displayName,links&$top=100', SCOPES_NOTIZ);
+  const imOrdner = (n) => decodeURIComponent(n.links?.oneNoteWebUrl?.href||'').toLowerCase().includes('/'+CFG.ordner.toLowerCase()+'/');
+  let treffer = nbs.filter(imOrdner);
+  if (!treffer.length){
+    /* Notizbücher außerhalb des Standardordners tauchen in der Liste nicht immer auf → über die Adresse holen */
+    for (const nb of notizbuecher){
+      try{
+        const r = await graph(basis+'/notebooks/getNotebookFromWebUrl', SCOPES_NOTIZ, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ webUrl:nb.webUrl }) });
+        treffer.push(await r.json());
+      }catch(e){ logge('Notizbuch „'+nb.name+'“ nicht lesbar: '+e.message); }
+    }
+  }
+  const seiten = [];
+  async function abschnitte(url, gruppen){
+    for (const ab of await graphAlle(url, SCOPES_NOTIZ)){
+      const kuerzel = modulKuerzel(ab.displayName) || gruppen.map(modulKuerzel).find(Boolean);
+      const titelQuelle = modulKuerzel(ab.displayName) ? ab.displayName : (gruppen.find(modulKuerzel) || '');
+      for (const p of await graphAlle(basis+'/sections/'+ab.id+'/pages?$select=id,title,lastModifiedDateTime,links&$top=100', SCOPES_NOTIZ)){
+        seiten.push({ id:'o_'+String(p.id).replace(/[^A-Za-z0-9!_.\-]/g, '_'), pageId:p.id, art:'onenote', name:(p.title||'Seite ohne Titel').trim(),
+          version:String(p.lastModifiedDateTime||''), geaendert:p.lastModifiedDateTime, webUrl:p.links?.oneNoteWebUrl?.href||'',
+          pfad:[...gruppen, ab.displayName].join(' / '), fach:kuerzel || ab.displayName || 'Notizen', fachTitel:kuerzel ? ohneKuerzel(titelQuelle) : '' });
+      }
+    }
+  }
+  async function gruppe(url, namen, tiefe){
+    for (const g of await graphAlle(url, SCOPES_NOTIZ)){
+      await abschnitte(basis+'/sectionGroups/'+g.id+'/sections?$select=id,displayName&$top=100', [...namen, g.displayName]);
+      if (tiefe < 3) await gruppe(basis+'/sectionGroups/'+g.id+'/sectionGroups?$select=id,displayName&$top=100', [...namen, g.displayName], tiefe+1);
+    }
+  }
+  for (const nb of treffer){
+    await abschnitte(basis+'/notebooks/'+nb.id+'/sections?$select=id,displayName&$top=100', []);
+    await gruppe(basis+'/notebooks/'+nb.id+'/sectionGroups?$select=id,displayName&$top=100', [], 0);
+  }
+  return { seiten, notizbuecher:treffer.length };
+}
+
+/* Claude-Aufruf je Abschnitt, mit Wiederholung bei Überlast */
+async function erzeuge(quelle, inhalt, bestehend){
+  for (let versuch=0; ; versuch++){
+    let r;
+    try{
+      r = await worker('/api/lernapp/erzeugen', { method:'POST', body:JSON.stringify({ quelle, inhalt, bestehend:(bestehend||[]).map((k) => ({ id:k.id, frage:k.frage, antwort:k.antwort })) }) });
+    }catch(e){ r = { ok:false, error:e.message, wiederholbar:!e.status || e.status>=500 }; }
+    if (r && r.ok) return r;
+    if (r && r.wiederholbar && versuch < 3){ status('Claude ist ausgelastet – neuer Versuch in Kürze …'); await warte([5000, 15000, 40000][versuch]); continue; }
+    const f = new Error((r && r.error) || 'Unbekannter Fehler'); f.zuLang = !!(r && r.zuLang); throw f;
+  }
+}
+async function bildBlock(blob){
+  const bmp = await createImageBitmap(blob);
+  if (bmp.width < 80 || bmp.height < 80) return null;
+  const f = Math.min(1, BILD_KANTE/Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width*f); c.height = Math.round(bmp.height*f);
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
+  return { typ:'bild', mime:'image/jpeg', daten:c.toDataURL('image/jpeg', 0.85).split(',')[1] };
+}
+function htmlZuText(wurzel){
+  const block = new Set(['P','DIV','LI','TR','H1','H2','H3','H4','H5','H6','BR','TABLE','UL','OL']);
+  let t = '';
+  (function lauf(n){
+    for (const c of n.childNodes){
+      if (c.nodeType === 3) t += c.nodeValue.replace(/\s+/g, ' ');
+      else if (c.nodeType === 1){
+        if (c.tagName === 'LI') t += '\n- ';
+        else if (c.tagName === 'TD' || c.tagName === 'TH') t += ' | ';
+        else if (block.has(c.tagName)) t += '\n';
+        lauf(c);
+        if (block.has(c.tagName)) t += '\n';
+      }
+    }
+  })(wurzel);
+  return t.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/* Eine Quelle in Abschnitte zerlegen: liefert { teile, seiten, holen(teilNr) → { inhalt, von, bis } } */
+async function bereiteDatei(q){
+  if (ENDUNG_TEXT.includes(q.endung)){
+    const text = new TextDecoder('utf-8').decode(await workerDatei(q.itemId, false));
+    return { teile:1, seiten:0, holen:async () => ({ teile:[{ inhalt:[{ typ:'text', text }], von:0, bis:0 }] }) };
+  }
+  if (ENDUNG_BILD.includes(q.endung)){
+    const bytes = await workerDatei(q.itemId, false);
+    const b = await bildBlock(new Blob([bytes]));
+    if (!b) throw new Error('Bild ist zu klein oder nicht lesbar.');
+    return { teile:1, seiten:0, holen:async () => ({ teile:[{ inhalt:[b], von:0, bis:0 }] }) };
+  }
+  const bytes = await workerDatei(q.itemId, ENDUNG_OFFICE.includes(q.endung));
+  let doc = null;
+  try{ if (typeof PDFLib !== 'undefined') doc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true, updateMetadata:false }); }catch(e){ doc = null; }
+  if (!doc){
+    if (bytes.length > 4000000) throw new Error('PDF lässt sich nicht in Abschnitte teilen (geschützt oder beschädigt).');
+    return { teile:1, seiten:0, holen:async () => ({ teile:[{ inhalt:[{ typ:'pdf', daten:b64(bytes) }], von:0, bis:0 }] }) };
+  }
+  const n = doc.getPageCount();
+  if (!n) throw new Error('PDF enthält keine Seiten.');
+  const teile = n <= TEIL_SEITEN+4 ? 1 : Math.ceil(n/TEIL_SEITEN);
+  const groesse = Math.ceil(n/teile);
+  async function bereich(von, bis){   // 1-basiert, einschließlich; zu große Abschnitte werden halbiert
+    const neu = await PDFLib.PDFDocument.create();
+    const seiten = await neu.copyPages(doc, Array.from({ length:bis-von+1 }, (_, i) => von-1+i));
+    seiten.forEach((s) => neu.addPage(s));
+    const out = await neu.save();
+    if (out.length > TEIL_MAX_BYTES && bis > von){
+      const mitte = Math.floor((von+bis)/2);
+      return [...await bereich(von, mitte), ...await bereich(mitte+1, bis)];
+    }
+    if (out.length > 9000000) throw new Error('Seite '+von+' ist zu groß für die Verarbeitung.');
+    return [{ inhalt:[{ typ:'pdf', daten:b64(out) }], von, bis }];
+  }
+  return { teile, seiten:n, holen:async (t) => ({ teile:await bereich((t-1)*groesse+1, Math.min(n, t*groesse)) }) };
+}
+async function bereiteNotiz(q){
+  const html = await (await graph('/me/onenote/pages/'+encodeURIComponent(q.pageId)+'/content', SCOPES_NOTIZ)).text();
+  const dom = new DOMParser().parseFromString(html, 'text/html');
+  let text = htmlZuText(dom.body);
+  const inhalt = [];
+  let bilder = 0;
+  for (const img of [...dom.querySelectorAll('img')].slice(0, 30)){
+    if (bilder >= 10) break;
+    const src = img.getAttribute('data-fullres-src') || img.getAttribute('src') || '';
+    if (!src.startsWith('https://graph.microsoft.com/')) continue;
+    try{ const b = await bildBlock(await (await graph(src, SCOPES_NOTIZ)).blob()); if (b){ inhalt.push(b); bilder++; } }
+    catch(e){ console.warn('Bild der Notizseite nicht lesbar:', e.message); }
+  }
+  for (const obj of [...dom.querySelectorAll('object[data-attachment]')].slice(0, 4)){
+    const name = obj.getAttribute('data-attachment') || 'Anhang', src = obj.getAttribute('data') || '';
+    if (endung(name) !== 'pdf' || !src.startsWith('https://graph.microsoft.com/')){ text += '\n(Anhang „'+name+'“ wurde nicht ausgewertet.)'; continue; }
+    try{
+      const bytes = new Uint8Array(await (await graph(src, SCOPES_NOTIZ)).arrayBuffer());
+      let seiten = 999;
+      try{ seiten = (await PDFLib.PDFDocument.load(bytes, { ignoreEncryption:true, updateMetadata:false })).getPageCount(); }catch(e){}
+      if (seiten <= 15 && bytes.length <= TEIL_MAX_BYTES) inhalt.push({ typ:'pdf', daten:b64(bytes) });
+      else S.sync.uebersprungen.push({ name:q.name+' → '+name, grund:'Anhang im Notizbuch ist zu umfangreich. Lege die Datei direkt in den Ordner '+CFG.ordner+', dann wird sie vollständig eingelesen.' });
+    }catch(e){ console.warn('Anhang nicht lesbar:', e.message); }
+  }
+  if (text.length < 40 && !inhalt.length) return { teile:1, seiten:0, leer:true, holen:async () => ({ teile:[] }) };
+  inhalt.unshift({ typ:'text', text:'Notizseite „'+q.name+'“'+(q.pfad ? ' (Abschnitt '+q.pfad+')' : '')+':\n\n'+(text || '(kein Text, siehe Bilder)') });
+  return { teile:1, seiten:0, holen:async () => ({ teile:[{ inhalt, von:0, bis:0 }] }) };
+}
+
+async function speichereQuelle(q, karten, meta){
+  const voll = { id:q.id, meta:{ name:q.name, fach:q.fach, fachTitel:q.fachTitel||'', art:q.art, pfad:q.pfad||'', webUrl:q.webUrl||'', version:q.version, ...meta },
+    karten:karten.map(({ qid, ...k }) => k) };
+  const r = await worker('/api/lernapp/quelle', { method:'POST', body:JSON.stringify(voll) });
+  const lokal = S.quellen.get(q.id)?.lokal;
+  uebernehmeQuelle({ ...voll, stand:r.stand });
+  if (lokal) S.quellen.get(q.id).lokal = lokal;
+}
+async function verarbeite(q){
+  const alt = S.quellen.get(q.id);
+  let karten = (alt && !alt.erzwungen) ? (S.karten.get(q.id)||[]).slice() : [];
+  const fortsetzen = alt && !alt.erzwungen && alt.version === q.version && alt.teileGesamt > 0 && alt.teileFertig < alt.teileGesamt && !alt.fehler;
+  if (!q.fachTitel && alt && alt.fachTitel) q.fachTitel = alt.fachTitel;
+  if (!q.fachTitel){ const gleich = [...S.quellen.values()].find((x) => x.fach === q.fach && x.fachTitel); if (gleich) q.fachTitel = gleich.fachTitel; }
+  let pruefung = fortsetzen ? (alt.pruefungText||'') : '';
+  S.quellen.set(q.id, { ...(alt||{ karten:0 }), id:q.id, name:q.name, fach:q.fach, fachTitel:q.fachTitel||'', art:q.art, webUrl:q.webUrl, lokal:'laeuft',
+    teileFertig:fortsetzen ? alt.teileFertig : 0, teileGesamt:alt?.teileGesamt||0, fehler:false, fehlerText:'' });
+  status('Lese „'+q.name+'“ …');
+  let plan;
+  try{
+    plan = q.art === 'onenote' ? await bereiteNotiz(q) : await bereiteDatei(q);
+    if (plan.leer){ await speichereQuelle(q, [], { teileFertig:1, teileGesamt:1, seiten:0, pruefung:'' }); return 0; }
+    let neuGesamt = 0;
+    for (let t = fortsetzen ? alt.teileFertig+1 : 1; t <= plan.teile; t++){
+      if (S.sync.stopp) return neuGesamt;
+      status('Lese „'+q.name+'“'+(plan.teile>1 ? ' · Abschnitt '+t+' von '+plan.teile : '')+' …');
+      const lage = S.quellen.get(q.id); lage.teileFertig = t-1; lage.teileGesamt = plan.teile;
+      const bestehend = karten.filter((k) => (k.teil||1) === t);
+      const behalten = new Set(), neu = [];
+      for (const stueck of (await plan.holen(t)).teile){
+        const r = await erzeuge({ name:q.name, fach:q.fach, art:q.art, teil:t, teile:plan.teile, seitenVon:stueck.von||1, seitenBis:stueck.bis||1 }, stueck.inhalt, bestehend);
+        r.behalten.forEach((id) => behalten.add(id));
+        for (const k of r.karten){
+          const seite = (stueck.von && k.seite >= 1 && k.seite <= stueck.bis-stueck.von+1) ? stueck.von-1+k.seite : 0;
+          neu.push({ ...k, seite, teil:t, id:q.id+'#'+t+'-'+zufallsId() });
+        }
+        if (r.modulTitel && !q.fachTitel) q.fachTitel = r.modulTitel;
+        if (r.pruefung && !pruefung.includes(r.pruefung)) pruefung = (pruefung ? pruefung+'\n\n' : '')+r.pruefung;
+      }
+      karten = karten.filter((k) => (k.teil||1) !== t || behalten.has(k.id)).concat(neu);
+      if (t === plan.teile) karten = karten.filter((k) => (k.teil||1) <= plan.teile);
+      neuGesamt += neu.length; S.sync.neu += neu.length;
+      await speichereQuelle(q, karten, { teileFertig:t, teileGesamt:plan.teile, seiten:plan.seiten, pruefung });
+      renderBald();
+    }
+    return neuGesamt;
+  }catch(e){
+    /* Fehler an der Quelle vermerken, damit sie nicht bei jedem Öffnen erneut Kosten verursacht */
+    logge('Fehler bei „'+q.name+'“: '+e.message);
+    const lage = S.quellen.get(q.id);
+    try{ await speichereQuelle(q, karten, { teileFertig:lage?.teileFertig||0, teileGesamt:Math.max(plan?.teile||0, lage?.teileGesamt||0, 1), seiten:plan?.seiten||0, pruefung, fehler:e.message }); }
+    catch(e2){ const l = S.quellen.get(q.id); if (l){ l.fehler = true; l.fehlerText = e.message; } }
+    return 0;
+  }finally{
+    const l = S.quellen.get(q.id); if (l){ delete l.lokal; delete l.erzwungen; }
+  }
+}
+
+async function sync(manuell){
+  const y = S.sync;
+  if (y.laeuft) return;
+  y.laeuft = true; y.stopp = false; y.fehler = ''; y.neu = 0; y.uebersprungen = [];
+  status('Ordner '+CFG.ordner+' wird geprüft …'); render();
+  try{
+    const { dateien, notizbuecher } = await listeDateien();
+    let seiten = [], notizGelesen = false;
+    if (istBesitzer()){
+      try{ const n = await listeNotizen(notizbuecher); seiten = n.seiten; notizGelesen = true; if (!n.notizbuecher && notizbuecher.length) logge('Das Notizbuch im Ordner wurde von OneNote nicht gefunden.'); }
+      catch(e){ logge('Notizbuch nicht lesbar: '+e.message+(e.status===403 ? ' (Berechtigung Notes.Read prüfen)' : '')); }
+    } else if (notizbuecher.length){
+      logge('Das Notizbuch wird nur mit der Anmeldung von '+CFG.besitzer+' eingelesen.');
+    }
+    const ruhe = Date.now() - NOTIZ_RUHE_MIN*60000;
+    const fern = [...dateien, ...seiten];
+    const fernIds = new Set(fern.map((f) => f.id));
+    for (const q of S.quellen.values()){
+      const zustaendig = q.art === 'onenote' ? notizGelesen : true;
+      q.verwaist = zustaendig && !fernIds.has(q.id);
+    }
+    const offen = fern.filter((f) => {
+      const alt = S.quellen.get(f.id);
+      if (!alt) return !(f.art === 'onenote' && !manuell && Date.parse(f.geaendert) > ruhe);
+      if (alt.erzwungen) return true;
+      if (alt.version !== f.version) return !(f.art === 'onenote' && !manuell && Date.parse(f.geaendert) > ruhe);
+      if (alt.fehler) return manuell;                       // fehlgeschlagene nur auf Wunsch erneut
+      return alt.teileGesamt > 0 && alt.teileFertig < alt.teileGesamt;
+    });
+    /* Reihenfolge: kleine Dateien zuerst, damit schnell die ersten Karten da sind */
+    offen.sort((a,b) => (a.groesse||0) - (b.groesse||0));
+    logge(fern.length+' Unterlagen im Ordner, '+offen.length+' neu oder geändert.');
+    if (offen.length && !S.kiBereit){
+      y.fehler = offen.length+' neue Unterlagen warten – der Claude-API-Schlüssel fehlt noch im Worker.';
+    } else {
+      for (const f of offen){ const l = S.quellen.get(f.id); if (l) l.lokal = 'wartet'; }
+      for (const f of offen){
+        if (y.stopp) break;
+        const n = await verarbeite(f);
+        logge('„'+f.name+'“: '+n+' Karten'+(S.quellen.get(f.id)?.fehler ? ' (mit Fehler abgebrochen)' : ''));
+      }
+      for (const q of S.quellen.values()) if (q.lokal === 'wartet') delete q.lokal;
+      if (y.stopp) logge('Abgleich angehalten.');
+      else if (offen.length) logge('Abgleich fertig: '+y.neu+' neue Karten.');
+    }
+    y.zuletzt = new Date().toISOString();
+  }catch(e){
+    y.fehler = 'Abgleich mit dem Ordner '+CFG.ordner+' nicht möglich: '+e.message+(e.status===404||e.status===403 ? ' – der Ordner ist für dieses Konto nicht freigegeben.' : '');
+    logge(y.fehler);
+  }finally{
+    y.laeuft = false; y.text = '';
+    if (!S.sitzung) render();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * START
+ * ═══════════════════════════════════════════════════════════ */
+$('btnLogin').onclick = login;
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && standOffen) speichereStandServer(); });
+window.addEventListener('beforeunload', (ev) => { if (S.sync.laeuft){ ev.preventDefault(); ev.returnValue = ''; } });
+(function start(){
+  if (!initMsal()) return;
+  const konten = msalInstance.getAllAccounts().filter((a) => (a.tenantId||CFG.tenantId) === CFG.tenantId);
+  if (konten.length){
+    currentAccount = konten[0];
+    msalInstance.setActiveAccount(currentAccount);
+    /* Sitzung noch gültig? Sonst bleibt die Anmeldeseite stehen. */
+    msalInstance.acquireTokenSilent({ scopes:SCOPES, account:currentAccount }).then(nachLogin).catch(() => { currentAccount = null; });
+  }
+})();
+</script>
+</body>
+</html>

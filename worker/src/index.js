@@ -2990,6 +2990,7 @@ const ENDPUNKT_GRUPPEN = {
   "scorecard":          ["PNW-App-BusinessScorecard"],
   "unterschriften":     ["PNW-App-Unterschriften"],
   "rueckmeldung":       ["PNW-App-Rueckmeldung"],
+  "lernapp":            ["PNW-App-Lernapp"],
 };
 
 let gruppenCache = new Map(); // upn → { namen:Set, fetchedAt }
@@ -3072,6 +3073,353 @@ async function zugriffPortal(request, env, caller, name, angefragt) {
     } catch (e) { console.warn("Zugriffsbericht nicht speicherbar:", e.message); }
   }
   return antwort;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Lernapp Soziale Arbeit (lernapp.html)
+//
+// Lernkarten aus den Studienunterlagen im OneDrive-Ordner „ISBA“ (Dateien
+// und OneNote-Notizbuch). Das Frontend liest die Unterlagen mit der
+// Anmeldung der Nutzerin über Graph, teilt sie in Abschnitte und schickt
+// sie hierher; der Worker lässt Claude daraus Karten erzeugen und hält
+// Karten und Lernstand in Workers KV.
+//
+//   GET  /api/lernapp/quellen            Liste aller verarbeiteten Quellen
+//   GET  /api/lernapp/karten?ids=a,b     Karten mehrerer Quellen (max. 25)
+//   POST /api/lernapp/quelle             Quelle mit Karten speichern
+//   POST /api/lernapp/quelle/loeschen    Quelle samt Karten löschen
+//   POST /api/lernapp/erzeugen           Karten aus einem Abschnitt erzeugen (Claude)
+//   POST /api/lernapp/bewerten           freie Antwort bewerten (Claude)
+//   GET  /api/lernapp/stand              eigener Lernstand
+//   POST /api/lernapp/stand              eigenen Lernstand speichern
+//   GET  /api/lernapp/inhalt?item=…      Dateiinhalt aus dem Quell-Laufwerk
+//                                        (Graph-Token des Aufrufers; pdf=1 → Umwandlung nach PDF)
+//
+// KV (PNW_DATEN):
+//   lernapp:q:<quelleId>      { id, meta, karten[] } — Kurzangaben zusätzlich als KV-Metadaten
+//   lernapp:stand:<upn>       Lernstand je Konto
+//
+// Secret ANTHROPIC_API_KEY (Cloudflare → Settings → Variables and Secrets).
+// Optional als Variable: LERNAPP_MODELL, LERNAPP_MODELL_BEWERTUNG.
+// ═══════════════════════════════════════════════════════════════
+const LERNAPP_DRIVE = "b!f7uxF10jA0-RUH7Gt7e1aFVimAAkpLhGqO8Zs9_BmTfQT-izV-7wRJ4sWE1h7QJD"; // OneDrive Sonja Peltz
+const LERNAPP_MODELL_KARTEN = "claude-sonnet-5-5";
+const LERNAPP_MODELL_BEWERTUNG = "claude-haiku-5-5";
+const LERNAPP_ID_RE = /^[A-Za-z0-9!_.\-]{5,200}$/;
+const LERNAPP_ITEM_RE = /^[A-Za-z0-9!_\-]{5,120}$/;
+const LERNAPP_TYPEN = ["frage", "luecke", "mc", "fall"];
+const LERNAPP_MAX_ANFRAGE = 14 * 1024 * 1024; // Abschnitt inkl. Base64
+const LERNAPP_MAX_QUELLE = 1500 * 1024;
+const LERNAPP_MAX_STAND = 1500 * 1024;
+
+const LERNAPP_SYSTEM_KARTEN = `Du erstellst Lernkarten für eine Studentin der Sozialen Arbeit (berufsbegleitendes Studium an der isba). Sie arbeitet seit Jahren in der Kinder- und Jugendhilfe und lernt mit den Karten für Prüfungen und Seminararbeiten.
+
+Du erhältst einen Abschnitt ihrer Unterlagen (Vorlesungsfolien, Skripte, eigene Notizen). Erstelle daraus Lernkarten auf Deutsch.
+
+Regeln:
+- Nur fachlicher Inhalt. Keine Karten zu Organisatorischem: Begrüßung, Vorstellung der Lehrenden, Kennenlernrunden, Agenda, Terminen, Gruppeneinteilung, Literaturlisten, Bildnachweisen.
+- Angaben zur Prüfungsleistung (Art, Umfang, Bearbeitungszeit, Bewertungskriterien, Abgabe) gehören NICHT auf Karten, sondern knapp zusammengefasst in das Feld "pruefung". Sonst bleibt "pruefung" leer.
+- Stütze dich ausschließlich auf die Unterlage. Erfinde keine Fakten, Zahlen, Autoren oder Paragraphen. Was die Unterlage nur andeutet, darfst du im Feld "erklaerung" kurz einordnen; diese Einordnung muss fachlich gesichert sein.
+- Eine Karte prüft genau einen Gedanken. Die Frage ist ohne die Folie verständlich (keine Verweise wie "auf dieser Folie" oder "laut Abbildung").
+- Antworten sind präzise: ein bis vier Sätze oder eine kurze Aufzählung. Fachbegriffe, Namen und Paragraphen exakt übernehmen.
+- Bevorzuge Verstehen vor Auswendiglernen: Definitionen, Abgrenzungen, Begründungen, Zusammenhänge, Anwendung auf die Praxis.
+- Anzahl: je inhaltlich gehaltvoller Seite etwa eine bis drei Karten, insgesamt höchstens 24. Bei dünnem Inhalt wenige Karten, bei rein organisatorischem Inhalt keine.
+
+Kartentypen (Feld "typ"):
+- "frage": offene Frage, Antwort als Mustertext. Der häufigste Typ.
+- "luecke": "frage" ist ein Satz mit genau einer Lücke, geschrieben als _____ ; "antwort" ist nur der fehlende Begriff.
+- "mc": "frage" plus genau vier "optionen"; "richtig" ist der Index der richtigen Option (0 bis 3); "antwort" wiederholt die richtige Option. Falsche Optionen sind plausibel, aber eindeutig falsch.
+- "fall": kurze Praxissituation aus der Sozialen Arbeit, zu der das Gelernte angewendet werden muss; "antwort" nennt die erwarteten Kernpunkte. Sparsam einsetzen, nur wo die Unterlage Anwendung hergibt.
+
+Felder je Karte:
+- "thema": kurzes Schlagwort (zwei bis fünf Wörter) zur Einordnung.
+- "optionen": bei "mc" vier Einträge, sonst leere Liste. "richtig": bei "mc" der Index, sonst 0.
+- "erklaerung": ein bis zwei Sätze Hintergrund oder Merkhilfe, darf leer sein.
+- "seite": Seitenzahl innerhalb des übergebenen Abschnitts (erste Seite = 1); bei Notizen ohne Seiten 0.
+
+"modulTitel": der Titel des Moduls oder der Lehrveranstaltung, falls er aus der Unterlage hervorgeht (ohne Modulnummer), sonst leer.
+
+Wenn dir bestehende Karten mitgegeben werden, wurde die Unterlage geändert: Nimm die Kennungen aller bestehenden Karten, die weiterhin zutreffen, unverändert in "behalten" auf und erstelle unter "karten" nur Karten für neuen oder geänderten Inhalt. Ohne bestehende Karten bleibt "behalten" leer.`;
+
+const LERNAPP_SCHEMA_KARTEN = {
+  type: "object",
+  additionalProperties: false,
+  required: ["modulTitel", "pruefung", "behalten", "karten"],
+  properties: {
+    modulTitel: { type: "string" },
+    pruefung: { type: "string" },
+    behalten: { type: "array", items: { type: "string" } },
+    karten: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["typ", "thema", "frage", "antwort", "optionen", "richtig", "erklaerung", "seite"],
+        properties: {
+          typ: { type: "string", enum: LERNAPP_TYPEN },
+          thema: { type: "string" },
+          frage: { type: "string" },
+          antwort: { type: "string" },
+          optionen: { type: "array", items: { type: "string" } },
+          richtig: { type: "integer" },
+          erklaerung: { type: "string" },
+          seite: { type: "integer" },
+        },
+      },
+    },
+  },
+};
+
+const LERNAPP_SYSTEM_BEWERTUNG = `Du bewertest die frei formulierte Antwort einer Studentin der Sozialen Arbeit auf eine Lernkarte. Maßstab ist die Musterantwort; gleichwertige eigene Formulierungen und zutreffende Praxisbeispiele zählen voll. Rechtschreibung und Stil spielen keine Rolle.
+
+"punkte":
+0 = falsch, leer oder am Thema vorbei
+1 = ein richtiger Ansatz, Wesentliches fehlt oder ist fehlerhaft
+2 = im Kern richtig, einzelne Punkte fehlen oder sind ungenau
+3 = vollständig und richtig
+
+"feedback": zwei bis vier Sätze auf Deutsch in der Du-Form. Sag konkret, was stimmt und was fehlt oder falsch ist. Wiederhole die Musterantwort nicht wörtlich, sie wird ohnehin angezeigt. Kein Lob als Floskel, keine Anrede.`;
+
+const LERNAPP_SCHEMA_BEWERTUNG = {
+  type: "object",
+  additionalProperties: false,
+  required: ["punkte", "feedback"],
+  properties: { punkte: { type: "integer" }, feedback: { type: "string" } },
+};
+
+const laText = (v, max) => String(v == null ? "" : v).slice(0, max);
+const laZahl = (v, min, max) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min; };
+
+// Kopf der Lernapp-Endpunkte: Token, Organisation, Gruppe. Liefert { caller } oder { antwort }.
+async function lernappAuth(request, origin) {
+  const auth = await validateEntraToken(request.headers.get("Authorization"));
+  if (!auth.ok) return { antwort: json({ error: auth.error }, 401, origin) };
+  const caller = (auth.upn || "").trim().toLowerCase();
+  if (!caller.endsWith(`@${MAIL_DOMAIN}`)) return { antwort: json({ error: "Konto gehört nicht zur Organisation" }, 403, origin) };
+  const gate = await endpunktGate(request, caller, "lernapp", origin);
+  if (gate) return { antwort: gate };
+  return { caller };
+}
+
+// Karte auf erlaubte Felder und Längen bringen (für Speichern und für Claude-Ergebnisse).
+function lernappKarte(k, mitId) {
+  if (!k || typeof k !== "object") return null;
+  const typ = LERNAPP_TYPEN.includes(String(k.typ || "").toLowerCase()) ? String(k.typ).toLowerCase() : "frage";
+  const frage = laText(k.frage, 1500).trim();
+  const antwort = laText(k.antwort, 3000).trim();
+  if (!frage || !antwort) return null;
+  const karte = {
+    typ, thema: laText(k.thema, 120).trim(), frage, antwort,
+    erklaerung: laText(k.erklaerung, 1500).trim(),
+    seite: laZahl(k.seite, 0, 100000),
+  };
+  if (typ === "mc") {
+    const optionen = (Array.isArray(k.optionen) ? k.optionen : []).map((o) => laText(o, 400).trim()).filter(Boolean).slice(0, 6);
+    const richtig = laZahl(k.richtig, 0, 5);
+    // Unbrauchbare Auswahlkarte wird zur offenen Frage — der Inhalt geht nicht verloren.
+    if (optionen.length < 2 || richtig >= optionen.length) karte.typ = "frage";
+    else { karte.optionen = optionen; karte.richtig = richtig; }
+  }
+  if (karte.typ === "luecke" && !/_{3,}/.test(karte.frage)) karte.typ = "frage";
+  if (mitId) {
+    const id = laText(k.id, 260);
+    if (!/^[A-Za-z0-9!_.\-#]{3,260}$/.test(id)) return null;
+    karte.id = id;
+    karte.teil = laZahl(k.teil, 0, 10000);
+  }
+  return karte;
+}
+
+function lernappMeta(m) {
+  const art = ["datei", "onenote", "anhang"].includes(m?.art) ? m.art : "datei";
+  return {
+    name: laText(m?.name, 200).trim() || "Ohne Namen",
+    fach: laText(m?.fach, 80).trim() || "Allgemein",
+    fachTitel: laText(m?.fachTitel, 140).trim(),
+    art,
+    pfad: laText(m?.pfad, 300),
+    webUrl: /^https:\/\//.test(String(m?.webUrl || "")) ? laText(m.webUrl, 800) : "",
+    version: laText(m?.version, 160),
+    teileFertig: laZahl(m?.teileFertig, 0, 10000),
+    teileGesamt: laZahl(m?.teileGesamt, 0, 10000),
+    seiten: laZahl(m?.seiten, 0, 100000),
+    pruefung: laText(m?.pruefung, 4000).trim(),
+    fehler: laText(m?.fehler, 400),
+  };
+}
+
+// KV-Metadaten sind auf 1024 Byte begrenzt → nur Kurzangaben, gekürzt.
+function lernappKvMeta(meta, anzahl, stand) {
+  return {
+    n: meta.name.slice(0, 110), f: meta.fach.slice(0, 50), ft: meta.fachTitel.slice(0, 90),
+    a: meta.art, v: meta.version.slice(0, 120), tf: meta.teileFertig, tg: meta.teileGesamt,
+    k: anzahl, st: stand, e: meta.fehler ? 1 : 0, p: meta.pruefung ? 1 : 0,
+  };
+}
+
+async function lernappQuellen(env) {
+  const quellen = [];
+  let cursor;
+  for (let i = 0; i < 10; i++) {
+    const l = await env.PNW_DATEN.list({ prefix: "lernapp:q:", cursor });
+    for (const k of l.keys) {
+      const m = k.metadata || {};
+      quellen.push({
+        id: k.name.slice("lernapp:q:".length), name: m.n || "", fach: m.f || "Allgemein", fachTitel: m.ft || "",
+        art: m.a || "datei", version: m.v || "", teileFertig: m.tf || 0, teileGesamt: m.tg || 0,
+        karten: m.k || 0, stand: m.st || null, fehler: !!m.e, pruefung: !!m.p,
+      });
+    }
+    if (l.list_complete) break;
+    cursor = l.cursor;
+  }
+  return quellen;
+}
+
+// Inhaltsblöcke des Frontends prüfen und in das Format der Messages-API bringen.
+function lernappInhalt(inhalt) {
+  if (!Array.isArray(inhalt) || !inhalt.length) return { fehler: "Kein Inhalt übergeben" };
+  if (inhalt.length > 14) return { fehler: "Zu viele Inhaltsblöcke (max. 14)" };
+  const bloecke = [];
+  for (const b of inhalt) {
+    if (b?.typ === "pdf" && typeof b.daten === "string" && /^[A-Za-z0-9+/=]+$/.test(b.daten.slice(0, 200))) {
+      bloecke.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b.daten } });
+    } else if (b?.typ === "bild" && typeof b.daten === "string" && ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(b.mime)) {
+      bloecke.push({ type: "image", source: { type: "base64", media_type: b.mime, data: b.daten } });
+    } else if (b?.typ === "text" && typeof b.text === "string" && b.text.trim()) {
+      bloecke.push({ type: "text", text: b.text.slice(0, 250000) });
+    } else {
+      return { fehler: "Unbekannter oder leerer Inhaltsblock" };
+    }
+  }
+  return { bloecke };
+}
+
+// Die Effort-Angabe ist nicht bei jedem Modell zulässig: lehnt die API sie ab,
+// wird dieselbe Anfrage einmal ohne sie wiederholt.
+async function lernappClaudeFetch(env, body) {
+  const senden = (b) => fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify(b),
+  });
+  let r = await senden(body);
+  if (r.status === 400 && body.output_config?.effort) {
+    const text = await r.text();
+    if (/effort/i.test(text)) {
+      const { effort, ...rest } = body.output_config;
+      r = await senden({ ...body, output_config: rest });
+    } else {
+      r = new Response(text, { status: 400, headers: { "content-type": "application/json" } });
+    }
+  }
+  return r;
+}
+
+async function lernappClaudeFehler(r) {
+  let detail = "";
+  try { const j = await r.json(); detail = j?.error?.message || ""; } catch { /* kein JSON */ }
+  if (r.status === 401) return { status: 502, error: "Der Claude-API-Schlüssel wird nicht akzeptiert (ANTHROPIC_API_KEY prüfen)." };
+  if (r.status === 429 || r.status === 529 || r.status >= 500) return { status: 503, error: `Claude ist gerade ausgelastet (HTTP ${r.status}). Bitte gleich noch einmal versuchen.`, wiederholbar: true };
+  if (r.status === 413) return { status: 413, error: "Der Abschnitt ist für Claude zu groß." };
+  return { status: 502, error: `Claude lehnt die Anfrage ab (HTTP ${r.status})${detail ? ": " + detail.slice(0, 300) : ""}` };
+}
+
+// Antwortstrom der Messages-API (SSE) lesen und den Text des JSON-Ergebnisses sammeln.
+// beiDaten() wird bei jedem eingehenden Stück aufgerufen (Lebenszeichen an den Browser).
+async function lernappStromLesen(antwort, beiDaten) {
+  const reader = antwort.body.getReader();
+  const dec = new TextDecoder();
+  let puffer = "", text = "", stop = null, fehler = null;
+  const verbrauch = { eingabe: 0, ausgabe: 0 };
+  const ereignis = (block) => {
+    for (const zeile of block.split("\n")) {
+      if (!zeile.startsWith("data:")) continue;
+      let d;
+      try { d = JSON.parse(zeile.slice(5).trim()); } catch { continue; }
+      if (d.type === "content_block_delta" && d.delta?.type === "text_delta") text += d.delta.text || "";
+      else if (d.type === "message_start") verbrauch.eingabe = d.message?.usage?.input_tokens || 0;
+      else if (d.type === "message_delta") { stop = d.delta?.stop_reason || stop; verbrauch.ausgabe = d.usage?.output_tokens || verbrauch.ausgabe; }
+      else if (d.type === "error") fehler = d.error?.message || "Fehler im Antwortstrom";
+    }
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (beiDaten) beiDaten();
+    puffer += dec.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+    let i;
+    while ((i = puffer.indexOf("\n\n")) >= 0) { ereignis(puffer.slice(0, i)); puffer = puffer.slice(i + 2); }
+  }
+  if (puffer.trim()) ereignis(puffer);
+  return { text, stop, fehler, verbrauch };
+}
+
+// Karten für einen Abschnitt erzeugen. Rückgabe { ok, … } bzw. { ok:false, status, error }.
+async function lernappErzeugen(env, body, beiDaten) {
+  const { bloecke, fehler } = lernappInhalt(body?.inhalt);
+  if (fehler) return { ok: false, status: 400, error: fehler };
+  const q = body?.quelle || {};
+  const bestehend = (Array.isArray(body?.bestehend) ? body.bestehend : []).slice(0, 80)
+    .map((k) => ({ id: laText(k?.id, 260), frage: laText(k?.frage, 600), antwort: laText(k?.antwort, 900) }))
+    .filter((k) => k.id && k.frage);
+  let auftrag = `Unterlage: „${laText(q.name, 200)}“`;
+  if (q.fach) auftrag += `\nFach/Modul: ${laText(q.fach, 80)}`;
+  if (q.art === "onenote") auftrag += "\nArt: eigene Notizen der Studentin aus OneNote (Stichpunkte können unvollständig sein; Bilder sind Fotos, Scans oder Folienausdrucke).";
+  if (laZahl(q.teile, 1, 10000) > 1) auftrag += `\nDies ist Abschnitt ${laZahl(q.teil, 1, 10000)} von ${laZahl(q.teile, 1, 10000)} (Seiten ${laZahl(q.seitenVon, 1, 100000)} bis ${laZahl(q.seitenBis, 1, 100000)} der Unterlage). Zähle die Seiten im Feld "seite" ab 1 für diesen Abschnitt.`;
+  if (bestehend.length) auftrag += `\n\nBestehende Karten zu diesem Abschnitt (Kennung, Frage, Antwort):\n${JSON.stringify(bestehend)}`;
+  auftrag += "\n\nErstelle die Lernkarten.";
+
+  const anfrage = {
+    model: env.LERNAPP_MODELL || LERNAPP_MODELL_KARTEN,
+    max_tokens: 20000,
+    stream: true,
+    system: LERNAPP_SYSTEM_KARTEN,
+    messages: [{ role: "user", content: [...bloecke, { type: "text", text: auftrag }] }],
+    output_config: { effort: "low", format: { type: "json_schema", schema: LERNAPP_SCHEMA_KARTEN } },
+  };
+  const r = await lernappClaudeFetch(env, anfrage);
+  if (!r.ok) return { ok: false, ...(await lernappClaudeFehler(r)) };
+  const strom = await lernappStromLesen(r, beiDaten);
+  if (strom.fehler) return { ok: false, status: 503, error: `Claude hat abgebrochen: ${strom.fehler}`, wiederholbar: true };
+  if (strom.stop === "max_tokens") return { ok: false, status: 502, error: "Die Antwort war zu lang für einen Abschnitt.", zuLang: true };
+  if (strom.stop === "refusal") return { ok: false, status: 502, error: "Claude hat die Verarbeitung dieses Abschnitts abgelehnt." };
+  let erg;
+  try { erg = JSON.parse(strom.text); } catch { return { ok: false, status: 502, error: "Claude hat kein auswertbares Ergebnis geliefert.", wiederholbar: true }; }
+  const bekannt = new Set(bestehend.map((k) => k.id));
+  return {
+    ok: true,
+    modulTitel: laText(erg.modulTitel, 140).trim(),
+    pruefung: laText(erg.pruefung, 2000).trim(),
+    behalten: (Array.isArray(erg.behalten) ? erg.behalten : []).map(String).filter((id) => bekannt.has(id)),
+    karten: (Array.isArray(erg.karten) ? erg.karten : []).map((k) => lernappKarte(k, false)).filter(Boolean).slice(0, 40),
+    verbrauch: strom.verbrauch,
+  };
+}
+
+async function lernappBewerten(env, body) {
+  const frage = laText(body?.frage, 1500).trim();
+  const muster = laText(body?.antwort, 3000).trim();
+  const eingabe = laText(body?.eingabe, 4000).trim();
+  if (!frage || !muster) return { ok: false, status: 400, error: "Frage und Musterantwort fehlen" };
+  if (!eingabe) return { ok: true, punkte: 0, feedback: "Du hast keine Antwort eingegeben." };
+  const text = `Thema: ${laText(body?.thema, 120)}\n\nFrage:\n${frage}\n\nMusterantwort:\n${muster}` +
+    (body?.erklaerung ? `\n\nHintergrund:\n${laText(body.erklaerung, 1500)}` : "") +
+    `\n\nAntwort der Studentin:\n${eingabe}`;
+  const r = await lernappClaudeFetch(env, {
+    model: env.LERNAPP_MODELL_BEWERTUNG || LERNAPP_MODELL_BEWERTUNG,
+    max_tokens: 3000,
+    system: LERNAPP_SYSTEM_BEWERTUNG,
+    messages: [{ role: "user", content: text }],
+    output_config: { effort: "low", format: { type: "json_schema", schema: LERNAPP_SCHEMA_BEWERTUNG } },
+  });
+  if (!r.ok) return { ok: false, ...(await lernappClaudeFehler(r)) };
+  let erg;
+  try {
+    const j = await r.json();
+    erg = JSON.parse((j.content || []).filter((b) => b.type === "text").map((b) => b.text).join(""));
+  } catch { return { ok: false, status: 502, error: "Claude hat keine auswertbare Bewertung geliefert." }; }
+  return { ok: true, punkte: laZahl(erg.punkte, 0, 3), feedback: laText(erg.feedback, 1500).trim() };
 }
 
 export default {
@@ -3869,6 +4217,172 @@ export default {
       } catch (e) {
         return json({ error: `Speichern fehlgeschlagen: ${e.message}` }, 500, origin);
       }
+    }
+
+    // ── Lernapp Soziale Arbeit ─────────────────────────────────────
+    if (url.pathname.startsWith("/api/lernapp/")) {
+      const { caller, antwort } = await lernappAuth(request, origin);
+      if (antwort) return antwort;
+      const pfad = url.pathname.slice("/api/lernapp/".length);
+      const get = request.method === "GET", post = request.method === "POST";
+      const kiBereit = !!env.ANTHROPIC_API_KEY;
+
+      // Dateiinhalt aus dem Quell-Laufwerk — läuft mit dem Graph-Token des Aufrufers,
+      // der Worker gibt also nichts frei, was das Konto nicht ohnehin lesen darf.
+      if (pfad === "inhalt" && get) {
+        const item = url.searchParams.get("item") || "";
+        if (!LERNAPP_ITEM_RE.test(item)) return json({ error: "Ungültige Datei-Kennung" }, 400, origin);
+        const graphToken = request.headers.get("X-Graph-Token");
+        if (!graphToken) return json({ error: "Graph-Token fehlt" }, 401, origin);
+        const alsPdf = url.searchParams.get("pdf") === "1";
+        try {
+          const r = await fetch(
+            `https://graph.microsoft.com/v1.0/drives/${LERNAPP_DRIVE}/items/${item}/content${alsPdf ? "?format=pdf" : ""}`,
+            { headers: { Authorization: `Bearer ${graphToken}` } }
+          );
+          if (!r.ok) {
+            const hinweis = r.status === 404 ? "Datei nicht gefunden oder nicht freigegeben"
+              : r.status === 406 || r.status === 415 ? "Dieses Format lässt sich nicht in PDF umwandeln"
+              : `Microsoft Graph meldet HTTP ${r.status}`;
+            return json({ error: hinweis }, r.status === 404 ? 404 : 502, origin);
+          }
+          return new Response(r.body, {
+            status: 200,
+            headers: {
+              "Content-Type": r.headers.get("Content-Type") || "application/octet-stream",
+              "Cache-Control": "private, no-store",
+              ...corsHeaders(origin),
+            },
+          });
+        } catch (e) {
+          return json({ error: `Datei nicht abrufbar: ${e.message}` }, 502, origin);
+        }
+      }
+
+      if (!env.PNW_DATEN) return json({ error: "KV-Speicher PNW_DATEN ist nicht gebunden" }, 500, origin);
+
+      if (pfad === "quellen" && get) {
+        try {
+          return json({ quellen: await lernappQuellen(env), kiBereit, stand: new Date().toISOString() }, 200, origin);
+        } catch (e) {
+          return json({ error: `Quellen nicht lesbar: ${e.message}` }, 500, origin);
+        }
+      }
+
+      if (pfad === "karten" && get) {
+        const ids = (url.searchParams.get("ids") || "").split(",").map((x) => x.trim()).filter((x) => LERNAPP_ID_RE.test(x)).slice(0, 25);
+        if (!ids.length) return json({ error: "Keine gültigen Kennungen übergeben" }, 400, origin);
+        try {
+          const quellen = (await Promise.all(ids.map((id) => env.PNW_DATEN.get(`lernapp:q:${id}`, "json")))).filter(Boolean);
+          return json({ quellen }, 200, origin);
+        } catch (e) {
+          return json({ error: `Karten nicht lesbar: ${e.message}` }, 500, origin);
+        }
+      }
+
+      if (pfad === "quelle" && post) {
+        if (Number(request.headers.get("Content-Length") || 0) > LERNAPP_MAX_QUELLE) return json({ error: "Quelle zu umfangreich" }, 413, origin);
+        let body;
+        try { body = await request.json(); } catch { return json({ error: "Ungültiger Request-Body" }, 400, origin); }
+        const id = String(body?.id || "");
+        if (!LERNAPP_ID_RE.test(id)) return json({ error: "Ungültige Quellen-Kennung" }, 400, origin);
+        const meta = lernappMeta(body?.meta);
+        const karten = (Array.isArray(body?.karten) ? body.karten : []).slice(0, 1500).map((k) => lernappKarte(k, true)).filter(Boolean);
+        const jetzt = new Date().toISOString();
+        const wert = JSON.stringify({ id, meta, karten, stand: jetzt, von: caller });
+        if (wert.length > LERNAPP_MAX_QUELLE) return json({ error: "Quelle zu umfangreich (max. 1,5 MB)" }, 413, origin);
+        try {
+          await env.PNW_DATEN.put(`lernapp:q:${id}`, wert, { metadata: lernappKvMeta(meta, karten.length, jetzt) });
+          return json({ ok: true, id, karten: karten.length, stand: jetzt }, 200, origin);
+        } catch (e) {
+          return json({ error: `Speichern fehlgeschlagen: ${e.message}` }, 500, origin);
+        }
+      }
+
+      if (pfad === "quelle/loeschen" && post) {
+        let body;
+        try { body = await request.json(); } catch { return json({ error: "Ungültiger Request-Body" }, 400, origin); }
+        const id = String(body?.id || "");
+        if (!LERNAPP_ID_RE.test(id)) return json({ error: "Ungültige Quellen-Kennung" }, 400, origin);
+        try {
+          await env.PNW_DATEN.delete(`lernapp:q:${id}`);
+          return json({ ok: true, id }, 200, origin);
+        } catch (e) {
+          return json({ error: `Löschen fehlgeschlagen: ${e.message}` }, 500, origin);
+        }
+      }
+
+      if (pfad === "stand" && get) {
+        try {
+          return json({ stand: (await env.PNW_DATEN.get(`lernapp:stand:${caller}`, "json")) || null }, 200, origin);
+        } catch (e) {
+          return json({ error: `Lernstand nicht lesbar: ${e.message}` }, 500, origin);
+        }
+      }
+
+      if (pfad === "stand" && post) {
+        if (Number(request.headers.get("Content-Length") || 0) > LERNAPP_MAX_STAND) return json({ error: "Lernstand zu umfangreich" }, 413, origin);
+        let body;
+        try { body = await request.json(); } catch { return json({ error: "Ungültiger Request-Body" }, 400, origin); }
+        const stand = body?.stand;
+        if (!stand || typeof stand !== "object" || Array.isArray(stand) || typeof stand.karten !== "object") {
+          return json({ error: "Ungültiger Lernstand" }, 400, origin);
+        }
+        const wert = JSON.stringify(stand);
+        if (wert.length > LERNAPP_MAX_STAND) return json({ error: "Lernstand zu umfangreich (max. 1,5 MB)" }, 413, origin);
+        try {
+          await env.PNW_DATEN.put(`lernapp:stand:${caller}`, wert);
+          return json({ ok: true }, 200, origin);
+        } catch (e) {
+          return json({ error: `Speichern fehlgeschlagen: ${e.message}` }, 500, origin);
+        }
+      }
+
+      if ((pfad === "erzeugen" || pfad === "bewerten") && post) {
+        if (!kiBereit) return json({ error: "Der Claude-API-Schlüssel fehlt noch (Secret ANTHROPIC_API_KEY im Worker anlegen)." }, 503, origin);
+        if (Number(request.headers.get("Content-Length") || 0) > LERNAPP_MAX_ANFRAGE) return json({ error: "Abschnitt zu groß" }, 413, origin);
+        let body;
+        try { body = await request.json(); } catch { return json({ error: "Ungültiger Request-Body" }, 400, origin); }
+
+        if (pfad === "bewerten") {
+          try {
+            const erg = await lernappBewerten(env, body);
+            return erg.ok ? json(erg, 200, origin) : json({ error: erg.error, wiederholbar: !!erg.wiederholbar }, erg.status, origin);
+          } catch (e) {
+            return json({ error: `Bewertung fehlgeschlagen: ${e.message}` }, 502, origin);
+          }
+        }
+
+        // Karten erzeugen dauert je Abschnitt bis über eine Minute. Damit die Verbindung
+        // nicht als untätig getrennt wird, beginnt die Antwort sofort und füllt die Wartezeit
+        // mit Leerzeichen; das eigentliche JSON folgt am Ende (führende Leerzeichen stören
+        // JSON.parse nicht). Der HTTP-Status ist deshalb immer 200 — Fehler stehen im Feld "error".
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const enc = new TextEncoder();
+        let letztes = 0;
+        const lebenszeichen = () => {
+          const t = Date.now();
+          if (t - letztes < 2000) return;
+          letztes = t;
+          writer.write(enc.encode(" ")).catch(() => {});
+        };
+        const takt = setInterval(lebenszeichen, 8000);
+        (async () => {
+          let erg;
+          try { erg = await lernappErzeugen(env, body, lebenszeichen); }
+          catch (e) { erg = { ok: false, status: 502, error: `Erzeugen fehlgeschlagen: ${e.message}`, wiederholbar: true }; }
+          clearInterval(takt);
+          try { await writer.write(enc.encode("\n" + JSON.stringify(erg))); } catch { /* Browser hat abgebrochen */ }
+          try { await writer.close(); } catch { /* bereits geschlossen */ }
+        })();
+        return new Response(readable, {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...corsHeaders(origin) },
+        });
+      }
+
+      return json({ error: "Nicht gefunden" }, 404, origin);
     }
 
     return json({ error: "Nicht gefunden" }, 404, origin);
