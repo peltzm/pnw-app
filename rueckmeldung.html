@@ -441,7 +441,8 @@ async function laden(){
     STATUS = d.gespeichert?.status || 'entwurf';
     FORM = Object.assign(leeresFormular(), d.gespeichert?.daten || {});
     if (!d.gespeichert?.daten?.ziele && d.ziele) FORM.ziele = Object.assign({}, d.ziele); // Ziel aus Vorperiode übernehmen
-    READONLY = STATUS==='abgegeben' || (istGf() && d.team.tl !== (currentAccount.username||'').toLowerCase());
+    // Nur abgegebene Rückmeldungen sind gesperrt; die GF darf alle Teams bearbeiten (Tests, Vertretung)
+    READONLY = STATUS==='abgegeben';
     rendere();
     verstecke('runMsg');
     if (!d.kennzahlen.aktuell.abgeschlossen) zeige('runMsg','Der Zeitraum läuft noch – Fachleistungsstunden liegen erst nach Abschluss des Monats (Rechnungslauf) vollständig vor.','warn');
@@ -510,7 +511,8 @@ function rendere(){
   document.getElementById('btnSpeichern').style.display = READONLY?'none':'inline-flex';
   document.getElementById('btnAbgeben').style.display = READONLY?'none':'inline-flex';
   document.getElementById('btnOeffnen').style.display = (istGf() && STATUS==='abgegeben')?'inline-flex':'none';
-  document.getElementById('saveInfo').textContent = d.gespeichert ? 'Zuletzt gespeichert '+zeitDe(d.gespeichert.geaendert) : 'Noch nicht gespeichert';
+  const fremd = istGf() && d.team.tl !== (currentAccount.username||'').toLowerCase();
+  document.getElementById('saveInfo').textContent = (d.gespeichert ? 'Zuletzt gespeichert '+zeitDe(d.gespeichert.geaendert) : 'Noch nicht gespeichert') + (fremd && !READONLY ? ' · du bearbeitest als Geschäftsführung' : '');
   _dirty=false;
 }
 function statusPill(st, g){
