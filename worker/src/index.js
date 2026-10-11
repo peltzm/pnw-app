@@ -3123,7 +3123,7 @@ Regeln:
 - Eine Karte prüft genau einen Gedanken. Die Frage ist ohne die Folie verständlich (keine Verweise wie "auf dieser Folie" oder "laut Abbildung").
 - Antworten sind präzise: ein bis vier Sätze oder eine kurze Aufzählung. Fachbegriffe, Namen und Paragraphen exakt übernehmen.
 - Bevorzuge Verstehen vor Auswendiglernen: Definitionen, Abgrenzungen, Begründungen, Zusammenhänge, Anwendung auf die Praxis.
-- Anzahl: je inhaltlich gehaltvoller Seite etwa eine bis drei Karten, insgesamt höchstens 24. Bei dünnem Inhalt wenige Karten, bei rein organisatorischem Inhalt keine.
+- Anzahl: Weniger ist mehr. Wähle nur die zentralen Inhalte, die in einer Prüfung oder Seminararbeit tatsächlich gebraucht werden – höchstens eine Karte je inhaltlich gehaltvoller Seite, insgesamt höchstens 12 je Abschnitt. Fasse Zusammengehöriges in einer Karte zusammen, statt jede Einzelheit einzeln abzufragen. Keine Karten zu Beispielen, Randbemerkungen, Formatierungs- und Formalvorgaben im Detail oder zu Inhalten, die sich wiederholen. Bei dünnem Inhalt wenige Karten, bei rein organisatorischem Inhalt keine.
 
 Kartentypen (Feld "typ"):
 - "frage": offene Frage, Antwort als Mustertext. Der häufigste Typ.
@@ -3392,7 +3392,7 @@ async function lernappErzeugen(env, body, beiDaten) {
     modulTitel: laText(erg.modulTitel, 140).trim(),
     pruefung: laText(erg.pruefung, 2000).trim(),
     behalten: (Array.isArray(erg.behalten) ? erg.behalten : []).map(String).filter((id) => bekannt.has(id)),
-    karten: (Array.isArray(erg.karten) ? erg.karten : []).map((k) => lernappKarte(k, false)).filter(Boolean).slice(0, 40),
+    karten: (Array.isArray(erg.karten) ? erg.karten : []).map((k) => lernappKarte(k, false)).filter(Boolean).slice(0, 16),
     verbrauch: strom.verbrauch,
   };
 }

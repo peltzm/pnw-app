@@ -46,6 +46,13 @@ Zugriff: Entra-Gruppe `PNW-App-Lernapp` (Sonja und Markus als direkte Mitglieder
 - **Fehler:** Eine Quelle mit Fehler wird nicht bei jedem Öffnen erneut versucht (Kosten),
   sondern nur über „Jetzt abgleichen“ oder „neu einlesen“.
 
+- **Kartenmenge:** höchstens eine Karte je gehaltvoller Seite und 12 je Abschnitt (Vorgabe im
+  Worker, `LERNAPP_SYSTEM_KARTEN`). Wird die Vorgabe geändert, in `lernapp.html` die Kennung
+  `ERZEUGUNG` erhöhen – dann liest die App alle Unterlagen beim nächsten Abgleich einmal neu ein
+  (der Lernstand der ersetzten Karten geht dabei verloren).
+- **Prüfungsleistungen** aus allen Unterlagen stehen gesammelt im Reiter „Fächer“, auch aus
+  Unterlagen ohne Karten (z. B. Abschnitt „Organisatorisch“ im Notizbuch).
+
 ## Notizbuch
 
 OneNote lässt sich über Graph nur mit der Anmeldung der Besitzerin lesen (`/me/onenote`,

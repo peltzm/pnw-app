@@ -226,6 +226,9 @@ const APP_VERSION = 'v8d1d1ae'; // auto-updated on deploy
 document.getElementById('versionBadge').textContent = APP_VERSION;
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 
+/* Stand der Kartenerzeugung. Wird die Vorgabe an Claude geändert (z. B. Kartenmenge), diese Kennung
+   erhöhen: Unterlagen mit älterem Stand werden beim nächsten Abgleich einmal vollständig neu eingelesen. */
+const ERZEUGUNG = 'g2';
 const TEIL_SEITEN = 10;            // Seiten je Abschnitt bei PDF
 const TEIL_MAX_BYTES = 3200000;    // größere Abschnitte werden halbiert
 const DATEI_MAX_BYTES = 60000000;
@@ -731,7 +734,8 @@ function viewFaecher(){
   if (S.fach) return viewFach();
   const fs = faecher().filter((f) => f.karten.length);   // Fächer ohne Karten (leere Seiten, Fehler) nicht zeigen
   let h = syncBand();
-  if (!fs.length) return h+'<div class="card"><h2>Noch keine Fächer</h2><p class="muted">Fächer entstehen automatisch aus den Modulkürzeln der Dateinamen (z. B. B01), den Unterordnern und den Abschnitten deines Notizbuchs.</p></div>';
+  const pr = pruefungenHtml();
+  if (!fs.length) return h+pr+'<div class="card"><h2>Noch keine Fächer</h2><p class="muted">Fächer entstehen automatisch aus den Modulkürzeln der Dateinamen (z. B. B01), den Unterordnern und den Abschnitten deines Notizbuchs.</p></div>';
   for (const f of fs){
     const z = zaehle(f.karten);
     h += '<button class="card fach" data-fach="'+esc(f.key)+'"><div class="kopf"><div>'
@@ -740,7 +744,15 @@ function viewFaecher(){
       + '<div class="balken"><i class="sicher" style="width:'+(z.gesamt?100*z.sicher/z.gesamt:0)+'%"></i><i class="lernt" style="width:'+(z.gesamt?100*z.lernt/z.gesamt:0)+'%"></i></div>'
       + '<div class="muted">'+zahlDe(z.gesamt)+' Karten · '+zahlDe(z.sicher)+' sicher · '+zahlDe(z.lernt)+' in Arbeit · '+zahlDe(z.neu)+' neu</div></button>';
   }
-  return h;
+  return h+pr;
+}
+/* Prüfungsleistungen aus allen Unterlagen – auch aus solchen ohne Karten (z. B. Abschnitt „Organisatorisch“) */
+function pruefungenHtml(){
+  const qs = [...S.quellen.values()].filter((q) => q.pruefungText)
+    .sort((a,b)=>a.fach.localeCompare(b.fach,'de',{numeric:true})||a.name.localeCompare(b.name,'de',{numeric:true}));
+  if (!qs.length) return '';
+  return '<div class="card"><h2>Prüfungsleistungen</h2><p class="muted">Was die Unterlagen zu Art, Umfang und Fristen der Prüfungen sagen.</p>'
+    + qs.map((q) => '<h3>'+esc(q.fach)+' · '+(q.webUrl ? '<a href="'+esc(q.webUrl)+'" target="_blank" rel="noopener" style="color:inherit">'+esc(ohneEndung(q.name))+'</a>' : esc(ohneEndung(q.name)))+'</h3><div class="pruefung">'+esc(q.pruefungText)+'</div>').join('')+'</div>';
 }
 function viewFach(){
   const f = faecher().find((x) => x.key === S.fach);
@@ -924,7 +936,7 @@ async function listeDateien(){
       if (it.size > DATEI_MAX_BYTES){ S.sync.uebersprungen.push({ name:[...pfad, it.name].join(' / '), grund:'Datei ist größer als 60 MB.' }); continue; }
       const kuerzel = modulKuerzel(it.name) || pfad.map(modulKuerzel).find(Boolean);
       dateien.push({ id:'d_'+it.id, itemId:it.id, art:'datei', name:it.name, endung:e, groesse:it.size||0,
-        version:String(it.cTag || it.eTag || (it.lastModifiedDateTime+'|'+it.size)), webUrl:it.webUrl||'', pfad:pfad.join(' / '),
+        version:String(it.cTag || it.eTag || (it.lastModifiedDateTime+'|'+it.size))+'|'+ERZEUGUNG, webUrl:it.webUrl||'', pfad:pfad.join(' / '),
         fach:kuerzel || pfad[0] || 'Allgemein', fachTitel:'' });
     }
   }
@@ -954,7 +966,7 @@ async function listeNotizen(notizbuecher){
       const titelQuelle = modulKuerzel(ab.displayName) ? ab.displayName : (gruppen.find(modulKuerzel) || '');
       for (const p of await graphAlle(basis+'/sections/'+ab.id+'/pages?$select=id,title,lastModifiedDateTime,links&$top=100', SCOPES_NOTIZ)){
         seiten.push({ id:'o_'+String(p.id).replace(/[^A-Za-z0-9!_.\-]/g, '_'), pageId:p.id, art:'onenote', name:(p.title||'Seite ohne Titel').trim(),
-          version:String(p.lastModifiedDateTime||''), geaendert:p.lastModifiedDateTime, webUrl:p.links?.oneNoteWebUrl?.href||'',
+          version:String(p.lastModifiedDateTime||'')+'|'+ERZEUGUNG, geaendert:p.lastModifiedDateTime, webUrl:p.links?.oneNoteWebUrl?.href||'',
           pfad:[...gruppen, ab.displayName].join(' / '), fach:kuerzel || ab.displayName || 'Notizen', fachTitel:kuerzel ? ohneKuerzel(titelQuelle) : '' });
       }
     }
@@ -1160,6 +1172,8 @@ async function sync(manuell){
     }
     const offen = fern.filter((f) => {
       const alt = S.quellen.get(f.id);
+      /* älterer Erzeugungsstand → vollständig neu, ohne die alten Karten zu übernehmen */
+      if (alt && alt.version && !alt.version.endsWith('|'+ERZEUGUNG)){ alt.erzwungen = true; return true; }
       if (!alt) return !(f.art === 'onenote' && !manuell && Date.parse(f.geaendert) > ruhe);
       if (alt.erzwungen) return true;
       if (alt.version !== f.version) return !(f.art === 'onenote' && !manuell && Date.parse(f.geaendert) > ruhe);
