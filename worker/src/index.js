@@ -1760,6 +1760,219 @@ async function buildCockpit(env, upn, now) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Zweimonatliche Rückmeldung der Teamleitungen (rueckmeldung.html)
+//   GET  /api/rueckmeldung?zeitraum=YYYY-MM[&als=<tl-upn>]
+//   POST /api/rueckmeldung  { zeitraum, team?, daten, status }
+//   GET  /api/rueckmeldung/liste   (GF: Stand aller Teamleitungen)
+//
+// Zeitraum = Startmonat der festen Zweimonatsblöcke (01, 03, 05, 07, 09, 11),
+// Abgabe bis zum 5. Werktag nach Ende des Zeitraums (Stellenbeschreibung
+// Teamleitung, Abschnitt 5). Kennzahlen entstehen ausschließlich aus den
+// bereits gecachten Kilanka-Rohdaten (buildCockpit je Mitarbeiter, Rechnungen,
+// Abwesenheiten, Stundenkonten) — keine neuen Kilanka-Modelle.
+// Freitexte, Fallanfragen und Verlängerungs-Einschätzungen liegen in KV:
+//   rueckmeldung:<tl-upn>:<zeitraum>
+// ═══════════════════════════════════════════════════════════════
+const RM_ZEITRAUM_RE = /^\d{4}-(01|03|05|07|09|11)$/;
+
+function rmZeitraumInfo(zeitraum) {
+  const [jy, jm] = zeitraum.split("-").map(Number);
+  const m1 = `${jy}-${String(jm).padStart(2, "0")}`;
+  const m2 = `${jy}-${String(jm + 1).padStart(2, "0")}`;
+  const start = new Date(Date.UTC(jy, jm - 1, 1));
+  const ende = new Date(Date.UTC(jy, jm + 1, 0));          // letzter Tag des 2. Monats
+  const folge = new Date(Date.UTC(jy, jm + 1, 1));          // 1. Tag nach dem Zeitraum
+  // Vorperiode: zwei Monate davor
+  const vy = jm === 1 ? jy - 1 : jy, vm = jm === 1 ? 11 : jm - 2;
+  return { zeitraum, monate: [m1, m2], start, ende, folge, vorperiode: `${vy}-${String(vm).padStart(2, "0")}` };
+}
+
+// Standard-Zeitraum: der zuletzt abgeschlossene Zweimonatsblock
+// 5. Werktag (Mo–Fr, ohne Feiertage Bayern) nach dem Ende des Zeitraums
+function rmAbgabefrist(ende) {
+  const d = new Date(ende.getTime());
+  let n = 0;
+  while (n < 5) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const w = d.getUTCDay();
+    if (w === 0 || w === 6) continue;
+    if (feiertageBayern(d.getUTCFullYear()).has(d.toISOString().slice(0, 10))) continue;
+    n++;
+  }
+  return d;
+}
+
+function rmAktuellerZeitraum(heute) {
+  const y = heute.getUTCFullYear(), m = heute.getUTCMonth() + 1; // 1..12
+  // letzter abgeschlossener Block beginnt im letzten ungeraden Monat < aktueller Monat
+  let sm = m % 2 === 0 ? m - 3 : m - 2;
+  let sy = y;
+  if (sm < 1) { sm += 12; sy -= 1; }
+  return `${sy}-${String(sm).padStart(2, "0")}`;
+}
+
+// Kennzahlen eines Teams für einen Zweimonatsblock.
+// Je Monat wird buildCockpit zum 1. des Folgemonats aufgerufen — damit trifft
+// dessen FLS-„Vormonat" genau den Berichtsmonat (gleiche Regel wie Scorecard).
+async function rmTeamKennzahlen(env, mitglieder, info, abs, heute) {
+  const personen = [];
+  let flsIst = 0, flsSoll = 0, krank = 0, saldo = 0, saldoN = 0, hbEnde = 0;
+  const idsStart = new Set(), idsEnde = new Set();
+  const istVergangen = info.folge <= heute;
+  for (const m of mitglieder) {
+    const p = { upn: m.upn, name: m.name || m.upn, fls: 0, soll: 0, faelle: null, krank: 0, saldo: null, verfuegbar: true, monate: [] };
+    let dEnde = null;
+    for (const monat of info.monate) {
+      const [jy, jm] = monat.split("-").map(Number);
+      const bezug = new Date(Date.UTC(jy, jm, 1)); // 1. des Folgemonats
+      let d;
+      try { d = await buildCockpit(env, m.upn, bezug <= heute ? bezug : heute); }
+      catch (e) { p.verfuegbar = false; p.hinweis = e.message; break; }
+      if (!d.personVerfuegbar) { p.verfuegbar = false; break; }
+      if (!p.name || p.name === m.upn) p.name = d.person.name || p.name;
+      p.team = d.person.team || null;
+      p.wochenstunden = d.person.wochenstundenVertrag;
+      p.kilankaId = d.person.kilankaId;
+      dEnde = d;
+      // FLS nur für abgeschlossene Monate (Rechnungen liegen erst danach vor)
+      const monatAbgeschlossen = bezug <= heute;
+      let ist = null, soll = null;
+      if (monatAbgeschlossen && d.fls.istMonat === monat && d.fls.istMonatsstunden != null) {
+        ist = d.fls.istMonatsstunden;
+        if (d.fls.nettoArbeitstage != null && d.person.wochenstundenVertrag) soll = d.fls.nettoArbeitstage * (d.person.wochenstundenVertrag / 5);
+      }
+      const { start: ms, ende: me } = monatsGrenzen(monat);
+      const kr = (abs.verfuegbar && d.person.kilankaId) ? Math.round(krankTageImMonat(abs.data, d.person.kilankaId, ms, me) * 2) / 2 : null;
+      p.monate.push({ monat, fls: ist, soll: soll != null ? Math.round(soll * 10) / 10 : null, krank: kr });
+      if (ist != null) p.fls += ist;
+      if (soll != null) p.soll += soll;
+      if (kr != null) p.krank += kr;
+    }
+    if (!p.verfuegbar) { personen.push(p); continue; }
+    // Fallbestand: zum Ende des Zeitraums (bzw. heute) und zum Start (Zu-/Abgänge)
+    p.faelle = dEnde.klienten.hb;
+    for (const id of dEnde.klienten.hbIds) idsEnde.add(id);
+    try {
+      const dStart = await buildCockpit(env, m.upn, info.start);
+      for (const id of dStart.klienten.hbIds) idsStart.add(id);
+    } catch (e) { /* Zugänge/Abgänge dann ohne diese Person */ }
+    // Stundenkonto: aktueller Saldo (Kilanka führt keine Historie)
+    if (p.kilankaId) {
+      try {
+        const zk = await ogZeitkonten(env, p.kilankaId);
+        if (zk.vorhanden && zk.konten.length) { p.saldo = zk.konten[0].stunden; saldo += p.saldo; saldoN++; }
+      } catch (e) { /* optional */ }
+    }
+    p.fls = Math.round(p.fls * 10) / 10;
+    p.soll = Math.round(p.soll * 10) / 10;
+    p.quote = p.soll > 0 ? Math.round((p.fls / p.soll) * 1000) / 10 : null;
+    flsIst += p.fls; flsSoll += p.soll; krank += p.krank; hbEnde += p.faelle;
+    personen.push(p);
+  }
+  const neu = [...idsEnde].filter((id) => !idsStart.has(id)).length;
+  const beendet = [...idsStart].filter((id) => !idsEnde.has(id)).length;
+  return {
+    abgeschlossen: istVergangen,
+    fls: Math.round(flsIst * 10) / 10,
+    flsSoll: Math.round(flsSoll * 10) / 10,
+    auslastung: flsSoll > 0 ? Math.round((flsIst / flsSoll) * 1000) / 10 : null,
+    hilfen: { laufend: hbEnde, neu, beendet },
+    krankTage: Math.round(krank * 2) / 2,
+    stundenkontoSaldo: saldoN ? Math.round(saldo * 10) / 10 : null,
+    personen: personen.sort((a, b) => a.name.localeCompare(b.name, "de")),
+  };
+}
+
+// Hilfen des Teams (Hauptbetreuung bei einem Teammitglied), deren Maßnahme
+// oder Bewilligung innerhalb der nächsten drei Monate ab heute endet.
+async function rmAuslaufendeHilfen(env, teamUpns, heute) {
+  const clients = await fetchKilankaClients(env);
+  const amtKurz = await fetchAmtKurznamen(env);
+  const horizont = new Date(heute.getTime() + 92 * 86400000);
+  const rows = [];
+  for (const client of clients || []) {
+    if (kDate(client.deletedAt) || isArchived(client.recName)) continue;
+    for (const a of client.actions || []) {
+      if (kDate(a.deletedAt)) continue;
+      if (!isCurrent(a.validFrom, a.validUntil, heute)) continue;
+      const hb = (a.attendants || []).find((t) => t.user && t.attendantKind?.name === "Hauptbetreuer" &&
+        !isArchived(t.user.recName) && isCurrent(t.validFrom, t.validUntil, heute) && teamUpns.has(upnForAttendant(t.user)));
+      if (!hb) continue;
+      // Ende der Maßnahme bzw. der aktuell gültigen Bewilligung — das frühere zählt
+      const mEnde = kDate(a.validUntil);
+      let bEnde = null;
+      for (const q of a.quotas || []) {
+        if (kDate(q.deletedAt) || q.timeBase === "quantity") continue;
+        const appr = pickApproval(q.approvals, heute);
+        if (appr && appr.status === "aktuell" && appr.bis) { bEnde = appr.bis; break; }
+      }
+      let ende = null, endeTyp = null;
+      if (mEnde && (!bEnde || mEnde <= bEnde)) { ende = mEnde; endeTyp = "Maßnahme"; }
+      else if (bEnde) { ende = bEnde; endeTyp = "Bewilligung"; }
+      if (!ende || ende > horizont) continue;
+      rows.push({
+        key: `${client.id}|${String(a.recName || "").slice(0, 40)}`,
+        klientId: String(client.id),
+        klient: client.recName || String(client.id),
+        massnahme: a.recName || "",
+        hilfeart: a.legalBasis?.name || "",
+        jugendamt: a.department?.shortName || (amtKurz && amtKurz.get(String(a.department?.id))) || a.department?.name || "",
+        aktenzeichen: a.fileReference || null,
+        fachkraft: hb.user.recName || "",
+        ende: isoDate(ende),
+        endeTyp,
+        naechstesHpg: isoDate(kDate(a.nextMeeting)),
+        wochenstunden: bewilligteWochenstunden(a, heute),
+        ueberfaellig: ende < heute,
+      });
+    }
+  }
+  return rows.sort((x, y) => x.ende.localeCompare(y.ende) || x.klient.localeCompare(y.klient, "de"));
+}
+
+async function rmLesen(env, tlUpn, zeitraum) {
+  if (!env.PNW_DATEN) return null;
+  try { return await env.PNW_DATEN.get(`rueckmeldung:${tlUpn}:${zeitraum}`, "json"); } catch { return null; }
+}
+
+// Team einer Teamleitung: die Leitung selbst plus ihre direkten Reports (Entra)
+async function rmTeamErmitteln(request, env, caller, istGf, alsParam) {
+  if (istGf && alsParam) {
+    const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
+    const alle = await alleAktivenMitarbeiter(env);
+    const kopf = alle.find((m) => (m.upn || "").toLowerCase() === alsParam) || { upn: alsParam, name: alsParam };
+    const liste = [kopf];
+    for (const m of alle) {
+      const mu = (m.upn || "").toLowerCase();
+      if (mu !== alsParam && ((mgrMap.get(m.upn)?.upn) || "").toLowerCase() === alsParam) liste.push(m);
+    }
+    return { tl: alsParam, tlName: kopf.name, liste, rolle: "gf" };
+  }
+  const dr = await fetchDirectReports(request.headers.get("X-Graph-Token"));
+  if (dr.fehler) return { fehler: dr.fehler };
+  if (!dr.reports.length && !istGf) return { keineLeitung: true };
+  const seen = new Set([caller]);
+  const liste = [{ upn: caller, name: null }];
+  for (const r of dr.reports) if (!seen.has(r.upn)) { seen.add(r.upn); liste.push(r); }
+  return { tl: caller, tlName: null, liste, rolle: istGf ? "gf" : "tl" };
+}
+
+// Teamleitungen = alle Konten, die in Entra als Manager eines aktiven Mitarbeiters stehen
+async function rmTeamleitungen(request, env) {
+  const mgrMap = await fetchManagerMap(request.headers.get("X-Graph-Token"));
+  const alle = await alleAktivenMitarbeiter(env);
+  const tls = new Map();
+  for (const m of alle) {
+    const mgr = mgrMap.get(m.upn);
+    if (!mgr || !mgr.upn.endsWith(`@${MAIL_DOMAIN}`)) continue;
+    if (GF_UPNS.some((g) => g.trim().toLowerCase() === mgr.upn)) continue; // GF ist keine Teamleitung
+    if (!tls.has(mgr.upn)) tls.set(mgr.upn, { upn: mgr.upn, name: mgr.name, anzahl: 0 });
+    tls.get(mgr.upn).anzahl++;
+  }
+  return [...tls.values()].sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Business Scorecard (business-scorecard-beta.html)
 // GET /api/scorecard?monat=YYYY-MM
 // Aggregiert vorhandene Bausteine (buildCockpit pro Mitarbeiter,
@@ -2683,6 +2896,7 @@ const ENDPUNKT_GRUPPEN = {
   "og-kennzahlen":      ["PNW-App-Orientierungsgespraech"],
   "scorecard":          ["PNW-App-BusinessScorecard"],
   "unterschriften":     ["PNW-App-Unterschriften"],
+  "rueckmeldung":       ["PNW-App-Rueckmeldung"],
 };
 
 let gruppenCache = new Map(); // upn → { namen:Set, fetchedAt }
@@ -3445,6 +3659,122 @@ export default {
         }, 200, origin);
       } catch (e) {
         return json({ error: `Scorecard-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    // ── Zweimonatliche Rückmeldung ─────────────────────────────────
+    if (url.pathname === "/api/rueckmeldung/liste" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      { const gate = await endpunktGate(request, caller, "rueckmeldung", origin); if (gate) return gate; }
+      const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+      if (!istGf) return json({ error: "Die Übersicht aller Teams ist der Geschäftsführung vorbehalten" }, 403, origin);
+      try {
+        const heute = new Date();
+        const tls = await rmTeamleitungen(request, env);
+        // die letzten vier Zeiträume
+        const zeitraeume = [];
+        let z = rmAktuellerZeitraum(heute);
+        for (let i = 0; i < 4; i++) { zeitraeume.push(z); const [y, m] = z.split("-").map(Number); const pm = m - 2; z = pm < 1 ? `${y - 1}-${String(pm + 12).padStart(2, "0")}` : `${y}-${String(pm).padStart(2, "0")}`; }
+        const rows = [];
+        for (const tl of tls) {
+          const stand = {};
+          for (const zr of zeitraeume) {
+            const g = await rmLesen(env, tl.upn, zr);
+            stand[zr] = g ? { status: g.status || "entwurf", geaendert: g.geaendert || null, abgegeben: g.abgegeben || null } : null;
+          }
+          rows.push({ ...tl, stand });
+        }
+        return json({ zeitraeume, aktuell: zeitraeume[0], teamleitungen: rows, stand: heute.toISOString() }, 200, origin);
+      } catch (e) {
+        return json({ error: `Übersicht fehlgeschlagen: ${e.message}` }, 502, origin);
+      }
+    }
+
+    if (url.pathname === "/api/rueckmeldung" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      { const gate = await endpunktGate(request, caller, "rueckmeldung", origin); if (gate) return gate; }
+      try {
+        const heute = new Date();
+        const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+        const alsParam = (url.searchParams.get("als") || "").trim().toLowerCase();
+        let zeitraum = (url.searchParams.get("zeitraum") || "").trim();
+        if (!RM_ZEITRAUM_RE.test(zeitraum)) zeitraum = rmAktuellerZeitraum(heute);
+        const info = rmZeitraumInfo(zeitraum);
+        if (info.start > heute) return json({ error: "Dieser Zeitraum hat noch nicht begonnen" }, 400, origin);
+
+        const team = await rmTeamErmitteln(request, env, caller, istGf, alsParam && alsParam !== caller ? alsParam : "");
+        if (team.fehler) return json({ error: "Berechtigung derzeit nicht prüfbar — Microsoft Graph antwortet nicht. Bitte in einer Minute erneut versuchen.", detail: team.fehler }, 503, origin);
+        if (team.keineLeitung) return json({ error: "Die Rückmeldung ist Teamleitungen und der Geschäftsführung vorbehalten" }, 403, origin);
+        if (istGf && !alsParam) {
+          // GF ohne Teamwahl: nur die Liste der Teamleitungen liefern
+          return json({ rolle: "gf", zeitraum, info: { monate: info.monate, vorperiode: info.vorperiode }, teamleitungen: await rmTeamleitungen(request, env), stand: heute.toISOString() }, 200, origin);
+        }
+
+        const abs = await fetchCockpitAbsences(env);
+        const [aktuell, vorher] = await Promise.all([
+          rmTeamKennzahlen(env, team.liste, info, abs, heute),
+          rmTeamKennzahlen(env, team.liste, rmZeitraumInfo(info.vorperiode), abs, heute),
+        ]);
+        const teamUpns = new Set(team.liste.map((m) => m.upn));
+        const auslaufend = await rmAuslaufendeHilfen(env, teamUpns, heute);
+        const gespeichert = await rmLesen(env, team.tl, zeitraum);
+        const vorherige = await rmLesen(env, team.tl, info.vorperiode);
+        const tlName = team.tlName || aktuell.personen.find((p) => p.upn === team.tl)?.name || (auth.upn === team.tl ? auth.name : null) || team.tl;
+        return json({
+          rolle: team.rolle, zeitraum, vorperiode: info.vorperiode, monate: info.monate,
+          abgabeBis: isoDate(rmAbgabefrist(info.ende)),
+          team: { tl: team.tl, tlName, mitglieder: team.liste.length },
+          kennzahlen: { aktuell, vorperiode: vorher },
+          auslaufend,
+          gespeichert,
+          ziele: gespeichert?.daten?.ziele || vorherige?.daten?.ziele || null,
+          stand: heute.toISOString(),
+        }, 200, origin);
+      } catch (e) {
+        return json({ error: `Rückmeldung konnte nicht aufgebaut werden: ${e.message}` }, 502, origin);
+      }
+    }
+
+    if (url.pathname === "/api/rueckmeldung" && request.method === "POST") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!caller.endsWith(`@${MAIL_DOMAIN}`)) return json({ error: "Konto gehört nicht zur Organisation" }, 403, origin);
+      { const gate = await endpunktGate(request, caller, "rueckmeldung", origin); if (gate) return gate; }
+      if (!env.PNW_DATEN) return json({ error: "KV-Speicher PNW_DATEN ist nicht gebunden" }, 500, origin);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "Ungültiger Request-Body" }, 400, origin); }
+      const zeitraum = String(body?.zeitraum || "");
+      if (!RM_ZEITRAUM_RE.test(zeitraum)) return json({ error: "Ungültiger Zeitraum" }, 400, origin);
+      const istGf = GF_UPNS.some((g) => g.trim().toLowerCase() === caller);
+      const tl = String(body?.team || caller).trim().toLowerCase();
+      if (tl !== caller && !istGf) return json({ error: "Nur die eigene Rückmeldung darf gespeichert werden" }, 403, origin);
+      const status = ["entwurf", "abgegeben"].includes(body?.status) ? body.status : "entwurf";
+      const daten = body?.daten && typeof body.daten === "object" ? body.daten : {};
+      if (JSON.stringify(daten).length > 60000) return json({ error: "Rückmeldung zu umfangreich (max. 60 kB)" }, 413, origin);
+      try {
+        const key = `rueckmeldung:${tl}:${zeitraum}`;
+        const alt = (await env.PNW_DATEN.get(key, "json")) || {};
+        if (alt.status === "abgegeben" && status !== "abgegeben" && !istGf) {
+          return json({ error: "Diese Rückmeldung ist bereits abgegeben und kann nur von der Geschäftsführung wieder geöffnet werden" }, 409, origin);
+        }
+        const jetzt = new Date().toISOString();
+        const neu = {
+          team: tl, zeitraum, status, daten,
+          angelegt: alt.angelegt || jetzt, geaendert: jetzt, geaendertVon: caller,
+          abgegeben: status === "abgegeben" ? (alt.status === "abgegeben" ? alt.abgegeben : jetzt) : null,
+          abgegebenVon: status === "abgegeben" ? (alt.abgegebenVon || caller) : null,
+        };
+        await env.PNW_DATEN.put(key, JSON.stringify(neu));
+        return json({ ok: true, gespeichert: neu }, 200, origin);
+      } catch (e) {
+        return json({ error: `Speichern fehlgeschlagen: ${e.message}` }, 500, origin);
       }
     }
 

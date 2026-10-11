@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Rückmeldung Teamleitung · Praxis NeueWege</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kodchasan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
+<style>
+:root {
+  --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
+  --text:#1a1916; --text-muted:#6b6860; --text-hint:#a09e99;
+  --accent:#7b3f1e; --accent-light:#f5ede7; --accent-mid:#c47848; --terra:#a15f38; --creme:#f5f0ea;
+  --ok:#2e7d32; --ok-bg:#eef7ee; --warn:#b45309; --warn-bg:#fef7ec;
+  --error:#9b1c1c; --error-bg:#fef2f2; --blue:#1565c0; --blue-bg:#eef4fb;
+  --radius:8px; --radius-lg:12px; --hdr-h:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;min-height:100dvh}
+body{font-family:'Kodchasan','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:var(--hdr-h);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px;cursor:pointer}
+.header-brand img{height:28px;width:auto}
+.header-brand span{font-size:13px;font-weight:600;color:var(--text)}
+.header-right{display:flex;align-items:center;gap:8px}
+.user-badge{display:none;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--accent-mid);flex-shrink:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;border:none;font-family:inherit;min-height:36px;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#68351a}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--border-strong);color:var(--text)}
+.btn-sm{padding:5px 12px;min-height:30px;font-size:12px}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 80px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:16px}
+.card h2{font-size:15px;font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:10px}
+.card h2 .nr{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--terra);color:#fff;font-size:11px;font-weight:700;flex-shrink:0}
+.card .leit{font-size:12.5px;color:var(--text-muted);font-style:italic;margin-bottom:10px}
+.msg{border-radius:var(--radius);padding:10px 14px;font-size:13px;margin-top:12px;display:none}
+.msg.zeigen{display:block}
+.msg.info{background:var(--blue-bg);color:var(--blue)}
+.msg.fehler{background:var(--error-bg);color:var(--error)}
+.msg.ok{background:var(--ok-bg);color:var(--ok)}
+.msg.warn{background:var(--warn-bg);color:var(--warn)}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(0,0,0,.15);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.leiste{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.leiste label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px}
+.leiste select{font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);min-height:36px}
+.leiste .rechts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.kopf{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:12px}
+.kopf .feld{background:var(--creme);border-radius:var(--radius);padding:8px 12px}
+.kopf .k-label{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px}
+.kopf .k-val{font-size:14px;font-weight:600}
+.status-pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px}
+.status-pill.entwurf{background:var(--warn-bg);color:var(--warn)}
+.status-pill.abgegeben{background:var(--ok-bg);color:var(--ok)}
+.status-pill.offen{background:var(--bg);color:var(--text-hint);border:1px solid var(--border)}
+textarea,input[type=text],input[type=number],input[type=date]{font-family:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text);width:100%;line-height:1.5}
+textarea{min-height:84px;resize:vertical}
+textarea:focus,input:focus,select:focus{outline:2px solid var(--accent-mid);outline-offset:1px;border-color:var(--accent-mid)}
+input[readonly],textarea[readonly]{background:var(--bg);color:var(--text-muted)}
+.zaehler{font-size:11px;color:var(--text-hint);text-align:right;margin-top:3px}
+.tabelle{width:100%;border-collapse:collapse;font-size:13px}
+.tabelle th{text-align:left;font-weight:600;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:7px 8px;border-bottom:2px solid var(--border);white-space:nowrap;background:var(--creme)}
+.tabelle td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.tabelle tr:last-child td{border-bottom:none}
+.tabelle .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tabelle td input,.tabelle td select{padding:5px 8px;font-size:13px;min-height:32px}
+.tabelle td input[type=number]{max-width:90px;text-align:right}
+.tabelle td select{font-family:inherit;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text)}
+.tab-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+tr.ueberfaellig td.ende{color:var(--error);font-weight:600}
+.delta{font-size:11px;color:var(--text-hint);margin-left:4px}
+.delta.plus{color:var(--ok)} .delta.minus{color:var(--error)}
+.hinweis{font-size:12px;color:var(--text-muted);background:var(--creme);border-radius:var(--radius);padding:8px 12px;margin-top:10px}
+.regeln{font-size:12.5px;background:var(--creme);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;line-height:1.55}
+details.mehr{margin-top:10px}
+details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);user-select:none}
+.zeile3{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.zeile3 .nr-feld{grid-column:1 / -1;display:flex;gap:8px;align-items:center}
+.zeile3 .nr-feld .n{width:22px;height:22px;border-radius:50%;background:var(--creme);color:var(--terra);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.absage{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;align-items:center;margin-bottom:6px}
+.aktion-leiste{position:sticky;bottom:0;background:rgba(247,246,242,.96);backdrop-filter:blur(6px);border-top:1px solid var(--border);padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;z-index:50}
+.aktion-leiste .links{margin-right:auto;font-size:12px;color:var(--text-muted);align-self:center}
+.gate{max-width:460px;margin:80px auto;text-align:center}
+.gate .g-icon{font-size:44px;margin-bottom:10px}
+.gate h1{font-size:19px;margin-bottom:6px}
+.gate p{font-size:13px;color:var(--text-muted);margin-bottom:18px}
+.page-footer{text-align:center;font-size:11px;color:var(--text-hint);margin-top:28px}
+.page-footer a{color:var(--text-muted)}
+.uebersicht td .status-pill{cursor:pointer}
+@media(max-width:640px){
+  .wrap{padding:14px 10px 90px}
+  .card{padding:14px}
+  .zeile3{grid-template-columns:1fr}
+  .absage{grid-template-columns:1fr}
+  .leiste .rechts{margin-left:0}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand" onclick="location.href='https://apps.praxisneuewege.de/apps.html'">
+    <img src="https://apps.praxisneuewege.de/assets/pnw-logo.png" alt="PNW" onerror="this.style.display='none'">
+    <span>Zweimonatliche Rückmeldung</span>
+  </div>
+  <div class="header-right">
+    <div class="user-badge" id="userBadge"><span class="user-dot"></span><span id="userName"></span></div>
+    <button class="btn btn-ghost btn-sm" id="btnLogout" style="display:none">Abmelden</button>
+  </div>
+</header>
+
+<!-- Login-Gate -->
+<div class="gate" id="gate">
+  <div class="g-icon">🧭</div>
+  <h1>Zweimonatliche Rückmeldung</h1>
+  <p>Überblick der Teamleitung für Leitungsteam und Geschäftsführung. Kennzahlen und auslaufende Hilfen kommen automatisch aus Kilanka – du ergänzt Beobachtungen, Fallanfragen, Personal, Aktivitäten und Bitten. Nur für Teamleitungen und Geschäftsführung.</p>
+  <button class="btn btn-primary" id="btnLogin">Mit Microsoft anmelden</button>
+  <div class="msg fehler" id="gateMsg"></div>
+</div>
+
+<!-- App -->
+<div class="wrap" id="app" style="display:none">
+
+  <div class="card">
+    <div class="leiste">
+      <label id="lblTeam" style="display:none">Team<select id="selTeam"></select></label>
+      <label>Zeitraum<select id="selZeitraum"></select></label>
+      <button class="btn btn-primary" id="btnLaden">Laden</button>
+      <div class="rechts">
+        <button class="btn btn-ghost" id="btnUebersicht" style="display:none">Übersicht aller Teams</button>
+      </div>
+    </div>
+    <div class="kopf" id="kopf" style="display:none">
+      <div class="feld"><div class="k-label">Team</div><div class="k-val" id="kTeam">–</div></div>
+      <div class="feld"><div class="k-label">Teamleitung</div><div class="k-val" id="kTl">–</div></div>
+      <div class="feld"><div class="k-label">Berichtszeitraum</div><div class="k-val" id="kZeitraum">–</div></div>
+      <div class="feld"><div class="k-label">Abgabe bis</div><div class="k-val" id="kAbgabe">–</div></div>
+      <div class="feld"><div class="k-label">Status</div><div class="k-val" id="kStatus">–</div></div>
+    </div>
+    <div class="msg" id="runMsg"></div>
+  </div>
+
+  <!-- GF: Übersicht -->
+  <div class="card" id="uebersichtCard" style="display:none">
+    <h2>Stand der Rückmeldungen</h2>
+    <div class="leit">Je Teamleitung und Zeitraum. Klick auf einen Status öffnet die Rückmeldung.</div>
+    <div class="tab-scroll"><table class="tabelle uebersicht" id="uebersichtTab"></table></div>
+  </div>
+
+  <div id="formular" style="display:none">
+
+    <div class="regeln">
+      <strong>Spielregeln:</strong> Abgabe bis zum 5. Werktag nach Ende des Zeitraums. Höchstens eine Seite. Ganze Sätze, Zahlen statt Adjektive („82 % Auslastung", nicht „gut ausgelastet"). Das Wichtigste zuerst, nichts beschönigen. Keine Klientennamen im Bericht – im PDF erscheinen nur Klienten-Nummer, Amt und Hilfeart.
+    </div>
+
+    <div class="card">
+      <h2><span class="nr">1</span>Beobachtungen</h2>
+      <div class="leit">Zwei bis drei Sätze: Wie steht mein Team da – und was ist das eine Thema, das die Geschäftsführung kennen muss?</div>
+      <textarea id="f_beobachtungen" data-feld="beobachtungen" maxlength="900" placeholder="…"></textarea>
+      <div class="zaehler" id="z_beobachtungen"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="nr">2</span>Kennzahlen – Ziel, Ist, Vorperiode</h2>
+      <div class="leit">Ist und Vorperiode kommen aus Kilanka (Rechnungen, Maßnahmen, Abwesenheiten, Stundenkonten). Ziel und Kommentar trägst du ein; das Ziel wird in die nächste Rückmeldung übernommen.</div>
+      <div class="tab-scroll">
+        <table class="tabelle" id="kennzahlenTab">
+          <thead><tr><th>Kennzahl</th><th class="num">Ziel</th><th class="num">Ist</th><th class="num">Vorperiode</th><th>Kommentar</th></tr></thead>
+          <tbody>
+            <tr><td>Geleistete Fachleistungsstunden</td><td class="num"><input type="number" step="1" data-ziel="fls"></td><td class="num" id="ist_fls">–</td><td class="num" id="vor_fls">–</td><td><input type="text" data-komm="fls" maxlength="120"></td></tr>
+            <tr><td>Auslastung des Teams in %</td><td class="num"><input type="number" step="1" data-ziel="auslastung"></td><td class="num" id="ist_auslastung">–</td><td class="num" id="vor_auslastung">–</td><td><input type="text" data-komm="auslastung" maxlength="120"></td></tr>
+            <tr><td>Laufende Hilfen (neu / beendet)</td><td class="num"><input type="number" step="1" data-ziel="hilfen"></td><td class="num" id="ist_hilfen">–</td><td class="num" id="vor_hilfen">–</td><td><input type="text" data-komm="hilfen" maxlength="120"></td></tr>
+            <tr><td>Fallanfragen (angenommen / abgesagt)</td><td class="num"><input type="number" step="1" data-ziel="anfragen"></td>
+              <td class="num" style="white-space:nowrap"><input type="number" min="0" step="1" data-feld="anfragenAngenommen" style="max-width:62px" title="angenommen"> / <input type="number" min="0" step="1" data-feld="anfragenAbgesagt" style="max-width:62px" title="abgesagt"></td>
+              <td class="num" id="vor_anfragen">–</td><td><input type="text" data-komm="anfragen" maxlength="120"></td></tr>
+            <tr><td>Krankheitstage / Überstundensaldo (Std.)</td><td class="num"><input type="number" step="1" data-ziel="krank"></td><td class="num" id="ist_krank">–</td><td class="num" id="vor_krank">–</td><td><input type="text" data-komm="krank" maxlength="120"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="absagenBox" style="margin-top:12px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Absagen – je Absage Amt und Grund (auch wenn bereits mündlich besprochen)</div>
+        <div id="absagenListe"></div>
+        <button class="btn btn-ghost btn-sm" id="btnAbsage">+ Absage ergänzen</button>
+      </div>
+      <details class="mehr" id="personenDetails">
+        <summary>Kennzahlen je Mitarbeiterin / Mitarbeiter anzeigen (nur hier, nicht im PDF)</summary>
+        <div class="tab-scroll" style="margin-top:8px"><table class="tabelle" id="personenTab"></table></div>
+      </details>
+      <div class="hinweis" id="kennzahlenHinweis" style="display:none"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="nr">3</span>Ausblick: Hilfen, die in den nächsten drei Monaten auslaufen</h2>
+      <div class="leit">Aus Kilanka: Hauptbetreuung im Team, Ende der Maßnahme oder der Bewilligung innerhalb von drei Monaten ab heute. Bitte je Hilfe Verlängerung und – bei „nein" – den Grund eintragen.</div>
+      <div class="tab-scroll">
+        <table class="tabelle" id="auslaufTab">
+          <thead><tr><th>Klient</th><th>Amt</th><th>Hilfeart</th><th>Fachkraft</th><th>Ende</th><th>Verlängerung</th><th>Grund / nächster Schritt</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="hinweis" id="auslaufHinweis" style="display:none"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="nr">4</span>Was funktioniert hat, was nicht – und was wir daraus lernen</h2>
+      <div class="leit">Erfolge und Rückschläge (beendete Hilfen mit Grund, kritische Verläufe, § 8a-Verfahren, Konflikte) – jeweils mit der Lehre daraus.</div>
+      <textarea id="f_lernen" data-feld="lernen" maxlength="1200" placeholder="…"></textarea>
+      <div class="zaehler" id="z_lernen"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="nr">5</span>Personal</h2>
+      <div class="leit">Besetzung, Ausfälle, Stimmung, teamübergreifende Einsätze. Wo gebe ich Kapazität ab, wo brauche ich welche?</div>
+      <textarea id="f_personal" data-feld="personal" maxlength="900" placeholder="…"></textarea>
+      <div class="zaehler" id="z_personal"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="nr">6</span>Meine drei wichtigsten Aktivitäten</h2>
+      <div class="leit">Womit bringe ich Team und Jugendamtsbeziehungen aktiv voran? Je Aktivität: Stand und nächster Schritt.</div>
+      <div id="aktivitaeten"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="nr">7</span>Bitten an die Geschäftsführung</h2>
+      <div class="leit">Höchstens drei. Konkret: Welche Entscheidung oder Unterstützung brauche ich – und bis wann?</div>
+      <div id="bitten"></div>
+    </div>
+
+  </div>
+
+  <div class="page-footer">
+    Praxis NeueWege GmbH · Rückmeldung Teamleitung <span id="versionBadge"></span> ·
+    <a href="https://apps.praxisneuewege.de/apps.html">App-Übersicht</a>
+  </div>
+</div>
+
+<div class="aktion-leiste" id="aktionen" style="display:none">
+  <div class="links" id="saveInfo"></div>
+  <button class="btn btn-ghost" id="btnPdf">PDF-Vorschau</button>
+  <button class="btn btn-ghost" id="btnSpeichern">Entwurf speichern</button>
+  <button class="btn btn-primary" id="btnAbgeben">Abgeben</button>
+  <button class="btn btn-ghost" id="btnOeffnen" style="display:none">Wieder öffnen (GF)</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+ * KONFIGURATION — identisch zu Sanity Check / OP-Abgleich
+ * ═══════════════════════════════════════════════════════════ */
+const CFG = {
+  clientId: 'f7e00950-2421-43b5-b48a-447bf8e7d4b3',
+  tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
+  redirectUri: 'https://apps.praxisneuewege.de/rueckmeldung.html',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev',
+  siteUrl: 'https://praxisneuewegesonjapeltz978.sharepoint.com',
+  outputFolder: '/Rueckmeldungen',
+  empfaenger: ['TL-Ambulant@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de', 'markus.peltz@praxisneuewege.de'],
+};
+/* User.Read reicht dem Worker für die Gruppenprüfung; Mail.Send und Files für Abgabe */
+const SCOPES = ['User.Read', 'Mail.Send', 'Files.ReadWrite.All', 'Sites.ReadWrite.All'];
+const GF = ['markus.peltz@praxisneuewege.de', 'sonja.peltz@praxisneuewege.de'];
+const APP_VERSION = 'v0000000'; // auto-updated on deploy
+document.getElementById('versionBadge').textContent = APP_VERSION;
+const MONATE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const MON_KURZ = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+/* ═══════════════════════════════════════════════════════════
+ * MSAL — defensiv nach dem Mobilfunk-Muster
+ * ═══════════════════════════════════════════════════════════ */
+let msalInstance = null, currentAccount = null;
+function initMsal(){
+  if (msalInstance) return true;
+  if (typeof msal === 'undefined'){
+    zeige('gateMsg', 'MSAL-Bibliothek konnte nicht geladen werden — bitte Seite neu laden (ggf. Netzwerk/Adblocker prüfen).', 'fehler');
+    return false;
+  }
+  msalInstance = new msal.PublicClientApplication({
+    auth:{ clientId:CFG.clientId, authority:'https://login.microsoftonline.com/'+CFG.tenantId, redirectUri:CFG.redirectUri },
+    cache:{ cacheLocation:'sessionStorage' }
+  });
+  return true;
+}
+async function login(){
+  try{
+    if (!initMsal()) return;
+    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    currentAccount = res.account;
+    msalInstance.setActiveAccount(currentAccount);
+    nachLogin();
+  }catch(e){ zeige('gateMsg', 'Anmeldung fehlgeschlagen: '+esc(e.message||e), 'fehler'); }
+}
+function istGf(){ return GF.includes((currentAccount?.username||'').toLowerCase()); }
+async function nachLogin(){
+  const upn = (currentAccount.username||'').toLowerCase();
+  document.getElementById('gate').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('userBadge').style.display='flex';
+  document.getElementById('userName').textContent = currentAccount.name || upn;
+  const lo = document.getElementById('btnLogout');
+  lo.style.display='inline-flex';
+  lo.onclick = () => msalInstance.logoutPopup({account:currentAccount}).then(()=>location.reload());
+  fuelleZeitraeume();
+  if (istGf()) {
+    document.getElementById('lblTeam').style.display = 'flex';
+    document.getElementById('btnUebersicht').style.display = 'inline-flex';
+    await ladeTeamliste();
+    const p = new URLSearchParams(location.search);
+    if (p.get('team')) { document.getElementById('selTeam').value = p.get('team'); }
+    if (p.get('zeitraum')) { document.getElementById('selZeitraum').value = p.get('zeitraum'); }
+    if (document.getElementById('selTeam').value) laden(); else ladeUebersicht();
+  } else {
+    laden();
+  }
+}
+function tokenAblauf(jwt){
+  try{ return JSON.parse(atob(jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000; }
+  catch(e){ return 0; }
+}
+async function tokens(){
+  const req = {scopes:SCOPES, account:currentAccount};
+  let r = await msalInstance.acquireTokenSilent(req).catch(async ()=>msalInstance.acquireTokenPopup(req));
+  if (tokenAblauf(r.idToken) < Date.now()+60000){
+    r = await msalInstance.acquireTokenSilent({...req, forceRefresh:true});
+  }
+  return { id:r.idToken, graph:r.accessToken };
+}
+async function worker(pfad, opt){
+  const t = await tokens();
+  const res = await fetch(CFG.workerUrl + pfad, {
+    ...(opt||{}),
+    headers:{ Authorization:'Bearer '+t.id, 'X-Graph-Token':t.graph, ...(opt && opt.body ? {'Content-Type':'application/json'} : {}) }
+  });
+  let d = null;
+  try{ d = await res.json(); }catch(e){}
+  if (!res.ok) throw new Error((d && d.error) || ('HTTP '+res.status));
+  return d;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * HELFER — Ausgabe im deutschen Format
+ * ═══════════════════════════════════════════════════════════ */
+function zeige(id, text, art){ const el=document.getElementById(id); el.className='msg zeigen '+(art||'info'); el.innerHTML=text; }
+function verstecke(id){ document.getElementById(id).className='msg'; }
+function esc(s){ const d=document.createElement('div'); d.textContent=String(s==null?'':s); return d.innerHTML; }
+function datumDe(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; }
+function zahlDe(n, st){ return (n==null||!isFinite(n)) ? '–' : n.toLocaleString('de-DE',{minimumFractionDigits:st||0, maximumFractionDigits:st||0}); }
+function zeitDe(iso){ const d=new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); }
+function zeitraumText(z){ const [y,m]=z.split('-').map(Number); return MONATE[m-1]+' / '+MONATE[m]+' '+y; }
+function zeitraumKurz(z){ const [y,m]=z.split('-').map(Number); return MON_KURZ[m-1]+'/'+MON_KURZ[m]+' '+String(y).slice(2); }
+/* Der zuletzt abgeschlossene und der laufende Zweimonatsblock plus drei ältere */
+function zeitraeume(){
+  const h = new Date(); const y=h.getFullYear(), m=h.getMonth()+1;
+  let sm = m % 2 === 0 ? m-1 : m, sy=y; // laufender Block
+  const list=[];
+  for (let i=0;i<5;i++){ list.push(sy+'-'+String(sm).padStart(2,'0')); sm-=2; if(sm<1){sm+=12;sy--;} }
+  return list;
+}
+function fuelleZeitraeume(){
+  const sel=document.getElementById('selZeitraum');
+  const zs=zeitraeume();
+  sel.innerHTML = zs.map((z,i)=>'<option value="'+z+'">'+zeitraumText(z)+(i===0?' (läuft noch)':'')+'</option>').join('');
+  sel.value = zs[1]; // Standard: zuletzt abgeschlossener Block
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * ZUSTAND
+ * ═══════════════════════════════════════════════════════════ */
+let DATEN = null;      // Antwort von /api/rueckmeldung
+let FORM = null;       // aktueller Formularstand (daten)
+let STATUS = 'entwurf';
+let READONLY = false;
+let _saveTimer = null, _dirty = false, _saving = false;
+
+function leeresFormular(){
+  return { beobachtungen:'', lernen:'', personal:'',
+    ziele:{}, kommentare:{},
+    anfragenAngenommen:null, anfragenAbgesagt:null, absagen:[],
+    auslaufend:{}, aktivitaeten:[{t:'',s:'',n:''},{t:'',s:'',n:''},{t:'',s:'',n:''}],
+    bitten:[{t:'',bis:''},{t:'',bis:''},{t:'',bis:''}] };
+}
+
+async function ladeTeamliste(){
+  try{
+    const d = await worker('/api/rueckmeldung');
+    const sel=document.getElementById('selTeam');
+    sel.innerHTML = '<option value="">— Team wählen —</option>' + (d.teamleitungen||[]).map(t=>'<option value="'+esc(t.upn)+'">'+esc(t.name)+' ('+t.anzahl+')</option>').join('');
+  }catch(e){ zeige('runMsg', 'Teamliste konnte nicht geladen werden: '+esc(e.message), 'fehler'); }
+}
+
+async function ladeUebersicht(){
+  document.getElementById('formular').style.display='none';
+  document.getElementById('aktionen').style.display='none';
+  document.getElementById('kopf').style.display='none';
+  zeige('runMsg', '<span class="spinner"></span>Übersicht wird geladen …', 'info');
+  try{
+    const d = await worker('/api/rueckmeldung/liste');
+    const tab=document.getElementById('uebersichtTab');
+    let h='<thead><tr><th>Teamleitung</th><th class="num">Team</th>'+d.zeitraeume.map(z=>'<th>'+esc(zeitraumKurz(z))+'</th>').join('')+'</tr></thead><tbody>';
+    for (const tl of d.teamleitungen){
+      h+='<tr><td>'+esc(tl.name)+'</td><td class="num">'+tl.anzahl+'</td>';
+      for (const z of d.zeitraeume){
+        const s=tl.stand[z];
+        const cls = s ? s.status : 'offen';
+        const txt = s ? (s.status==='abgegeben' ? 'abgegeben '+datumDe(s.abgegeben) : 'Entwurf '+datumDe(s.geaendert)) : 'offen';
+        h+='<td><span class="status-pill '+cls+'" onclick="oeffne(\''+esc(tl.upn)+'\',\''+z+'\')">'+esc(txt)+'</span></td>';
+      }
+      h+='</tr>';
+    }
+    tab.innerHTML = h+'</tbody>';
+    document.getElementById('uebersichtCard').style.display='block';
+    verstecke('runMsg');
+  }catch(e){ zeige('runMsg', 'Übersicht fehlgeschlagen: '+esc(e.message), 'fehler'); }
+}
+function oeffne(upn, z){
+  document.getElementById('selTeam').value = upn;
+  const sel=document.getElementById('selZeitraum');
+  if (![...sel.options].some(o=>o.value===z)) sel.add(new Option(zeitraumText(z), z));
+  sel.value = z;
+  laden();
+}
+
+async function laden(){
+  if (_dirty && !READONLY) await speichern(false);
+  const btn=document.getElementById('btnLaden'); btn.disabled=true;
+  document.getElementById('uebersichtCard').style.display='none';
+  zeige('runMsg', '<span class="spinner"></span>Kennzahlen werden aus Kilanka zusammengestellt – das dauert einen Moment …', 'info');
+  try{
+    const z=document.getElementById('selZeitraum').value;
+    const team = istGf() ? document.getElementById('selTeam').value : '';
+    if (istGf() && !team){ zeige('runMsg','Bitte zuerst ein Team wählen.','warn'); btn.disabled=false; return; }
+    const d = await worker('/api/rueckmeldung?zeitraum='+encodeURIComponent(z)+(team?'&als='+encodeURIComponent(team):''));
+    DATEN = d;
+    STATUS = d.gespeichert?.status || 'entwurf';
+    FORM = Object.assign(leeresFormular(), d.gespeichert?.daten || {});
+    if (!d.gespeichert?.daten?.ziele && d.ziele) FORM.ziele = Object.assign({}, d.ziele); // Ziel aus Vorperiode übernehmen
+    READONLY = STATUS==='abgegeben' || (istGf() && d.team.tl !== (currentAccount.username||'').toLowerCase());
+    rendere();
+    verstecke('runMsg');
+    if (!d.kennzahlen.aktuell.abgeschlossen) zeige('runMsg','Der Zeitraum läuft noch – Fachleistungsstunden liegen erst nach Abschluss des Monats (Rechnungslauf) vollständig vor.','warn');
+  }catch(e){ zeige('runMsg', esc(e.message), 'fehler'); }
+  btn.disabled=false;
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * RENDERN
+ * ═══════════════════════════════════════════════════════════ */
+function delta(a, b, st){
+  if (a==null || b==null) return '';
+  const d=a-b; if (!d) return '<span class="delta">±0</span>';
+  return '<span class="delta '+(d>0?'plus':'minus')+'">'+(d>0?'+':'')+zahlDe(d, st||0)+'</span>';
+}
+function rendere(){
+  const d=DATEN, k=d.kennzahlen.aktuell, v=d.kennzahlen.vorperiode;
+  document.getElementById('kopf').style.display='grid';
+  document.getElementById('kTeam').textContent = (k.personen.find(p=>p.team)||{}).team || 'Team '+(d.team.tlName||'').split(' ')[0];
+  document.getElementById('kTl').textContent = d.team.tlName || d.team.tl;
+  document.getElementById('kZeitraum').textContent = zeitraumText(d.zeitraum);
+  document.getElementById('kAbgabe').textContent = datumDe(d.abgabeBis);
+  document.getElementById('kStatus').innerHTML = statusPill(STATUS, d.gespeichert);
+  document.getElementById('formular').style.display='block';
+  document.getElementById('aktionen').style.display='flex';
+
+  // Kennzahlen
+  document.getElementById('ist_fls').innerHTML = zahlDe(k.fls,1)+delta(k.fls,v.fls,1);
+  document.getElementById('vor_fls').textContent = zahlDe(v.fls,1);
+  document.getElementById('ist_auslastung').innerHTML = (k.auslastung==null?'–':zahlDe(k.auslastung,1)+' %')+delta(k.auslastung,v.auslastung,1);
+  document.getElementById('vor_auslastung').textContent = v.auslastung==null?'–':zahlDe(v.auslastung,1)+' %';
+  document.getElementById('ist_hilfen').innerHTML = k.hilfen.laufend+' <span class="delta">(+'+k.hilfen.neu+' / −'+k.hilfen.beendet+')</span>';
+  document.getElementById('vor_hilfen').innerHTML = v.hilfen.laufend+' <span class="delta">(+'+v.hilfen.neu+' / −'+v.hilfen.beendet+')</span>';
+  const vorForm = null; // Vorperioden-Anfragen stehen nur in der gespeicherten Vorperiode → Worker liefert sie nicht; Anzeige „–"
+  document.getElementById('vor_anfragen').textContent = '–';
+  document.getElementById('ist_krank').innerHTML = zahlDe(k.krankTage,1)+' Tage / '+(k.stundenkontoSaldo==null?'–':zahlDe(k.stundenkontoSaldo,1)+' Std.');
+  document.getElementById('vor_krank').textContent = zahlDe(v.krankTage,1)+' Tage';
+  const hin=[];
+  if (!k.abgeschlossen) hin.push('Fachleistungsstunden des laufenden Monats fehlen noch (Rechnungslauf).');
+  const ohne=k.personen.filter(p=>!p.verfuegbar).map(p=>p.name);
+  if (ohne.length) hin.push('Ohne Kilanka-Daten: '+ohne.join(', ')+'.');
+  hin.push('Überstundensaldo ist der aktuelle Stand der Stundenkonten (Summe des Teams), nicht der Stand zum Zeitraumende.');
+  document.getElementById('kennzahlenHinweis').style.display='block';
+  document.getElementById('kennzahlenHinweis').textContent = hin.join(' ');
+
+  // Personen
+  let h='<thead><tr><th>Name</th><th class="num">Std./Wo.</th><th class="num">Fälle (HB)</th><th class="num">FLS Ist</th><th class="num">FLS Soll</th><th class="num">Quote</th><th class="num">Krank (Tage)</th><th class="num">Stundenkonto</th></tr></thead><tbody>';
+  for (const p of k.personen){
+    h+='<tr><td>'+esc(p.name)+(p.verfuegbar?'':' <span class="delta">(keine Kilanka-Daten)</span>')+'</td><td class="num">'+zahlDe(p.wochenstunden,1)+'</td><td class="num">'+(p.faelle==null?'–':p.faelle)+'</td><td class="num">'+zahlDe(p.fls,1)+'</td><td class="num">'+zahlDe(p.soll,1)+'</td><td class="num">'+(p.quote==null?'–':zahlDe(p.quote,1)+' %')+'</td><td class="num">'+zahlDe(p.krank,1)+'</td><td class="num">'+(p.saldo==null?'–':zahlDe(p.saldo,1))+'</td></tr>';
+  }
+  document.getElementById('personenTab').innerHTML = h+'</tbody>';
+
+  // Felder
+  for (const id of ['beobachtungen','lernen','personal']){
+    const el=document.getElementById('f_'+id); el.value=FORM[id]||''; el.readOnly=READONLY; zaehler(id);
+  }
+  document.querySelectorAll('[data-ziel]').forEach(i=>{ i.value = FORM.ziele?.[i.dataset.ziel] ?? ''; i.readOnly=READONLY; });
+  document.querySelectorAll('[data-komm]').forEach(i=>{ i.value = FORM.kommentare?.[i.dataset.komm] ?? ''; i.readOnly=READONLY; });
+  document.querySelector('[data-feld=anfragenAngenommen]').value = FORM.anfragenAngenommen ?? '';
+  document.querySelector('[data-feld=anfragenAbgesagt]').value = FORM.anfragenAbgesagt ?? '';
+  document.querySelectorAll('[data-feld=anfragenAngenommen],[data-feld=anfragenAbgesagt]').forEach(i=>i.readOnly=READONLY);
+  rendereAbsagen();
+  rendereAuslaufend();
+  rendereListen();
+  document.getElementById('btnAbsage').style.display = READONLY?'none':'inline-flex';
+  document.getElementById('btnSpeichern').style.display = READONLY?'none':'inline-flex';
+  document.getElementById('btnAbgeben').style.display = READONLY?'none':'inline-flex';
+  document.getElementById('btnOeffnen').style.display = (istGf() && STATUS==='abgegeben')?'inline-flex':'none';
+  document.getElementById('saveInfo').textContent = d.gespeichert ? 'Zuletzt gespeichert '+zeitDe(d.gespeichert.geaendert) : 'Noch nicht gespeichert';
+  _dirty=false;
+}
+function statusPill(st, g){
+  if (st==='abgegeben') return '<span class="status-pill abgegeben">abgegeben '+datumDe(g?.abgegeben)+'</span>';
+  return '<span class="status-pill entwurf">Entwurf</span>';
+}
+function zaehler(id){ const el=document.getElementById('f_'+id); document.getElementById('z_'+id).textContent = el.value.length+' / '+el.maxLength; }
+
+function rendereAbsagen(){
+  const box=document.getElementById('absagenListe');
+  if (!FORM.absagen.length){ box.innerHTML='<div class="zaehler" style="text-align:left">Keine Absagen im Zeitraum.</div>'; return; }
+  box.innerHTML = FORM.absagen.map((a,i)=>'<div class="absage"><input type="text" placeholder="Jugendamt" value="'+esc(a.amt)+'" data-abs="amt" data-i="'+i+'" '+(READONLY?'readonly':'')+'><input type="text" placeholder="Grund (kurz)" value="'+esc(a.grund)+'" data-abs="grund" data-i="'+i+'" maxlength="160" '+(READONLY?'readonly':'')+'>'+(READONLY?'<span></span>':'<button class="btn btn-ghost btn-sm" onclick="absageWeg('+i+')" title="entfernen">×</button>')+'</div>').join('');
+  box.querySelectorAll('[data-abs]').forEach(i=>i.addEventListener('input', ()=>{ FORM.absagen[+i.dataset.i][i.dataset.abs]=i.value; markiere(); }));
+}
+function absageWeg(i){ FORM.absagen.splice(i,1); rendereAbsagen(); markiere(); }
+document.getElementById('btnAbsage').onclick=()=>{ FORM.absagen.push({amt:'',grund:''}); rendereAbsagen(); markiere(); };
+
+function rendereAuslaufend(){
+  const tb=document.querySelector('#auslaufTab tbody');
+  const rows=DATEN.auslaufend||[];
+  const hinweis=document.getElementById('auslaufHinweis');
+  if (!rows.length){ tb.innerHTML='<tr><td colspan="7" class="zaehler" style="text-align:left">Keine Hilfe des Teams endet in den nächsten drei Monaten.</td></tr>'; hinweis.style.display='none'; return; }
+  tb.innerHTML = rows.map(r=>{
+    const e=FORM.auslaufend[r.key]||{};
+    const sel = READONLY
+      ? '<span>'+esc({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–')+'</span>'
+      : '<select data-ausl="verl" data-key="'+esc(r.key)+'"><option value="">–</option><option value="ja"'+(e.verl==='ja'?' selected':'')+'>ja</option><option value="nein"'+(e.verl==='nein'?' selected':'')+'>nein</option><option value="offen"'+(e.verl==='offen'?' selected':'')+'>offen</option></select>';
+    return '<tr class="'+(r.ueberfaellig?'ueberfaellig':'')+'"><td title="Klienten-Nr. '+esc(r.klientId)+'">'+esc(r.klient)+'<div class="delta" style="margin:0">Nr. '+esc(r.klientId)+(r.aktenzeichen?' · AZ '+esc(r.aktenzeichen):'')+'</div></td><td>'+esc(r.jugendamt)+'</td><td>'+esc(r.hilfeart||r.massnahme)+(r.wochenstunden?'<div class="delta" style="margin:0">'+zahlDe(r.wochenstunden,1)+' Std./Wo.</div>':'')+'</td><td>'+esc(r.fachkraft)+'</td><td class="ende" style="white-space:nowrap">'+datumDe(r.ende)+'<div class="delta" style="margin:0">'+esc(r.endeTyp)+(r.naechstesHpg?' · HPG '+datumDe(r.naechstesHpg):'')+'</div></td><td>'+sel+'</td><td><input type="text" data-ausl="grund" data-key="'+esc(r.key)+'" value="'+esc(e.grund||'')+'" maxlength="160" '+(READONLY?'readonly':'')+'></td></tr>';
+  }).join('');
+  tb.querySelectorAll('[data-ausl]').forEach(i=>i.addEventListener('input', ()=>{ const k=i.dataset.key; FORM.auslaufend[k]=FORM.auslaufend[k]||{}; FORM.auslaufend[k][i.dataset.ausl]=i.value; markiere(); }));
+  const ueber=rows.filter(r=>r.ueberfaellig).length;
+  hinweis.style.display = ueber?'block':'none';
+  hinweis.textContent = ueber ? ueber+' Hilfe(n) mit bereits überschrittenem Ende – bitte in Kilanka prüfen (Verlängerung eintragen oder Maßnahme beenden).' : '';
+}
+function rendereListen(){
+  const ak=document.getElementById('aktivitaeten');
+  ak.innerHTML = FORM.aktivitaeten.map((a,i)=>'<div class="zeile3"><div class="nr-feld"><span class="n">'+(i+1)+'</span><input type="text" placeholder="Aktivität" value="'+esc(a.t)+'" data-akt="t" data-i="'+i+'" maxlength="140" '+(READONLY?'readonly':'')+'></div><input type="text" placeholder="Stand" value="'+esc(a.s)+'" data-akt="s" data-i="'+i+'" maxlength="140" '+(READONLY?'readonly':'')+'><input type="text" placeholder="Nächster Schritt" value="'+esc(a.n)+'" data-akt="n" data-i="'+i+'" maxlength="140" '+(READONLY?'readonly':'')+'></div>').join('');
+  ak.querySelectorAll('[data-akt]').forEach(i=>i.addEventListener('input',()=>{ FORM.aktivitaeten[+i.dataset.i][i.dataset.akt]=i.value; markiere(); }));
+  const bi=document.getElementById('bitten');
+  bi.innerHTML = FORM.bitten.map((b,i)=>'<div class="zeile3" style="grid-template-columns:3fr 1fr"><div class="nr-feld" style="grid-column:1"><span class="n">'+(i+1)+'</span><input type="text" placeholder="Bitte / Entscheidung" value="'+esc(b.t)+'" data-bit="t" data-i="'+i+'" maxlength="200" '+(READONLY?'readonly':'')+'></div><input type="date" title="bis wann" value="'+esc(b.bis)+'" data-bit="bis" data-i="'+i+'" '+(READONLY?'readonly':'')+'></div>').join('');
+  bi.querySelectorAll('[data-bit]').forEach(i=>i.addEventListener('input',()=>{ FORM.bitten[+i.dataset.i][i.dataset.bit]=i.value; markiere(); }));
+}
+
+/* Eingaben in FORM übernehmen + Autosave */
+for (const id of ['beobachtungen','lernen','personal']){
+  document.getElementById('f_'+id).addEventListener('input', e=>{ FORM[id]=e.target.value; zaehler(id); markiere(); });
+}
+document.querySelectorAll('[data-ziel]').forEach(i=>i.addEventListener('input',()=>{ FORM.ziele[i.dataset.ziel]=i.value===''?null:Number(i.value); markiere(); }));
+document.querySelectorAll('[data-komm]').forEach(i=>i.addEventListener('input',()=>{ FORM.kommentare[i.dataset.komm]=i.value; markiere(); }));
+document.querySelectorAll('[data-feld=anfragenAngenommen],[data-feld=anfragenAbgesagt]').forEach(i=>i.addEventListener('input',()=>{ FORM[i.dataset.feld]=i.value===''?null:Number(i.value); markiere(); }));
+function markiere(){
+  if (READONLY) return;
+  _dirty=true;
+  document.getElementById('saveInfo').textContent='Änderungen werden gespeichert …';
+  clearTimeout(_saveTimer); _saveTimer=setTimeout(()=>speichern(false), 2500);
+}
+window.addEventListener('beforeunload', e=>{ if(_dirty){ e.preventDefault(); e.returnValue=''; } });
+
+async function speichern(abgeben){
+  if (!DATEN || _saving) return false;
+  _saving=true;
+  try{
+    const r = await worker('/api/rueckmeldung', { method:'POST', body: JSON.stringify({ zeitraum:DATEN.zeitraum, team:DATEN.team.tl, daten:FORM, status: abgeben?'abgegeben':STATUS }) });
+    DATEN.gespeichert = r.gespeichert; STATUS=r.gespeichert.status; _dirty=false;
+    document.getElementById('saveInfo').textContent='Gespeichert '+zeitDe(r.gespeichert.geaendert);
+    document.getElementById('kStatus').innerHTML = statusPill(STATUS, r.gespeichert);
+    return true;
+  }catch(e){
+    document.getElementById('saveInfo').textContent='Speichern fehlgeschlagen: '+e.message;
+    return false;
+  }finally{ _saving=false; }
+}
+document.getElementById('btnSpeichern').onclick=()=>speichern(false);
+document.getElementById('btnLaden').onclick=()=>laden();
+document.getElementById('btnUebersicht').onclick=()=>ladeUebersicht();
+document.getElementById('btnLogin').onclick=login;
+document.getElementById('btnOeffnen').onclick=async()=>{
+  if (!confirm('Rückmeldung wieder zur Bearbeitung öffnen?')) return;
+  try{ await worker('/api/rueckmeldung',{method:'POST',body:JSON.stringify({zeitraum:DATEN.zeitraum, team:DATEN.team.tl, daten:FORM, status:'entwurf'})}); laden(); }
+  catch(e){ alert('Fehlgeschlagen: '+e.message); }
+};
+
+/* ═══════════════════════════════════════════════════════════
+ * ABGEBEN — speichern, PDF, SharePoint, Mail
+ * ═══════════════════════════════════════════════════════════ */
+function pruefeVollstaendig(){
+  const fehlt=[];
+  if (!FORM.beobachtungen.trim()) fehlt.push('Beobachtungen');
+  if (FORM.anfragenAngenommen==null || FORM.anfragenAbgesagt==null) fehlt.push('Fallanfragen (angenommen / abgesagt)');
+  if (FORM.anfragenAbgesagt>0 && FORM.absagen.filter(a=>a.grund.trim()).length < FORM.anfragenAbgesagt) fehlt.push('Grund je Absage');
+  const offen=(DATEN.auslaufend||[]).filter(r=>!(FORM.auslaufend[r.key]||{}).verl);
+  if (offen.length) fehlt.push('Verlängerung bei '+offen.length+' auslaufenden Hilfe(n)');
+  const neinOhne=(DATEN.auslaufend||[]).filter(r=>{const e=FORM.auslaufend[r.key]||{}; return e.verl==='nein' && !(e.grund||'').trim();});
+  if (neinOhne.length) fehlt.push('Grund bei '+neinOhne.length+' nicht verlängerten Hilfe(n)');
+  if (!FORM.lernen.trim()) fehlt.push('Was funktioniert hat, was nicht');
+  if (!FORM.personal.trim()) fehlt.push('Personal');
+  if (!FORM.aktivitaeten.some(a=>a.t.trim())) fehlt.push('mindestens eine Aktivität');
+  return fehlt;
+}
+document.getElementById('btnAbgeben').onclick=async()=>{
+  const fehlt=pruefeVollstaendig();
+  if (fehlt.length){ alert('Vor der Abgabe bitte ergänzen:\n– '+fehlt.join('\n– ')); return; }
+  if (!confirm('Rückmeldung für '+zeitraumText(DATEN.zeitraum)+' abgeben?\n\nSie wird als PDF in SharePoint abgelegt und an Geschäftsführung und Leitungsteam gesendet. Danach ist sie nur noch lesbar.')) return;
+  const btn=document.getElementById('btnAbgeben'); btn.disabled=true;
+  try{
+    zeige('runMsg','<span class="spinner"></span>PDF wird erstellt …','info');
+    const bytes = await erzeugePdf();
+    const name = pdfName();
+    zeige('runMsg','<span class="spinner"></span>PDF wird in SharePoint abgelegt …','info');
+    let spOk=true, spText='';
+    try{ await pdfHochladen(name, bytes); }catch(e){ spOk=false; spText=e.message; console.warn('SharePoint:',e); }
+    zeige('runMsg','<span class="spinner"></span>Mail an Geschäftsführung und Leitungsteam …','info');
+    let mailOk=true, mailText='';
+    try{ await sendeMail(name, bytes); }catch(e){ mailOk=false; mailText=e.message; console.warn('Mail:',e); }
+    const ok = await speichern(true);
+    READONLY=true; rendere();
+    const teile=['Rückmeldung abgegeben.'];
+    teile.push(spOk?'PDF liegt in SharePoint ('+CFG.outputFolder+').':'SharePoint-Ablage fehlgeschlagen: '+esc(spText));
+    teile.push(mailOk?'Mail wurde gesendet.':'Mailversand fehlgeschlagen: '+esc(mailText)+' – bitte PDF manuell senden.');
+    if (!ok) teile.push('Status konnte nicht gespeichert werden – bitte erneut abgeben.');
+    zeige('runMsg', teile.join(' '), (spOk&&mailOk&&ok)?'ok':'warn');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }catch(e){ zeige('runMsg','Abgabe fehlgeschlagen: '+esc(e.message),'fehler'); }
+  btn.disabled=false;
+};
+document.getElementById('btnPdf').onclick=async()=>{
+  const btn=document.getElementById('btnPdf'); btn.disabled=true;
+  try{
+    const bytes=await erzeugePdf();
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    const w=window.open(url); if(!w){ const a=document.createElement('a'); a.href=url; a.download=pdfName(); a.click(); }
+  }catch(e){ alert('PDF-Erzeugung fehlgeschlagen: '+e.message); console.error(e); }
+  btn.disabled=false;
+};
+function pdfName(){ const tl=(DATEN.team.tlName||DATEN.team.tl).replace(/[^\wäöüÄÖÜß -]/g,'').trim().replace(/\s+/g,'_'); return 'Rueckmeldung_'+DATEN.zeitraum+'_'+tl+'.pdf'; }
+
+async function graphToken(){ return (await tokens()).graph; }
+async function getDrive(token){
+  const siteHost=CFG.siteUrl.replace('https://','').split('/')[0];
+  const siteResp=await fetch('https://graph.microsoft.com/v1.0/sites/'+siteHost+':/',{headers:{Authorization:'Bearer '+token}});
+  if(!siteResp.ok) throw new Error('SharePoint-Site nicht erreichbar');
+  const site=await siteResp.json();
+  const drives=await (await fetch('https://graph.microsoft.com/v1.0/sites/'+site.id+'/drives',{headers:{Authorization:'Bearer '+token}})).json();
+  const drive=(drives.value||[]).find(d=>d.name==='Dokumente'||d.name==='Documents'||d.name==='Freigegebene Dokumente');
+  if(!drive) throw new Error('Dokumentenbibliothek nicht gefunden');
+  return drive.id;
+}
+async function pdfHochladen(name, bytes){
+  const token=await graphToken();
+  const driveId=await getDrive(token);
+  const url='https://graph.microsoft.com/v1.0/drives/'+driveId+'/root:'+CFG.outputFolder+'/'+encodeURIComponent(name)+':/content';
+  let r=await fetch(url,{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/pdf'},body:bytes});
+  if (r.status===404){ // Ordner fehlt → anlegen und erneut
+    await fetch('https://graph.microsoft.com/v1.0/drives/'+driveId+'/root/children',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({name:CFG.outputFolder.replace(/^\//,''),folder:{},'@microsoft.graph.conflictBehavior':'fail'})});
+    r=await fetch(url,{method:'PUT',headers:{Authorization:'Bearer '+token,'Content-Type':'application/pdf'},body:bytes});
+  }
+  if(!r.ok){ let m='Upload fehlgeschlagen'; try{ m=(await r.json()).error?.message||m; }catch(e){} throw new Error(m); }
+}
+async function sendeMail(name, bytes){
+  const token=await graphToken();
+  let bin=''; for(let i=0;i<bytes.length;i+=0x8000) bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+  const k=DATEN.kennzahlen.aktuell;
+  const mail={ message:{
+    subject:'Rückmeldung '+zeitraumText(DATEN.zeitraum)+' – '+(DATEN.team.tlName||DATEN.team.tl),
+    body:{ contentType:'HTML', content:'<html><body style="font-family:Arial,sans-serif;color:#333;font-size:14px;max-width:640px;">'+
+      '<p>Hallo zusammen,</p><p>anbei meine Rückmeldung für '+esc(zeitraumText(DATEN.zeitraum))+'.</p>'+
+      '<p><b>Beobachtungen:</b><br>'+esc(FORM.beobachtungen).replace(/\n/g,'<br>')+'</p>'+
+      '<p>Auslastung '+(k.auslastung==null?'–':zahlDe(k.auslastung,1)+' %')+' · '+zahlDe(k.fls,1)+' FLS · '+k.hilfen.laufend+' laufende Hilfen (+'+k.hilfen.neu+' / −'+k.hilfen.beendet+') · Fallanfragen '+(FORM.anfragenAngenommen??0)+' angenommen / '+(FORM.anfragenAbgesagt??0)+' abgesagt</p>'+
+      '<p>Viele Grüße<br>'+esc(currentAccount.name||'')+'</p></body></html>' },
+    toRecipients: CFG.empfaenger.map(a=>({emailAddress:{address:a}})),
+    attachments:[{'@odata.type':'#microsoft.graph.fileAttachment', name, contentType:'application/pdf', contentBytes:btoa(bin)}]
+  }, saveToSentItems:true };
+  const r=await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(mail)});
+  if(!r.ok){ const e=await r.json().catch(()=>({})); throw new Error(e?.error?.message||('HTTP '+r.status)); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+ * PDF — Layout wie Anlage 1 der Stellenbeschreibung (PNW-CI,
+ * pdfmake, Kodchasan / Libre Baskerville)
+ * ═══════════════════════════════════════════════════════════ */
+let _pdfAssets=null;
+async function ladePdfAssets(){
+  if (_pdfAssets) return _pdfAssets;
+  const basis=window.location.pathname.replace(/[^/]*$/,'');
+  async function b64(pfad){ const r=await fetch(basis+pfad); if(!r.ok) throw new Error(pfad+' nicht gefunden'); const b=new Uint8Array(await r.arrayBuffer()); let s=''; for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); }
+  const namen=['Kodchasan-Regular.ttf','Kodchasan-Medium.ttf','Kodchasan-SemiBold.ttf','Kodchasan-Bold.ttf','Kodchasan-Italic.ttf','LibreBaskerville-Regular.ttf','LibreBaskerville-Bold.ttf','LibreBaskerville-Italic.ttf'];
+  const geladen=await Promise.all(namen.map(n=>b64('assets/fonts/'+n)));
+  const vfs={}; namen.forEach((n,i)=>vfs[n]=geladen[i]);
+  const fonts={
+    Kodchasan:{normal:'Kodchasan-Regular.ttf',bold:'Kodchasan-Bold.ttf',italics:'Kodchasan-Italic.ttf',bolditalics:'Kodchasan-Bold.ttf'},
+    KodchasanMedium:{normal:'Kodchasan-Medium.ttf',bold:'Kodchasan-SemiBold.ttf',italics:'Kodchasan-Italic.ttf',bolditalics:'Kodchasan-SemiBold.ttf'},
+    KodchasanSemi:{normal:'Kodchasan-SemiBold.ttf',bold:'Kodchasan-Bold.ttf',italics:'Kodchasan-Italic.ttf',bolditalics:'Kodchasan-Bold.ttf'},
+    Baskerville:{normal:'LibreBaskerville-Regular.ttf',bold:'LibreBaskerville-Bold.ttf',italics:'LibreBaskerville-Italic.ttf',bolditalics:'LibreBaskerville-Bold.ttf'},
+  };
+  let logo=null; try{ logo='data:image/png;base64,'+await b64('assets/logo-praxisneuewege.png'); }catch(e){}
+  _pdfAssets={vfs,fonts,logo}; return _pdfAssets;
+}
+function rmDocDefinition(logo){
+  const C={dunkelbraun:'#5A2D15',terra:'#A15F38',creme:'#F5F0EA',papier:'#FFFFFF',ink:'#211F1B',muted:'#4A4640',meta:'#8A857B',rahmenStark:'#D8D2C6',rahmenMittel:'#E4DED2'};
+  const F={titel:17.5,untertitel:9.75,eyebrow:6.4,h2:10.1,label:6,fliess:10,fuss:8};
+  const PAGE_W=595.28, MX=34.5, INNER=PAGE_W-2*MX;
+  const up=s=>String(s||'').toUpperCase();
+  const d=DATEN, k=d.kennzahlen.aktuell, v=d.kennzahlen.vorperiode;
+  const badge=n=>({svg:'<svg width="14" height="14" viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="7" fill="'+C.terra+'"/><text x="7" y="9.6" font-size="7.5" font-weight="bold" fill="'+C.papier+'" text-anchor="middle" font-family="sans-serif">'+n+'</text></svg>',width:14,margin:[0,.5,0,0]});
+  const h=(n,t)=>({unbreakable:true,headlineLevel:1,stack:[{columns:[{width:20,stack:[badge(n)]},{width:'*',text:t,font:'Baskerville',bold:true,fontSize:F.h2,color:C.dunkelbraun,margin:[0,1,0,0]}]},{canvas:[{type:'line',x1:0,y1:0,x2:INNER,y2:0,lineWidth:.8,lineColor:C.dunkelbraun}],margin:[0,3,0,0]}],margin:[0,9,0,4]});
+  const text=t=>({text:String(t||'–'),fontSize:F.fliess,lineHeight:1.35,color:C.ink,margin:[20,0,0,3]});
+  const cell=(label,value)=>({stack:[{text:up(label),font:'KodchasanSemi',fontSize:F.label,characterSpacing:.5,color:C.meta,margin:[0,0,0,1.5]},{text:value||'–',fontSize:F.fliess,color:C.ink,lineHeight:1.3}],margin:[6,5,6,5]});
+  const kopfBox={table:{widths:['*','*','*','*'],body:[[cell('Team',document.getElementById('kTeam').textContent),cell('Teamleitung',d.team.tlName||d.team.tl),cell('Berichtszeitraum',zeitraumText(d.zeitraum)),cell('Abgegeben am',datumDe((d.gespeichert?.abgegeben||new Date().toISOString()).slice(0,10)))]]},
+    layout:{hLineWidth:()=>.9,vLineWidth:(i,n)=>(i===0||i===n.table.widths.length)?.9:0,hLineColor:()=>C.rahmenStark,vLineColor:()=>C.rahmenStark,paddingLeft:()=>8,paddingRight:()=>8,paddingTop:()=>2,paddingBottom:()=>2},margin:[0,10,0,6]};
+  const th=t=>({text:up(t),font:'KodchasanSemi',fontSize:F.label,characterSpacing:.5,color:C.meta,fillColor:C.creme,margin:[4,3,4,3]});
+  const td=(t,r)=>({text:String(t==null?'–':t),fontSize:8.5,color:C.ink,margin:[4,2,4,2],alignment:r?'right':'left'});
+  const z=FORM.ziele||{}, km=FORM.kommentare||{};
+  const zl=x=>x==null||x===''?'–':zahlDe(Number(x),0);
+  const kennz={table:{widths:[150,42,70,70,'*'],headerRows:1,body:[
+      ['Kennzahl','Ziel','Ist','Vorperiode','Kommentar'].map(th),
+      [td('Geleistete Fachleistungsstunden'),td(zl(z.fls),1),td(zahlDe(k.fls,1),1),td(zahlDe(v.fls,1),1),td(km.fls)],
+      [td('Auslastung des Teams in %'),td(z.auslastung==null?'–':zl(z.auslastung)+' %',1),td(k.auslastung==null?'–':zahlDe(k.auslastung,1)+' %',1),td(v.auslastung==null?'–':zahlDe(v.auslastung,1)+' %',1),td(km.auslastung)],
+      [td('Laufende Hilfen (neu / beendet)'),td(zl(z.hilfen),1),td(k.hilfen.laufend+' (+'+k.hilfen.neu+' / −'+k.hilfen.beendet+')',1),td(v.hilfen.laufend+' (+'+v.hilfen.neu+' / −'+v.hilfen.beendet+')',1),td(km.hilfen)],
+      [td('Fallanfragen (angenommen / abgesagt)'),td(zl(z.anfragen),1),td((FORM.anfragenAngenommen??'–')+' / '+(FORM.anfragenAbgesagt??'–'),1),td('–',1),td(km.anfragen)],
+      [td('Krankheitstage / Überstundensaldo'),td(zl(z.krank),1),td(zahlDe(k.krankTage,1)+' Tage / '+(k.stundenkontoSaldo==null?'–':zahlDe(k.stundenkontoSaldo,1)+' Std.'),1),td(zahlDe(v.krankTage,1)+' Tage',1),td(km.krank)],
+    ]},layout:{hLineWidth:()=>.75,vLineWidth:()=>.75,hLineColor:()=>C.rahmenMittel,vLineColor:()=>C.rahmenMittel},margin:[20,0,0,2]};
+  const absagen=(FORM.absagen||[]).filter(a=>a.amt||a.grund);
+  const absText=absagen.length?{ul:absagen.map(a=>({text:[{text:(a.amt||'–')+': ',font:'KodchasanSemi'},a.grund||'–'],fontSize:9,lineHeight:1.3})),markerColor:C.terra,margin:[22,4,0,2]}:null;
+  const ausl=(d.auslaufend||[]);
+  const auslTab=ausl.length?{table:{widths:[66,50,82,68,52,40,'*'],headerRows:1,body:[
+      ['Klient-Nr.','Jugendamt','Hilfeart','Fachkraft','Ende','Verläng.','Grund / nächster Schritt'].map(th),
+      ...ausl.map(r=>{const e=FORM.auslaufend[r.key]||{}; return [td('Nr. '+r.klientId+(r.aktenzeichen?'\nAZ '+r.aktenzeichen:'')),td(r.jugendamt),td(r.hilfeart||r.massnahme),td(r.fachkraft),td(datumDe(r.ende)),td({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–'),td(e.grund)];})
+    ]},layout:{hLineWidth:()=>.75,vLineWidth:()=>.75,hLineColor:()=>C.rahmenMittel,vLineColor:()=>C.rahmenMittel},margin:[20,0,0,2]}
+    :text('Keine Hilfe des Teams endet in den nächsten drei Monaten.');
+  const akt=(FORM.aktivitaeten||[]).filter(a=>a.t.trim());
+  const aktList=akt.length?{ol:akt.map(a=>({text:[{text:a.t,font:'KodchasanSemi'},(a.s?' – Stand: '+a.s:''),(a.n?' – Nächster Schritt: '+a.n:'')],fontSize:F.fliess,lineHeight:1.3,margin:[0,0,0,2]})),margin:[22,0,0,2]}:text('–');
+  const bit=(FORM.bitten||[]).filter(b=>b.t.trim());
+  const bitList=bit.length?{ol:bit.map(b=>({text:[b.t,(b.bis?' – bis '+datumDe(b.bis):'')],fontSize:F.fliess,lineHeight:1.3,margin:[0,0,0,2]})),margin:[22,0,0,2]}:text('–');
+  return {
+    pageSize:'A4',pageMargins:[MX,46,MX,56],
+    defaultStyle:{font:'Kodchasan',fontSize:F.fliess,color:C.ink},
+    pageBreakBefore:node=>!!(node.headlineLevel&&node.stack&&node.startPosition&&(node.startPosition.pageInnerHeight-node.startPosition.top)<60),
+    info:{title:'Rückmeldung '+zeitraumText(d.zeitraum)+' – '+(d.team.tlName||''),author:'Praxis NeueWege GmbH'},
+    header:page=>page===1?null:{margin:[MX,18,MX,0],stack:[{columns:[{text:'PRAXIS NEUEWEGE · ZWEIMONATLICHE RÜCKMELDUNG',font:'KodchasanSemi',fontSize:F.eyebrow,characterSpacing:1,color:C.meta},{text:(d.team.tlName||'')+' · '+zeitraumText(d.zeitraum),alignment:'right',font:'KodchasanMedium',fontSize:F.fuss,color:C.muted}]},{canvas:[{type:'line',x1:0,y1:0,x2:INNER,y2:0,lineWidth:.75,lineColor:C.rahmenStark}],margin:[0,4,0,0]}]},
+    footer:(page,pages)=>({margin:[MX,16,MX,0],stack:[{canvas:[{type:'line',x1:0,y1:0,x2:INNER,y2:0,lineWidth:1.1,lineColor:C.terra}]},{columns:[{width:'*',stack:[{text:'Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach',fontSize:F.fuss-1,color:C.meta},{text:'Vertraulich – nur für Leitungsteam und Geschäftsführung',fontSize:F.fuss-1,color:C.meta}]},{width:'*',alignment:'right',margin:[0,2,0,0],text:'Seite '+page+' von '+pages,fontSize:F.fuss,color:C.meta}],margin:[0,5,0,0]}]}),
+    content:[
+      {columns:[{width:'*',stack:[{text:'Zweimonatliche Rückmeldung',font:'Baskerville',bold:true,fontSize:F.titel,color:C.dunkelbraun,margin:[0,0,0,3]},{text:'Überblick der Teamleitung für Leitungsteam und Geschäftsführung',font:'Baskerville',italics:true,fontSize:F.untertitel,color:C.terra,margin:[0,0,0,4]},{text:'STAND '+datumDe(new Date().toISOString().slice(0,10))+' · KENNZAHLEN AUS KILANKA',font:'KodchasanSemi',fontSize:F.eyebrow,characterSpacing:1,color:C.meta,margin:[0,2,0,2]}]},
+        ...(logo?[{image:logo,fit:[210,55],width:210,margin:[12,0,0,0]}]:[])],margin:[0,0,0,4]},
+      {canvas:[{type:'line',x1:0,y1:0,x2:INNER,y2:0,lineWidth:.75,lineColor:C.rahmenStark}],margin:[0,4,0,0]},
+      kopfBox,
+      h(1,'Beobachtungen'), text(FORM.beobachtungen),
+      h(2,'Kennzahlen – Ziel, Ist, Vorperiode'), kennz,
+      ...(absText?[{text:'Absagen mit Grund',font:'KodchasanSemi',fontSize:8.5,color:C.muted,margin:[20,4,0,0]},absText]:[]),
+      h(3,'Ausblick: Hilfen, die in den nächsten drei Monaten auslaufen'), auslTab,
+      h(4,'Was funktioniert hat, was nicht – und was wir daraus lernen'), text(FORM.lernen),
+      h(5,'Personal'), text(FORM.personal),
+      h(6,'Meine drei wichtigsten Aktivitäten'), aktList,
+      h(7,'Bitten an die Geschäftsführung'), bitList,
+    ]
+  };
+}
+async function erzeugePdf(){
+  const a=await ladePdfAssets();
+  pdfMake.vfs=a.vfs; pdfMake.fonts=a.fonts;
+  const dd=rmDocDefinition(a.logo);
+  const buf=await new Promise(res=>pdfMake.createPdf(dd).getBuffer(res));
+  return new Uint8Array(buf);
+}
+</script>
+</body>
+</html>

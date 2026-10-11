@@ -230,6 +230,13 @@
           <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Übersicht & Freigabe-Workflow</div>
         </div>
 
+        <!-- Zweimonatliche Rückmeldung der Teamleitung: nur TL Ambulant / GF (eigene Seite, gleiches Backend) -->
+        <div id="rueckmeldungTile" onclick="window.location.href='rueckmeldung.html'" style="display:none; background:var(--surface); border:2px solid var(--accent-mid); border-radius:var(--radius-lg); padding:1.5rem; cursor:pointer; text-align:center; transition:all 0.15s;" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='var(--surface)'">
+          <div style="font-size:28px; margin-bottom:10px;">🧭</div>
+          <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Rückmeldung Teamleitung</div>
+          <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Zweimonatlicher Überblick mit Kennzahlen aus Kilanka</div>
+        </div>
+
       </div>
 
       <!-- Draft list -->
@@ -1132,6 +1139,8 @@ function showApp() {
       if (nav7) nav7.style.display = 'flex';
       const tile = document.getElementById('statusBerichteTile');
       if (tile) tile.style.display = 'block';
+      const rmTile = document.getElementById('rueckmeldungTile');
+      if (rmTile) rmTile.style.display = 'block';
       const grid = document.getElementById('startGrid');
       if (grid) grid.style.gridTemplateColumns = '1fr 1fr';
     }
