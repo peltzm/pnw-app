@@ -37,8 +37,8 @@ Alle Werte entstehen aus den bereits gecachten Kilanka-Rohdaten, je Teammitglied
 
 | Kennzahl | Quelle / Regel |
 |---|---|
-| Geleistete FLS | Rechnungszeilen mit `approval.id` der eigenen Hauptbetreuungen, je Monat (`buildCockpit` zum 1. des Folgemonats, dessen „Vormonat" = Berichtsmonat); Summe der beiden Monate |
-| Auslastung % | FLS Ist ÷ Soll; Soll = Netto-Arbeitstage (Bayern, abzgl. genehmigter Abwesenheiten) × Vertragsstunden ÷ 5 |
+| Fakturierbare Stunden | Alle abrechenbaren Stunden der Person, unabhängig von der Betreuerrolle: `clients/timeSheets` der Person im Monat, die eine Rechnung tragen (`invoice.id`); solange der Rechnungslauf des Monats im Team noch nicht gelaufen ist, stattdessen nach Leistungsart (`ogKategorie`: alles außer Fahrt/KM und intern, Kennzeichen `vorlaeufig`). Dazu `rosters/timeSheets` ohne Klientbezug mit Kostenstelle Nordstern/Wohngruppe (Gruppendienst) oder Rufbereitschaft |
+| Auslastung % | Fakturierbare Stunden ÷ Soll; Soll = Netto-Arbeitstage (Bayern, abzgl. genehmigter Abwesenheiten) × Vertragsstunden ÷ 5 × 80 % (`RM_FAKTURIERBAR_ANTEIL`, Entgeltkalkulation) |
 | Laufende Hilfen | Hauptbetreuungen zum Zeitraumende (bzw. heute); neu/beendet = Differenz der HB-Klienten-IDs zwischen Zeitraumbeginn und -ende |
 | Fallanfragen | nicht in Kilanka — manuelle Eingabe (angenommen/abgesagt, je Absage Amt und Grund) |
 | Krankheitstage | `users/absences`, Art „krank", Arbeitstage im Zeitraum, gedeckelt auf `totalDays` |

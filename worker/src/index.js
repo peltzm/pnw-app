@@ -1811,16 +1811,79 @@ function rmAktuellerZeitraum(heute) {
   return `${sy}-${String(sm).padStart(2, "0")}`;
 }
 
+// Fakturierbare Leistungen je Person und Monat — Vorgabe Markus 11.10.2026:
+// Alles Abrechenbare zählt, unabhängig von der Betreuerrolle (HB/MB/Vertretung),
+// zusätzlich geleistete Stunden im Nordstern (Gruppendienst) und Rufbereitschaft.
+//   Klienten-Leistungen (clients/timeSheets): Zeile ist abgerechnet (invoice.id) —
+//   oder, solange der Rechnungslauf des Monats noch nicht gelaufen ist, nach
+//   Leistungsart: alles außer Fahrt/KM und internen Zeiten (ogKategorie).
+//   Rosters (rosters/timeSheets ohne Klientbezug): Kostenstelle Nordstern/Wohngruppe
+//   oder Rufbereitschaft.
+// Soll: Netto-Arbeitstage × Vertragsstunden/5, davon 80 % fakturierbar (Entgeltkalkulation).
+const RM_FAKTURIERBAR_ANTEIL = 0.8;
+const RM_TS_GRAPH = { id: 1, date: 1, total: 1, deletedAt: 1, client: { id: 1 }, user: { id: 1 }, service: { id: 1 }, invoice: { id: 1 }, $limit: 1000 };
+const RM_RTS_GRAPH = { id: 1, date: 1, total: 1, totalDecimal: 1, user: { id: 1 }, clientTimeSheet: { id: 1 }, costCenter: { id: 1, name: 1, recName: 1 }, $limit: 1000 };
+let rmLeistungCache = new Map(); // "von|bis" → { ts, rts, fetchedAt }
+
+async function rmLeistungen(env, vonIso, bisIso) {
+  const key = `${vonIso}|${bisIso}`;
+  const hit = rmLeistungCache.get(key);
+  if (hit && Date.now() - hit.fetchedAt < CACHE_TTL_MIN * 60 * 1000) return hit;
+  const filter = { date: { $gte: { $date: vonIso }, $lte: { $date: bisIso } } };
+  const [ts, rts] = await Promise.all([
+    kilankaSeiten(env, "clients/timeSheets", { ...RM_TS_GRAPH, $filter: filter }, 40),
+    kilankaSeiten(env, "rosters/timeSheets", { ...RM_RTS_GRAPH, $filter: filter }, 20).catch((e) => { console.warn("rosters/timeSheets optional —", e.message); return []; }),
+  ]);
+  const out = { ts, rts, fetchedAt: Date.now() };
+  if (rmLeistungCache.size > 6) rmLeistungCache.clear();
+  rmLeistungCache.set(key, out);
+  return out;
+}
+
+// Stunden einer Person in einem Monat: { klient, nordstern, rufbereitschaft, vorlaeufig }
+function rmMonatsIst(leist, namen, kid, monat, monatAbgerechnet) {
+  let klient = 0, nordstern = 0, ruf = 0;
+  for (const t of leist.ts) {
+    if (String(t.user?.id) !== kid || kDate(t.deletedAt)) continue;
+    const tag = ogTag(t.date); if (!tag || tag.slice(0, 7) !== monat) continue;
+    const abgerechnet = !!t.invoice?.id;
+    if (monatAbgerechnet) { if (!abgerechnet) continue; }
+    else { const kat = ogKategorie(namen.get(String(t.service?.id)) || ""); if (kat === "fahrt" || kat === "intern") continue; }
+    klient += kStunden(t.total);
+  }
+  for (const r of leist.rts) {
+    if (String(r.user?.id) !== kid || r.clientTimeSheet?.id) continue;
+    const tag = ogTag(r.date); if (!tag || tag.slice(0, 7) !== monat) continue;
+    const kst = String(r.costCenter?.name || r.costCenter?.recName || "").toLowerCase();
+    const h = decimalToNumber(r.totalDecimal) || kStunden(r.total);
+    if (/rufbereitschaft|bereitschaft/.test(kst)) ruf += h;
+    else if (/nordstern|erziehung und betreuung|wohngruppe|jwg|twg/.test(kst)) nordstern += h;
+  }
+  return { klient, nordstern, ruf, vorlaeufig: !monatAbgerechnet };
+}
+
+// Monat gilt als abgerechnet, sobald im Team mindestens eine Leistung eine Rechnung trägt
+function rmMonatAbgerechnet(leist, kids, monat) {
+  return leist.ts.some((t) => kids.has(String(t.user?.id)) && t.invoice?.id && (ogTag(t.date) || "").slice(0, 7) === monat);
+}
+
 // Kennzahlen eines Teams für einen Zweimonatsblock.
 // Je Monat wird buildCockpit zum 1. des Folgemonats aufgerufen — damit trifft
 // dessen FLS-„Vormonat" genau den Berichtsmonat (gleiche Regel wie Scorecard).
 async function rmTeamKennzahlen(env, mitglieder, info, abs, heute) {
   const personen = [];
-  let flsIst = 0, flsSoll = 0, krank = 0, saldo = 0, saldoN = 0, hbEnde = 0;
+  let flsIst = 0, flsSoll = 0, krank = 0, saldo = 0, saldoN = 0, hbEnde = 0, nordstern = 0, ruf = 0;
   const idsStart = new Set(), idsEnde = new Set();
   const istVergangen = info.folge <= heute;
+  const leist = await rmLeistungen(env, isoDate(info.start), isoDate(info.ende));
+  const namen = await serviceNamen(env);
+  // Kilanka-IDs der Teammitglieder (für die Rechnungslauf-Erkennung je Monat)
+  const kids = new Set();
+  for (const m of mitglieder) { try { const k = await ogKilankaId(env, m.upn); if (k) kids.add(k); } catch (_) {} }
+  const abgerechnet = Object.fromEntries(info.monate.map((mo) => [mo, rmMonatAbgerechnet(leist, kids, mo)]));
+  let vorlaeufig = false;
   for (const m of mitglieder) {
-    const p = { upn: m.upn, name: m.name || m.upn, fls: 0, soll: 0, faelle: null, krank: 0, saldo: null, verfuegbar: true, monate: [] };
+    const p = { upn: m.upn, name: m.name || m.upn, fls: 0, klientStd: 0, nordsternStd: 0, rufStd: 0, soll: 0, faelle: null, krank: 0, saldo: null, verfuegbar: true, monate: [] };
     let dEnde = null;
     for (const monat of info.monate) {
       const [jy, jm] = monat.split("-").map(Number);
@@ -1834,17 +1897,34 @@ async function rmTeamKennzahlen(env, mitglieder, info, abs, heute) {
       p.wochenstunden = d.person.wochenstundenVertrag;
       p.kilankaId = d.person.kilankaId;
       dEnde = d;
-      // FLS nur für abgeschlossene Monate (Rechnungen liegen erst danach vor)
-      const monatAbgeschlossen = bezug <= heute;
-      let ist = null, soll = null;
-      if (monatAbgeschlossen && d.fls.istMonat === monat && d.fls.istMonatsstunden != null) {
-        ist = d.fls.istMonatsstunden;
-        if (d.fls.nettoArbeitstage != null && d.person.wochenstundenVertrag) soll = d.fls.nettoArbeitstage * (d.person.wochenstundenVertrag / 5);
-      }
+      // Ist: alle fakturierbaren Stunden der Person (Klienten-Leistungen jeder Rolle,
+      // Nordstern, Rufbereitschaft); Soll: 80 % der Netto-Arbeitszeit des Monats
       const { start: ms, ende: me } = monatsGrenzen(monat);
+      let ist = null, soll = null, teile = null;
+      if (d.person.kilankaId) {
+        teile = rmMonatsIst(leist, namen, d.person.kilankaId, monat, abgerechnet[monat]);
+        ist = teile.klient + teile.nordstern + teile.ruf;
+        if (teile.vorlaeufig && ist > 0) vorlaeufig = true;
+      }
+      // Netto-Arbeitstage wie im Cockpit: Arbeitstage Bayern minus genehmigte Abwesenheiten
+      if (d.person.wochenstundenVertrag) {
+        let abwTage = 0;
+        if (abs.verfuegbar && d.person.kilankaId) {
+          for (const a of abs.data || []) {
+            if (String(a.user?.id) !== d.person.kilankaId || (a.status || "").toLowerCase() !== "approved") continue;
+            const b = kDate(a.begin), e = kDate(a.end) || kDate(a.begin);
+            if (!b || !e || e < ms || b > me) continue;
+            const at = arbeitstageBayern(b > ms ? b : ms, e < me ? e : me);
+            const total = decimalToNumber(a.totalDays);
+            abwTage += total > 0 ? Math.min(at, total) : at;
+          }
+        }
+        const nettoAT = Math.max(0, arbeitstageBayern(ms, me) - abwTage);
+        soll = nettoAT * (d.person.wochenstundenVertrag / 5) * RM_FAKTURIERBAR_ANTEIL;
+      }
       const kr = (abs.verfuegbar && d.person.kilankaId) ? Math.round(krankTageImMonat(abs.data, d.person.kilankaId, ms, me) * 2) / 2 : null;
-      p.monate.push({ monat, fls: ist, soll: soll != null ? Math.round(soll * 10) / 10 : null, krank: kr });
-      if (ist != null) p.fls += ist;
+      p.monate.push({ monat, fls: ist != null ? Math.round(ist * 10) / 10 : null, soll: soll != null ? Math.round(soll * 10) / 10 : null, krank: kr, abgerechnet: abgerechnet[monat] });
+      if (ist != null) { p.fls += ist; p.klientStd += teile.klient; p.nordsternStd += teile.nordstern; p.rufStd += teile.ruf; }
       if (soll != null) p.soll += soll;
       if (kr != null) p.krank += kr;
     }
@@ -1864,17 +1944,23 @@ async function rmTeamKennzahlen(env, mitglieder, info, abs, heute) {
       } catch (e) { /* optional */ }
     }
     p.fls = Math.round(p.fls * 10) / 10;
+    p.klientStd = Math.round(p.klientStd * 10) / 10; p.nordsternStd = Math.round(p.nordsternStd * 10) / 10; p.rufStd = Math.round(p.rufStd * 10) / 10;
     p.soll = Math.round(p.soll * 10) / 10;
     p.quote = p.soll > 0 ? Math.round((p.fls / p.soll) * 1000) / 10 : null;
-    flsIst += p.fls; flsSoll += p.soll; krank += p.krank; hbEnde += p.faelle;
+    flsIst += p.fls; flsSoll += p.soll; krank += p.krank; hbEnde += p.faelle; nordstern += p.nordsternStd; ruf += p.rufStd;
     personen.push(p);
   }
   const neu = [...idsEnde].filter((id) => !idsStart.has(id)).length;
   const beendet = [...idsStart].filter((id) => !idsEnde.has(id)).length;
   return {
     abgeschlossen: istVergangen,
+    vorlaeufig, // mindestens ein Monat ohne Rechnungslauf → Ist nach Leistungsart geschätzt
+    abgerechnet,
     fls: Math.round(flsIst * 10) / 10,
+    nordsternStd: Math.round(nordstern * 10) / 10,
+    rufStd: Math.round(ruf * 10) / 10,
     flsSoll: Math.round(flsSoll * 10) / 10,
+    fakturierbarAnteil: RM_FAKTURIERBAR_ANTEIL,
     auslastung: flsSoll > 0 ? Math.round((flsIst / flsSoll) * 1000) / 10 : null,
     hilfen: { laufend: hbEnde, neu, beendet },
     krankTage: Math.round(krank * 2) / 2,

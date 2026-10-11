@@ -178,7 +178,7 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
         <table class="tabelle" id="kennzahlenTab">
           <thead><tr><th>Kennzahl</th><th class="num">Vorperiode</th><th class="num">Ist</th><th>Kommentar</th></tr></thead>
           <tbody>
-            <tr><td>Geleistete Fachleistungsstunden</td><td class="num" id="vor_fls">–</td><td class="num" id="ist_fls">–</td><td><input type="text" data-komm="fls" maxlength="120"></td></tr>
+            <tr><td>Fakturierbare Stunden (Klienten, Nordstern, Rufbereitschaft)</td><td class="num" id="vor_fls">–</td><td class="num" id="ist_fls">–</td><td><input type="text" data-komm="fls" maxlength="120"></td></tr>
             <tr><td>Auslastung des Teams in %</td><td class="num" id="vor_auslastung">–</td><td class="num" id="ist_auslastung">–</td><td><input type="text" data-komm="auslastung" maxlength="120"></td></tr>
             <tr><td>Laufende Hilfen (neu / beendet)</td><td class="num" id="vor_hilfen">–</td><td class="num" id="ist_hilfen">–</td><td><input type="text" data-komm="hilfen" maxlength="120"></td></tr>
             <tr><td>Fallanfragen (angenommen / abgesagt)</td><td class="num" id="vor_anfragen">–</td>
@@ -449,7 +449,7 @@ async function laden(){
     READONLY = STATUS==='abgegeben';
     rendere();
     verstecke('runMsg');
-    if (!d.kennzahlen.aktuell.abgeschlossen) zeige('runMsg','Der Zeitraum läuft noch – Fachleistungsstunden liegen erst nach Abschluss des Monats (Rechnungslauf) vollständig vor.','warn');
+    if (d.kennzahlen.aktuell.vorlaeufig) zeige('runMsg','Rechnungslauf noch nicht für alle Monate gelaufen – die Stunden sind dort vorläufig nach Leistungsart geschätzt.','warn');
   }catch(e){ zeige('runMsg', esc(e.message), 'fehler'); }
   btn.disabled=false;
 }
@@ -485,7 +485,8 @@ function rendere(){
   document.getElementById('ist_krank').innerHTML = zahlDe(k.krankTage,1)+' Tage / '+(k.stundenkontoSaldo==null?'–':zahlDe(k.stundenkontoSaldo,1)+' Std.');
   document.getElementById('vor_krank').textContent = zahlDe(v.krankTage,1)+' Tage';
   const hin=[];
-  if (!k.abgeschlossen) hin.push('Fachleistungsstunden des laufenden Monats fehlen noch (Rechnungslauf).');
+  if (k.vorlaeufig) hin.push('Für mindestens einen Monat ist der Rechnungslauf noch nicht gelaufen – die Stunden dort sind nach Leistungsart geschätzt (ohne Fahrt- und interne Zeiten).');
+  hin.push('Auslastung = fakturierbare Stunden (Klienten-Leistungen aller Rollen + Nordstern + Rufbereitschaft) ÷ Soll; Soll = '+Math.round((k.fakturierbarAnteil||0.8)*100)+' % der Netto-Arbeitszeit (Arbeitstage Bayern abzüglich Abwesenheiten × Vertragsstunden ÷ 5).');
   const ohne=k.personen.filter(p=>!p.verfuegbar).map(p=>p.name);
   if (ohne.length) hin.push('Ohne Kilanka-Daten: '+ohne.join(', ')+'.');
   hin.push('Überstundensaldo ist der aktuelle Stand der Stundenkonten (Summe des Teams), nicht der Stand zum Zeitraumende.');
@@ -493,9 +494,9 @@ function rendere(){
   document.getElementById('kennzahlenHinweis').textContent = hin.join(' ');
 
   // Personen
-  let h='<thead><tr><th>Name</th><th class="num">Std./Wo.</th><th class="num">Fälle (HB)</th><th class="num">FLS Ist</th><th class="num">FLS Soll</th><th class="num">Quote</th><th class="num">Krank (Tage)</th><th class="num">Stundenkonto</th></tr></thead><tbody>';
+  let h='<thead><tr><th>Name</th><th class="num">Std./Wo.</th><th class="num">Fälle (HB)</th><th class="num">Klienten</th><th class="num">Nordstern</th><th class="num">Rufber.</th><th class="num">Ist gesamt</th><th class="num">Soll (80 %)</th><th class="num">Quote</th><th class="num">Krank (Tage)</th><th class="num">Stundenkonto</th></tr></thead><tbody>';
   for (const p of k.personen){
-    h+='<tr><td>'+esc(p.name)+(p.verfuegbar?'':' <span class="delta">(keine Kilanka-Daten)</span>')+'</td><td class="num">'+zahlDe(p.wochenstunden,1)+'</td><td class="num">'+(p.faelle==null?'–':p.faelle)+'</td><td class="num">'+zahlDe(p.fls,1)+'</td><td class="num">'+zahlDe(p.soll,1)+'</td><td class="num">'+(p.quote==null?'–':zahlDe(p.quote,1)+' %')+'</td><td class="num">'+zahlDe(p.krank,1)+'</td><td class="num">'+(p.saldo==null?'–':zahlDe(p.saldo,1))+'</td></tr>';
+    h+='<tr><td>'+esc(p.name)+(p.verfuegbar?'':' <span class="delta">(keine Kilanka-Daten)</span>')+'</td><td class="num">'+zahlDe(p.wochenstunden,1)+'</td><td class="num">'+(p.faelle==null?'–':p.faelle)+'</td><td class="num">'+zahlDe(p.klientStd,1)+'</td><td class="num">'+zahlDe(p.nordsternStd,1)+'</td><td class="num">'+zahlDe(p.rufStd,1)+'</td><td class="num">'+zahlDe(p.fls,1)+'</td><td class="num">'+zahlDe(p.soll,1)+'</td><td class="num">'+(p.quote==null?'–':zahlDe(p.quote,1)+' %')+'</td><td class="num">'+zahlDe(p.krank,1)+'</td><td class="num">'+(p.saldo==null?'–':zahlDe(p.saldo,1))+'</td></tr>';
   }
   document.getElementById('personenTab').innerHTML = h+'</tbody>';
 
@@ -736,7 +737,7 @@ function rmDocDefinition(logo){
   const km=FORM.kommentare||{};
   const kennz={table:{widths:[160,80,100,'*'],headerRows:1,body:[
       ['Kennzahl','Vorperiode','Ist','Kommentar'].map(th),
-      [td('Geleistete Fachleistungsstunden'),td(zahlDe(v.fls,1),1),td(zahlDe(k.fls,1),1),td(km.fls)],
+      [td('Fakturierbare Stunden'),td(zahlDe(v.fls,1),1),td(zahlDe(k.fls,1),1),td(km.fls)],
       [td('Auslastung des Teams in %'),td(v.auslastung==null?'–':zahlDe(v.auslastung,1)+' %',1),td(k.auslastung==null?'–':zahlDe(k.auslastung,1)+' %',1),td(km.auslastung)],
       [td('Laufende Hilfen (neu / beendet)'),td(v.hilfen.laufend+' (+'+v.hilfen.neu+' / −'+v.hilfen.beendet+')',1),td(k.hilfen.laufend+' (+'+k.hilfen.neu+' / −'+k.hilfen.beendet+')',1),td(km.hilfen)],
       [td('Fallanfragen (angenommen / abgesagt)'),td('–',1),td((FORM.anfragenAngenommen??'–')+' / '+(FORM.anfragenAbgesagt??'–'),1),td(km.anfragen)],
