@@ -214,6 +214,10 @@ table.skala tr.fremd td.kom{font-size:12.5px;color:var(--accent);text-align:left
   table.skala tr.fremd,.fremd-info,.notiz.intern{display:none!important}   /* interne Notizen nie auf dem Ausdruck */
   .notiz{break-inside:avoid;padding:4pt 8pt}   /* TL-Einschätzung nie auf dem Ausdruck */
   .skala-legende{margin-bottom:4pt}input::placeholder{color:transparent}
+  /* Druck für die Gesprächsvorbereitung der Leitung: Einschätzung + Kommentare der Teamleitung sichtbar (nur über den Button „Drucken mit Teamleitung“) */
+  body.mit-tl table.skala tr.fremd{display:table-row!important}
+  body.mit-tl .fremd-info{display:block!important}
+  body.mit-tl .card::before{content:"VERTRAULICH – Gesprächsvorbereitung der Leitung (enthält die Einschätzung der Teamleitung, nicht an die Person weitergeben)";display:block;font-size:8.4pt;font-weight:600;color:var(--terra);border:.6pt solid var(--terra);border-radius:3pt;padding:3pt 6pt;margin-bottom:8pt}
   body.papier .papier-hinweis{display:block}body.papier .hinweis{display:none}
   table.skala td.kom{min-width:0;width:24%}table.skala th:first-child,table.skala td:first-child{width:48%}
 }
@@ -901,14 +905,22 @@ function renderBogen(){
   </div>`;
   renderLeiste();
 }
+/* GF: Bogen für die Gesprächsvorbereitung drucken — inkl. Einschätzung/Kommentare der Teamleitung (Klasse wird nur für den Druckvorgang gesetzt) */
+function druckeMitTL(){
+  document.body.classList.add('mit-tl');
+  const ende=()=>{ document.body.classList.remove('mit-tl'); window.removeEventListener('afterprint',ende); };
+  window.addEventListener('afterprint',ende);
+  setTimeout(()=>window.print(),100);
+}
 function renderLeiste(){
   const el=document.getElementById('leiste'); el.style.display='flex';
   const stand=`<span class="stand" id="saveStand">${leseModus&&!gfSicht?'Dein Bogen ist abgegeben und kann nicht mehr geändert werden.':''}</span>`;
   const druck=`<button class="btn btn-ghost sek" onclick="window.print()">Drucken / PDF (A4)</button>`;
+  const druckTL=`<button class="btn btn-ghost sek" onclick="druckeMitTL()" title="Ausdruck für die Gesprächsvorbereitung: mit Einschätzung und Kommentaren der Teamleitung">Drucken mit Teamleitung (A4)</button>`;
   const mehr=`<button class="btn btn-ghost mehr-btn" onclick="document.getElementById('leiste').classList.toggle('offen')" aria-label="Weitere Aktionen">Mehr ⋯</button>`;
   if(gfSicht){
     const zu = akt.f.OGStatus==='Abgeschlossen';
-    el.innerHTML = stand+`<button class="btn btn-danger sek" onclick="loeschen()">Bogen löschen</button>`+druck+
+    el.innerHTML = stand+`<button class="btn btn-danger sek" onclick="loeschen()">Bogen löschen</button>`+druck+druckTL+
       (akt.f.OGStatus!=='Entwurf'?`<button class="btn btn-ghost sek" onclick="setStatus('Entwurf')">Für Mitarbeiter:in wieder öffnen</button>`:'')+mehr+
       (zu?'':`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="setStatus('Abgeschlossen')">Gespräch abschließen</button>`);
   } else if(leseModus){ el.innerHTML = stand+`<button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`; }
@@ -1229,6 +1241,7 @@ async function zeigeAdmin(){
   app().innerHTML=`<div class="card">
     <div class="adminbar"><div><label>Runde</label>${rundenAuswahl(runde,'?r=')}</div>
       <div style="font-size:12.5px"><label>Anleitungen</label><a href="${ANLEITUNG.ma}" target="_blank" rel="noopener" style="color:var(--terra)">Mitarbeitende</a> · <a href="${ANLEITUNG.tl}" target="_blank" rel="noopener" style="color:var(--terra)">Teamleitung</a></div>
+      <div><button class="btn btn-ghost btn-sm" onclick="exportTermine()">Terminliste (CSV)</button></div>
       <div><button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(CFG.redirectUri+'?tl=1&r='+aktRunde()).then(()=>{const e=document.getElementById('adminMsg');e.className='msg ok';e.textContent='Link für Teamleitungen kopiert.';})">Link für Teamleitungen kopieren</button></div>
       <div style="margin-left:auto;font-size:12.5px;color:var(--text-muted)">${dabei.length} Mitarbeitende · ${zahl('Entwurf')} in Arbeit · ${zahl('Papier')} auf Papier · ${zahl('Abgegeben')} abgegeben · ${zahl('Abgeschlossen')} abgeschlossen</div></div>
     ${(n=>n?`<div class="msg warn" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span><b>${n} Selbsteinschätzung(en) können an die Teamleitung freigegeben werden</b> – Person und Teamleitung haben beide abgegeben.</span><button class="btn btn-primary btn-sm" onclick="freigeben()">Jetzt an Teamleitung senden</button></div>`:'')(offeneFreigaben(runde).length)}
@@ -1323,6 +1336,19 @@ async function vorgangZuruecksetzen(u){
 async function setzeAus(u,aus){ await setPlan(u,'aus',aus); zeigeAdmin(); }
 async function gruppenFreigeben(){ const k=await teamKarte(true); if(k) zeigeAdmin(); else alert('Freigabe nicht erfolgt: '+(gruppenFehler||'unbekannt')); }
 document.addEventListener('click',e=>{ document.querySelectorAll('details.menu[open]').forEach(d=>{ if(!d.contains(e.target)) d.removeAttribute('open'); }); });
+
+/* Terminliste: Termin, Mitarbeiter:in, Teamleitung — nach Termin sortiert, Personen ohne Termin am Ende; CSV (Excel-tauglich, Semikolon, UTF-8 mit BOM) */
+function exportTermine(){
+  const dabei=(mitarbeiter||[]).filter(m=>!ohneGespraech(m));
+  const zeilen=dabei.map(m=>{ const t=(plan[m.upn]||{}).t||'', tl=tlInfo?.[m.upn];
+    const d=t?new Date(t):null, termin=d?d.toLocaleDateString('de-DE')+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'';
+    return { t, termin, name:m.name, tl:tl?(GF.includes(tl.mail)?'Geschäftsführung':tl.name):'' }; });
+  zeilen.sort((a,b)=>(a.t?0:1)-(b.t?0:1) || a.t.localeCompare(b.t) || a.name.localeCompare(b.name,'de'));
+  const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const csv='\ufeff'+['Termin','Mitarbeiter:in','Teamleitung'].map(q).join(';')+'\r\n'+zeilen.map(z=>[z.termin,z.name,z.tl].map(q).join(';')).join('\r\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='Orientierungsgespraeche-Termine-'+aktRunde()+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
 async function setPlan(u,k,w){
   (plan[u] ||= {})[k]=w;
   const runde=aktRunde(), body={AntwortenJSON:JSON.stringify(plan)};
