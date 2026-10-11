@@ -245,7 +245,7 @@ const S = {
   stand: null,          // Lernstand des Kontos
   kiBereit: true,
   tab: 'heute', fach: null, suche: '',
-  sync: { laeuft: false, stopp: false, text: '', fehler: '', log: [], uebersprungen: [], zuletzt: null, neu: 0 },
+  sync: { laeuft: false, stopp: false, text: '', fehler: '', log: [], uebersprungen: [], zuletzt: null, neu: 0, notizFreigabe: false, nochmal: false },
   sitzung: null,
 };
 
@@ -306,7 +306,7 @@ function initMsal(){
 async function login(){
   try{
     if (!initMsal()) return;
-    const res = await msalInstance.loginPopup({scopes:SCOPES});
+    const res = await msalInstance.loginPopup({scopes:SCOPES, extraScopesToConsent:SCOPES_NOTIZ});
     currentAccount = res.account;
     msalInstance.setActiveAccount(currentAccount);
     nachLogin();
@@ -320,7 +320,13 @@ function tokenAblauf(jwt){
 }
 async function tokens(scopes){
   const req = {scopes:scopes||SCOPES, account:currentAccount};
-  let r = await msalInstance.acquireTokenSilent(req).catch(async ()=>msalInstance.acquireTokenPopup(req));
+  /* Für das Notizbuch nie von selbst ein Anmeldefenster öffnen: der Abgleich läuft im Hintergrund,
+     der Browser blockiert Fenster ohne Klick. Stattdessen bietet die App einen Knopf an. */
+  const notiz = scopes === SCOPES_NOTIZ;
+  let r = await msalInstance.acquireTokenSilent(req).catch(async (e)=>{
+    if (notiz){ const f = new Error('Für das Notizbuch fehlt noch die Freigabe (Notes.Read).'); f.freigabe = true; f.ursache = e; throw f; }
+    return msalInstance.acquireTokenPopup(req);
+  });
   if (tokenAblauf(r.idToken) < Date.now()+60000){
     r = await msalInstance.acquireTokenSilent({...req, forceRefresh:true});
   }
@@ -671,7 +677,23 @@ document.addEventListener('keydown', (ev) => {
 /* ═══════════════════════════════════════════════════════════
  * ANSICHTEN
  * ═══════════════════════════════════════════════════════════ */
-function syncBand(){
+function syncBand(){ return notizBand()+syncBandKern(); }
+function notizBand(){
+  return S.sync.notizFreigabe ? '<div class="syncband fehler"><div class="txt">Dein OneNote-Notizbuch kann noch nicht gelesen werden – es fehlt die Freigabe.</div><button class="btn btn-primary btn-sm" data-akt="notiz">Notizbuch freigeben</button></div>' : '';
+}
+async function notizFreigeben(){
+  try{
+    await msalInstance.acquireTokenPopup({ scopes:SCOPES_NOTIZ, account:currentAccount });
+    S.sync.notizFreigabe = false;
+    logge('Notizbuch freigegeben.');
+    if (S.sync.laeuft){ S.sync.nochmal = true; render(); } else sync(true);
+  }catch(e){
+    logge('Freigabe des Notizbuchs nicht möglich: '+(e.message||e));
+    alert('Die Freigabe hat nicht geklappt:\n\n'+(e.message||e)+'\n\nFalls ein Hinweis auf eine Administratorgenehmigung erscheint, muss in Entra für die Berechtigung Notes.Read die Administratorzustimmung erteilt werden.');
+    render();
+  }
+}
+function syncBandKern(){
   const y = S.sync;
   if (y.laeuft) return '<div class="syncband"><span class="spinner"></span><div class="txt">'+esc(y.text||'Unterlagen werden abgeglichen …')+'</div></div>';
   if (y.fehler) return '<div class="syncband fehler"><div class="txt">'+esc(y.fehler)+'</div><button class="btn btn-ghost btn-sm" data-akt="sync">Erneut</button></div>';
@@ -829,6 +851,7 @@ $('view').addEventListener('click', async (ev) => {
   else if (a === 'freiFach') starteSitzung({ fach:S.fach, frei:true });
   else if (a === 'zurueck'){ S.fach = null; S.suche = ''; render(); }
   else if (a === 'sync') sync(true);
+  else if (a === 'notiz') notizFreigeben();
   else if (a === 'stopp'){ S.sync.stopp = true; S.sync.text = 'Wird nach dem laufenden Abschnitt angehalten …'; render(); }
 });
 $('view').addEventListener('input', (ev) => { if (ev.target.id === 'suche'){ S.suche = ev.target.value; renderBald(); } });
@@ -1114,14 +1137,17 @@ async function verarbeite(q){
 async function sync(manuell){
   const y = S.sync;
   if (y.laeuft) return;
-  y.laeuft = true; y.stopp = false; y.fehler = ''; y.neu = 0; y.uebersprungen = [];
+  y.laeuft = true; y.stopp = false; y.fehler = ''; y.neu = 0; y.uebersprungen = []; y.notizFreigabe = false;
   status('Ordner '+CFG.ordner+' wird geprüft …'); render();
   try{
     const { dateien, notizbuecher } = await listeDateien();
     let seiten = [], notizGelesen = false;
     if (istBesitzer()){
       try{ const n = await listeNotizen(notizbuecher); seiten = n.seiten; notizGelesen = true; if (!n.notizbuecher && notizbuecher.length) logge('Das Notizbuch im Ordner wurde von OneNote nicht gefunden.'); }
-      catch(e){ logge('Notizbuch nicht lesbar: '+e.message+(e.status===403 ? ' (Berechtigung Notes.Read prüfen)' : '')); }
+      catch(e){
+        if (e.freigabe){ y.notizFreigabe = true; logge('Notizbuch noch nicht freigegeben – bitte oben auf „Notizbuch freigeben“ klicken.'); }
+        else logge('Notizbuch nicht lesbar: '+e.message+(e.status===403 ? ' (Berechtigung Notes.Read prüfen)' : ''));
+      }
     } else if (notizbuecher.length){
       logge('Das Notizbuch wird nur mit der Anmeldung von '+CFG.besitzer+' eingelesen.');
     }
@@ -1163,6 +1189,7 @@ async function sync(manuell){
   }finally{
     y.laeuft = false; y.text = '';
     if (!S.sitzung) render();
+    if (y.nochmal){ y.nochmal = false; sync(true); }
   }
 }
 
