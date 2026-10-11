@@ -75,6 +75,9 @@ input[readonly],textarea[readonly]{background:var(--bg);color:var(--text-muted)}
 .tabelle td input[type=number]{max-width:90px;text-align:right}
 .tabelle td select{font-family:inherit;border:1px solid var(--border-strong);border-radius:var(--radius);background:var(--surface);color:var(--text)}
 .tab-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.verl-wahl{display:flex;gap:10px;white-space:nowrap}
+.verl-wahl label{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;cursor:pointer}
+.verl-wahl input{width:15px;height:15px;accent-color:var(--accent)}
 tr.ueberfaellig td.ende{color:var(--error);font-weight:600}
 .delta{font-size:11px;color:var(--text-hint);margin-left:4px}
 .delta.plus{color:var(--ok)} .delta.minus{color:var(--error)}
@@ -158,7 +161,7 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
   <div id="formular" style="display:none">
 
     <div class="regeln">
-      <strong>Spielregeln:</strong> Abgabe bis zum 5. Werktag nach Ende des Zeitraums. Höchstens eine Seite. Ganze Sätze, Zahlen statt Adjektive („82 % Auslastung", nicht „gut ausgelastet"). Das Wichtigste zuerst, nichts beschönigen. Keine Klientennamen im Bericht – im PDF erscheinen nur Klienten-Nummer, Amt und Hilfeart.
+      <strong>Spielregeln:</strong> Abgabe bis zum 5. Werktag nach Ende des Zeitraums. Höchstens eine Seite. Ganze Sätze, Zahlen statt Adjektive („82 % Auslastung", nicht „gut ausgelastet"). Das Wichtigste zuerst, nichts beschönigen. Im PDF erscheinen bei den auslaufenden Hilfen Nachname, Jugendamt und Maßnahme.
     </div>
 
     <div class="card">
@@ -169,19 +172,18 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
     </div>
 
     <div class="card">
-      <h2><span class="nr">2</span>Kennzahlen – Ziel, Ist, Vorperiode</h2>
-      <div class="leit">Ist und Vorperiode kommen aus Kilanka (Rechnungen, Maßnahmen, Abwesenheiten, Stundenkonten). Ziel und Kommentar trägst du ein; das Ziel wird in die nächste Rückmeldung übernommen.</div>
+      <h2><span class="nr">2</span>Kennzahlen – Vorperiode und Ist</h2>
+      <div class="leit">Vorperiode und Ist kommen aus Kilanka (Rechnungen, Maßnahmen, Abwesenheiten, Stundenkonten). Du ergänzst Fallanfragen und Kommentare.</div>
       <div class="tab-scroll">
         <table class="tabelle" id="kennzahlenTab">
-          <thead><tr><th>Kennzahl</th><th class="num">Ziel</th><th class="num">Ist</th><th class="num">Vorperiode</th><th>Kommentar</th></tr></thead>
+          <thead><tr><th>Kennzahl</th><th class="num">Vorperiode</th><th class="num">Ist</th><th>Kommentar</th></tr></thead>
           <tbody>
-            <tr><td>Geleistete Fachleistungsstunden</td><td class="num"><input type="number" step="1" data-ziel="fls"></td><td class="num" id="ist_fls">–</td><td class="num" id="vor_fls">–</td><td><input type="text" data-komm="fls" maxlength="120"></td></tr>
-            <tr><td>Auslastung des Teams in %</td><td class="num"><input type="number" step="1" data-ziel="auslastung"></td><td class="num" id="ist_auslastung">–</td><td class="num" id="vor_auslastung">–</td><td><input type="text" data-komm="auslastung" maxlength="120"></td></tr>
-            <tr><td>Laufende Hilfen (neu / beendet)</td><td class="num"><input type="number" step="1" data-ziel="hilfen"></td><td class="num" id="ist_hilfen">–</td><td class="num" id="vor_hilfen">–</td><td><input type="text" data-komm="hilfen" maxlength="120"></td></tr>
-            <tr><td>Fallanfragen (angenommen / abgesagt)</td><td class="num"><input type="number" step="1" data-ziel="anfragen"></td>
-              <td class="num" style="white-space:nowrap"><input type="number" min="0" step="1" data-feld="anfragenAngenommen" style="max-width:62px" title="angenommen"> / <input type="number" min="0" step="1" data-feld="anfragenAbgesagt" style="max-width:62px" title="abgesagt"></td>
-              <td class="num" id="vor_anfragen">–</td><td><input type="text" data-komm="anfragen" maxlength="120"></td></tr>
-            <tr><td>Krankheitstage / Überstundensaldo (Std.)</td><td class="num"><input type="number" step="1" data-ziel="krank"></td><td class="num" id="ist_krank">–</td><td class="num" id="vor_krank">–</td><td><input type="text" data-komm="krank" maxlength="120"></td></tr>
+            <tr><td>Geleistete Fachleistungsstunden</td><td class="num" id="vor_fls">–</td><td class="num" id="ist_fls">–</td><td><input type="text" data-komm="fls" maxlength="120"></td></tr>
+            <tr><td>Auslastung des Teams in %</td><td class="num" id="vor_auslastung">–</td><td class="num" id="ist_auslastung">–</td><td><input type="text" data-komm="auslastung" maxlength="120"></td></tr>
+            <tr><td>Laufende Hilfen (neu / beendet)</td><td class="num" id="vor_hilfen">–</td><td class="num" id="ist_hilfen">–</td><td><input type="text" data-komm="hilfen" maxlength="120"></td></tr>
+            <tr><td>Fallanfragen (angenommen / abgesagt)</td><td class="num" id="vor_anfragen">–</td>
+              <td class="num" style="white-space:nowrap"><input type="number" min="0" step="1" data-feld="anfragenAngenommen" style="max-width:62px" title="angenommen"> / <input type="number" min="0" step="1" data-feld="anfragenAbgesagt" style="max-width:62px" title="abgesagt"></td><td><input type="text" data-komm="anfragen" maxlength="120"></td></tr>
+            <tr><td>Krankheitstage / Überstundensaldo (Std.)</td><td class="num" id="vor_krank">–</td><td class="num" id="ist_krank">–</td><td><input type="text" data-komm="krank" maxlength="120"></td></tr>
           </tbody>
         </table>
       </div>
@@ -202,7 +204,7 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
       <div class="leit">Aus Kilanka: Hauptbetreuung im Team, Ende der Maßnahme oder der Bewilligung innerhalb von drei Monaten ab heute. Bitte je Hilfe Verlängerung und – bei „nein" – den Grund eintragen.</div>
       <div class="tab-scroll">
         <table class="tabelle" id="auslaufTab">
-          <thead><tr><th>Klient</th><th>Amt</th><th>Hilfeart</th><th>Fachkraft</th><th>Ende</th><th>Verlängerung</th><th>Grund / nächster Schritt</th></tr></thead>
+          <thead><tr><th>Klient</th><th>Jugendamt</th><th>Maßnahme</th><th>Fachkraft</th><th>Ende</th><th>Verlängerung (wahrscheinlich)</th><th>Grund / nächster Schritt</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -353,6 +355,9 @@ function esc(s){ const d=document.createElement('div'); d.textContent=String(s==
 function datumDe(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; }
 function zahlDe(n, st){ return (n==null||!isFinite(n)) ? '–' : n.toLocaleString('de-DE',{minimumFractionDigits:st||0, maximumFractionDigits:st||0}); }
 function zeitDe(iso){ const d=new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); }
+/* "Nachname, Vorname" -> Nachname; Jugendamt-Kurzname aus dem langen Amtsnamen */
+function nachname(n){ return String(n||'').replace(/^\[archiviert\]\s*/i,'').split(',')[0].trim(); }
+function amtKurz(a){ const s=String(a||'').trim(); const k=s.replace(/^(Kreisjugendamt|Stadtjugendamt|Jugendamt|Landratsamt|Landkreis|Stadt|Amt für Jugend und Familie|Amt für Kinder, Jugend und Familie)\s+/i,'').replace(/\s*[-–,]\s*(Jugendamt|Amt für Jugend und Familie|Kreisjugendamt|Sozialdienst)$/i,'').trim(); return k||s; }
 function zeitraumText(z){ const [y,m]=z.split('-').map(Number); return MONATE[m-1]+' / '+MONATE[m]+' '+y; }
 function zeitraumKurz(z){ const [y,m]=z.split('-').map(Number); return MON_KURZ[m-1]+'/'+MON_KURZ[m]+' '+String(y).slice(2); }
 /* Der zuletzt abgeschlossene und der laufende Zweimonatsblock plus drei ältere */
@@ -440,7 +445,6 @@ async function laden(){
     DATEN = d;
     STATUS = d.gespeichert?.status || 'entwurf';
     FORM = Object.assign(leeresFormular(), d.gespeichert?.daten || {});
-    if (!d.gespeichert?.daten?.ziele && d.ziele) FORM.ziele = Object.assign({}, d.ziele); // Ziel aus Vorperiode übernehmen
     // Nur abgegebene Rückmeldungen sind gesperrt; die GF darf alle Teams bearbeiten (Tests, Vertretung)
     READONLY = STATUS==='abgegeben';
     rendere();
@@ -499,7 +503,6 @@ function rendere(){
   for (const id of ['beobachtungen','lernen','personal']){
     const el=document.getElementById('f_'+id); el.value=FORM[id]||''; el.readOnly=READONLY; zaehler(id);
   }
-  document.querySelectorAll('[data-ziel]').forEach(i=>{ i.value = FORM.ziele?.[i.dataset.ziel] ?? ''; i.readOnly=READONLY; });
   document.querySelectorAll('[data-komm]').forEach(i=>{ i.value = FORM.kommentare?.[i.dataset.komm] ?? ''; i.readOnly=READONLY; });
   document.querySelector('[data-feld=anfragenAngenommen]').value = FORM.anfragenAngenommen ?? '';
   document.querySelector('[data-feld=anfragenAbgesagt]').value = FORM.anfragenAbgesagt ?? '';
@@ -539,10 +542,17 @@ function rendereAuslaufend(){
     const e=FORM.auslaufend[r.key]||{};
     const sel = READONLY
       ? '<span>'+esc({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–')+'</span>'
-      : '<select data-ausl="verl" data-key="'+esc(r.key)+'"><option value="">–</option><option value="ja"'+(e.verl==='ja'?' selected':'')+'>ja</option><option value="nein"'+(e.verl==='nein'?' selected':'')+'>nein</option><option value="offen"'+(e.verl==='offen'?' selected':'')+'>offen</option></select>';
-    return '<tr class="'+(r.ueberfaellig?'ueberfaellig':'')+'"><td title="Klienten-Nr. '+esc(r.klientId)+'">'+esc(r.klient)+'<div class="delta" style="margin:0">Nr. '+esc(r.klientId)+(r.aktenzeichen?' · AZ '+esc(r.aktenzeichen):'')+'</div></td><td>'+esc(r.jugendamt)+'</td><td>'+esc(r.hilfeart||r.massnahme)+(r.wochenstunden?'<div class="delta" style="margin:0">'+zahlDe(r.wochenstunden,1)+' Std./Wo.</div>':'')+'</td><td>'+esc(r.fachkraft)+'</td><td class="ende" style="white-space:nowrap">'+datumDe(r.ende)+'<div class="delta" style="margin:0">'+esc(r.endeTyp)+(r.naechstesHpg?' · HPG '+datumDe(r.naechstesHpg):'')+'</div></td><td>'+sel+'</td><td><input type="text" data-ausl="grund" data-key="'+esc(r.key)+'" value="'+esc(e.grund||'')+'" maxlength="160" '+(READONLY?'readonly':'')+'></td></tr>';
+      : '<span class="verl-wahl">'+['ja','nein','offen'].map(w=>'<label><input type="checkbox" data-verl="'+w+'" data-key="'+esc(r.key)+'"'+(e.verl===w?' checked':'')+'> '+w+'</label>').join('')+'</span>';
+    return '<tr class="'+(r.ueberfaellig?'ueberfaellig':'')+'"><td title="Klienten-Nr. '+esc(r.klientId)+'">'+esc(nachname(r.klient))+'<div class="delta" style="margin:0">'+esc(r.klient)+(r.aktenzeichen?' · AZ '+esc(r.aktenzeichen):'')+'</div></td><td>'+esc(amtKurz(r.jugendamt))+'</td><td>'+esc(r.massnahme||r.hilfeart)+(r.wochenstunden?'<div class="delta" style="margin:0">'+zahlDe(r.wochenstunden,1)+' Std./Wo.</div>':'')+'</td><td>'+esc(r.fachkraft)+'</td><td class="ende" style="white-space:nowrap">'+datumDe(r.ende)+'<div class="delta" style="margin:0">'+esc(r.endeTyp)+(r.naechstesHpg?' · HPG '+datumDe(r.naechstesHpg):'')+'</div></td><td>'+sel+'</td><td><input type="text" data-ausl="grund" data-key="'+esc(r.key)+'" value="'+esc(e.grund||'')+'" maxlength="160" '+(READONLY?'readonly':'')+'></td></tr>';
   }).join('');
   tb.querySelectorAll('[data-ausl]').forEach(i=>i.addEventListener('input', ()=>{ const k=i.dataset.key; FORM.auslaufend[k]=FORM.auslaufend[k]||{}; FORM.auslaufend[k][i.dataset.ausl]=i.value; markiere(); }));
+  // Checkboxen ja / nein / offen verhalten sich wie eine Einfachauswahl je Zeile
+  tb.querySelectorAll('[data-verl]').forEach(cb=>cb.addEventListener('change', ()=>{
+    const k=cb.dataset.key; FORM.auslaufend[k]=FORM.auslaufend[k]||{};
+    FORM.auslaufend[k].verl = cb.checked ? cb.dataset.verl : '';
+    tb.querySelectorAll('[data-verl][data-key="'+CSS.escape(k)+'"]').forEach(o=>{ if(o!==cb) o.checked=false; });
+    markiere();
+  }));
   const ueber=rows.filter(r=>r.ueberfaellig).length;
   hinweis.style.display = ueber?'block':'none';
   hinweis.textContent = ueber ? ueber+' Hilfe(n) mit bereits überschrittenem Ende – bitte in Kilanka prüfen (Verlängerung eintragen oder Maßnahme beenden).' : '';
@@ -560,7 +570,6 @@ function rendereListen(){
 for (const id of ['beobachtungen','lernen','personal']){
   document.getElementById('f_'+id).addEventListener('input', e=>{ FORM[id]=e.target.value; zaehler(id); markiere(); });
 }
-document.querySelectorAll('[data-ziel]').forEach(i=>i.addEventListener('input',()=>{ FORM.ziele[i.dataset.ziel]=i.value===''?null:Number(i.value); markiere(); }));
 document.querySelectorAll('[data-komm]').forEach(i=>i.addEventListener('input',()=>{ FORM.kommentare[i.dataset.komm]=i.value; markiere(); }));
 document.querySelectorAll('[data-feld=anfragenAngenommen],[data-feld=anfragenAbgesagt]').forEach(i=>i.addEventListener('input',()=>{ FORM[i.dataset.feld]=i.value===''?null:Number(i.value); markiere(); }));
 function markiere(){
@@ -724,22 +733,21 @@ function rmDocDefinition(logo){
     layout:{hLineWidth:()=>.9,vLineWidth:(i,n)=>(i===0||i===n.table.widths.length)?.9:0,hLineColor:()=>C.rahmenStark,vLineColor:()=>C.rahmenStark,paddingLeft:()=>8,paddingRight:()=>8,paddingTop:()=>2,paddingBottom:()=>2},margin:[0,10,0,6]};
   const th=t=>({text:up(t),font:'KodchasanSemi',fontSize:F.label,characterSpacing:.5,color:C.meta,fillColor:C.creme,margin:[4,3,4,3]});
   const td=(t,r)=>({text:String(t==null?'–':t),fontSize:8.5,color:C.ink,margin:[4,2,4,2],alignment:r?'right':'left'});
-  const z=FORM.ziele||{}, km=FORM.kommentare||{};
-  const zl=x=>x==null||x===''?'–':zahlDe(Number(x),0);
-  const kennz={table:{widths:[150,42,70,70,'*'],headerRows:1,body:[
-      ['Kennzahl','Ziel','Ist','Vorperiode','Kommentar'].map(th),
-      [td('Geleistete Fachleistungsstunden'),td(zl(z.fls),1),td(zahlDe(k.fls,1),1),td(zahlDe(v.fls,1),1),td(km.fls)],
-      [td('Auslastung des Teams in %'),td(z.auslastung==null?'–':zl(z.auslastung)+' %',1),td(k.auslastung==null?'–':zahlDe(k.auslastung,1)+' %',1),td(v.auslastung==null?'–':zahlDe(v.auslastung,1)+' %',1),td(km.auslastung)],
-      [td('Laufende Hilfen (neu / beendet)'),td(zl(z.hilfen),1),td(k.hilfen.laufend+' (+'+k.hilfen.neu+' / −'+k.hilfen.beendet+')',1),td(v.hilfen.laufend+' (+'+v.hilfen.neu+' / −'+v.hilfen.beendet+')',1),td(km.hilfen)],
-      [td('Fallanfragen (angenommen / abgesagt)'),td(zl(z.anfragen),1),td((FORM.anfragenAngenommen??'–')+' / '+(FORM.anfragenAbgesagt??'–'),1),td('–',1),td(km.anfragen)],
-      [td('Krankheitstage / Überstundensaldo'),td(zl(z.krank),1),td(zahlDe(k.krankTage,1)+' Tage / '+(k.stundenkontoSaldo==null?'–':zahlDe(k.stundenkontoSaldo,1)+' Std.'),1),td(zahlDe(v.krankTage,1)+' Tage',1),td(km.krank)],
+  const km=FORM.kommentare||{};
+  const kennz={table:{widths:[160,80,100,'*'],headerRows:1,body:[
+      ['Kennzahl','Vorperiode','Ist','Kommentar'].map(th),
+      [td('Geleistete Fachleistungsstunden'),td(zahlDe(v.fls,1),1),td(zahlDe(k.fls,1),1),td(km.fls)],
+      [td('Auslastung des Teams in %'),td(v.auslastung==null?'–':zahlDe(v.auslastung,1)+' %',1),td(k.auslastung==null?'–':zahlDe(k.auslastung,1)+' %',1),td(km.auslastung)],
+      [td('Laufende Hilfen (neu / beendet)'),td(v.hilfen.laufend+' (+'+v.hilfen.neu+' / −'+v.hilfen.beendet+')',1),td(k.hilfen.laufend+' (+'+k.hilfen.neu+' / −'+k.hilfen.beendet+')',1),td(km.hilfen)],
+      [td('Fallanfragen (angenommen / abgesagt)'),td('–',1),td((FORM.anfragenAngenommen??'–')+' / '+(FORM.anfragenAbgesagt??'–'),1),td(km.anfragen)],
+      [td('Krankheitstage / Überstundensaldo'),td(zahlDe(v.krankTage,1)+' Tage',1),td(zahlDe(k.krankTage,1)+' Tage / '+(k.stundenkontoSaldo==null?'–':zahlDe(k.stundenkontoSaldo,1)+' Std.'),1),td(km.krank)],
     ]},layout:{hLineWidth:()=>.75,vLineWidth:()=>.75,hLineColor:()=>C.rahmenMittel,vLineColor:()=>C.rahmenMittel},margin:[20,0,0,2]};
   const absagen=(FORM.absagen||[]).filter(a=>a.amt||a.grund);
   const absText=absagen.length?{ul:absagen.map(a=>({text:[{text:(a.amt||'–')+': ',font:'KodchasanSemi'},a.grund||'–'],fontSize:9,lineHeight:1.3})),markerColor:C.terra,margin:[22,4,0,2]}:null;
   const ausl=(d.auslaufend||[]);
-  const auslTab=ausl.length?{table:{widths:[66,50,82,68,52,40,'*'],headerRows:1,body:[
-      ['Klient-Nr.','Jugendamt','Hilfeart','Fachkraft','Ende','Verläng.','Grund / nächster Schritt'].map(th),
-      ...ausl.map(r=>{const e=FORM.auslaufend[r.key]||{}; return [td('Nr. '+r.klientId+(r.aktenzeichen?'\nAZ '+r.aktenzeichen:'')),td(r.jugendamt),td(r.hilfeart||r.massnahme),td(r.fachkraft),td(datumDe(r.ende)),td({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–'),td(e.grund)];})
+  const auslTab=ausl.length?{table:{widths:[68,66,56,66,56,40,'*'],headerRows:1,body:[
+      ['Klient','Jugendamt','Maßnahme','Fachkraft','Ende','Verl.','Grund / nächster Schritt'].map(th),
+      ...ausl.map(r=>{const e=FORM.auslaufend[r.key]||{}; return [td(nachname(r.klient)),td(amtKurz(r.jugendamt)),td(r.massnahme||r.hilfeart),td(nachname(r.fachkraft)),td(datumDe(r.ende)),td({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–'),td(e.grund)];})
     ]},layout:{hLineWidth:()=>.75,vLineWidth:()=>.75,hLineColor:()=>C.rahmenMittel,vLineColor:()=>C.rahmenMittel},margin:[20,0,0,2]}
     :text('Keine Hilfe des Teams endet in den nächsten drei Monaten.');
   const akt=(FORM.aktivitaeten||[]).filter(a=>a.t.trim());
@@ -759,7 +767,7 @@ function rmDocDefinition(logo){
       {canvas:[{type:'line',x1:0,y1:0,x2:INNER,y2:0,lineWidth:.75,lineColor:C.rahmenStark}],margin:[0,4,0,0]},
       kopfBox,
       h(1,'Beobachtungen'), text(FORM.beobachtungen),
-      h(2,'Kennzahlen – Ziel, Ist, Vorperiode'), kennz,
+      h(2,'Kennzahlen – Vorperiode und Ist'), kennz,
       ...(absText?[{text:'Absagen mit Grund',font:'KodchasanSemi',fontSize:8.5,color:C.muted,margin:[20,4,0,0]},absText]:[]),
       h(3,'Ausblick: Hilfen, die in den nächsten drei Monaten auslaufen'), auslTab,
       h(4,'Was funktioniert hat, was nicht – und was wir daraus lernen'), text(FORM.lernen),
