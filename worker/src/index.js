@@ -1995,8 +1995,13 @@ async function rmAuslaufendeHilfen(env, teamUpns, heute) {
       let ende = null, endeTyp = null;
       if (mEnde && (!bEnde || mEnde <= bEnde)) { ende = mEnde; endeTyp = "Maßnahme"; }
       else if (bEnde) { ende = bEnde; endeTyp = "Bewilligung"; }
-      if (!ende || ende > horizont) continue;
+      // Ohne Ende: Hilfe läuft, aber weder Maßnahme noch Bewilligung haben ein Enddatum —
+      // d. h. kein (neuer) Bescheid bzw. keine Verlängerung erfasst → Klärungsbedarf, steht ganz oben
+      const ohneEnde = !ende;
+      if (ohneEnde) endeTyp = "kein Bescheid";
+      else if (ende > horizont) continue;
       rows.push({
+        ohneEnde,
         key: `${client.id}|${String(a.recName || "").slice(0, 40)}`,
         klientId: String(client.id),
         klient: client.recName || String(client.id),
@@ -2005,15 +2010,17 @@ async function rmAuslaufendeHilfen(env, teamUpns, heute) {
         jugendamt: a.department?.shortName || (amtKurz && amtKurz.get(String(a.department?.id))) || a.department?.name || "",
         aktenzeichen: a.fileReference || null,
         fachkraft: hb.user.recName || "",
-        ende: isoDate(ende),
+        ende: ohneEnde ? null : isoDate(ende),
         endeTyp,
         naechstesHpg: isoDate(kDate(a.nextMeeting)),
         wochenstunden: bewilligteWochenstunden(a, heute),
-        ueberfaellig: ende < heute,
+        ueberfaellig: !ohneEnde && ende < heute,
       });
     }
   }
-  return rows.sort((x, y) => x.ende.localeCompare(y.ende) || x.klient.localeCompare(y.klient, "de"));
+  // Reihenfolge: zuerst Hilfen ohne Enddatum (Klärungsbedarf), dann nach Ende aufsteigend
+  return rows.sort((x, y) => (y.ohneEnde ? 1 : 0) - (x.ohneEnde ? 1 : 0) ||
+    (x.ende || "").localeCompare(y.ende || "") || x.klient.localeCompare(y.klient, "de"));
 }
 
 async function rmLesen(env, tlUpn, zeitraum) {

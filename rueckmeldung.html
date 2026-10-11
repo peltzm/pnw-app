@@ -79,6 +79,8 @@ input[readonly],textarea[readonly]{background:var(--bg);color:var(--text-muted)}
 .verl-wahl label{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;cursor:pointer}
 .verl-wahl input{width:15px;height:15px;accent-color:var(--accent)}
 tr.ueberfaellig td.ende{color:var(--error);font-weight:600}
+tr.ohne-ende td{background:#FBEFEA}
+tr.ohne-ende td.ende{color:var(--error);font-weight:600}
 .delta{font-size:11px;color:var(--text-hint);margin-left:4px}
 .delta.plus{color:var(--ok)} .delta.minus{color:var(--error)}
 .hinweis{font-size:12px;color:var(--text-muted);background:var(--creme);border-radius:var(--radius);padding:8px 12px;margin-top:10px}
@@ -201,7 +203,7 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
 
     <div class="card">
       <h2><span class="nr">3</span>Ausblick: Hilfen, die in den nächsten drei Monaten auslaufen</h2>
-      <div class="leit">Aus Kilanka: Hauptbetreuung im Team, Ende der Maßnahme oder der Bewilligung innerhalb von drei Monaten ab heute. Bitte je Hilfe Verlängerung und – bei „nein" – den Grund eintragen.</div>
+      <div class="leit">Aus Kilanka: Hauptbetreuung im Team, Ende der Maßnahme oder der Bewilligung innerhalb von drei Monaten ab heute. Ganz oben stehen laufende Hilfen <strong>ohne Enddatum</strong> – gestartet, aber kein Bescheid bzw. keine Verlängerung in Kilanka erfasst (Klärungsbedarf). Bitte je Hilfe Verlängerung und – bei „nein" – den Grund eintragen.</div>
       <div class="tab-scroll">
         <table class="tabelle" id="auslaufTab">
           <thead><tr><th>Klient</th><th>Jugendamt</th><th>Maßnahme</th><th>Fachkraft</th><th>Ende</th><th>Verlängerung (wahrscheinlich)</th><th>Grund / nächster Schritt</th></tr></thead>
@@ -538,13 +540,13 @@ function rendereAuslaufend(){
   const tb=document.querySelector('#auslaufTab tbody');
   const rows=DATEN.auslaufend||[];
   const hinweis=document.getElementById('auslaufHinweis');
-  if (!rows.length){ tb.innerHTML='<tr><td colspan="7" class="zaehler" style="text-align:left">Keine Hilfe des Teams endet in den nächsten drei Monaten.</td></tr>'; hinweis.style.display='none'; return; }
+  if (!rows.length){ tb.innerHTML='<tr><td colspan="7" class="zaehler" style="text-align:left">Keine Hilfe des Teams ohne Enddatum, keine endet in den nächsten drei Monaten.</td></tr>'; hinweis.style.display='none'; return; }
   tb.innerHTML = rows.map(r=>{
     const e=FORM.auslaufend[r.key]||{};
     const sel = READONLY
       ? '<span>'+esc({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–')+'</span>'
       : '<span class="verl-wahl">'+['ja','nein','offen'].map(w=>'<label><input type="checkbox" data-verl="'+w+'" data-key="'+esc(r.key)+'"'+(e.verl===w?' checked':'')+'> '+w+'</label>').join('')+'</span>';
-    return '<tr class="'+(r.ueberfaellig?'ueberfaellig':'')+'"><td title="Klienten-Nr. '+esc(r.klientId)+'">'+esc(nachname(r.klient))+'<div class="delta" style="margin:0">'+esc(r.klient)+(r.aktenzeichen?' · AZ '+esc(r.aktenzeichen):'')+'</div></td><td>'+esc(amtKurz(r.jugendamt))+'</td><td>'+esc(r.massnahme||r.hilfeart)+(r.wochenstunden?'<div class="delta" style="margin:0">'+zahlDe(r.wochenstunden,1)+' Std./Wo.</div>':'')+'</td><td>'+esc(r.fachkraft)+'</td><td class="ende" style="white-space:nowrap">'+datumDe(r.ende)+'<div class="delta" style="margin:0">'+esc(r.endeTyp)+(r.naechstesHpg?' · HPG '+datumDe(r.naechstesHpg):'')+'</div></td><td>'+sel+'</td><td><input type="text" data-ausl="grund" data-key="'+esc(r.key)+'" value="'+esc(e.grund||'')+'" maxlength="160" '+(READONLY?'readonly':'')+'></td></tr>';
+    return '<tr class="'+(r.ohneEnde?'ohne-ende':r.ueberfaellig?'ueberfaellig':'')+'"><td title="Klienten-Nr. '+esc(r.klientId)+'">'+esc(nachname(r.klient))+'<div class="delta" style="margin:0">'+esc(r.klient)+(r.aktenzeichen?' · AZ '+esc(r.aktenzeichen):'')+'</div></td><td>'+esc(amtKurz(r.jugendamt))+'</td><td>'+esc(r.massnahme||r.hilfeart)+(r.wochenstunden?'<div class="delta" style="margin:0">'+zahlDe(r.wochenstunden,1)+' Std./Wo.</div>':'')+'</td><td>'+esc(r.fachkraft)+'</td><td class="ende" style="white-space:nowrap">'+(r.ohneEnde?'kein Enddatum':datumDe(r.ende))+'<div class="delta" style="margin:0">'+esc(r.ohneEnde?'Bescheid / Verlängerung fehlt':r.endeTyp)+(r.naechstesHpg?' · HPG '+datumDe(r.naechstesHpg):'')+'</div></td><td>'+sel+'</td><td><input type="text" data-ausl="grund" data-key="'+esc(r.key)+'" value="'+esc(e.grund||'')+'" maxlength="160" '+(READONLY?'readonly':'')+'></td></tr>';
   }).join('');
   tb.querySelectorAll('[data-ausl]').forEach(i=>i.addEventListener('input', ()=>{ const k=i.dataset.key; FORM.auslaufend[k]=FORM.auslaufend[k]||{}; FORM.auslaufend[k][i.dataset.ausl]=i.value; markiere(); }));
   // Checkboxen ja / nein / offen verhalten sich wie eine Einfachauswahl je Zeile
@@ -554,9 +556,12 @@ function rendereAuslaufend(){
     tb.querySelectorAll('[data-verl][data-key="'+CSS.escape(k)+'"]').forEach(o=>{ if(o!==cb) o.checked=false; });
     markiere();
   }));
-  const ueber=rows.filter(r=>r.ueberfaellig).length;
-  hinweis.style.display = ueber?'block':'none';
-  hinweis.textContent = ueber ? ueber+' Hilfe(n) mit bereits überschrittenem Ende – bitte in Kilanka prüfen (Verlängerung eintragen oder Maßnahme beenden).' : '';
+  const ohne=rows.filter(r=>r.ohneEnde).length, ueber=rows.filter(r=>r.ueberfaellig).length;
+  const teile=[];
+  if (ohne) teile.push(ohne+' laufende Hilfe(n) ohne Enddatum – gestartet, aber kein Bescheid bzw. keine Verlängerung in Kilanka erfasst. Bitte mit dem Amt klären und in Kilanka nachtragen.');
+  if (ueber) teile.push(ueber+' Hilfe(n) mit bereits überschrittenem Ende – bitte in Kilanka prüfen (Verlängerung eintragen oder Maßnahme beenden).');
+  hinweis.style.display = teile.length?'block':'none';
+  hinweis.textContent = teile.join(' ');
 }
 function rendereListen(){
   const ak=document.getElementById('aktivitaeten');
@@ -748,9 +753,9 @@ function rmDocDefinition(logo){
   const ausl=(d.auslaufend||[]);
   const auslTab=ausl.length?{table:{widths:[68,66,56,66,56,40,'*'],headerRows:1,body:[
       ['Klient','Jugendamt','Maßnahme','Fachkraft','Ende','Verl.','Grund / nächster Schritt'].map(th),
-      ...ausl.map(r=>{const e=FORM.auslaufend[r.key]||{}; return [td(nachname(r.klient)),td(amtKurz(r.jugendamt)),td(r.massnahme||r.hilfeart),td(nachname(r.fachkraft)),td(datumDe(r.ende)),td({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–'),td(e.grund)];})
+      ...ausl.map(r=>{const e=FORM.auslaufend[r.key]||{}; return [td(nachname(r.klient)),td(amtKurz(r.jugendamt)),td(r.massnahme||r.hilfeart),td(nachname(r.fachkraft)),r.ohneEnde?{text:'kein Enddatum – Bescheid fehlt',fontSize:8.5,color:C.terra,bold:true,margin:[4,2,4,2]}:td(datumDe(r.ende)),td({ja:'ja',nein:'nein',offen:'offen'}[e.verl]||'–'),td(e.grund)];})
     ]},layout:{hLineWidth:()=>.75,vLineWidth:()=>.75,hLineColor:()=>C.rahmenMittel,vLineColor:()=>C.rahmenMittel},margin:[20,0,0,2]}
-    :text('Keine Hilfe des Teams endet in den nächsten drei Monaten.');
+    :text('Keine Hilfe des Teams ohne Enddatum, keine endet in den nächsten drei Monaten.');
   const akt=(FORM.aktivitaeten||[]).filter(a=>a.t.trim());
   const aktList=akt.length?{ol:akt.map(a=>({text:[{text:a.t,font:'KodchasanSemi'},(a.s?' – Stand: '+a.s:''),(a.n?' – Nächster Schritt: '+a.n:'')],fontSize:F.fliess,lineHeight:1.3,margin:[0,0,0,2]})),margin:[22,0,0,2]}:text('–');
   const bit=(FORM.bitten||[]).filter(b=>b.t.trim());

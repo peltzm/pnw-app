@@ -56,6 +56,12 @@ Je Zeile: Klient (in der App mit Name, im PDF nur Klienten-Nr. und Aktenzeichen)
 Die Teamleitung ergänzt Verlängerung (ja/nein/offen) und Grund/nächsten Schritt; „nein" ohne
 Grund blockiert die Abgabe. Bereits überschrittene Enden werden rot markiert (Kilanka pflegen).
 
+**Hilfen ohne Enddatum** (Maßnahme aktiv, aber weder `validUntil` der Maßnahme noch eine
+aktuelle Bewilligung mit Ende): das sind gestartete Hilfen, für die noch kein Bescheid bzw.
+keine Verlängerung in Kilanka erfasst ist. Sie werden unabhängig vom 92-Tage-Horizont
+aufgenommen (`ohneEnde: true`, `endeTyp: "kein Bescheid"`, `ende: null`) und stehen **ganz
+oben** in der Liste, weil Klärungsbedarf besteht; in App und PDF hervorgehoben.
+
 ## Abgabe (Frontend)
 1. Pflichtprüfung (Beobachtungen, Fallanfragen, Verlängerung je auslaufender Hilfe, Lernen,
    Personal, mindestens eine Aktivität).
