@@ -3092,6 +3092,8 @@ async function zugriffPortal(request, env, caller, name, angefragt) {
 //   POST /api/lernapp/bewerten           freie Antwort bewerten (Claude)
 //   GET  /api/lernapp/stand              eigener Lernstand
 //   POST /api/lernapp/stand              eigenen Lernstand speichern
+//   POST /api/lernapp/einreichen         Abschnitte einer Quelle für den Wochenlauf einreichen (Batch)
+//   POST /api/lernapp/abholen            fertige Batches übernehmen (läuft auch per Cron)
 //   GET  /api/lernapp/inhalt?item=…      Dateiinhalt aus dem Quell-Laufwerk
 //                                        (Graph-Token des Aufrufers; pdf=1 → Umwandlung nach PDF)
 //
@@ -3267,7 +3269,7 @@ async function lernappQuellen(env) {
       quellen.push({
         id: k.name.slice("lernapp:q:".length), name: m.n || "", fach: m.f || "Allgemein", fachTitel: m.ft || "",
         art: m.a || "datei", version: m.v || "", teileFertig: m.tf || 0, teileGesamt: m.tg || 0,
-        karten: m.k || 0, stand: m.st || null, fehler: !!m.e, pruefung: !!m.p,
+        karten: m.k || 0, stand: m.st || null, fehler: !!m.e, pruefung: !!m.p, wartet: m.w || 0,
       });
     }
     if (l.list_complete) break;
@@ -3355,29 +3357,49 @@ async function lernappStromLesen(antwort, beiDaten) {
   return { text, stop, fehler, verbrauch };
 }
 
-// Karten für einen Abschnitt erzeugen. Rückgabe { ok, … } bzw. { ok:false, status, error }.
-async function lernappErzeugen(env, body, beiDaten) {
-  const { bloecke, fehler } = lernappInhalt(body?.inhalt);
-  if (fehler) return { ok: false, status: 400, error: fehler };
-  const q = body?.quelle || {};
-  const bestehend = (Array.isArray(body?.bestehend) ? body.bestehend : []).slice(0, 80)
+// Bestehende Karten in die Kurzform für den Auftrag bringen.
+function lernappBestehend(liste) {
+  return (Array.isArray(liste) ? liste : []).slice(0, 80)
     .map((k) => ({ id: laText(k?.id, 260), frage: laText(k?.frage, 600), antwort: laText(k?.antwort, 900) }))
     .filter((k) => k.id && k.frage);
+}
+
+// Parameter der Messages-API für einen Abschnitt (ohne stream). q: { name, fach, art, teil, teile, seitenVon, seitenBis }
+function lernappAnfrage(env, q, bloecke, bestehend, mitEffort) {
   let auftrag = `Unterlage: „${laText(q.name, 200)}“`;
   if (q.fach) auftrag += `\nFach/Modul: ${laText(q.fach, 80)}`;
   if (q.art === "onenote") auftrag += "\nArt: eigene Notizen der Studentin aus OneNote (Stichpunkte können unvollständig sein; Bilder sind Fotos, Scans oder Folienausdrucke).";
   if (laZahl(q.teile, 1, 10000) > 1) auftrag += `\nDies ist Abschnitt ${laZahl(q.teil, 1, 10000)} von ${laZahl(q.teile, 1, 10000)} (Seiten ${laZahl(q.seitenVon, 1, 100000)} bis ${laZahl(q.seitenBis, 1, 100000)} der Unterlage). Zähle die Seiten im Feld "seite" ab 1 für diesen Abschnitt.`;
   if (bestehend.length) auftrag += `\n\nBestehende Karten zu diesem Abschnitt (Kennung, Frage, Antwort):\n${JSON.stringify(bestehend)}`;
   auftrag += "\n\nErstelle die Lernkarten.";
-
-  const anfrage = {
+  const format = { type: "json_schema", schema: LERNAPP_SCHEMA_KARTEN };
+  return {
     model: env.LERNAPP_MODELL || LERNAPP_MODELL_KARTEN,
     max_tokens: 20000,
-    stream: true,
     system: LERNAPP_SYSTEM_KARTEN,
     messages: [{ role: "user", content: [...bloecke, { type: "text", text: auftrag }] }],
-    output_config: { effort: "low", format: { type: "json_schema", schema: LERNAPP_SCHEMA_KARTEN } },
+    output_config: mitEffort ? { effort: "low", format } : { format },
   };
+}
+
+// JSON-Ergebnis von Claude prüfen und kürzen.
+function lernappErgebnis(erg, bestehend) {
+  const bekannt = new Set(bestehend.map((k) => k.id));
+  return {
+    modulTitel: laText(erg?.modulTitel, 140).trim(),
+    pruefung: laText(erg?.pruefung, 2000).trim(),
+    behalten: (Array.isArray(erg?.behalten) ? erg.behalten : []).map(String).filter((id) => bekannt.has(id)),
+    karten: (Array.isArray(erg?.karten) ? erg.karten : []).map((k) => lernappKarte(k, false)).filter(Boolean).slice(0, 16),
+  };
+}
+
+// Karten für einen Abschnitt sofort erzeugen (Antwortstrom). Rückgabe { ok, … } bzw. { ok:false, status, error }.
+// Wird von der App nicht mehr regulär genutzt (Wochenlauf über die Batch-Schnittstelle), bleibt für Tests und Notfälle.
+async function lernappErzeugen(env, body, beiDaten) {
+  const { bloecke, fehler } = lernappInhalt(body?.inhalt);
+  if (fehler) return { ok: false, status: 400, error: fehler };
+  const bestehend = lernappBestehend(body?.bestehend);
+  const anfrage = { ...lernappAnfrage(env, body?.quelle || {}, bloecke, bestehend, true), stream: true };
   const r = await lernappClaudeFetch(env, anfrage);
   if (!r.ok) return { ok: false, ...(await lernappClaudeFehler(r)) };
   const strom = await lernappStromLesen(r, beiDaten);
@@ -3386,15 +3408,163 @@ async function lernappErzeugen(env, body, beiDaten) {
   if (strom.stop === "refusal") return { ok: false, status: 502, error: "Claude hat die Verarbeitung dieses Abschnitts abgelehnt." };
   let erg;
   try { erg = JSON.parse(strom.text); } catch { return { ok: false, status: 502, error: "Claude hat kein auswertbares Ergebnis geliefert.", wiederholbar: true }; }
-  const bekannt = new Set(bestehend.map((k) => k.id));
-  return {
-    ok: true,
-    modulTitel: laText(erg.modulTitel, 140).trim(),
-    pruefung: laText(erg.pruefung, 2000).trim(),
-    behalten: (Array.isArray(erg.behalten) ? erg.behalten : []).map(String).filter((id) => bekannt.has(id)),
-    karten: (Array.isArray(erg.karten) ? erg.karten : []).map((k) => lernappKarte(k, false)).filter(Boolean).slice(0, 16),
-    verbrauch: strom.verbrauch,
-  };
+  return { ok: true, ...lernappErgebnis(erg, bestehend), verbrauch: strom.verbrauch };
+}
+
+// ── Wochenlauf über die Batch-Schnittstelle ─────────────────────
+// Die App reicht beim ersten Öffnen der Woche alle neuen oder geänderten Abschnitte
+// gesammelt ein (POST /api/lernapp/einreichen). Anthropic verarbeitet sie mit
+// niedriger Priorität zum halben Preis, in der Regel innerhalb einer Stunde,
+// spätestens nach 24 Stunden. Der Cron-Trigger des Workers (alle 30 Minuten)
+// und die App beim Öffnen (POST /api/lernapp/abholen) holen fertige Ergebnisse ab
+// und schreiben die Karten in die Quelle.
+//
+// KV: lernapp:job:<batchId>  { batchId, quelleId, teileGesamt, neu, letzter, stuecke:[{cid, teil, von, bis}], erstellt }
+//     lernapp:lauf           { letzte: ISO-Zeit der letzten Einreichung }
+const LERNAPP_WOCHE_TAGE = 7;
+const LERNAPP_BATCH_URL = "https://api.anthropic.com/v1/messages/batches";
+const lernappApiKopf = (env) => ({ "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" });
+
+async function lernappQuelleLesen(env, id) {
+  return env.PNW_DATEN.get(`lernapp:q:${id}`, "json");
+}
+async function lernappQuelleSchreiben(env, rec) {
+  const meta = lernappMeta(rec.meta);
+  rec.meta = meta;
+  rec.jobs = Array.isArray(rec.jobs) ? rec.jobs : [];
+  rec.stand = new Date().toISOString();
+  const md = { ...lernappKvMeta(meta, (rec.karten || []).length, rec.stand), w: rec.jobs.length };
+  await env.PNW_DATEN.put(`lernapp:q:${rec.id}`, JSON.stringify(rec), { metadata: md });
+}
+
+async function lernappEinreichen(env, body, caller) {
+  const q = body?.quelle || {};
+  const id = String(q.id || "");
+  if (!LERNAPP_ID_RE.test(id)) return { ok: false, status: 400, error: "Ungültige Quellen-Kennung" };
+  const stuecke = Array.isArray(body?.stuecke) ? body.stuecke : [];
+  if (!stuecke.length || stuecke.length > 200) return { ok: false, status: 400, error: "Keine oder zu viele Abschnitte" };
+  const teileGesamt = laZahl(body?.teileGesamt, 1, 10000);
+  const neu = !!body?.neu, letzter = body?.letzter !== false;
+  const metaNeu = lernappMeta(q.meta);
+  const rec = (await lernappQuelleLesen(env, id)) || { id, meta: { ...metaNeu, version: "" }, karten: [], jobs: [] };
+
+  const requests = [], liste = [];
+  for (let i = 0; i < stuecke.length; i++) {
+    const st = stuecke[i];
+    const { bloecke, fehler } = lernappInhalt(st?.inhalt);
+    if (fehler) return { ok: false, status: 400, error: `Abschnitt ${i + 1}: ${fehler}` };
+    const teil = laZahl(st?.teil, 1, 10000), von = laZahl(st?.von, 0, 100000), bis = laZahl(st?.bis, 0, 100000);
+    const bestehend = neu ? [] : lernappBestehend((rec.karten || []).filter((k) => (k.teil || 1) === teil));
+    const cid = `s${i}`;
+    requests.push({ custom_id: cid, params: lernappAnfrage(env, { name: metaNeu.name, fach: metaNeu.fach, art: metaNeu.art, teil, teile: teileGesamt, seitenVon: von || 1, seitenBis: bis || 1 }, bloecke, bestehend, false) });
+    liste.push({ cid, teil, von, bis, bestehend: bestehend.map((k) => k.id) });
+  }
+  const r = await fetch(LERNAPP_BATCH_URL, { method: "POST", headers: lernappApiKopf(env), body: JSON.stringify({ requests }) });
+  if (!r.ok) return { ok: false, ...(await lernappClaudeFehler(r)) };
+  const batch = await r.json();
+  const jetzt = new Date().toISOString();
+  await env.PNW_DATEN.put(`lernapp:job:${batch.id}`, JSON.stringify({
+    batchId: batch.id, quelleId: id, teileGesamt, neu, letzter, stuecke: liste, erstellt: jetzt, von: caller,
+  }));
+  // Die neue Version gilt erst, wenn der letzte Teil eingereicht ist — bricht das Einreichen ab,
+  // reicht die App die Unterlage beim nächsten Wochenlauf vollständig neu ein.
+  rec.meta = { ...rec.meta, ...metaNeu, version: letzter ? metaNeu.version : (rec.meta?.version || ""), teileGesamt, fehler: "",
+    fachTitel: rec.meta?.fachTitel || metaNeu.fachTitel, pruefung: rec.meta?.pruefung || "" };
+  rec.jobs = [...(rec.jobs || []), batch.id];
+  await lernappQuelleSchreiben(env, rec);
+  await env.PNW_DATEN.put("lernapp:lauf", JSON.stringify({ letzte: jetzt, von: caller }));
+  return { ok: true, batchId: batch.id, abschnitte: requests.length };
+}
+
+// Ergebnisse eines beendeten Batches in die Quelle übernehmen.
+function lernappTextAus(message) {
+  return (message?.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+}
+async function lernappJobAnwenden(env, job, zeilen) {
+  const rec = await lernappQuelleLesen(env, job.quelleId);
+  if (!rec) return { karten: 0, fehler: 0 };          // Quelle wurde inzwischen entfernt
+  const nachCid = new Map(zeilen.map((z) => [z.custom_id, z]));
+  const jeTeil = new Map();
+  let fehlerTexte = [], neuGesamt = 0, eingabe = 0, ausgabe = 0;
+  for (const st of job.stuecke) {
+    const t = jeTeil.get(st.teil) || { behalten: new Set(), karten: [], fehler: false };
+    jeTeil.set(st.teil, t);
+    const z = nachCid.get(st.cid);
+    if (!z || z.result?.type !== "succeeded") {
+      t.fehler = true;
+      const grund = z?.result?.type === "errored" ? (z.result.error?.error?.message || z.result.error?.message || "Fehler") : (z?.result?.type || "kein Ergebnis");
+      fehlerTexte.push(`Abschnitt ${st.teil}: ${String(grund).slice(0, 160)}`);
+      continue;
+    }
+    const msg = z.result.message || {};
+    eingabe += msg.usage?.input_tokens || 0; ausgabe += msg.usage?.output_tokens || 0;
+    if (msg.stop_reason === "max_tokens" || msg.stop_reason === "refusal") {
+      t.fehler = true; fehlerTexte.push(`Abschnitt ${st.teil}: ${msg.stop_reason === "refusal" ? "abgelehnt" : "Antwort zu lang"}`); continue;
+    }
+    let erg;
+    try { erg = JSON.parse(lernappTextAus(msg)); } catch { t.fehler = true; fehlerTexte.push(`Abschnitt ${st.teil}: kein auswertbares Ergebnis`); continue; }
+    const e = lernappErgebnis(erg, st.bestehend.map((id) => ({ id })));
+    e.behalten.forEach((id) => t.behalten.add(id));
+    const breite = st.bis && st.von ? st.bis - st.von + 1 : 0;
+    for (const k of e.karten) {
+      const seite = (st.von && k.seite >= 1 && k.seite <= breite) ? st.von - 1 + k.seite : 0;
+      t.karten.push({ ...k, seite, teil: st.teil, id: `${job.quelleId}#${st.teil}-${Math.random().toString(36).slice(2, 8)}` });
+    }
+    if (e.modulTitel && !rec.meta.fachTitel) rec.meta.fachTitel = e.modulTitel;
+    if (e.pruefung) t.pruefung = (t.pruefung ? t.pruefung + "\n\n" : "") + e.pruefung;
+  }
+  let karten = rec.karten || [];
+  let pruefungNeu = [];
+  for (const [teil, t] of jeTeil) {
+    if (t.fehler && !t.karten.length) continue;     // Abschnitt gescheitert → bisherige Karten bleiben
+    karten = karten.filter((k) => (k.teil || 1) !== teil || (!job.neu && t.behalten.has(k.id))).concat(t.karten);
+    neuGesamt += t.karten.length;
+    if (t.pruefung) pruefungNeu.push(t.pruefung);
+  }
+  if (job.letzter) karten = karten.filter((k) => (k.teil || 1) <= job.teileGesamt);
+  // Prüfungshinweise: bei vollständigem Neueinlesen ersetzen, sonst ergänzen (ohne Doppelte)
+  const alt = job.neu ? [] : String(rec.meta.pruefung || "").split("\n\n").filter(Boolean);
+  rec.meta.pruefung = [...new Set([...alt, ...pruefungNeu.join("\n\n").split("\n\n").filter(Boolean)])].join("\n\n").slice(0, 4000);
+  rec.karten = karten.slice(0, 1500);
+  rec.jobs = (rec.jobs || []).filter((b) => b !== job.batchId);
+  rec.meta.teileGesamt = job.teileGesamt;
+  rec.meta.teileFertig = fehlerTexte.length ? 0 : job.teileGesamt;
+  rec.meta.fehler = fehlerTexte.join(" · ").slice(0, 400);
+  await lernappQuelleSchreiben(env, rec);
+  console.log(`[lernapp] ${job.quelleId}: ${neuGesamt} neue Karten, ${fehlerTexte.length} Fehler, ${eingabe} Eingabe-/${ausgabe} Ausgabe-Token (Batch)`);
+  return { karten: neuGesamt, fehler: fehlerTexte.length };
+}
+
+// Alle offenen Batches prüfen; fertige übernehmen. Läuft per Cron und auf Anstoß der App.
+async function lernappAbholen(env) {
+  if (!env.PNW_DATEN || !env.ANTHROPIC_API_KEY) return { geprueft: 0, fertig: 0, karten: 0 };
+  const l = await env.PNW_DATEN.list({ prefix: "lernapp:job:" });
+  let fertig = 0, karten = 0, offen = 0;
+  for (const k of l.keys.slice(0, 40)) {
+    const job = await env.PNW_DATEN.get(k.name, "json");
+    if (!job) continue;
+    try {
+      const r = await fetch(`${LERNAPP_BATCH_URL}/${encodeURIComponent(job.batchId)}`, { headers: lernappApiKopf(env) });
+      if (r.status === 404) {                         // Batch existiert nicht (mehr) → Auftrag verwerfen
+        const rec = await lernappQuelleLesen(env, job.quelleId);
+        if (rec) { rec.jobs = (rec.jobs || []).filter((b) => b !== job.batchId); rec.meta.fehler = "Auftrag bei Claude nicht mehr vorhanden"; await lernappQuelleSchreiben(env, rec); }
+        await env.PNW_DATEN.delete(k.name); continue;
+      }
+      if (!r.ok) { offen++; continue; }
+      const b = await r.json();
+      if (b.processing_status !== "ended" || !b.results_url) { offen++; continue; }
+      const er = await fetch(b.results_url, { headers: lernappApiKopf(env) });
+      if (!er.ok) { offen++; continue; }
+      const zeilen = (await er.text()).split("\n").filter((z) => z.trim()).map((z) => { try { return JSON.parse(z); } catch { return null; } }).filter(Boolean);
+      const erg = await lernappJobAnwenden(env, job, zeilen);
+      await env.PNW_DATEN.delete(k.name);
+      fertig++; karten += erg.karten;
+    } catch (e) {
+      console.warn(`[lernapp] Batch ${job.batchId} nicht abholbar: ${e.message}`);
+      offen++;
+    }
+  }
+  return { geprueft: l.keys.length, fertig, offen, karten };
 }
 
 async function lernappBewerten(env, body) {
@@ -3423,6 +3593,12 @@ async function lernappBewerten(env, body) {
 }
 
 export default {
+  // Cron-Trigger (wrangler.toml [triggers]): fertige Lernapp-Batches abholen
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(lernappAbholen(env).then((e) => { if (e.fertig) console.log(`[lernapp] Cron: ${e.fertig} Aufträge übernommen, ${e.karten} Karten`); })
+      .catch((e) => console.warn(`[lernapp] Cron fehlgeschlagen: ${e.message}`)));
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin") || "";
@@ -4263,7 +4439,8 @@ export default {
 
       if (pfad === "quellen" && get) {
         try {
-          return json({ quellen: await lernappQuellen(env), kiBereit, stand: new Date().toISOString() }, 200, origin);
+          const lauf = (await env.PNW_DATEN.get("lernapp:lauf", "json")) || {};
+          return json({ quellen: await lernappQuellen(env), kiBereit, lauf: { letzte: lauf.letzte || null, wocheTage: LERNAPP_WOCHE_TAGE }, stand: new Date().toISOString() }, 200, origin);
         } catch (e) {
           return json({ error: `Quellen nicht lesbar: ${e.message}` }, 500, origin);
         }
@@ -4289,10 +4466,11 @@ export default {
         const meta = lernappMeta(body?.meta);
         const karten = (Array.isArray(body?.karten) ? body.karten : []).slice(0, 1500).map((k) => lernappKarte(k, true)).filter(Boolean);
         const jetzt = new Date().toISOString();
-        const wert = JSON.stringify({ id, meta, karten, stand: jetzt, von: caller });
+        const jobs = ((await env.PNW_DATEN.get(`lernapp:q:${id}`, "json")) || {}).jobs || [];
+        const wert = JSON.stringify({ id, meta, karten, stand: jetzt, von: caller, jobs });
         if (wert.length > LERNAPP_MAX_QUELLE) return json({ error: "Quelle zu umfangreich (max. 1,5 MB)" }, 413, origin);
         try {
-          await env.PNW_DATEN.put(`lernapp:q:${id}`, wert, { metadata: lernappKvMeta(meta, karten.length, jetzt) });
+          await env.PNW_DATEN.put(`lernapp:q:${id}`, wert, { metadata: { ...lernappKvMeta(meta, karten.length, jetzt), w: jobs.length } });
           return json({ ok: true, id, karten: karten.length, stand: jetzt }, 200, origin);
         } catch (e) {
           return json({ error: `Speichern fehlgeschlagen: ${e.message}` }, 500, origin);
@@ -4305,6 +4483,8 @@ export default {
         const id = String(body?.id || "");
         if (!LERNAPP_ID_RE.test(id)) return json({ error: "Ungültige Quellen-Kennung" }, 400, origin);
         try {
+          const rec = await env.PNW_DATEN.get(`lernapp:q:${id}`, "json");
+          for (const b of (rec?.jobs || [])) await env.PNW_DATEN.delete(`lernapp:job:${b}`);
           await env.PNW_DATEN.delete(`lernapp:q:${id}`);
           return json({ ok: true, id }, 200, origin);
         } catch (e) {
@@ -4335,6 +4515,24 @@ export default {
           return json({ ok: true }, 200, origin);
         } catch (e) {
           return json({ error: `Speichern fehlgeschlagen: ${e.message}` }, 500, origin);
+        }
+      }
+
+      if (pfad === "abholen" && post) {
+        try { return json({ ok: true, ...(await lernappAbholen(env)) }, 200, origin); }
+        catch (e) { return json({ error: `Abholen fehlgeschlagen: ${e.message}` }, 502, origin); }
+      }
+
+      if (pfad === "einreichen" && post) {
+        if (!kiBereit) return json({ error: "Der Claude-API-Schlüssel fehlt noch (Secret ANTHROPIC_API_KEY im Worker anlegen)." }, 503, origin);
+        if (Number(request.headers.get("Content-Length") || 0) > LERNAPP_MAX_ANFRAGE) return json({ error: "Einreichung zu groß" }, 413, origin);
+        let body;
+        try { body = await request.json(); } catch { return json({ error: "Ungültiger Request-Body" }, 400, origin); }
+        try {
+          const erg = await lernappEinreichen(env, body, caller);
+          return erg.ok ? json(erg, 200, origin) : json({ error: erg.error, wiederholbar: !!erg.wiederholbar }, erg.status, origin);
+        } catch (e) {
+          return json({ error: `Einreichen fehlgeschlagen: ${e.message}` }, 502, origin);
         }
       }
 

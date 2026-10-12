@@ -10,3 +10,7 @@ kv_namespaces = [
 
 # Secret KILANKA_TOKEN wird in Cloudflare verwaltet (Settings -> Variables and Secrets)
 # und bleibt bei Git-Deploys erhalten.
+
+# Cron: Lernapp – fertige Batch-Aufträge bei Anthropic abholen (UTC)
+[triggers]
+crons = ["*/30 * * * *"]
