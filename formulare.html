@@ -468,6 +468,12 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
             <div class="fc-title">Vollmacht Sorgerecht</div>
             <div class="fc-desc">Bevollmächtigung für Angelegenheiten der elterlichen Sorge.</div>
           </div>
+          <div class="fc" id="fc_hund" onclick="toggleFC('hund')">
+            <div class="fc-check"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="fc-icon">🐕</div>
+            <div class="fc-title">Einwilligung Hund</div>
+            <div class="fc-desc">Einverständnis der Familie zur Mitnahme des Hundes der Fachkraft (Anlage 2 der Hunde-Richtlinie).</div>
+          </div>
         </div>
         <div id="noFormWarn" class="alert alert-warn" style="display:none;">Bitte mindestens ein Formular auswählen.</div>
         <div class="btn-row">
@@ -495,7 +501,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
         <div id="det_unterz" style="display:none;">
           <div class="card">
             <div class="card-title">✍️ Unterzeichnende — Sorgeberechtigte</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Vorbefüllt aus Kilanka (Eltern und Sorgeberechtigte). Nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere Personen hinzufügen. Gilt für Schweigepflichtsentbindung, Datenschutzerklärung und Startkompass.</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Vorbefüllt aus Kilanka (Eltern und Sorgeberechtigte). Nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere Personen hinzufügen. Gilt für Schweigepflichtsentbindung, Datenschutzerklärung, Startkompass und Einwilligung Hund.</div>
             <div id="schweig_list"></div>
             <button class="btn-add" onclick="addSchweigPerson()" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -527,6 +533,17 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
                   <option value="">— optional —</option>
                 </select>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hund Details -->
+        <div id="det_hund" style="display:none;">
+          <div class="card">
+            <div class="card-title">🐕 Details — Einwilligung Hund</div>
+            <div class="fg">
+              <div class="field"><label>Name und Rasse des Hundes *</label><input type="text" id="h_hund" placeholder="z.B. Balu, Labrador-Mix"></div>
+              <div class="field"><label>Fachkraft (Hundehalter/in)</label><input type="text" id="h_fk" placeholder="Name der Fachkraft"></div>
             </div>
           </div>
         </div>
@@ -617,6 +634,22 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
                 Drucken
               </button>
               <button class="btn btn-secondary btn-sm" onclick="blankDownload('vollm')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                PDF
+              </button>
+            </div>
+          </div>
+          <div class="dl-card">
+            <div class="dl-card-info">
+              <div class="dl-card-title">🐕 Einwilligung Hund</div>
+              <div class="dl-card-sub">1–2 Seiten · PDF · Anlage 2 Hunde-Richtlinie</div>
+            </div>
+            <div class="dl-actions">
+              <button class="btn btn-secondary btn-sm" onclick="blankPrint('hund')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Drucken
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="blankDownload('hund')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 PDF
               </button>
@@ -783,8 +816,14 @@ const FL = {
   schweig:    {icon:'🤝', name:'Schweigepflichtsentbindung'},
   datenschutz:{icon:'🔒', name:'Datenschutzerklärung'},
   vollm:      {icon:'⚖️', name:'Vollmacht Sorgerecht'},
-  kompass:    {icon:'🧭', name:'Startkompass'}
+  kompass:    {icon:'🧭', name:'Startkompass'},
+  hund:       {icon:'🐕', name:'Einwilligung Hund'}
 };
+// Fragen der Hunde-Einwilligung (Anlage 2 der Richtlinie „Hunde am Arbeitsplatz“)
+const HUND_FRAGEN=['Tierhaarallergie oder Asthma','Angst vor Hunden','Schlechte Erfahrungen mit Hunden, zum Beispiel ein Biss','Eigene Haustiere im Haushalt','Säugling oder Kleinkind unter 3 Jahren im Haushalt'];
+const HUND_ENTSCHEIDUNG=[['ki_h_e_wohnung','Wir sind einverstanden, dass der oben genannte Hund zu Terminen in unsere Wohnung mitkommt.'],['ki_h_e_frei','Wir sind nur bei Terminen im Freien einverstanden.'],['ki_h_e_kein','Wir möchten keinen Hund bei den Terminen.']];
+const HUND_AUTO='Wir sind einverstanden, dass unser Kind im Auto mitfährt, wenn der Hund gesichert dabei ist.';
+const HUND_WISSEN='Der Hund bleibt angeleint und bei der Fachkraft. Kinder haben nur Kontakt zum Hund, wenn sie es selbst möchten und die Fachkraft dabei ist. Für Schäden durch den Hund haftet die Fachkraft über ihre Tierhalterhaftpflicht. Ein Anruf oder ein Satz beim nächsten Termin genügt, um die Einwilligung zurückzunehmen.';
 
 // ── MSAL INIT ──
 (async ()=>{
@@ -1231,7 +1270,7 @@ function toggleFC(id){
   document.getElementById('dot_formulare').className='tab-dot '+(n>0?'dot-p':'dot-e');
   const _subF = document.getElementById('sub_formulare'); if (_subF) _subF.textContent = n>0?n+' ausgewählt':'Keine ausgewählt';
   // Details-Tab anzeigen wenn Formulare mit Pflichtangaben gewählt
-  const needsDetails=['schweig','vollm','datenschutz','kompass'].some(k=>selForms.has(k));
+  const needsDetails=['schweig','vollm','datenschutz','kompass','hund'].some(k=>selForms.has(k));
   const detTab=document.getElementById('tab_details');
   if(detTab) detTab.style.display=needsDetails?'':'none';
 }
@@ -1240,7 +1279,7 @@ function goToDetails(){
   if(!kd.name){alert('Bitte zuerst Stammdaten speichern.');showPanel('stamm');return;}
   document.getElementById('noFormWarn').style.display='none';
   // Braucht irgendein gewähltes Formular Details?
-  const needsDetails=['schweig','vollm','datenschutz','kompass'].some(k=>selForms.has(k));
+  const needsDetails=['schweig','vollm','datenschutz','kompass','hund'].some(k=>selForms.has(k));
   if(!needsDetails){
     // Direkt zur Übergabe springen
     buildSummary();
@@ -1250,13 +1289,15 @@ function goToDetails(){
   // Details-Panel befüllen
   document.getElementById('det_schweig').style.display=selForms.has('schweig')?'block':'none';
   document.getElementById('det_vollm').style.display=selForms.has('vollm')?'block':'none';
+  document.getElementById('det_hund').style.display=selForms.has('hund')?'block':'none';
+  { const hf=document.getElementById('h_fk'); if(hf&&!hf.value) hf.value=kd.fk||''; }
   // Fachkraft vorausfüllen
   if(document.getElementById('s_vertr')) document.getElementById('s_vertr').value=kd.fk||'';
   if(document.getElementById('v_fk1'))   document.getElementById('v_fk1').value=kd.fk||'';
   // Kind-Name aus Stammdaten vorausfüllen (wenn vorhanden)
   const vkind=document.getElementById('v_kind');
   if(vkind&&!vkind.dataset.manuallyEdited&&kd.name) vkind.value=kd.name;
-  const _needUnterz=selForms.has('schweig')||selForms.has('datenschutz')||selForms.has('kompass');
+  const _needUnterz=selForms.has('schweig')||selForms.has('datenschutz')||selForms.has('kompass')||selForms.has('hund');
   document.getElementById('det_unterz').style.display=_needUnterz?'block':'none';
   if(_needUnterz) schweigListeInit();
   if(selForms.has('vollm')) vollmListeInit();
@@ -1273,13 +1314,21 @@ function goToHandover(){
       return;
     }
   }
+  if(selForms.has('hund')){
+    const hh=document.getElementById('h_hund');
+    if(hh&&!hh.value.trim()){
+      document.getElementById('detailWarn').style.display='block';
+      hh.focus();
+      return;
+    }
+  }
   document.getElementById('detailWarn').style.display='none';
   buildSummary();
   showPanel('uebergabe');
 }
 
 function goBackFromHandover(){
-  const needsDetails=['schweig','vollm','datenschutz','kompass'].some(k=>selForms.has(k));
+  const needsDetails=['schweig','vollm','datenschutz','kompass','hund'].some(k=>selForms.has(k));
   showPanel(needsDetails?'details':'formulare');
 }
 
@@ -1405,6 +1454,42 @@ function buildStep(fid,idx){
         <button type="button" class="btn-add" onclick="addWaPerson()" style="margin-top:6px;">+ Person hinzufügen</button>
         <div style="font-size:11px;color:var(--text-hint);margin-top:8px;line-height:1.5;">Hinweis: WhatsApp erhält Zugriff auf Metadaten (Absender, Empfänger, Zeitpunkt) und teilt Nutzerdaten mit der Konzernmutter Meta (USA). Es gibt sichere Messenger-Alternativen — sprechen Sie uns bei Interesse gerne an.</div>
       </div>
+    </div>`;
+  }
+
+  // ── EINWILLIGUNG HUND ──
+  else if(fid==='hund'){
+    const hHund=(document.getElementById('h_hund').value||'').trim()||'_______________';
+    const hFk=(document.getElementById('h_fk').value||'').trim()||kd.fk||M365_USER.displayName;
+    const zeilen=HUND_FRAGEN.map((f,i)=>`
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:14px;">${f}</div>
+        <div style="display:flex;gap:14px;">
+          <label class="kcheck" style="margin:0;"><input type="radio" name="ki_h_q${i}" id="ki_h_q${i}_ja" onchange="document.getElementById('ki_h_q${i}_txtw').style.display='block'"> <span style="font-size:13px;">Ja</span></label>
+          <label class="kcheck" style="margin:0;"><input type="radio" name="ki_h_q${i}" id="ki_h_q${i}_nein" onchange="document.getElementById('ki_h_q${i}_txtw').style.display='none'"> <span style="font-size:13px;">Nein</span></label>
+        </div>
+        <div id="ki_h_q${i}_txtw" style="display:none;grid-column:1/-1;"><input type="text" id="ki_h_q${i}_txt" placeholder="Wer und was?" style="width:100%;font-size:14px;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;"></div>
+      </div>`).join('');
+    html+=`
+    <div class="form-text-box">
+      <h2>Einwilligung der Familie zur Mitnahme eines Hundes</h2>
+      <div class="subtitle">Praxis NeueWege GmbH · Hopfenstr. 22 · 85283 Wolnzach · Familie <strong>${d.nn||'___'}</strong></div>
+      <p>Unsere Fachkraft möchte zu Terminen bei Ihnen ihren Hund mitbringen. Das geschieht nur, wenn Sie einverstanden sind. Ihre Entscheidung hat keinen Einfluss auf die Hilfe, und Sie können sie jederzeit ohne Begründung zurücknehmen.</p>
+      <div class="inst-highlight" style="margin-bottom:6px;">Fachkraft: <strong>${hFk}</strong></div>
+      <div class="inst-highlight">Hund: <strong>${hHund}</strong></div>
+    </div>
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Ihre Angaben — bitte für alle Personen im Haushalt beantworten</div>
+      ${zeilen}
+    </div>
+    <div class="klient-inputs">
+      <div class="klient-inputs-title">Ihre Entscheidung</div>
+      ${HUND_ENTSCHEIDUNG.map(([id,t])=>`<label class="kcheck"><input type="radio" name="ki_h_ent" id="${id}"> <div class="kcheck-label">${t}</div></label>`).join('')}
+      <label class="kcheck" style="margin-top:8px;"><input type="checkbox" id="ki_h_e_auto"> <div class="kcheck-label">${HUND_AUTO}</div></label>
+    </div>
+    <div class="form-text-box">
+      <h3>Wir wissen</h3>
+      <p>${HUND_WISSEN}</p>
     </div>`;
   }
 
@@ -1566,9 +1651,9 @@ function buildStep(fid,idx){
     </div>`;
   }
   const vGebers2=(fid==='vollm')?getAllVollmachtgeber():[];
-  const sUnt=(fid==='schweig'||fid==='datenschutz')?getSchweigUnterzeichner():[];
+  const sUnt=(fid==='schweig'||fid==='datenschutz'||fid==='hund')?getSchweigUnterzeichner():[];
   const sigPersonen=(fid==='vollm')?vGebers2.map((v,i)=>({titel:'Unterschrift '+(v.name||'Vollmachtgeber '+(i+1))+(v.rolle?' ('+v.rolle+')':'')})):sUnt.map(u=>({titel:'Unterschrift '+u.name+' ('+u.rolle+')'}));
-  if((fid==='vollm'&&vGebers2.length>1)||((fid==='schweig'||fid==='datenschutz')&&sUnt.length>1)){
+  if((fid==='vollm'&&vGebers2.length>1)||((fid==='schweig'||fid==='datenschutz'||fid==='hund')&&sUnt.length>1)){
     // Multiple signature pads: one per Vollmachtgeber
     sigPersonen.forEach((vg,i)=>{
       const padId=fid+'_'+i;
@@ -1608,14 +1693,35 @@ function buildStep(fid,idx){
   </div>`;
   }
 
+  if(fid==='hund'){
+    const padJm='hund_jm';
+    html+=`
+    <div class="sig-container">
+      <div class="sig-title">Unterschrift junger Mensch ab 14 Jahren (optional)</div>
+      <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
+      <div class="sig-canvas-wrap" id="sigWrap_${padJm}">
+        <canvas id="sigCanvas_${padJm}" width="600" height="180"></canvas>
+        <div class="sig-hint" id="sigHint_${padJm}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
+          Mit Finger oder Stift unterschreiben (optional)
+        </div>
+      </div>
+      <div class="sig-actions">
+        <span class="sig-status" id="sigStatus_${padJm}">Optional</span>
+        <button class="btn btn-secondary btn-sm" onclick="clearSig('${padJm}')">Löschen</button>
+      </div>
+    </div>`;
+  }
+
   return html;
 }
 
 // ── SIGNATURE PAD ──
 function setupPad(fid){
-  if(fid==='schweig'||fid==='datenschutz'){
+  if(fid==='schweig'||fid==='datenschutz'||fid==='hund'){
     const _u=getSchweigUnterzeichner();
     const padIds=_u.length>1?_u.map((_,i)=>fid+'_'+i):[fid];
+    if(fid==='hund') padIds.push('hund_jm');
     padIds.forEach((padId,i)=>setTimeout(()=>_initPad(padId), i*80));
   } else if(fid==='vollm'){
     const vGebers=getAllVollmachtgeber();
@@ -1763,7 +1869,7 @@ function klNav(dir){
       { const _ke=getSchweigUnterzeichner(); padIds=_ke.length>1?_ke.map((_,i)=>'kompass_eb_'+i):['kompass_eb']; } // kompass_kl is optional
     } else if(fid==='vollm'&&vGebers.length>1){
       padIds=vGebers.map((_,i)=>fid+'_'+i);
-    } else if((fid==='schweig'||fid==='datenschutz')&&getSchweigUnterzeichner().length>1){
+    } else if((fid==='schweig'||fid==='datenschutz'||fid==='hund')&&getSchweigUnterzeichner().length>1){
       padIds=getSchweigUnterzeichner().map((_,i)=>fid+'_'+i);
     } else {
       padIds=[fid];
@@ -1772,6 +1878,11 @@ function klNav(dir){
     if(missing>0){alert(missing>1?'Bitte alle '+missing+' Unterschriften leisten.':'Bitte zuerst unterschreiben.');return;}
     // Validate mandatory checkbox for datenschutz
     if(fid==='datenschutz'){const cb=document.getElementById('ki_ds_basis');if(!cb||!cb.checked){alert('Bitte bestätigen Sie die Pflicht-Einwilligung zur Datenschutzerklärung.');return;}}
+    if(fid==='hund'){
+      const offen=HUND_FRAGEN.filter((_,i)=>!(document.getElementById('ki_h_q'+i+'_ja')||{}).checked&&!(document.getElementById('ki_h_q'+i+'_nein')||{}).checked).length;
+      if(offen>0){alert('Bitte alle Fragen unter „Ihre Angaben“ mit Ja oder Nein beantworten.');return;}
+      if(!HUND_ENTSCHEIDUNG.some(([id])=>(document.getElementById(id)||{}).checked)){alert('Bitte wählen Sie unter „Ihre Entscheidung“ eine Möglichkeit aus.');return;}
+    }
     if(klCurrent===klSteps.length-1){finishKlientMode();return;}
   }
   const old=document.getElementById('kl_'+klCurrent);
@@ -1801,7 +1912,7 @@ function buildFileName(formId){
   const now=kd.datum?new Date(kd.datum):new Date();
   const jj=String(now.getFullYear()).slice(-2);
   const mm=String(now.getMonth()+1).padStart(2,'0');
-  const artMap={schweig:'Schweigepflicht',datenschutz:'Datenschutz',vollm:'Vollmacht',kompass:'Startkompass'};
+  const artMap={schweig:'Schweigepflicht',datenschutz:'Datenschutz',vollm:'Vollmacht',kompass:'Startkompass',hund:'EinwilligungHund'};
   const art=artMap[formId]||FL[formId].name.replace(/\s+/g,'');
   return `${nn}${vv}_${art}_${jj}${mm}.pdf`;
 }
@@ -1874,8 +1985,8 @@ function generatePDF(formId, blank, pre){
   const ACC=[123,63,30],MUTED=[140,130,120],LIGHT=[245,237,231],BRD=[220,215,208],WHITE=[255,255,255];
   const F='Kodchasan';
   let y=0;
-  const CODES={schweig:'SW',datenschutz:'DS',vollm:'VM',kompass:'SK'};
-  const CATS={schweig:'SCHWEIGEPFLICHT · ENTBINDUNG',datenschutz:'DATENSCHUTZ · ART. 13 DSGVO',vollm:'VOLLMACHT · ELTERLICHE SORGE',kompass:'STARTKOMPASS · ERSTAUFNAHME'};
+  const CODES={schweig:'SW',datenschutz:'DS',vollm:'VM',kompass:'SK',hund:'HU'};
+  const CATS={schweig:'SCHWEIGEPFLICHT · ENTBINDUNG',datenschutz:'DATENSCHUTZ · ART. 13 DSGVO',vollm:'VOLLMACHT · ELTERLICHE SORGE',kompass:'STARTKOMPASS · ERSTAUFNAHME',hund:'ANLAGE 2 · RICHTLINIE HUNDE AM ARBEITSPLATZ'};
   function newPage(){doc.addPage();drawPageHeader(formId,false);y=26;}
   function pageCheck(n=20){if(y+n>PH-22)newPage();}
   // Kopf/Fuß wie im PDF der Berichts-App (Produktion): Farben, Linien, Schriftgrößen
@@ -2230,6 +2341,49 @@ function generatePDF(formId, blank, pre){
     }
   }
 
+  else if(formId==='hund'){
+    const hHund=(($id('h_hund')||{}).value)||'';
+    const hFk=(($id('h_fk')||{}).value)||kdX.fk||'';
+    eyebrow('EINWILLIGUNG · MITNAHME EINES HUNDES');mainTitle('Einwilligung Hund');
+    subtitle('Unsere Fachkraft möchte zu Terminen bei Ihnen ihren Hund mitbringen. Das geschieht nur, wenn Sie einverstanden sind. Ihre Entscheidung hat keinen Einfluss auf die Hilfe, und Sie können sie jederzeit ohne Begründung zurücknehmen.');
+    hRule();
+    fieldRow2('Familie, Name',kdX.nn?('Familie '+kdX.nn):'','Fachkraft',hFk);
+    fieldRow('Name und Rasse des Hundes',hHund,CW,ML);
+    y+=1;capsSection('IHRE ANGABEN');
+    doc.setFont(F,'normal');doc.setFontSize(8);doc.setTextColor(...MUTED);doc.text('Bitte für alle Personen im Haushalt beantworten.',ML,y);y+=5;
+    const cF=ML,cJ=ML+86,cN=ML+101,cT=ML+116,rh=7.5;
+    doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
+    doc.text('FRAGE',cF+2,y);doc.text('JA',cJ,y);doc.text('NEIN',cN,y);doc.text('WENN JA: WER UND WAS?',cT,y);y+=2;
+    const box=(x,yy,chk)=>{doc.setDrawColor(...(chk?ACC:MUTED));doc.setLineWidth(chk?0.5:0.3);doc.roundedRect(x,yy,3.8,3.8,0.5,0.5);if(chk){doc.setFillColor(...ACC);doc.roundedRect(x,yy,3.8,3.8,0.5,0.5,'F');doc.setDrawColor(...WHITE);doc.setLineWidth(0.7);doc.line(x+0.6,yy+2,x+1.6,yy+3);doc.line(x+1.6,yy+3,x+3.3,yy+0.8);}};
+    HUND_FRAGEN.forEach((f,i)=>{
+      const fl=doc.splitTextToSize(f,cJ-cF-6);const h=Math.max(rh,fl.length*3.6+3.5);
+      doc.setFillColor(...LIGHT);doc.rect(cF,y,cJ-cF-3,h,'F');
+      doc.setDrawColor(...BRD);doc.setLineWidth(0.3);doc.rect(cF,y,CW,h);
+      doc.setFont(F,'normal');doc.setFontSize(8.5);doc.setTextColor(26,25,22);doc.text(fl,cF+2,y+4.8);
+      const ja=(($id('ki_h_q'+i+'_ja')||{}).checked)||false, nein=(($id('ki_h_q'+i+'_nein')||{}).checked)||false;
+      box(cJ,y+h/2-1.9,ja);box(cN+1,y+h/2-1.9,nein);
+      const t=(($id('ki_h_q'+i+'_txt')||{}).value)||'';
+      if(ja&&t){doc.setFont(F,'bold');doc.setFontSize(8.5);doc.text(doc.splitTextToSize(t,PW-MR-cT-2),cT,y+5);}
+      y+=h;
+    });
+    y+=4;capsSection('IHRE ENTSCHEIDUNG');
+    HUND_ENTSCHEIDUNG.slice(0,2).forEach(([id,t])=>cbRow(id,t));
+    cbRow('ki_h_e_auto',HUND_AUTO);
+    cbRow('ki_h_e_kein',HUND_ENTSCHEIDUNG[2][1]);
+    y+=2;noteBox('Wir wissen: '+HUND_WISSEN);
+    pageCheck(50);y+=1;capsSection('UNTERSCHRIFT');
+    const _hUnt=blank?((pre&&pre.unterzeichner)||[]):getSchweigUnterzeichner();
+    const _hOD=(kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||'');
+    if(_hUnt.length>1){
+      _hUnt.forEach((u,i)=>personBlock(i+1,_hUnt.length,u,'',_hOD,sigsX['hund_'+i],false));
+    } else {
+      personBlock(1,1,_hUnt[0]||{name:'',rolle:'Sorgeberechtigte/r'},'',_hOD,sigsX['hund'],false);
+    }
+    if((sigsX['hund_jm']&&sigsX['hund_jm'].length>200)||blank){
+      personBlock(1,1,{name:blank?'':(kdX.name||''),rolle:'Junger Mensch ab 14 Jahren'},'',_hOD,sigsX['hund_jm'],false);
+    }
+  }
+
   const tot=doc.getNumberOfPages();
   for(let p=1;p<=tot;p++){doc.setPage(p);drawPageFooter(formId,p,tot);}
   return doc;
@@ -2304,7 +2458,7 @@ function getWaPersonen(){
   return out;
 }
 function _blankName(fid){
-  const map={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass'};
+  const map={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass',hund:'Einwilligung_Hund'};
   return _leerPre ? 'PNW_'+(map[fid]||fid)+_leerFileSuffix()+'.pdf' : 'PNW_Leer_'+(map[fid]||fid)+'.pdf';
 }
 function blankPrint(fid){
@@ -2316,7 +2470,7 @@ function blankDownload(fid){
   catch(e){ alert('PDF-Fehler: '+e.message); }
 }
 async function blankDownloadAll(){
-  const fids=['schweig','datenschutz','vollm','kompass'];
+  const fids=['schweig','datenschutz','vollm','kompass','hund'];
   try{
     if(typeof PDFLib==='undefined'){ fids.forEach(f=>blankDownload(f)); return; }
     const merged=await PDFLib.PDFDocument.create();
@@ -2333,9 +2487,9 @@ async function blankDownloadAll(){
   }catch(e){ alert('PDF-Fehler: '+e.message); }
 }
 // ── BLANKO AUS DER FORMULARAUSWAHL (Download / Druck / Mailversand) ──
-const _BLANKO_ORDER=['kompass','schweig','datenschutz','vollm'];
-const _BLANKO_NAMEN={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass'};
-const _BLANKO_TITEL={schweig:'🤝 Schweigepflichtsentbindung',datenschutz:'🔒 Datenschutzerklärung',vollm:'⚖️ Vollmacht Sorgerecht',kompass:'🧭 Startkompass'};
+const _BLANKO_ORDER=['kompass','schweig','datenschutz','vollm','hund'];
+const _BLANKO_NAMEN={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass',hund:'Einwilligung_Hund'};
+const _BLANKO_TITEL={schweig:'🤝 Schweigepflichtsentbindung',datenschutz:'🔒 Datenschutzerklärung',vollm:'⚖️ Vollmacht Sorgerecht',kompass:'🧭 Startkompass',hund:'🐕 Einwilligung Hund'};
 function _blankoFids(){ return _BLANKO_ORDER.filter(f=>selForms.has(f)); }
 // Vorbefüllung aus den aktuellen Stammdaten-Feldern (ungespeicherte Änderungen zählen mit); Datum/Unterschriften bleiben leer
 function _blankoPre(){
