@@ -829,5 +829,50 @@ const NM = (function () {
     try { btn.disabled = true; await sendePlanMails(m, ziele); btn.textContent = '✓ Benachrichtigt: ' + ziele.map(z => z.name).join(' und '); zeigeToast('Benachrichtigung gesendet'); }
     catch (e) { err.textContent = e.message; btn.disabled = false; }
   }
-  return { laden, view, vorlagenView, bind, upnVorschlag, benachrichtigen, planEmpfaenger, gehaltBerechnen, eur, parseZahl, TABELLE };
+
+  /* Mentor:in und Teamleitung eines bestehenden Plans ändern (Geschäftsführung, auch nach der Freigabe).
+     Die Freigabe der geänderten Rolle entfällt; der Plan geht zurück „in Abstimmung“, bis die neue Person freigegeben hat. */
+  function planBeteiligte(mid) {
+    const m = mitarbeiterListe.find(e => e.id === mid); if (!m || demoMode) return;
+    ensureOverlay(); byId2('nmTitel').textContent = 'Mentor:in und Teamleitung: ' + m.name;
+    const f = (idn, label, wert, hint) => '<div class="feld feld-voll"><label for="' + idn + '">' + label + '</label><input id="' + idn + '" value="' + esc(wert || '') + '" placeholder="vorname.nachname@' + MAIL_DOMAIN + '" list="nmPListe">' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+    byId2('nmInhalt').innerHTML = '<div class="felder">' +
+      f('nmBMentor', 'Mentor:in (Anmeldename)', m.mentorUpn, 'Aktuell: ' + esc(m.mentorName || '–') + '. Wähle aus der Liste oder tippe die Adresse.') +
+      f('nmBTl', 'Teamleitung (Anmeldename)', m.tlUpn, 'Aktuell: ' + esc(m.tlName || '–')) + '<datalist id="nmPListe"></datalist>' +
+      '<div class="feld feld-voll"><label class="chk"><input type="checkbox" id="nmBMgr" checked> Teamleitung in Microsoft 365 als Vorgesetzte setzen' + (m.upn ? ' (' + esc(m.upn) + ')' : ' (kein M365-Konto hinterlegt)') + '</label></div></div>' +
+      '<p class="ea-item-desc" style="margin:10px 0">Die Freigabe einer geänderten Rolle entfällt, der Plan steht dann wieder „in Abstimmung“. Der Plan selbst bleibt unverändert.</p>' +
+      '<div class="dlg-err" id="nmFehler"></div><div class="dialog-actions"><button class="btn btn-solid" id="nmBGo">Speichern</button><button class="btn btn-outline" id="nmKAbbr">Abbrechen</button></div>';
+    byId2('nmKAbbr').onclick = schliesse; byId2('nmBGo').onclick = () => planBeteiligteSpeichern(mid);
+    byId2('nmOverlay').classList.add('open');
+    vorschlaege().then(l => { const dl = byId2('nmPListe'); if (dl) dl.innerHTML = l.map(e => '<option value="' + esc(e.upn) + '">' + esc(e.name) + '</option>').join(''); }).catch(() => {});
+  }
+  async function planBeteiligteSpeichern(mid) {
+    const m = mitarbeiterListe.find(e => e.id === mid); const err = byId2('nmFehler'), btn = byId2('nmBGo'); err.textContent = '';
+    const mUpn = byId2('nmBMentor').value.trim().toLowerCase(), tUpn = byId2('nmBTl').value.trim().toLowerCase(), setzeMgr = byId2('nmBMgr').checked;
+    const gueltig = u => /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(u);
+    if (!gueltig(mUpn) || !gueltig(tUpn)) { err.textContent = 'Bitte Mentor:in und Teamleitung als gültigen Anmeldenamen angeben.'; return; }
+    const mentorNeu = mUpn !== String(m.mentorUpn || '').toLowerCase(), tlNeu = tUpn !== String(m.tlUpn || '').toLowerCase();
+    if (!mentorNeu && !tlNeu) { schliesse(); return; }
+    try {
+      btn.disabled = true; btn.textContent = 'Arbeite …';
+      const holen = async upn => { const r = await ga('GET', '/users/' + encodeURIComponent(upn) + '?$select=id,displayName'); if (!r.ok) throw new Error('„' + upn + '“ wurde in Microsoft 365 nicht gefunden.'); return r.json; };
+      const mentor = mentorNeu ? await holen(mUpn) : { displayName: m.mentorName }, tl = tlNeu ? (mUpn === tUpn && mentorNeu ? mentor : await holen(tUpn)) : { displayName: m.tlName };
+      const fr = (() => { try { return JSON.parse(m.planFreigaben || '{}') || {}; } catch (e) { return {}; } })();
+      if (mentorNeu) delete fr.mentor; if (tlNeu) delete fr.tl;
+      const felder = { mentorName: mentor.displayName, mentorUpn: mUpn, tlName: tl.displayName, tlUpn: tUpn, planFreigaben: JSON.stringify(fr), planStatus: 'abstimmung' };
+      await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, Object.assign({ id: m.id }, felder)); Object.assign(m, felder);
+      let hinweis = '';
+      if (tlNeu && setzeMgr && m.upn) {
+        const u = await ga('GET', '/users/' + encodeURIComponent(m.upn) + '?$select=id');
+        if (u.ok) { const r = await ga('PUT', '/users/' + u.json.id + '/manager/$ref', { '@odata.id': 'https://graph.microsoft.com/v1.0/users/' + (await holen(tUpn)).id }); hinweis = r.ok ? ' Vorgesetzte(r) in M365 gesetzt.' : ' Vorgesetzte(r) nicht gesetzt: ' + gaFehlerKurz(r); }
+        else hinweis = ' Konto ' + m.upn + ' nicht gefunden, Vorgesetzte(r) nicht gesetzt.';
+      }
+      schliesse(); render(); zeigeToast('Gespeichert.' + hinweis);
+      const ziele = planEmpfaenger(m).filter(z => (mentorNeu && z.upn === mUpn) || (tlNeu && z.upn === tUpn));
+      if (ziele.length && confirm('Neue Beteiligte jetzt benachrichtigen: ' + empfaengerText(ziele) + '?')) {
+        try { await sendePlanMails(m, ziele); zeigeToast('Benachrichtigung gesendet an ' + ziele.map(z => z.name).join(' und ')); } catch (e) { zeigeToast(e.message, true); }
+      }
+    } catch (e) { err.textContent = e.message; btn.disabled = false; btn.textContent = 'Speichern'; }
+  }
+  return { laden, view, vorlagenView, bind, upnVorschlag, benachrichtigen, planBeteiligte, planEmpfaenger, gehaltBerechnen, eur, parseZahl, TABELLE };
 })();
