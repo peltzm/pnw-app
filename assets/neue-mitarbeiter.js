@@ -712,20 +712,40 @@ const NM = (function () {
     }
     return Array.from(out.entries()).map(([upn, name]) => ({ upn, name })).sort((a, b) => a.name.localeCompare(b.name, 'de'));
   }
+  async function gruppeMitglieder(gname) {
+    const out = [];
+    try {
+      const g = await ga('GET', '/groups?$filter=' + encodeURIComponent("displayName eq '" + gname + "'") + '&$select=id');
+      const id = g.ok && g.json.value && g.json.value[0] && g.json.value[0].id; if (!id) return out;
+      (await gaAlle('/groups/' + id + '/members/microsoft.graph.user?$select=displayName,userPrincipalName&$top=200')).forEach(u => out.push({ upn: String(u.userPrincipalName).toLowerCase(), name: u.displayName }));
+    } catch (e) { /* Gruppe nicht lesbar: Auswahl enthält dann nur den aktuellen Eintrag */ }
+    return out.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  }
+  const waehlFeld = (idn, label, aktuellUpn, aktuellName, hint) => '<div class="feld feld-voll"><label for="' + idn + '">' + label + '</label><select id="' + idn + '" data-aktuell="' + esc(aktuellUpn || '') + '" data-name="' + esc(aktuellName || '') + '"><option value="">Wird geladen …</option></select>' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+  function fuelleWahl(idn, liste) {
+    const sel = byId2(idn); if (!sel) return;
+    const akt = (sel.getAttribute('data-aktuell') || '').toLowerCase(), aname = sel.getAttribute('data-name') || akt;
+    const l = liste.slice(); if (akt && !l.some(e => e.upn === akt)) l.unshift({ upn: akt, name: aname });
+    sel.innerHTML = '<option value="">Bitte wählen …</option>' + l.map(e => '<option value="' + esc(e.upn) + '"' + (e.upn === akt ? ' selected' : '') + '>' + esc(e.name) + '</option>').join('');
+  }
+  function ladeWahlen(mentorId, tlId) {
+    gruppeMitglieder('Team').then(l => fuelleWahl(mentorId, l)).catch(() => fuelleWahl(mentorId, []));
+    gruppeMitglieder('TL-Ambulant').then(l => fuelleWahl(tlId, l)).catch(() => fuelleWahl(tlId, []));
+  }
   function planDialog(id) {
     const x = eintrag(id); if (!x || demoMode) return;
     ensureOverlay(); byId2('nmTitel').textContent = 'Einarbeitungsplan: ' + x.name;
     const m = x.mitarbeiterId && mitarbeiterListe.find(e => e.id === x.mitarbeiterId);
     const f = (idn, label, wert, hint, ph, liste) => '<div class="feld feld-voll"><label for="' + idn + '">' + label + '</label><input id="' + idn + '" value="' + esc(wert || '') + '" placeholder="' + esc(ph || '') + '"' + (liste ? ' list="' + liste + '"' : '') + '>' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
     byId2('nmInhalt').innerHTML = '<div class="felder">' +
-      f('nmPMentor', 'Mentor:in (Anmeldename)', m && m.mentorUpn, 'Wähle aus der Liste oder tippe die Adresse.', 'vorname.nachname@' + MAIL_DOMAIN, 'nmPListe') +
-      f('nmPTl', 'Teamleitung (Anmeldename)', m && m.tlUpn, '', 'vorname.nachname@' + MAIL_DOMAIN, 'nmPListe') + '<datalist id="nmPListe"></datalist>' +
+      waehlFeld('nmPMentor', 'Mentor:in', m && m.mentorUpn, m && m.mentorName, 'Alle Mitarbeitenden der Gruppe „Team“.') +
+      waehlFeld('nmPTl', 'Teamleitung', m && m.tlUpn, m && m.tlName, 'Teamleitungen aus der Gruppe „TL-Ambulant“.') +
       '<div class="feld feld-voll"><label class="chk"><input type="checkbox" id="nmPMgr" checked> Teamleitung in Microsoft 365 als Vorgesetzte setzen' + (x.upn ? ' (' + esc(x.upn) + ')' : ' (erst möglich, wenn ein M365-Konto angelegt ist)') + '</label></div></div>' +
       '<p class="ea-item-desc" style="margin:10px 0">Aus der Vorlage entsteht ein <b>eigener Plan für ' + esc(x.vorname) + '</b>, den Mentor:in, Teamleitung und Geschäftsführung anpassen und freigeben. Bis dahin sieht ' + esc(x.vorname) + ' den Plan nicht.' + (m && hatEigenenPlan(m.id) ? ' <b>Für diese Person besteht schon ein Plan, er wird nicht neu erzeugt.</b>' : '') + '</p>' +
       '<div class="dlg-err" id="nmFehler"></div><div class="dialog-actions"><button class="btn btn-solid" id="nmPGo">Plan erzeugen</button><button class="btn btn-outline" id="nmKAbbr">Abbrechen</button></div>';
     byId2('nmKAbbr').onclick = schliesse; byId2('nmPGo').onclick = () => planErzeugen(id);
     byId2('nmOverlay').classList.add('open');
-    vorschlaege().then(l => { const dl = byId2('nmPListe'); if (dl) dl.innerHTML = l.map(e => '<option value="' + esc(e.upn) + '">' + esc(e.name) + '</option>').join(''); }).catch(() => {});
+    ladeWahlen('nmPMentor', 'nmPTl');
   }
   async function kopiereVorlage(mid) {
     const vorlage = vorlageZeilen(); if (!vorlage.length) throw new Error('Die Vorlage („Fahrplan verwalten“) ist leer.');
@@ -755,7 +775,7 @@ const NM = (function () {
     const x = eintrag(id); const err = byId2('nmFehler'); const btn = byId2('nmPGo'); err.textContent = '';
     const mUpn = byId2('nmPMentor').value.trim().toLowerCase(), tUpn = byId2('nmPTl').value.trim().toLowerCase(), setzeMgr = byId2('nmPMgr').checked;
     const gueltig = u => /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(u);
-    if (!gueltig(mUpn) || !gueltig(tUpn)) { err.textContent = 'Bitte Mentor:in und Teamleitung als gültigen Anmeldenamen angeben.'; return; }
+    if (!gueltig(mUpn) || !gueltig(tUpn)) { err.textContent = 'Bitte Mentor:in und Teamleitung auswählen.'; return; }
     const schritte = []; const ok = (a, b, st) => schritte.push({ a, b, st: st || 'ok' });
     try {
       btn.disabled = true; btn.textContent = 'Arbeite …';
@@ -835,22 +855,21 @@ const NM = (function () {
   function planBeteiligte(mid) {
     const m = mitarbeiterListe.find(e => e.id === mid); if (!m || demoMode) return;
     ensureOverlay(); byId2('nmTitel').textContent = 'Mentor:in und Teamleitung: ' + m.name;
-    const f = (idn, label, wert, hint) => '<div class="feld feld-voll"><label for="' + idn + '">' + label + '</label><input id="' + idn + '" value="' + esc(wert || '') + '" placeholder="vorname.nachname@' + MAIL_DOMAIN + '" list="nmPListe">' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
     byId2('nmInhalt').innerHTML = '<div class="felder">' +
-      f('nmBMentor', 'Mentor:in (Anmeldename)', m.mentorUpn, 'Aktuell: ' + esc(m.mentorName || '–') + '. Wähle aus der Liste oder tippe die Adresse.') +
-      f('nmBTl', 'Teamleitung (Anmeldename)', m.tlUpn, 'Aktuell: ' + esc(m.tlName || '–')) + '<datalist id="nmPListe"></datalist>' +
+      waehlFeld('nmBMentor', 'Mentor:in', m.mentorUpn, m.mentorName, 'Alle Mitarbeitenden der Gruppe „Team“.') +
+      waehlFeld('nmBTl', 'Teamleitung', m.tlUpn, m.tlName, 'Teamleitungen aus der Gruppe „TL-Ambulant“.') +
       '<div class="feld feld-voll"><label class="chk"><input type="checkbox" id="nmBMgr" checked> Teamleitung in Microsoft 365 als Vorgesetzte setzen' + (m.upn ? ' (' + esc(m.upn) + ')' : ' (kein M365-Konto hinterlegt)') + '</label></div></div>' +
       '<p class="ea-item-desc" style="margin:10px 0">Die Freigabe einer geänderten Rolle entfällt, der Plan steht dann wieder „in Abstimmung“. Der Plan selbst bleibt unverändert.</p>' +
       '<div class="dlg-err" id="nmFehler"></div><div class="dialog-actions"><button class="btn btn-solid" id="nmBGo">Speichern</button><button class="btn btn-outline" id="nmKAbbr">Abbrechen</button></div>';
     byId2('nmKAbbr').onclick = schliesse; byId2('nmBGo').onclick = () => planBeteiligteSpeichern(mid);
     byId2('nmOverlay').classList.add('open');
-    vorschlaege().then(l => { const dl = byId2('nmPListe'); if (dl) dl.innerHTML = l.map(e => '<option value="' + esc(e.upn) + '">' + esc(e.name) + '</option>').join(''); }).catch(() => {});
+    ladeWahlen('nmBMentor', 'nmBTl');
   }
   async function planBeteiligteSpeichern(mid) {
     const m = mitarbeiterListe.find(e => e.id === mid); const err = byId2('nmFehler'), btn = byId2('nmBGo'); err.textContent = '';
     const mUpn = byId2('nmBMentor').value.trim().toLowerCase(), tUpn = byId2('nmBTl').value.trim().toLowerCase(), setzeMgr = byId2('nmBMgr').checked;
     const gueltig = u => /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(u);
-    if (!gueltig(mUpn) || !gueltig(tUpn)) { err.textContent = 'Bitte Mentor:in und Teamleitung als gültigen Anmeldenamen angeben.'; return; }
+    if (!gueltig(mUpn) || !gueltig(tUpn)) { err.textContent = 'Bitte Mentor:in und Teamleitung auswählen.'; return; }
     const mentorNeu = mUpn !== String(m.mentorUpn || '').toLowerCase(), tlNeu = tUpn !== String(m.tlUpn || '').toLowerCase();
     if (!mentorNeu && !tlNeu) { schliesse(); return; }
     try {
