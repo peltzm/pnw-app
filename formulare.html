@@ -471,7 +471,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
           <div class="fc" id="fc_hund" onclick="toggleFC('hund')">
             <div class="fc-check"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <div class="fc-icon">🐕</div>
-            <div class="fc-title">Einwilligung Hund</div>
+            <div class="fc-title">Einwilligung der Familie zur Mitnahme eines Hundes</div>
             <div class="fc-desc">Einverständnis der Familie zur Mitnahme des Hundes der Fachkraft (Anlage 2 der Hunde-Richtlinie).</div>
           </div>
         </div>
@@ -501,7 +501,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
         <div id="det_unterz" style="display:none;">
           <div class="card">
             <div class="card-title">✍️ Unterzeichnende — Sorgeberechtigte</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Vorbefüllt aus Kilanka (Eltern und Sorgeberechtigte). Nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere Personen hinzufügen. Gilt für Schweigepflichtsentbindung, Datenschutzerklärung, Startkompass und Einwilligung Hund.</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Vorbefüllt aus Kilanka (Eltern und Sorgeberechtigte). Nicht unterzeichnende Personen mit „Entfernen“ löschen, weitere Personen hinzufügen. Gilt für Schweigepflichtsentbindung, Datenschutzerklärung, Startkompass und Einwilligung der Familie zur Mitnahme eines Hundes.</div>
             <div id="schweig_list"></div>
             <button class="btn-add" onclick="addSchweigPerson()" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -540,7 +540,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
         <!-- Hund Details -->
         <div id="det_hund" style="display:none;">
           <div class="card">
-            <div class="card-title">🐕 Details — Einwilligung Hund</div>
+            <div class="card-title">🐕 Details — Einwilligung der Familie zur Mitnahme eines Hundes</div>
             <div class="fg">
               <div class="field"><label>Name und Rasse des Hundes *</label><input type="text" id="h_hund" placeholder="z.B. Balu, Labrador-Mix"></div>
               <div class="field"><label>Fachkraft (Hundehalter/in)</label><input type="text" id="h_fk" placeholder="Name der Fachkraft"></div>
@@ -641,7 +641,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
           </div>
           <div class="dl-card">
             <div class="dl-card-info">
-              <div class="dl-card-title">🐕 Einwilligung Hund</div>
+              <div class="dl-card-title">🐕 Einwilligung der Familie zur Mitnahme eines Hundes</div>
               <div class="dl-card-sub">1 Seite · PDF · Anlage 2 Hunde-Richtlinie</div>
             </div>
             <div class="dl-actions">
@@ -817,7 +817,7 @@ const FL = {
   datenschutz:{icon:'🔒', name:'Datenschutzerklärung'},
   vollm:      {icon:'⚖️', name:'Vollmacht Sorgerecht'},
   kompass:    {icon:'🧭', name:'Startkompass'},
-  hund:       {icon:'🐕', name:'Einwilligung Hund'}
+  hund:       {icon:'🐕', name:'Einwilligung der Familie zur Mitnahme eines Hundes'}
 };
 // Fragen der Hunde-Einwilligung (Anlage 2 der Richtlinie „Hunde am Arbeitsplatz“)
 const HUND_FRAGEN=['Tierhaarallergie oder Asthma','Angst vor Hunden','Schlechte Erfahrungen mit Hunden, zum Beispiel ein Biss','Eigene Haustiere im Haushalt','Säugling oder Kleinkind unter 3 Jahren im Haushalt'];
@@ -1890,7 +1890,7 @@ function buildFileName(formId){
   const now=kd.datum?new Date(kd.datum):new Date();
   const jj=String(now.getFullYear()).slice(-2);
   const mm=String(now.getMonth()+1).padStart(2,'0');
-  const artMap={schweig:'Schweigepflicht',datenschutz:'Datenschutz',vollm:'Vollmacht',kompass:'Startkompass',hund:'EinwilligungHund'};
+  const artMap={schweig:'Schweigepflicht',datenschutz:'Datenschutz',vollm:'Vollmacht',kompass:'Startkompass',hund:'EinwilligungFamilieHund'};
   const art=artMap[formId]||FL[formId].name.replace(/\s+/g,'');
   return `${nn}${vv}_${art}_${jj}${mm}.pdf`;
 }
@@ -2322,7 +2322,7 @@ function generatePDF(formId, blank, pre){
   else if(formId==='hund'){
     const hHund=(($id('h_hund')||{}).value)||'';
     const hFk=(($id('h_fk')||{}).value)||kdX.fk||'';
-    eyebrow('EINWILLIGUNG · MITNAHME EINES HUNDES');mainTitle('Einwilligung Hund');
+    eyebrow('EINWILLIGUNG · HUNDE AM ARBEITSPLATZ');doc.setFont(F,'bold');doc.setFontSize(17);doc.setTextColor(...ACC);doc.text('Einwilligung der Familie zur Mitnahme eines Hundes',ML,y);y+=11;
     subtitle('Unsere Fachkraft möchte zu Terminen bei Ihnen ihren Hund mitbringen. Das geschieht nur, wenn Sie einverstanden sind. Ihre Entscheidung hat keinen Einfluss auf die Hilfe, und Sie können sie jederzeit ohne Begründung zurücknehmen.');
     hRule();
     fieldRow2('Familie, Name',kdX.nn?('Familie '+kdX.nn):'','Fachkraft',hFk);
@@ -2447,7 +2447,7 @@ function getWaPersonen(){
   return out;
 }
 function _blankName(fid){
-  const map={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass',hund:'Einwilligung_Hund'};
+  const map={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass',hund:'Einwilligung_Familie_Mitnahme_Hund'};
   return _leerPre ? 'PNW_'+(map[fid]||fid)+_leerFileSuffix()+'.pdf' : 'PNW_Leer_'+(map[fid]||fid)+'.pdf';
 }
 function blankPrint(fid){
@@ -2477,8 +2477,8 @@ async function blankDownloadAll(){
 }
 // ── BLANKO AUS DER FORMULARAUSWAHL (Download / Druck / Mailversand) ──
 const _BLANKO_ORDER=['kompass','schweig','datenschutz','vollm','hund'];
-const _BLANKO_NAMEN={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass',hund:'Einwilligung_Hund'};
-const _BLANKO_TITEL={schweig:'🤝 Schweigepflichtsentbindung',datenschutz:'🔒 Datenschutzerklärung',vollm:'⚖️ Vollmacht Sorgerecht',kompass:'🧭 Startkompass',hund:'🐕 Einwilligung Hund'};
+const _BLANKO_NAMEN={schweig:'Schweigepflichtsentbindung',datenschutz:'Datenschutzerklaerung',vollm:'Vollmacht_Sorgerecht',kompass:'Startkompass',hund:'Einwilligung_Familie_Mitnahme_Hund'};
+const _BLANKO_TITEL={schweig:'🤝 Schweigepflichtsentbindung',datenschutz:'🔒 Datenschutzerklärung',vollm:'⚖️ Vollmacht Sorgerecht',kompass:'🧭 Startkompass',hund:'🐕 Einwilligung der Familie zur Mitnahme eines Hundes'};
 function _blankoFids(){ return _BLANKO_ORDER.filter(f=>selForms.has(f)); }
 // Vorbefüllung aus den aktuellen Stammdaten-Feldern (ungespeicherte Änderungen zählen mit); Datum/Unterschriften bleiben leer
 function _blankoPre(){
