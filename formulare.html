@@ -642,7 +642,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;}
           <div class="dl-card">
             <div class="dl-card-info">
               <div class="dl-card-title">🐕 Einwilligung Hund</div>
-              <div class="dl-card-sub">1–2 Seiten · PDF · Anlage 2 Hunde-Richtlinie</div>
+              <div class="dl-card-sub">1 Seite · PDF · Anlage 2 Hunde-Richtlinie</div>
             </div>
             <div class="dl-actions">
               <button class="btn btn-secondary btn-sm" onclick="blankPrint('hund')">
@@ -1692,27 +1692,6 @@ function buildStep(fid,idx){
     </div>
   </div>`;
   }
-
-  if(fid==='hund'){
-    const padJm='hund_jm';
-    html+=`
-    <div class="sig-container">
-      <div class="sig-title">Unterschrift junger Mensch ab 14 Jahren (optional)</div>
-      <div class="sig-meta">${d.name||''}${kd.datum?' · '+fmtDate(kd.datum):''}</div>
-      <div class="sig-canvas-wrap" id="sigWrap_${padJm}">
-        <canvas id="sigCanvas_${padJm}" width="600" height="180"></canvas>
-        <div class="sig-hint" id="sigHint_${padJm}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l-7-7 7-7"/><path d="M19 12H5"/></svg>
-          Mit Finger oder Stift unterschreiben (optional)
-        </div>
-      </div>
-      <div class="sig-actions">
-        <span class="sig-status" id="sigStatus_${padJm}">Optional</span>
-        <button class="btn btn-secondary btn-sm" onclick="clearSig('${padJm}')">Löschen</button>
-      </div>
-    </div>`;
-  }
-
   return html;
 }
 
@@ -1721,7 +1700,6 @@ function setupPad(fid){
   if(fid==='schweig'||fid==='datenschutz'||fid==='hund'){
     const _u=getSchweigUnterzeichner();
     const padIds=_u.length>1?_u.map((_,i)=>fid+'_'+i):[fid];
-    if(fid==='hund') padIds.push('hund_jm');
     padIds.forEach((padId,i)=>setTimeout(()=>_initPad(padId), i*80));
   } else if(fid==='vollm'){
     const vGebers=getAllVollmachtgeber();
@@ -2349,7 +2327,7 @@ function generatePDF(formId, blank, pre){
     hRule();
     fieldRow2('Familie, Name',kdX.nn?('Familie '+kdX.nn):'','Fachkraft',hFk);
     fieldRow('Name und Rasse des Hundes',hHund,CW,ML);
-    y+=1;capsSection('IHRE ANGABEN');
+    capsSection('IHRE ANGABEN');
     doc.setFont(F,'normal');doc.setFontSize(8);doc.setTextColor(...MUTED);doc.text('Bitte für alle Personen im Haushalt beantworten.',ML,y);y+=5;
     const cF=ML,cJ=ML+86,cN=ML+101,cT=ML+116,rh=7.5;
     doc.setFont(F,'normal');doc.setFontSize(7);doc.setTextColor(...MUTED);
@@ -2366,22 +2344,33 @@ function generatePDF(formId, blank, pre){
       if(ja&&t){doc.setFont(F,'bold');doc.setFontSize(8.5);doc.text(doc.splitTextToSize(t,PW-MR-cT-2),cT,y+5);}
       y+=h;
     });
-    y+=4;capsSection('IHRE ENTSCHEIDUNG');
+    y+=3;capsSection('IHRE ENTSCHEIDUNG');
     HUND_ENTSCHEIDUNG.slice(0,2).forEach(([id,t])=>cbRow(id,t));
     cbRow('ki_h_e_auto',HUND_AUTO);
     cbRow('ki_h_e_kein',HUND_ENTSCHEIDUNG[2][1]);
-    y+=2;noteBox('Wir wissen: '+HUND_WISSEN);
-    pageCheck(50);y+=1;capsSection('UNTERSCHRIFT');
+    noteBox('Wir wissen: '+HUND_WISSEN);
+    capsSection('UNTERSCHRIFT');
     const _hUnt=blank?((pre&&pre.unterzeichner)||[]):getSchweigUnterzeichner();
     const _hOD=(kdX.ort||'Wolnzach')+', '+fmtDate(kdX.datum||'');
-    if(_hUnt.length>1){
-      _hUnt.forEach((u,i)=>personBlock(i+1,_hUnt.length,u,'',_hOD,sigsX['hund_'+i],false));
-    } else {
-      personBlock(1,1,_hUnt[0]||{name:'',rolle:'Sorgeberechtigte/r'},'',_hOD,sigsX['hund'],false);
-    }
-    if((sigsX['hund_jm']&&sigsX['hund_jm'].length>200)||blank){
-      personBlock(1,1,{name:blank?'':(kdX.name||''),rolle:'Junger Mensch ab 14 Jahren'},'',_hOD,sigsX['hund_jm'],false);
-    }
+    // Kompakte Unterschriftsblöcke nebeneinander (2 pro Zeile), damit das Formular auf eine A4-Seite passt
+    const _hList=_hUnt.length?_hUnt:[{name:'',rolle:'Sorgeberechtigte/r'},{name:'',rolle:'Sorgeberechtigte/r'}];
+    const bw=(CW-6)/2,bh=30;
+    _hList.forEach((u,i)=>{
+      if(i%2===0) pageCheck(bh+4);
+      const bx=ML+(i%2)*(bw+6),by=y;
+      doc.setFillColor(...LIGHT);doc.rect(bx+0.3,by+0.3,bw-0.6,6.4,'F');
+      doc.setDrawColor(...BRD);doc.setLineWidth(0.4);doc.roundedRect(bx,by,bw,bh,1.6,1.6,'S');
+      doc.setFont(F,'bold');doc.setFontSize(6.8);doc.setTextColor(...ACC);
+      doc.text(('UNTERZEICHNENDE/R'+(u.rolle?' · '+String(u.rolle).toUpperCase():'')),bx+4,by+4.6);
+      doc.setFont(F,'normal');doc.setFontSize(6.5);doc.setTextColor(...MUTED);doc.text('NAME, VORNAME · ORT, DATUM',bx+4,by+10.5);
+      doc.setFont(F,'bold');doc.setFontSize(9);doc.setTextColor(26,25,22);
+      doc.text(doc.splitTextToSize((u.name||'')+(u.name?'  ·  ':'')+(blank&&!kdX.datum?'':_hOD),bw-8)[0]||'',bx+4,by+14.5);
+      const sig=sigsX[_hUnt.length>1?'hund_'+i:'hund'];
+      if(sig&&sig.length>200){try{doc.addImage(sig,'PNG',bx+4,by+15.5,Math.min(bw*0.6,50),10);}catch(e){}}
+      doc.setDrawColor(190,180,170);doc.setLineWidth(0.3);doc.line(bx+4,by+26,bx+bw-4,by+26);
+      doc.setFont(F,'normal');doc.setFontSize(6.5);doc.setTextColor(...MUTED);doc.text('UNTERSCHRIFT',bx+4,by+28.6);
+      if(i%2===1||i===_hList.length-1) y+=bh+4;
+    });
   }
 
   const tot=doc.getNumberOfPages();
