@@ -12,9 +12,9 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfmake@0.2.23/build/pdfmake.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-<script src="assets/nm-pdf.js?v=20261015b"></script>
-<script src="assets/nm-docx.js?v=20261015b"></script>
-<script src="assets/neue-mitarbeiter.js?v=20261015b"></script>
+<script src="assets/nm-pdf.js?v=20261015c"></script>
+<script src="assets/nm-docx.js?v=20261015c"></script>
+<script src="assets/neue-mitarbeiter.js?v=20261015c"></script>
 <style>
 :root {
   --bg:#f7f6f2; --surface:#ffffff; --border:#e2dfd8; --border-strong:#c8c4bc;
@@ -1288,11 +1288,18 @@ async function planGeaendert(){
   if (!demoMode) await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, {id:m.id, planStatus:'abstimmung', planFreigaben:'{}'});
   zeigeToast('Plan geändert – bisherige Freigaben wurden zurückgesetzt');
 }
-async function planFreigeben(mid){
+async function planFreigeben(mid, stellvertretendFuer){
   const m = mitarbeiter(mid); if (!m) return;
   const rollen = meineRollen(m); if (!rollen.length) return;
   const f = freigaben(m); const jetzt = new Date().toISOString();
-  rollen.forEach(r=>{ if (!f[r]) f[r] = jetzt; });
+  if (stellvertretendFuer){
+    // Geschäftsführung gibt anstelle von Mentor:in bzw. Teamleitung frei (z. B. wenn diese nicht selbst in der App freigeben)
+    if (!rollen.includes('gf') || !['mentor','tl'].includes(stellvertretendFuer)) return;
+    const name = stellvertretendFuer==='mentor' ? m.mentorName : m.tlName;
+    if (!confirm('Plan von '+m.name+' als Geschäftsführung anstelle von '+(name||'Mentor:in/Teamleitung')+' freigeben?')) return;
+    if (!f[stellvertretendFuer]) f[stellvertretendFuer] = jetzt;
+    f[stellvertretendFuer+'DurchGf'] = currentUpn;
+  } else rollen.forEach(r=>{ if (!f[r]) f[r] = jetzt; });
   const komplett = !!(f.mentor && f.tl && f.gf);
   m.planFreigaben = JSON.stringify(f); m.planStatus = komplett ? 'freigegeben' : 'abstimmung';
   if (!demoMode) await schreibeItem(CFG.listMitarbeiter, SCHEMA_MITARBEITER, {id:m.id, planFreigaben:m.planFreigaben, planStatus:m.planStatus});
@@ -1312,8 +1319,9 @@ function planKarte(m){
   const f = freigaben(m), rollen = meineRollen(m), fertig = m.planStatus==='freigegeben';
   const zeile = (key, label, wer)=>{
     const ts = f[key]; const meine = rollen.includes(key);
-    return '<tr><td>'+label+'</td><td>'+esc(wer||'–')+'</td><td>'+(ts ? '<span style="color:var(--success)">✓ '+fmtDatum(ts.slice(0,10))+'</span>' : '<span class="ea-item-desc">offen</span>')+'</td><td>'
-      + (meine && !ts ? '<button class="btn btn-sm btn-solid" data-plan-freigabe="'+m.id+'">Freigeben</button>' : '')+'</td></tr>';
+    return '<tr><td>'+label+'</td><td>'+esc(wer||'–')+'</td><td>'+(ts ? '<span style="color:var(--success)">✓ '+fmtDatum(ts.slice(0,10))+(f[key+'DurchGf'] ? ' (durch GF)' : '')+'</span>' : '<span class="ea-item-desc">offen</span>')+'</td><td>'
+      + (meine && !ts ? '<button class="btn btn-sm btn-solid" data-plan-freigabe="'+m.id+'">Freigeben</button>'
+        : (!ts && key!=='gf' && rollen.includes('gf') ? '<button class="btn btn-sm btn-outline" data-plan-freigabe="'+m.id+'" data-plan-fuer="'+key+'">Als GF freigeben</button>' : ''))+'</td></tr>';
   };
   let h = '<div class="ea-card"><div class="ea-card-head"><div><h3>Einarbeitungsplan '+(fertig?'– freigegeben ✓':'– in Abstimmung')+'</h3>'
     + '<p class="ea-item-desc" style="margin-top:4px">'+(fertig?'Alle drei Freigaben liegen vor.':'Mentor:in, Teamleitung und Geschäftsführung prüfen den Plan, passen ihn an und geben ihn frei. Jede Änderung setzt die Freigaben zurück.')+'</p></div>'
@@ -1691,7 +1699,7 @@ function bindContentEvents(){
   if (rolle==='gf' && (gfTab==='neue' || gfTab==='vorlagen')) NM.bind();
   document.querySelectorAll('[data-plan-open]').forEach(b=>b.onclick=()=>planOeffnen(b.getAttribute('data-plan-open')));
   document.querySelectorAll('[data-plan-close]').forEach(b=>b.onclick=()=>planSchliessen());
-  document.querySelectorAll('[data-plan-freigabe]').forEach(b=>b.onclick=()=>planFreigeben(b.getAttribute('data-plan-freigabe')));
+  document.querySelectorAll('[data-plan-freigabe]').forEach(b=>b.onclick=()=>planFreigeben(b.getAttribute('data-plan-freigabe'), b.getAttribute('data-plan-fuer')));
   document.querySelectorAll('[data-plan-reset]').forEach(b=>b.onclick=()=>freigabenZuruecksetzen(b.getAttribute('data-plan-reset')));
   document.querySelectorAll('[data-plan-beteiligte]').forEach(b=>b.onclick=()=>NM.planBeteiligte(b.getAttribute('data-plan-beteiligte')));
   document.querySelectorAll('[data-plan-mail]').forEach(b=>b.onclick=()=>NM.benachrichtigen(b.getAttribute('data-plan-mail')));
