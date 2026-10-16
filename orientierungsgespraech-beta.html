@@ -958,6 +958,7 @@ async function speichern(manuell, extra={}){
     Object.assign(akt.f,fields);
     if(gfSicht && internItem){   // interne Notizen + Kopie der Gesprächsnotizen für die Teamleitung
       internItem.leitung.gemeinsamKopie = akt.leitung.gemeinsam||{};
+      internItem.leitung.gespraechKopie = akt.leitung.gespraech?.am ? { am:akt.leitung.gespraech.am } : null;   // Teamleitung: ab dann nur noch Teil 1 + Feedback-Punkte
       const lf={LeitungJSON:JSON.stringify(internItem.leitung)};
       await graph(`${LISTE()}/items/${internItem.spId}/fields`,{method:'PATCH',body:JSON.stringify(lf)}); Object.assign(internItem.f,lf);
     }
@@ -1113,6 +1114,19 @@ function zeigeTLEinschaetzung(maUpn){
   renderTL(); window.scrollTo(0,0);
 }
 let tlAnsichtVon='';
+/* Vorgabe GF 16.10.2026: Nach dem Gespräch sieht die Teamleitung nur Teil 1 (ihre Einschätzung) und die gemeinsam festgehaltenen
+ * Feedback-Punkte zusammenhängend — nicht mehr die Gliederung/Inhalte der Person aus den Teilen 2 bis 5. */
+function nachGespraechTL(){ const L=akt.leitung||{}; return !!(L.gespraechKopie?.am || Object.values(L.gemeinsamKopie||{}).some(x=>String(x||'').trim())); }
+function feedbackBlockTL(){
+  const L=akt.leitung, gem=TEILE.map(([t])=>String(L.gemeinsamKopie?.[t]||'').trim()).filter(Boolean).join('\n\n');
+  /* Bereits früher je Teil erfasste interne Notizen (Teil 2–5) bleiben lesbar, damit nichts verloren geht */
+  const alt=[2,3,4,5].flatMap(t=>internListe(L,t).filter(x=>x.text)).map(x=>`<div class="txt" style="margin:2px 0 6px"><span style="font-size:11px;color:var(--meta)">${esc(x.name||x.von)}${x.am?' · '+esc(fmtDT(x.am)):''}</span><br>${esc(x.text)}</div>`).join('');
+  return `<h2 class="teil"><span>Feedback ·</span> aus dem Gespräch</h2>
+    <div class="teil-hinweis">Nach dem Gespräch siehst du hier nur deine Einschätzung (Teil 1) und die gemeinsam festgehaltenen Feedback-Punkte – nicht mehr die Inhalte der Person aus den Teilen 2 bis 5.</div>
+    ${gem?`<div class="notiz"><div class="lbl">Feedback-Punkte aus dem Gespräch – sehen alle (auch die Person)</div><div class="txt" style="white-space:pre-wrap">${esc(gem)}</div></div>`
+         :`<div class="notiz"><div class="lbl">Feedback-Punkte aus dem Gespräch</div><div class="txt" style="color:var(--text-muted)">Noch keine Punkte festgehalten – sie erscheinen hier, sobald die Geschäftsführung sie gespeichert hat.</div></div>`}
+    <div class="notiz intern"><div class="lbl">🔒 Interne Notizen – nur GF und Teamleitung</div>${alt}${internHtml(L,1,tlAnsicht)}</div>`;
+}
 async function oeffneTL(maUpn){
   tlAnsicht=false;
   if(istGF) tlTeam=(mitarbeiter||[]).filter(x=>istTeamleitung(x.upn));   // Sonja schätzt die Teamleitungen ein
@@ -1142,9 +1156,9 @@ function renderTL(){
     ${tlAnsicht?`<div class="hinweis"><b>Nur-Lese-Ansicht für die Geschäftsführung.</b> Abgegebene Einschätzung von <b>${esc(tlAnsichtVon)}</b> zu ${esc(name)}. Sobald ${esc(name)} den eigenen Bogen abgegeben hat, seht ihr beide Sichten nebeneinander über „Öffnen“.</div>`:`<div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>`}
     <h2 class="teil"><span>Teil 1 ·</span> ${tlAnsicht?'Einschätzung von '+esc(tlAnsichtVon):'Meine Einschätzung '+(istGF?'als Vorgesetzte':'als Teamleitung')}</h2>
     ${skalaTabelle(V, akt.antworten, leseModus, null)}
-    ${tlAnsicht?'':`<h2 class="teil"><span>Gesprächsnotizen ·</span> Teil 1 bis 5</h2>
+    ${tlAnsicht?'':(nachGespraechTL()?feedbackBlockTL():`<h2 class="teil"><span>Gesprächsnotizen ·</span> Teil 1 bis 5</h2>
     <div class="teil-hinweis">Interne Notizen (nur GF und du) kannst du vor, während und nach dem Gespräch eintragen – auch nach der Abgabe deiner Einschätzung. Die Gesprächsnotizen, die alle sehen, führt die Geschäftsführung im Gespräch; sie erscheinen hier nach dem Speichern.</div>
-    ${TEILE.map(([t,titel])=>`<div style="margin-top:10px;font-weight:600;font-size:13px">Teil ${t} · ${esc(titel)}</div>${notizen(t,'tl',vrTL)}`).join('')}`}
+    ${TEILE.map(([t,titel])=>`<div style="margin-top:10px;font-weight:600;font-size:13px">Teil ${t} · ${esc(titel)}</div>${notizen(t,'tl',vrTL)}`).join('')}`)}
     <div class="bogen-fuss">Praxis NeueWege GmbH · vertraulich – Personalunterlage · sichtbar nur für ${istGF?'die Geschäftsführung':'die Teamleitung und die Geschäftsführung'}</div>
   </div>`;
   const el=document.getElementById('leiste'); el.style.display='flex'; el.classList.remove('offen');
