@@ -958,7 +958,7 @@ async function speichern(manuell, extra={}){
     Object.assign(akt.f,fields);
     if(gfSicht && internItem){   // interne Notizen + Kopie der Gesprächsnotizen für die Teamleitung
       internItem.leitung.gemeinsamKopie = akt.leitung.gemeinsam||{};
-      internItem.leitung.gespraechKopie = akt.leitung.gespraech?.am ? { am:akt.leitung.gespraech.am } : null;   // Teamleitung: ab dann nur noch Teil 1 + Feedback-Punkte
+      if(akt.leitung.freigabeTL && ['Abgegeben','Abgeschlossen'].includes(akt.f.OGStatus) && (internItem.f.MitarbeiterUpn||'').toLowerCase().startsWith(TL_PRAEFIX)) internItem.leitung.bogenKopie=bogenKopieVon(akt);
       const lf={LeitungJSON:JSON.stringify(internItem.leitung)};
       await graph(`${LISTE()}/items/${internItem.spId}/fields`,{method:'PATCH',body:JSON.stringify(lf)}); Object.assign(internItem.f,lf);
     }
@@ -1114,18 +1114,70 @@ function zeigeTLEinschaetzung(maUpn){
   renderTL(); window.scrollTo(0,0);
 }
 let tlAnsichtVon='';
-/* Vorgabe GF 16.10.2026: Nach dem Gespräch sieht die Teamleitung nur Teil 1 (ihre Einschätzung) und die gemeinsam festgehaltenen
- * Feedback-Punkte zusammenhängend — nicht mehr die Gliederung/Inhalte der Person aus den Teilen 2 bis 5. */
-function nachGespraechTL(){ const L=akt.leitung||{}; return !!(L.gespraechKopie?.am || Object.values(L.gemeinsamKopie||{}).some(x=>String(x||'').trim())); }
-function feedbackBlockTL(){
-  const L=akt.leitung, gem=TEILE.map(([t])=>String(L.gemeinsamKopie?.[t]||'').trim()).filter(Boolean).join('\n\n');
-  /* Bereits früher je Teil erfasste interne Notizen (Teil 2–5) bleiben lesbar, damit nichts verloren geht */
-  const alt=[2,3,4,5].flatMap(t=>internListe(L,t).filter(x=>x.text)).map(x=>`<div class="txt" style="margin:2px 0 6px"><span style="font-size:11px;color:var(--meta)">${esc(x.name||x.von)}${x.am?' · '+esc(fmtDT(x.am)):''}</span><br>${esc(x.text)}</div>`).join('');
-  return `<h2 class="teil"><span>Feedback ·</span> aus dem Gespräch</h2>
-    <div class="teil-hinweis">Nach dem Gespräch siehst du hier nur deine Einschätzung (Teil 1) und die gemeinsam festgehaltenen Feedback-Punkte – nicht mehr die Inhalte der Person aus den Teilen 2 bis 5.</div>
-    ${gem?`<div class="notiz"><div class="lbl">Feedback-Punkte aus dem Gespräch – sehen alle (auch die Person)</div><div class="txt" style="white-space:pre-wrap">${esc(gem)}</div></div>`
-         :`<div class="notiz"><div class="lbl">Feedback-Punkte aus dem Gespräch</div><div class="txt" style="color:var(--text-muted)">Noch keine Punkte festgehalten – sie erscheinen hier, sobald die Geschäftsführung sie gespeichert hat.</div></div>`}
-    <div class="notiz intern"><div class="lbl">🔒 Interne Notizen – nur GF und Teamleitung</div>${alt}${internHtml(L,1,tlAnsicht)}</div>`;
+/* Teamleitung braucht nach der Freigabe ALLE Teile (Vorgabe GF 16.10.2026). Sie hat keinen Zugriff auf die geschützte Ablage —
+ * deshalb legt die GF-Sicht eine schlanke Kopie des Bogens ins TL-Element (wie bei den Gesprächsnotizen): Teil 1–3 und 5 der Person,
+ * Kennzahlen als fertige Zeilen, Vereinbarungen. Erst NACH der Freigabe (erst einschätzen, dann ansehen). */
+function bogenKopieVon(e){
+  const k=e.kennzahlen, V=VERSIONEN[e.f.Version]||VERSIONEN.B;
+  let kz=[]; try{ kz=[...kennzahlenZeilen(k), ...erweitertZeilen(k, e.f.AbgegebenAm).zeilen]; }catch(x){ console.warn('Kennzahlen-Kopie —',x.message); }
+  const man=(V.manuell||[]).map(([id,l])=>[l,e.leitung.manuell?.[id]||'','Anmerkung der Leitung']).filter(z=>z[1]);
+  const L=e.leitung;
+  return { version:e.f.Version, name:e.f.MitarbeiterName, termin:e.f.Termin||'', abgegebenAm:e.f.AbgegebenAm||'', stand:k?.stand||'', wochenstunden:k?.wochenstunden??null,
+    antworten:{ skala:e.antworten.skala||{}, kommentar:e.antworten.kommentar||{}, themen:e.antworten.themen||[], text:e.antworten.text||{} },
+    kz:[...kz,...man], vereinbarungen:(L.vereinbarungen||[]).filter(z=>z&&(z.was||z.wer||z.bis)), naechster:L.naechster||'', gespraechAm:L.gespraech?.am||'' };
+}
+/* Kopie ins TL-Element schreiben, falls sie fehlt oder veraltet ist (frisch lesen, damit Notizen der Teamleitung nicht überschrieben werden) */
+async function syncTLKopie(bogenItem){
+  const e=entpacke(bogenItem), u=(bogenItem.f.MitarbeiterUpn||'').toLowerCase();
+  if(!e.leitung.freigabeTL || !['Abgegeben','Abgeschlossen'].includes(bogenItem.f.OGStatus)) return false;
+  const ti=findeInternItem(u,bogenItem.f.Runde);
+  if(!ti || !(ti.f.MitarbeiterUpn||'').toLowerCase().startsWith(TL_PRAEFIX)) return false;
+  const tlUpn=(ti.f.MitarbeiterUpn||'').slice(TL_PRAEFIX.length).split(':')[0];
+  if(GF.includes(tlUpn)) return false;
+  const neu=bogenKopieVon(e);
+  const fresh=await graph(`${LISTE()}/items/${ti.spId}/fields`);
+  let L; try{ L=fresh.LeitungJSON?JSON.parse(fresh.LeitungJSON):{}; }catch(x){ L={}; }
+  if(JSON.stringify(L.bogenKopie||null)===JSON.stringify(neu)) return false;
+  L.bogenKopie=neu;
+  const txt=JSON.stringify(L);
+  if(txt.length>60000){ console.warn('TL-Kopie zu groß für das Feld —',u); return false; }
+  await graph(`${LISTE()}/items/${ti.spId}/fields`,{method:'PATCH',body:JSON.stringify({LeitungJSON:txt})});
+  ti.f.LeitungJSON=txt; return true;
+}
+async function syncTLKopien(){
+  const runde=aktRunde(); let n=0;
+  for(const i of items.filter(x=>x.f.Runde===runde && !(x.f.MitarbeiterUpn||'').startsWith('__'))){
+    try{ if(await syncTLKopie(i)) n++; }catch(e){ console.warn('TL-Kopie nicht aktualisiert —',i.f.MitarbeiterName,e.message); }
+  }
+  if(n) console.info('TL-Kopien aktualisiert:',n);
+}
+/* TL-Ansicht (nach der Freigabe): Teil 1 im Vergleich, Teil 2–5 der Person, jeweils mit den Gesprächsnotizen darunter */
+function tlVollansicht(vrTL){
+  const K=akt.leitung.bogenKopie, VK=VERSIONEN[K.version]||VERSIONEN.B, a=K.antworten, name=(K.name||'').split(',').reverse().join(' ').trim();
+  const own={ abgegeben:akt.f.OGStatus==='Abgegeben', skala:akt.antworten.skala, kommentar:akt.antworten.kommentar, tlName:meinName(), tlUpn:upn };
+  const themen=a.themen.length?a.themen.map(t=>`<span class="status offen" style="font-weight:500;margin:2px 6px 2px 0;display:inline-block">${esc(t)}</span>`).join(''):'<span style="color:var(--text-muted)">–</span>';
+  const fragen=VK.fragen.map(([id,q])=>`<div class="frage-block"><div class="frage">${esc(q)}</div><div class="txt" style="white-space:pre-wrap">${esc(a.text[id]||'–')}</div></div>`).join('');
+  const kz=(K.kz||[]).map(([l,w,h])=>`<tr><td>${esc(l)}${h?`<br><span class="quelle" style="text-transform:none;letter-spacing:0">${esc(h)}</span>`:''}</td><td><b>${esc(w)}</b></td></tr>`).join('');
+  const ver=(K.vereinbarungen||[]).length?`<table class="daten"><tr><th style="width:62%">Was nehmen wir uns vor?</th><th>Wer</th><th>Bis wann</th></tr>${K.vereinbarungen.map(z=>`<tr><td>${esc(z.was||'')}</td><td>${esc(z.wer||'')}</td><td>${esc(z.bis||'')}</td></tr>`).join('')}</table>${K.naechster?`<div class="frage">Zwischencheck / nächstes Gespräch am: <b>${esc(K.naechster)}</b></div>`:''}`
+    :'<div class="teil-hinweis">Noch keine Vereinbarungen festgehalten – sie erscheinen hier, sobald die Geschäftsführung sie gespeichert hat.</div>';
+  return `<div class="hinweis"><b>Selbsteinschätzung von ${esc(name)}</b>${K.abgegebenAm?' (abgegeben '+esc(fmtDT(K.abgegebenAm))+')':''} – freigegeben durch die Geschäftsführung. Vertraulich behandeln.</div>
+    <h2 class="teil"><span>Teil 1 ·</span> Selbsteinschätzung und deine Einschätzung im Vergleich</h2>
+    ${skalaTabelle(VK, a, true, own)}
+    ${notizen(1,'tl',vrTL)}
+    <h2 class="teil"><span>Teil 2 ·</span> Die wichtigsten Themen von ${esc(name)}</h2>
+    <div>${themen}</div>
+    ${notizen(2,'tl',vrTL)}
+    <h2 class="teil"><span>Teil 3 ·</span> Kurz in Stichpunkten</h2>
+    ${fragen}
+    ${notizen(3,'tl',vrTL)}
+    <h2 class="teil umbruch"><span>Teil 4 ·</span> Zahlen &amp; Fakten</h2>
+    <div class="teil-hinweis">Aus Kilanka${K.stand?' (Stand '+esc(fmtDT(K.stand))+')':''}.</div>
+    <table class="daten"><tr><th style="width:46%">Kennzahl</th><th>Stand</th></tr>${kz||'<tr><td colspan="2">Kennzahlen aus Kilanka derzeit nicht verfügbar.</td></tr>'}</table>
+    ${notizen(4,'tl',vrTL)}
+    <h2 class="teil"><span>Teil 5 ·</span> Ziele &amp; Vereinbarungen</h2>
+    ${a.text.ziele?`<div class="frage">Vorschläge von ${esc(name)}:</div><div class="txt" style="white-space:pre-wrap">${esc(a.text.ziele)}</div>`:''}
+    <div class="frage">Vereinbarungen</div>${ver}
+    ${notizen(5,'tl',vrTL)}`;
 }
 async function oeffneTL(maUpn){
   tlAnsicht=false;
@@ -1153,18 +1205,18 @@ function renderTL(){
     <div class="bogen-kopf"><div><h1>${tlAnsicht?'Einschätzung der Teamleitung':(istGF?'Einschätzung der Geschäftsführung':'Einschätzung der Teamleitung')}</h1><div class="unter">zu ${esc(name)} · ${esc(V.titel)}</div><div class="eyebrow">Praxis NeueWege · Orientierungsgespräch · Runde ${esc(akt.f.Runde)}</div></div><img src="assets/logo-praxisneuewege.png" alt=""></div>
     <div class="stamm"><div><span class="eyebrow">Teammitglied</span><b>${esc(akt.f.MitarbeiterName)}</b></div>
       <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div></div>
-    ${tlAnsicht?`<div class="hinweis"><b>Nur-Lese-Ansicht für die Geschäftsführung.</b> Abgegebene Einschätzung von <b>${esc(tlAnsichtVon)}</b> zu ${esc(name)}. Sobald ${esc(name)} den eigenen Bogen abgegeben hat, seht ihr beide Sichten nebeneinander über „Öffnen“.</div>`:`<div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>`}
-    <h2 class="teil"><span>Teil 1 ·</span> ${tlAnsicht?'Einschätzung von '+esc(tlAnsichtVon):'Meine Einschätzung '+(istGF?'als Vorgesetzte':'als Teamleitung')}</h2>
+    ${tlAnsicht?`<div class="hinweis"><b>Nur-Lese-Ansicht für die Geschäftsführung.</b> Abgegebene Einschätzung von <b>${esc(tlAnsichtVon)}</b> zu ${esc(name)}. Sobald ${esc(name)} den eigenen Bogen abgegeben hat, seht ihr beide Sichten nebeneinander über „Öffnen“.</div>`:(akt.leitung.bogenKopie&&leseModus?'':`<div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>`)}
+    ${(!tlAnsicht && akt.leitung.bogenKopie) ? tlVollansicht(vrTL) : `<h2 class="teil"><span>Teil 1 ·</span> ${tlAnsicht?'Einschätzung von '+esc(tlAnsichtVon):'Meine Einschätzung '+(istGF?'als Vorgesetzte':'als Teamleitung')}</h2>
     ${skalaTabelle(V, akt.antworten, leseModus, null)}
-    ${tlAnsicht?'':(nachGespraechTL()?feedbackBlockTL():`<h2 class="teil"><span>Gesprächsnotizen ·</span> Teil 1 bis 5</h2>
+    ${tlAnsicht?'':`<h2 class="teil"><span>Gesprächsnotizen ·</span> Teil 1 bis 5</h2>
     <div class="teil-hinweis">Interne Notizen (nur GF und du) kannst du vor, während und nach dem Gespräch eintragen – auch nach der Abgabe deiner Einschätzung. Die Gesprächsnotizen, die alle sehen, führt die Geschäftsführung im Gespräch; sie erscheinen hier nach dem Speichern.</div>
-    ${TEILE.map(([t,titel])=>`<div style="margin-top:10px;font-weight:600;font-size:13px">Teil ${t} · ${esc(titel)}</div>${notizen(t,'tl',vrTL)}`).join('')}`)}
+    ${TEILE.map(([t,titel])=>`<div style="margin-top:10px;font-weight:600;font-size:13px">Teil ${t} · ${esc(titel)}</div>${notizen(t,'tl',vrTL)}`).join('')}`}`}
     <div class="bogen-fuss">Praxis NeueWege GmbH · vertraulich – Personalunterlage · sichtbar nur für ${istGF?'die Geschäftsführung':'die Teamleitung und die Geschäftsführung'}</div>
   </div>`;
   const el=document.getElementById('leiste'); el.style.display='flex'; el.classList.remove('offen');
   if(tlAnsicht){ el.innerHTML=`<span class="stand" id="saveStand">Abgegeben${akt.f.AbgegebenAm?' am '+esc(fmtDT(akt.f.AbgegebenAm)):''} – nur Anzeige.</span><button class="btn btn-ghost" onclick="window.print()">Drucken / PDF (A4)</button>`; return; }
-  el.innerHTML=`<span class="stand" id="saveStand">${leseModus?(istGF?'Einschätzung abgegeben – nicht mehr änderbar.':'Einschätzung abgegeben – nicht mehr änderbar. Die Selbsteinschätzung erhältst du per E-Mail, sobald die Person abgegeben hat und die Geschäftsführung sie freigibt.'):''}</span>`+
-    (leseModus?(tlAnsicht||istGF?'':`<button class="btn btn-ghost" onclick="speichern(true)">Notizen speichern</button>`)
+  el.innerHTML=`<span class="stand" id="saveStand">${leseModus?(istGF?'Einschätzung abgegeben – nicht mehr änderbar.':(akt.leitung.bogenKopie?'Einschätzung abgegeben – nicht mehr änderbar. Unten siehst du alle Teile der Person und die Gesprächsnotizen.':'Einschätzung abgegeben – nicht mehr änderbar. Die Selbsteinschätzung erhältst du per E-Mail und hier im Bogen, sobald die Person abgegeben hat und die Geschäftsführung sie freigibt.')):''}</span>`+
+    (leseModus?(tlAnsicht||istGF?'':(akt.leitung.bogenKopie?`<button class="btn btn-ghost sek" onclick="druckeMitTL()">Drucken mit Einschätzung (A4)</button>`:'')+`<button class="btn btn-ghost" onclick="speichern(true)">Notizen speichern</button>`)
               :`<button class="btn btn-ghost" onclick="speichern(true)">Speichern</button><button class="btn btn-primary" onclick="tlStatus('Abgegeben')">Einschätzung abgeben</button>`);
 }
 async function tlStatus(neu){
@@ -1266,6 +1318,7 @@ async function zeigeAdmin(){
     ${pausiert.length?`<div style="margin-top:14px;font-size:12.5px;color:var(--text-muted)"><b>Ohne Orientierungsgespräch in dieser Runde:</b> ${pausiert.map(m=>`${esc(m.name)} <button class="btn btn-ghost btn-sm" style="min-height:24px;padding:2px 8px" onclick="setzeAus('${esc(m.upn)}',false)">wieder aufnehmen</button>`).join(' · ')}</div>`:''}
     <div class="msg ${karte?'':'warn'}" id="adminMsg">${karte?'':`Die Entra-Gruppen (Team-Joerg, Team-Laura, Team-Nadine) konnten nicht gelesen werden – die Teamzuordnung fällt deshalb auf die Vorgesetzten in Entra zurück. <button class="btn btn-ghost btn-sm" onclick="gruppenFreigeben()">Zugriff auf Gruppen freigeben</button><br><span style="font-size:11.5px">Im Microsoft-Fenster bitte „Zustimmung im Namen Ihrer Organisation“ ankreuzen – dann gilt die Freigabe für alle Mitarbeitenden.</span>`}</div></div>`;
   document.getElementById('leiste').style.display='none';
+  if(istGF) syncTLKopien();   // fehlende/veraltete Bogen-Kopien für die Teamleitungen nachziehen (im Hintergrund)
 }
 const kzCache = {};   // upn → Kennzahlen (pro Sitzung; schont das Kilanka-Rate-Limit)
 function kennzahlenTabelle(k){
@@ -1314,6 +1367,7 @@ async function freigeben(){
       x.e.leitung.freigabeTL=new Date().toISOString();
       await graph(`${LISTE()}/items/${x.i.spId}/fields`,{method:'PATCH',body:JSON.stringify({LeitungJSON:JSON.stringify(x.e.leitung)})});
       x.i.f.LeitungJSON=JSON.stringify(x.e.leitung); ok++;
+      try{ await syncTLKopie(x.i); }catch(e){ console.warn('TL-Kopie nicht angelegt —',name,e.message); }
     }catch(e){ console.warn('Freigabe fehlgeschlagen —',name,e.message); }
   }
   await zeigeAdmin();
