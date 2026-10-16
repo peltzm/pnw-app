@@ -1206,7 +1206,7 @@ function renderTL(){
     <div class="stamm"><div><span class="eyebrow">Teammitglied</span><b>${esc(akt.f.MitarbeiterName)}</b></div>
       <div><span class="eyebrow">Status</span><b><span class="status ${esc((akt.f.OGStatus||'').toLowerCase())}">${esc(akt.f.OGStatus)}</span>${akt.f.AbgegebenAm?' · '+esc(fmtDT(akt.f.AbgegebenAm)):''}</b></div></div>
     ${tlAnsicht?`<div class="hinweis"><b>Nur-Lese-Ansicht für die Geschäftsführung.</b> Abgegebene Einschätzung von <b>${esc(tlAnsichtVon)}</b> zu ${esc(name)}. Sobald ${esc(name)} den eigenen Bogen abgegeben hat, seht ihr beide Sichten nebeneinander über „Öffnen“.</div>`:(akt.leitung.bogenKopie&&leseModus?'':`<div class="hinweis">Die Aussagen sind aus Sicht von ${esc(name)} formuliert. <b>Wie würdest du sie für ${esc(name)} beantworten?</b> Beispiel: „Fallzahl und Stundenumfang passen zusammen“ → deine Einschätzung, ob das bei ${esc(name)} passt. Was du nicht beurteilen kannst (z. B. Vergütung, Motivation): „k. A.“.</div>`)}
-    ${(!tlAnsicht && akt.leitung.bogenKopie) ? tlVollansicht(vrTL) : `<h2 class="teil"><span>Teil 1 ·</span> ${tlAnsicht?'Einschätzung von '+esc(tlAnsichtVon):'Meine Einschätzung '+(istGF?'als Vorgesetzte':'als Teamleitung')}</h2>
+    ${(!tlAnsicht && leseModus && akt.leitung.bogenKopie) ? tlVollansicht(vrTL) : `<h2 class="teil"><span>Teil 1 ·</span> ${tlAnsicht?'Einschätzung von '+esc(tlAnsichtVon):'Meine Einschätzung '+(istGF?'als Vorgesetzte':'als Teamleitung')}</h2>
     ${skalaTabelle(V, akt.antworten, leseModus, null)}
     ${tlAnsicht?'':`<h2 class="teil"><span>Gesprächsnotizen ·</span> Teil 1 bis 5</h2>
     <div class="teil-hinweis">Interne Notizen (nur GF und du) kannst du vor, während und nach dem Gespräch eintragen – auch nach der Abgabe deiner Einschätzung. Die Gesprächsnotizen, die alle sehen, führt die Geschäftsführung im Gespräch; sie erscheinen hier nach dem Speichern.</div>
@@ -1295,6 +1295,7 @@ async function zeigeAdmin(){
           (gesperrt||!i)?'':eintrag(`mail('${esc(m.upn)}')`,p.mailAm?'✉ Erneut einladen':'✉ Einladung senden'),
           sonja?eintrag(`oeffneTL('${esc(m.upn)}')`,'✍ Einschätzen (Teil 1)'):'',
           tl?.abgegeben?eintrag(`zeigeTLEinschaetzung('${esc(m.upn)}')`,`👁 ${istTeamleitung(m.upn)?'Sonja':'TL'}-Einschätzung ansehen`):'',
+          tl?.abgegeben?eintrag(`tlWiederOeffnen('${esc(m.upn)}')`,`↩ ${istTeamleitung(m.upn)?'Sonja':'TL'}-Einschätzung wieder öffnen (Werte bleiben)`):'',
           '<div class="menu-sep"></div>',
           eintrag(`setzeAus('${esc(m.upn)}',true)`,'⏸ Kein Gespräch in dieser Runde'),
           vorgangTeile(m.upn,runde).length?eintrag(`vorgangZuruecksetzen('${esc(m.upn)}')`,'🗑 Vorgang zurücksetzen','gefahr'):''
@@ -1384,6 +1385,29 @@ function vorgangTeile(u, runde){
   items.filter(x=>(x.f.MitarbeiterUpn||'').toLowerCase()===GF_PRAEFIX+u && x.f.Runde===runde).forEach(x=>teile.push({art:'gf', item:x, text:'Interne Notizen der GF'}));
   if(plan[u]?.mailAm) teile.push({art:'mail', text:`Einladungsvermerk (gesendet ${fmtDT(plan[u].mailAm)})`});
   return teile;
+}
+/* Einschätzung der Teamleitung zur Korrektur wieder öffnen: nur der Status geht zurück auf „Entwurf“ — alle Werte, Kommentare und Notizen bleiben.
+ * Die bereits erfolgte Freigabe der Selbsteinschätzung bleibt bestehen (es geht keine zweite Freigabe-Mail raus). */
+async function tlWiederOeffnen(u){
+  const runde=aktRunde(), m=mitarbeiter.find(x=>x.upn===u), tl=tlEinschaetzungFuer(u,runde);
+  const ti=items.find(x=>{ const k=(x.f.MitarbeiterUpn||'').toLowerCase(); return k.startsWith(TL_PRAEFIX) && k.endsWith(':'+u) && x.f.Runde===runde; });
+  if(!ti || !tl?.abgegeben) return;
+  if(!confirm(`Einschätzung von ${tl.tlName} zu ${m.name} wieder öffnen?\n\nAlle bisherigen Werte, Kommentare und Notizen bleiben erhalten. ${tl.tlName} kann sie korrigieren und danach erneut abgeben. Die Freigabe der Selbsteinschätzung bleibt bestehen.\n\n${tl.tlName} wird per E-Mail gebeten, zu korrigieren und erneut abzugeben.`)) return;
+  const el=document.getElementById('adminMsg');
+  try{
+    await graph(`${LISTE()}/items/${ti.spId}/fields`,{method:'PATCH',body:JSON.stringify({OGStatus:'Entwurf',AbgegebenAm:null})});
+    ti.f.OGStatus='Entwurf'; ti.f.AbgegebenAm=null;
+  }catch(e){ el.className='msg err'; el.textContent='Wieder öffnen fehlgeschlagen: '+e.message; return; }
+  let mailOk=true;
+  try{
+    await sendeMail(tl.tlUpn, `Orientierungsgespräch ${runde} – bitte Einschätzung zu ${m.name.split(',').reverse().join(' ').trim()} korrigieren`, mailRahmen(`
+      <p>Hallo ${esc(tl.tlName.split(' ')[0])},</p>
+      <p>deine Einschätzung zu <b>${esc(m.name.split(',').reverse().join(' ').trim())}</b> (Teil 1) wurde zur Korrektur wieder geöffnet. Deine bisherigen Angaben sind unverändert gespeichert – bitte passe sie an und gib die Einschätzung danach erneut ab.</p>
+      ${mailKnopf(CFG.redirectUri+'?tl=1&r='+runde,'Einschätzung öffnen')}`));
+  }catch(e){ mailOk=false; console.warn('Mail an Teamleitung nicht gesendet —',e.message); }
+  await zeigeAdmin();
+  const e2=document.getElementById('adminMsg'); e2.className='msg '+(mailOk?'ok':'warn');
+  e2.textContent=`Einschätzung von ${tl.tlName} zu ${m.name} ist wieder geöffnet – alle Werte sind erhalten.`+(mailOk?` ${tl.tlName} wurde per E-Mail informiert.`:` Die E-Mail an ${tl.tlName} konnte nicht gesendet werden – bitte kurz selbst Bescheid geben.`);
 }
 async function vorgangZuruecksetzen(u){
   const runde=aktRunde(), m=mitarbeiter.find(x=>x.upn===u), teile=vorgangTeile(u,runde), el=document.getElementById('adminMsg');
