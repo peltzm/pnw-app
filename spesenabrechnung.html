@@ -2151,9 +2151,25 @@ async function einreichen() {
         <p style="margin:0 0 12px;font-size:13px;color:#6b5414"><strong>🔍 Prüfmodus</strong> — Klicken Sie auf den Button um direkt in den Prüfmodus zu wechseln. Sie können dort jeden Beleg kommentieren, die Abrechnung zurückweisen oder freigeben.</p>
         <a href="${reviewUrl}" style="display:inline-block;background:#c9a227;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">🔍 Abrechnung jetzt prüfen →</a>
       </div>
-      <p style="color:#888;font-size:12px;border-top:1px solid #eee;padding-top:16px">Nach Freigabe wird automatisch ein PDF erstellt und an ${CFG.spesen_mail} gesendet.</p>
+      <p style="color:#888;font-size:12px;border-top:1px solid #eee;padding-top:16px">Nach Freigabe wird automatisch ein PDF erstellt und an ${CFG.spesen_mail} sowie an die Fachkraft gesendet.</p>
     </body></html>`;
-    const sent = await sendMail(tl, [currentAccount?.username||''], `[Spesen] ${fachkraft} · ${fmtMonat(_currentMonat)} · ${fmt(total)}`, html);
+    // Prüf-Mail NUR an die Prüferin — der Prüf-Button hat CC-Mitarbeiter verwirrt
+    const sent = await sendMail(tl, [], `[Spesen] ${fachkraft} · ${fmtMonat(_currentMonat)} · ${fmt(total)}`, html);
+    // Mitarbeiter bekommt eine eigene Eingangsbestätigung ohne Prüf-Button
+    const bestaetigungHtml = `<html><body style="font-family:Arial,sans-serif;color:#333;max-width:600px">
+      <div style="border-left:4px solid #7b3f1e;padding-left:16px;margin-bottom:24px">
+        <h2 style="color:#7b3f1e;margin:0 0 4px">Spesenabrechnung eingereicht ✓</h2>
+        <p style="margin:0;color:#666">Praxis NeueWege — Spesenabrechnung</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+        <tr><td style="padding:8px 0;color:#666;width:140px">Monat</td><td style="padding:8px 0">${fmtMonat(_currentMonat)}</td></tr>
+        <tr><td style="padding:8px 0;color:#666">Positionen</td><td style="padding:8px 0">${belege.length}</td></tr>
+        <tr><td style="padding:8px 0;color:#666;font-weight:700">Gesamtbetrag</td><td style="padding:8px 0;font-size:18px;font-weight:700;color:#7b3f1e">${fmt(total)}</td></tr>
+      </table>
+      <p style="color:#555;font-size:14px">Deine Abrechnung liegt jetzt bei ${esc(tl)} zur Prüfung. Du bekommst automatisch eine E-Mail mit dem finalen PDF, sobald sie genehmigt ist.</p>
+      <p style="color:#888;font-size:12px;border-top:1px solid #eee;padding-top:16px">Praxis NeueWege · Spesenabrechnung</p>
+    </body></html>`;
+    await sendMail(fachkraftMail, [], `[Spesen] Eingereicht ✓ · ${fmtMonat(_currentMonat)} · ${fmt(total)}`, bestaetigungHtml).catch(()=>{});
     setStatus('abschlussStatus', 'done', `✓ Eingereicht${sent ? ` — E-Mail an ${tl} gesendet` : ''}`);
     showToast('📨 Eingereicht', true);
     if (_isTL) ladeTLAbrechnungen();
@@ -2341,9 +2357,13 @@ async function genehmigen(g) {
     // 4. E-Mail senden
     setStatus('tlStatus', 'uploading', '📧 E-Mail wird gesendet…');
     const mailHtml = buildFreigabeEmail(g, pdfUrl);
-    await sendMail([CFG.spesen_mail], [], `✓ Spesenabrg. genehmigt: ${g.fachkraft} · ${fmtMonat(g.monat)} · ${fmt(g.total)}`, mailHtml);
-    setStatus('tlStatus', 'done', `✓ ${g.fachkraft} genehmigt — PDF an ${CFG.spesen_mail} gesendet`);
-    document.getElementById('approvedText').innerHTML = `PDF wurde erstellt und an <strong>${esc(CFG.spesen_mail)}</strong> gesendet.`;
+    // Empfänger: Buchhaltung + die Fachkraft selbst (Mitarbeiter sollen die Genehmigung erhalten)
+    const fkMailEmpf = g.mail || g.belege?.[0]?.Fachkraft_Mail || '';
+    const empfaenger = fkMailEmpf && fkMailEmpf.toLowerCase() !== CFG.spesen_mail.toLowerCase()
+      ? [CFG.spesen_mail, fkMailEmpf] : [CFG.spesen_mail];
+    await sendMail(empfaenger, [], `✓ Spesenabrg. genehmigt: ${g.fachkraft} · ${fmtMonat(g.monat)} · ${fmt(g.total)}`, mailHtml);
+    setStatus('tlStatus', 'done', `✓ ${g.fachkraft} genehmigt — PDF an ${empfaenger.join(' und ')} gesendet`);
+    document.getElementById('approvedText').innerHTML = `PDF wurde erstellt und an <strong>${esc(empfaenger.join('</strong> und <strong>'))}</strong> gesendet.`;
     openModal('approvedModal');
     showToast(`✅ ${g.fachkraft} genehmigt`, true);
   } catch(e) {
