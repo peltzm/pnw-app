@@ -199,6 +199,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
         Fahrtenbuch
       </button>
+      <button class="btn btn-outline btn-sm" id="btnKmKilanka" onclick="kmKilankaDialog()" title="Aktuelle km-Stände aus dem Kilanka-Fahrtenbuch">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
+        km aus Kilanka
+      </button>
+      <span id="kmKilankaStand" style="display:none;font-size:11px;color:var(--text-muted);align-self:center"></span>
       <input type="file" id="fbDatei" accept=".xlsx,.xls" style="display:none" onchange="fbDateiGewaehlt(event)">
       <button class="btn btn-outline btn-sm" onclick="csvExport()" title="Flotte: alle Stammdaten als CSV · Kosten/Prognose: sichtbare Tabelle">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
@@ -246,7 +251,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   </div>
 
   <div class="footer-note">
-    <strong>Datenquellen:</strong> Stammdaten, Verträge, Versicherung und km-Stände aus der SharePoint-Liste <code>PNW-Fahrzeuge</code> (Graph API, <code>Sites.ReadWrite.All</code>) · Fahrzeug-Dokumente (Schein, Policen, Leasingverträge, DGUV-70-Nachweise) in Kilanka, verknüpft über das Feld <code>KilankaLink</code> · Kostenkennzahlen und km-Prognosen werden live berechnet und nicht gespeichert. Alle Beträge sind Endbeträge inkl. USt (kein Vorsteuerabzug); <code>PNW p. M.</code> = monatliche Kosten nach Abzug vereinbarter Eigenanteile. Kilanka hat aktuell keinen Fahrzeug-Graphen; die FIN dient als stabiler Schlüssel für eine spätere Synchronisierung.
+    <strong>Datenquellen:</strong> Stammdaten, Verträge, Versicherung und km-Stände aus der SharePoint-Liste <code>PNW-Fahrzeuge</code> (Graph API, <code>Sites.ReadWrite.All</code>) · Fahrzeug-Dokumente (Schein, Policen, Leasingverträge, DGUV-70-Nachweise) in Kilanka, verknüpft über das Feld <code>KilankaLink</code> · Kostenkennzahlen und km-Prognosen werden live berechnet und nicht gespeichert. Alle Beträge sind Endbeträge inkl. USt (kein Vorsteuerabzug); <code>PNW p. M.</code> = monatliche Kosten nach Abzug vereinbarter Eigenanteile. Aktuelle km-Stände kommen automatisch aus dem Kilanka-Fahrtenbuch (<code>driverslog/tours</code>, Zuordnung per Kennzeichen, End-km der jüngsten Fahrt) — übernommen werden nur neuere und höhere Stände; Abweichungen nach unten zeigt „km aus Kilanka“ zur Prüfung.
   </div>
 </div>
 
@@ -266,6 +271,23 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <div class="dialog-actions">
       <button class="btn btn-solid btn-sm" onclick="fbUebernehmen()">Auswertung speichern</button>
       <button class="btn btn-ghost" onclick="fbSchliessen()" style="min-height:30px">Verwerfen</button>
+    </div>
+  </div>
+</div>
+
+<!-- KM-STÄNDE AUS KILANKA -->
+<div class="overlay" id="kmOverlay">
+  <div class="dialog">
+    <h2>km-Stände aus dem Kilanka-Fahrtenbuch</h2>
+    <div class="dsub" id="kmSub"></div>
+    <div id="kmErgebnis" style="overflow-x:auto"></div>
+    <div style="font-size:10.5px;color:var(--text-hint);line-height:1.6;margin-top:10px">
+      Maßgeblich ist der End-km-Stand der jüngsten Fahrt je Fahrzeug (Fahrten der letzten 120 Tage). Offensichtliche Tippfehler (Sprünge über 1.500 km in einer Fahrt, Rückschritte) werden verworfen. Neuere und höhere Stände übernimmt die App beim Öffnen automatisch; Abweichungen nach unten stehen hier zur Prüfung.
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-solid btn-sm" id="kmUebernehmenBtn" onclick="kmAuswahlUebernehmen()">Markierte übernehmen</button>
+      <button class="btn btn-outline btn-sm" onclick="kmKilankaLaden({neu:true,dialog:true})">Neu abrufen</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('kmOverlay').classList.remove('open')" style="min-height:30px">Schließen</button>
     </div>
   </div>
 </div>
@@ -295,7 +317,8 @@ const CFG = {
   tenantId: '1ac059d9-8d39-43ab-a8db-bd9197bde0f4',
   redirectUri: 'https://apps.praxisneuewege.de/fuhrpark-beta.html',
   spHost: 'praxisneuewegesonjapeltz978.sharepoint.com',
-  listName: 'PNW-Fahrzeuge'
+  listName: 'PNW-Fahrzeuge',
+  workerUrl: 'https://pnw-kilanka-proxy.markus-3c8.workers.dev'
 };
 const SCOPES = ['User.Read', 'User.ReadBasic.All', 'Sites.ReadWrite.All'];
 const APP_VERSION = 'BETA-5045b93'; // auto-updated on deploy
@@ -529,6 +552,7 @@ async function login(){
     // wenigstens die vorhandenen Fahrernamen anbieten.
     await ladeFahrerListe();
     zeigeZuordnungsStand();
+    kmKilankaLaden({auto:true});   // läuft im Hintergrund, Fehler nur als Hinweis im Kopf
   }catch(e){
     const err = document.getElementById('loginError');
     err.textContent = 'Anmeldung fehlgeschlagen: '+e.message;
@@ -1295,6 +1319,110 @@ async function dialogSpeichern(){
   try{ await speichern(dialogFahrzeug); }catch(e){ alert('Speichern fehlgeschlagen: '+e.message); return; }
   dialogFahrzeug=null;
   document.getElementById('overlay').classList.remove('open');
+}
+/* ═══════════════════════════════════════════════════════════
+ * KM-STÄNDE AUS KILANKA — Worker /api/fuhrpark/km-staende
+ * Quelle: Kilanka-Fahrtenbuch (driverslog/tours), Zuordnung per
+ * Kennzeichen. Neuere UND höhere Stände werden automatisch
+ * gespeichert (nur KmStand + KmStandDatum), alles andere zur Prüfung.
+ * ═══════════════════════════════════════════════════════════ */
+let kmKilanka=null;   // letzte Antwort des Workers
+let kmZeilen=[];      // Abgleich App ↔ Kilanka
+async function workerTokens(){
+  const req={scopes:SCOPES,account:currentAccount};
+  let r=await msalInstance.acquireTokenSilent(req).catch(()=>msalInstance.acquireTokenPopup(req));
+  let exp=0; try{ exp=JSON.parse(atob(r.idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1000; }catch(e){}
+  if(exp<Date.now()+60000) r=await msalInstance.acquireTokenSilent({...req,forceRefresh:true});
+  return {id:r.idToken,graph:r.accessToken};
+}
+async function workerGet(pfad){
+  const t=await workerTokens();
+  const res=await fetch(CFG.workerUrl+pfad,{headers:{Authorization:'Bearer '+t.id,'X-Graph-Token':t.graph}});
+  let d=null; try{ d=await res.json(); }catch(e){}
+  if(!res.ok) throw new Error((d&&d.error)||('HTTP '+res.status));
+  return d;
+}
+function kmFahrzeugZu(kz){
+  const nk=normKz(kz); if(!nk) return null;
+  const tr=fahrzeuge.filter(f=>normKz(f.kennzeichen)===nk);
+  return tr.find(f=>f.status==='aktiv')||tr[0]||null;
+}
+function kmAbgleich(){
+  const zeilen=[];
+  for(const k of (kmKilanka&&kmKilanka.fahrzeuge)||[]){
+    const f=kmFahrzeugZu(k.kennzeichen);
+    let status;
+    if(!f) status='fremd';
+    else if(f.kmStand&&k.kmStand===Math.round(f.kmStand)) status='gleich';
+    else if((!f.kmStand||k.kmStand>f.kmStand)&&(!f.kmStandDatum||k.datum>=f.kmStandDatum)) status='neuer';
+    else status='pruefen';
+    zeilen.push({k,f,status});
+  }
+  return zeilen;
+}
+async function kmSpeichernNur(f,km,datum){
+  f.kmStand=km; f.kmStandDatum=datum;
+  if(!online||!f._spId) return;
+  await graph(listenBasis+'/items/'+f._spId+'/fields',{method:'PATCH',body:JSON.stringify({KmStand:km,KmStandDatum:datum})});
+}
+async function kmKilankaLaden(opt){
+  opt=opt||{};
+  const st=document.getElementById('kmKilankaStand');
+  if(demoMode||!online){ if(opt.dialog) alert('Im Demo-Modus nicht verfügbar.'); return; }
+  st.style.display=''; st.textContent='km-Stände werden aus Kilanka geladen …';
+  try{
+    kmKilanka=await workerGet('/api/fuhrpark/km-staende'+(opt.neu?'?neu=1':''));
+  }catch(e){
+    st.textContent='Kilanka-km nicht abrufbar'; st.title=e.message;
+    if(opt.dialog) alert('km-Stände aus Kilanka nicht abrufbar: '+e.message);
+    return;
+  }
+  kmZeilen=kmAbgleich();
+  let n=0, fehler=0;
+  for(const z of kmZeilen.filter(z=>z.status==='neuer')){
+    try{ await kmSpeichernNur(z.f,z.k.kmStand,z.k.datum); z.status='uebernommen'; n++; }
+    catch(e){ fehler++; console.warn('km-Stand nicht gespeichert',z.f.kennzeichen,e); }
+  }
+  const pruefen=kmZeilen.filter(z=>z.status==='pruefen').length;
+  st.textContent='Kilanka: '+n+' km-Stand'+(n===1?'':'e')+' aktualisiert'+(pruefen?' · '+pruefen+' prüfen':'')+(fehler?' · '+fehler+' Fehler':'');
+  st.style.color=pruefen||fehler?'var(--warn)':'var(--text-muted)';
+  st.title='Quelle: '+kmKilanka.quelle+(kmKilanka.hinweis?'\n'+kmKilanka.hinweis:'');
+  if(n) renderAll();
+  if(opt.dialog) kmDialogZeigen();
+}
+async function kmKilankaDialog(){
+  if(!kmKilanka) await kmKilankaLaden({dialog:true}); else kmDialogZeigen();
+}
+function kmDialogZeigen(){
+  const d=kmKilanka; if(!d) return;
+  kmZeilen=kmAbgleich().map(z=>{ const alt=kmZeilen.find(x=>x.k.carId===z.k.carId&&x.status==='uebernommen'); return alt&&z.status==='gleich'?alt:z; });
+  document.getElementById('kmSub').textContent='Abruf '+new Date(d.stand).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})+' · Quelle '+d.quelle+' · Fahrten ab '+fDat(d.ab)+(d.hinweis?' — '+d.hinweis:'');
+  const label={uebernommen:['chip-ok','übernommen'],gleich:['chip-mut','aktuell'],neuer:['chip-ok','neuer'],pruefen:['chip-warn','prüfen'],fremd:['chip-mut','nicht in Liste']};
+  const fehlend=fahrzeuge.filter(f=>f.status==='aktiv'&&!kmZeilen.some(z=>z.f===f));
+  document.getElementById('kmErgebnis').innerHTML='<table><thead><tr><th></th><th>Kennzeichen</th><th class="num">km lt. Liste</th><th>vom</th><th class="num">km lt. Kilanka</th><th>letzte Fahrt</th><th>Fahrer:in</th><th class="num">Δ km</th><th>Status</th></tr></thead><tbody>'+
+    kmZeilen.map((z,i)=>{
+      const [cls,txt]=label[z.status]; const f=z.f, k=z.k;
+      const delta=f&&f.kmStand!=null?k.kmStand-f.kmStand:null;
+      const waehlbar=f&&(z.status==='pruefen'||z.status==='neuer');
+      return '<tr><td>'+(waehlbar?'<input type="checkbox" data-km="'+i+'"'+(z.status==='neuer'?' checked':'')+' style="accent-color:var(--accent)">':'')+'</td>'+
+        '<td><span class="kennzeichen" style="font-size:11.5px">'+esc(f?f.kennzeichen:(k.kennzeichen||'Kilanka-Fzg. '+k.carId))+'</span></td>'+
+        '<td class="num">'+(f?fKM(f.kmStand):'—')+'</td><td>'+(f&&f.kmStandDatum?fDat(f.kmStandDatum):'—')+'</td>'+
+        '<td class="num"><b>'+fKM(k.kmStand)+'</b></td><td>'+fDat(k.datum)+'</td><td>'+esc(k.fahrer||'—')+'</td>'+
+        '<td class="num"'+(delta<0?' style="color:var(--error)"':'')+'>'+(delta==null?'—':(delta>0?'+':'')+delta.toLocaleString('de-DE'))+'</td>'+
+        '<td><span class="chip '+cls+'" style="font-size:9.5px;padding:1px 7px" title="'+esc(k.verworfen?k.verworfen+' unplausible Fahrt(en) verworfen':'')+'">'+txt+'</span></td></tr>';
+    }).join('')+
+    fehlend.map(f=>'<tr><td></td><td><span class="kennzeichen" style="font-size:11.5px">'+esc(f.kennzeichen)+'</span></td><td class="num">'+fKM(f.kmStand)+'</td><td>'+(f.kmStandDatum?fDat(f.kmStandDatum):'—')+'</td><td colspan="4" style="color:var(--text-hint)">keine Fahrt im Kilanka-Fahrtenbuch gefunden</td><td><span class="chip chip-warn" style="font-size:9.5px;padding:1px 7px">fehlt</span></td></tr>').join('')+
+    '</tbody></table>';
+  document.getElementById('kmUebernehmenBtn').style.display=kmZeilen.some(z=>z.f&&(z.status==='pruefen'||z.status==='neuer'))?'':'none';
+  document.getElementById('kmOverlay').classList.add('open');
+}
+async function kmAuswahlUebernehmen(){
+  const boxen=[...document.querySelectorAll('#kmErgebnis input[data-km]:checked')];
+  if(!boxen.length){ alert('Keine Zeile markiert.'); return; }
+  try{
+    for(const b of boxen){ const z=kmZeilen[+b.dataset.km]; await kmSpeichernNur(z.f,z.k.kmStand,z.k.datum); z.status='uebernommen'; }
+  }catch(e){ alert('Speichern fehlgeschlagen: '+e.message); }
+  renderAll(); kmDialogZeigen();
 }
 function kmErfassen(){
   if(!dialogFahrzeug) return;

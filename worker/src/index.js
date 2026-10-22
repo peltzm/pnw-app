@@ -100,7 +100,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-10-04.2 (cleanup)";
+const WORKER_VERSION = "2026-10-22.1 (fuhrpark-km)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -2283,6 +2283,121 @@ async function kilankaSeiten(env, model, graph, maxSeiten = 40) {
   return alle;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Fuhrpark — aktueller km-Stand je Fahrzeug aus dem Kilanka-Fahrtenbuch
+//   Primär: driverslog/tours (seit Web-Update 20.10.2026, mit Kennzeichen)
+//   Fallback: tour an clients/timeSheets + rosters/timeSheets (Stand 09/2026)
+// Bewusst schmal: keine Adressen, kein Fahrtzweck, keine Klienten.
+// ═══════════════════════════════════════════════════════════════
+const FP_TAGE = 120;               // Fahrten der letzten 120 Tage reichen für den aktuellen Stand
+const FP_CACHE_MIN = 10;
+let fpCache = { data: null, fetchedAt: 0 };
+const fpBerlinTag = (z) => (/T/.test(z) ? new Date(z).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) : z.slice(0, 10));
+const fpZeit = (v) => (v && typeof v === "object" ? (v.$datetime ?? v.$date ?? null) : (v || null));
+
+async function fpToursDriverslog(env, abIso) {
+  const graph = {
+    id: 1, begin: 1, end: 1, mileageStartKm: 1, mileageEndKm: 1, privateTour: 1, deletedAt: 1,
+    car: { id: 1, recName: 1, licensePlate: 1, privateCar: 1, deletedAt: 1 },
+    user: { recName: 1 },
+    $limit: 1000,
+  };
+  let rows, gefiltert = true;
+  try {
+    rows = await kilankaSeiten(env, "driverslog/tours", { ...graph, $filter: { begin: { $gte: { $datetime: abIso + "T00:00:00Z" } } } }, 20);
+  } catch (e) {
+    if (/ 403 /.test(e.message)) throw e;   // Graph nicht freigegeben → Fallback beim Aufrufer
+    rows = null;
+  }
+  if (!rows || !rows.length) {              // Filter nicht unterstützt/ignoriert → ungefiltert, lokal schneiden
+    gefiltert = false;
+    rows = await kilankaSeiten(env, "driverslog/tours", graph, 40);
+  }
+  return {
+    quelle: "driverslog/tours", gefiltert,
+    fahrten: rows.filter((t) => !t.deletedAt && t.car && t.car.id != null).map((t) => ({
+      carId: String(t.car.id),
+      name: t.car.licensePlate || t.car.recName || null,
+      privatfahrzeug: t.car.privateCar === true,
+      archiviert: !!t.car.deletedAt,
+      zeit: String(fpZeit(t.end) || fpZeit(t.begin) || ""),
+      start: decimalToNumber(t.mileageStartKm), ende: decimalToNumber(t.mileageEndKm),
+      fahrer: t.user?.recName || null,
+    })),
+  };
+}
+
+async function fpToursTimeSheets(env, abIso) {
+  const tour = { id: 1, begin: 1, end: 1, mileageStartKm: 1, mileageEndKm: 1, car: { id: 1, recName: 1 } };
+  const filter = { date: { $gte: { $date: abIso } } };
+  const [kl, ro] = await Promise.all([
+    kilankaSeiten(env, "clients/timeSheets", { id: 1, date: 1, user: { id: 1 }, tour, $filter: filter, $limit: 1000 }, 20),
+    kilankaSeiten(env, "rosters/timeSheets", { id: 1, date: 1, user: { id: 1, recName: 1 }, tour, $filter: filter, $limit: 1000 }, 20).catch(() => []),
+  ]);
+  const namen = new Map(); // car.id → recName (nur rosters/timeSheets liefert den Namen)
+  for (const t of [...ro, ...kl]) if (t.tour?.car?.id != null && t.tour.car.recName) namen.set(String(t.tour.car.id), t.tour.car.recName);
+  const gesehen = new Set(), fahrten = [];
+  for (const t of [...kl, ...ro]) {
+    const tr = t.tour;
+    if (!tr || tr.car?.id == null || gesehen.has(String(tr.id))) continue;
+    gesehen.add(String(tr.id));
+    const id = String(tr.car.id);
+    fahrten.push({ carId: id, name: namen.get(id) || null, privatfahrzeug: false, archiviert: false,
+      zeit: String(fpZeit(tr.end) || fpZeit(tr.begin) || fpZeit(t.date) || ""),
+      start: decimalToNumber(tr.mileageStartKm), ende: decimalToNumber(tr.mileageEndKm),
+      fahrer: t.user?.recName || null });
+  }
+  return { quelle: "timeSheets.tour", gefiltert: true, fahrten };
+}
+
+// Je Fahrzeug chronologisch durchlaufen; Tippfehler (Sprünge nach oben, die
+// nicht zur Folgefahrt passen) und Rückschritte werden verworfen.
+function fpKmStaende(fahrten, abIso) {
+  const jeAuto = new Map();
+  for (const f of fahrten) {
+    if (!f.zeit || f.zeit.slice(0, 10) < abIso) continue;
+    if (!(f.ende > 0)) continue;
+    (jeAuto.get(f.carId) || jeAuto.set(f.carId, []).get(f.carId)).push(f);
+  }
+  const ergebnis = [];
+  for (const [carId, liste] of jeAuto) {
+    liste.sort((a, b) => a.zeit.localeCompare(b.zeit));
+    let stand = null, letzte = null, verworfen = 0;
+    for (let i = 0; i < liste.length; i++) {
+      const f = liste[i];
+      const naechste = liste[i + 1];
+      // Sprung > 3.000 km über dem bisherigen Stand UND die Folgefahrt startet wieder darunter → Tippfehler
+      const sprung = (f.start > 0 && f.ende - f.start > 1500) ||
+        (stand != null && f.ende - stand > 3000 && naechste && naechste.start > 0 && naechste.start < f.ende - 1000);
+      const rueckschritt = stand != null && f.ende < stand - 50;
+      if (sprung || rueckschritt) { verworfen++; continue; }
+      stand = Math.max(stand ?? 0, f.ende); letzte = f;
+    }
+    if (!letzte) continue;
+    const name = liste.map((x) => x.name).filter(Boolean).pop() || null;
+    if (liste.some((x) => x.privatfahrzeug)) continue;            // Privat-PKW (km-Abrechnung) gehören nicht in den Fuhrpark
+    ergebnis.push({
+      carId, kennzeichen: name, kmStand: Math.round(stand), datum: fpBerlinTag(letzte.zeit),
+      fahrer: letzte.fahrer, fahrten: liste.length, verworfen, archiviert: liste.some((x) => x.archiviert),
+    });
+  }
+  return ergebnis.sort((a, b) => String(a.kennzeichen).localeCompare(String(b.kennzeichen), "de"));
+}
+
+async function buildFuhrparkKm(env, neu) {
+  if (!neu && fpCache.data && Date.now() - fpCache.fetchedAt < FP_CACHE_MIN * 60 * 1000) return { ...fpCache.data, cache: true };
+  const ab = new Date(Date.now() - FP_TAGE * 86400000).toISOString().slice(0, 10);
+  let roh, hinweis = null;
+  try { roh = await fpToursDriverslog(env, ab); }
+  catch (e) {
+    hinweis = `driverslog/tours nicht nutzbar (${e.message}) — Fallback auf Fahrten an den Zeitbuchungen. Für Kennzeichen direkt aus dem Fahrtenbuch das Modell „driverslog/tours“ im Schnittstellen-Graphen freigeben.`;
+    roh = await fpToursTimeSheets(env, ab);
+  }
+  const data = { stand: new Date().toISOString(), ab, quelle: roh.quelle, gefiltert: roh.gefiltert, hinweis, fahrzeuge: fpKmStaende(roh.fahrten, ab) };
+  fpCache = { data, fetchedAt: Date.now() };
+  return data;
+}
+
 async function serviceNamen(env) {
   if (serviceNameCache.map && Date.now() - serviceNameCache.fetchedAt < 60 * 60 * 1000) {
     return serviceNameCache.map;
@@ -3791,7 +3906,7 @@ export default {
       const modelle = [
         "users", "clients", "rosters", "contacts", "users/absences",
         "clients/reports", "clients/absences", "clients/timeSheets",
-        "rosters/timeSheets", "rosters/accounts",
+        "rosters/timeSheets", "rosters/accounts", "driverslog/tours",
         "accounting/invoices", "accounting/services", "accounting/invoiceSets",
       ];
       const ergebnis = [];
@@ -3804,6 +3919,22 @@ export default {
         }
       }
       return json({ stand: new Date().toISOString(), ergebnis }, 200, origin);
+    }
+
+    // ── Fuhrpark: aktuelle km-Stände aus dem Kilanka-Fahrtenbuch (GF) ──
+    if (url.pathname === "/api/fuhrpark/km-staende" && request.method === "GET") {
+      const auth = await validateEntraToken(request.headers.get("Authorization"));
+      if (!auth.ok) return json({ error: auth.error }, 401, origin);
+      const caller = (auth.upn || "").trim().toLowerCase();
+      if (!GF_UPNS.some((g) => g.trim().toLowerCase() === caller)) {
+        return json({ error: "Der Fuhrpark ist der Geschäftsführung vorbehalten" }, 403, origin);
+      }
+      { const gate = await appZugriff(request, caller, ["PNW-App-Fuhrpark"], "/api/fuhrpark/km-staende"); if (!gate.ok) return json({ error: gate.error }, gate.status, origin); }
+      try {
+        return json(await buildFuhrparkKm(env, url.searchParams.get("neu") === "1"), 200, origin);
+      } catch (e) {
+        return json({ error: "km-Stände aus Kilanka nicht ladbar: " + e.message }, 502, origin);
+      }
     }
 
     if (url.pathname === "/api/health") {

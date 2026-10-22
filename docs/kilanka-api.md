@@ -158,3 +158,15 @@ Probing gegen 2.719 Echt-Rechnungen (eine aktuelle ambulante je Kostenträger):
   leere Felder als `null`.
 - **Quelle der Schlüsselnamen ohne Probing:** generierte Applet-`sdk.ts`
   (enthält das komplette UDF-Schema als TypeScript-Typen).
+
+## Fahrtenbuch `driverslog/tours` (neu seit Web-Update 20.10.2026)
+
+Laut OpenAPI `/documentation` (abgerufen 22.10.2026, `2.0.0-wip`, 16 Pfade) gibt es ein eigenes Fahrtenbuch-Modell:
+
+- **Felder:** `id`, `begin`/`end` (Zeitbereich, `$datetime`), `mileageStartKm`/`mileageEndKm`, `distanceKm`, `privateTour`, `description` (Zweck), `startAddress`/`endAddress`, `costCenter`, `user` (Mitarbeiter), `clientTimeSheet`/`rosterTimeSheet` (Verknüpfung zur Buchung), `deletedAt`, create/write
+- **`car`:** `id`, `recName`, `licensePlate` (**Kennzeichen**), `privateCar`, `deletedAt`, `udf` — damit erstmals Kennzeichen direkt aus der API, ohne Umweg über `rosters/timeSheets`
+- Parameter wie gewohnt: `$limit` (max 1000), `$offset`, `$filter`, `$cursor`
+- Ebenfalls neu im Pfad-Katalog: `clients/scheduleEvents`
+- Freigabe: Die Tokens `G8O6…` und `vDVc…` erhalten am 22.10.2026 **403** — das Modell muss im Schnittstellen-Graphen ausdrücklich freigegeben werden
+
+Genutzt vom Worker-Endpunkt `GET /api/fuhrpark/km-staende` (GF + `PNW-App-Fuhrpark`): End-km der jüngsten Fahrt je Fahrzeug (letzte 120 Tage), Tippfehler-Filter (> 1.500 km in einer Fahrt oder Rückschritt), Privat-PKW ausgeblendet. Fehlt die Freigabe, fällt der Worker auf `tour` an `clients/timeSheets` + `rosters/timeSheets` zurück. Adressen/Zweck werden nicht abgefragt.
