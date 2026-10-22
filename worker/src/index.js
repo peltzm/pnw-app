@@ -410,7 +410,7 @@ let qualiCache = { map: null, fetchedAt: 0 };
 async function kilankaPost(env, model, graph) {
   const body = JSON.stringify(graph);
   let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 4; attempt++) {
     const r = await fetch(`${KILANKA_BASE}/${model}`, {
       method: "POST",
       headers: {
@@ -425,7 +425,8 @@ async function kilankaPost(env, model, graph) {
     }
     lastErr = `Kilanka ${r.status} bei ${model}`; // Modell im Text: sonst ist bei 403 nicht erkennbar, welche Freigabe fehlt
     if (r.status === 502 || r.status === 429) {
-      await new Promise((res) => setTimeout(res, 800 * attempt));
+      // 429: Rate-Limit 10 Anfragen / 5 s — Fenster abwarten statt sofort aufzugeben
+      await new Promise((res) => setTimeout(res, (r.status === 429 ? 2000 : 800) * attempt));
       continue;
     }
     break;
@@ -2292,6 +2293,11 @@ async function kilankaSeiten(env, model, graph, maxSeiten = 40) {
 const FP_TAGE = 120;               // Fahrten der letzten 120 Tage reichen für den aktuellen Stand
 const FP_CACHE_MIN = 10;
 let fpCache = { data: null, fetchedAt: 0 };
+// Kilanka-Fahrzeugnamen lauten z. B. "FS - NW 919 - FS - NW 919" oder "FS - NW 911 (neu) - FS - NW 911"
+const fpKz = (n) => {
+  const m = String(n || "").toUpperCase().match(/\b([A-ZÄÖÜ]{1,3})\s*-?\s*([A-Z]{1,2})\s*-?\s*(\d{1,4}\s*[EH]?)\b/);
+  return m ? `${m[1]}-${m[2]} ${m[3].replace(/\s+/g, "")}` : null;
+};
 const fpBerlinTag = (z) => (/T/.test(z) ? new Date(z).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) : z.slice(0, 10));
 const fpZeit = (v) => (v && typeof v === "object" ? (v.$datetime ?? v.$date ?? null) : (v || null));
 
@@ -2330,12 +2336,15 @@ async function fpToursDriverslog(env, abIso) {
 async function fpToursTimeSheets(env, abIso) {
   const tour = { id: 1, begin: 1, end: 1, mileageStartKm: 1, mileageEndKm: 1, car: { id: 1, recName: 1 } };
   const filter = { date: { $gte: { $date: abIso } } };
-  const [kl, ro] = await Promise.all([
-    kilankaSeiten(env, "clients/timeSheets", { id: 1, date: 1, user: { id: 1 }, tour, $filter: filter, $limit: 1000 }, 20),
-    kilankaSeiten(env, "rosters/timeSheets", { id: 1, date: 1, user: { id: 1, recName: 1 }, tour, $filter: filter, $limit: 1000 }, 20).catch(() => []),
-  ]);
+  // Nacheinander, nicht parallel: Kilanka-Rate-Limit 10 Anfragen / 5 s (sonst 429)
+  const kl = await kilankaSeiten(env, "clients/timeSheets", { id: 1, date: 1, user: { id: 1 }, tour, $filter: filter, $limit: 1000 }, 20);
+  const ro = await kilankaSeiten(env, "rosters/timeSheets", { id: 1, date: 1, user: { id: 1 }, tour, $filter: filter, $limit: 1000 }, 20)
+    .catch((e) => { console.warn("Fuhrpark: rosters/timeSheets nicht ladbar —", e.message); return []; });
   const namen = new Map(); // car.id → recName (nur rosters/timeSheets liefert den Namen)
   for (const t of [...ro, ...kl]) if (t.tour?.car?.id != null && t.tour.car.recName) namen.set(String(t.tour.car.id), t.tour.car.recName);
+  const leute = new Map();
+  try { for (const u of await kilankaUser(env)) leute.set(String(u.id), [u.name, u.firstName].filter(Boolean).join(", ")); }
+  catch (e) { console.warn("Fuhrpark: Mitarbeiternamen nicht ladbar —", e.message); }
   const gesehen = new Set(), fahrten = [];
   for (const t of [...kl, ...ro]) {
     const tr = t.tour;
@@ -2345,7 +2354,7 @@ async function fpToursTimeSheets(env, abIso) {
     fahrten.push({ carId: id, name: namen.get(id) || null, privatfahrzeug: false, archiviert: false,
       zeit: String(fpZeit(tr.end) || fpZeit(tr.begin) || fpZeit(t.date) || ""),
       start: decimalToNumber(tr.mileageStartKm), ende: decimalToNumber(tr.mileageEndKm),
-      fahrer: t.user?.recName || null });
+      fahrer: leute.get(String(t.user?.id)) || t.user?.recName || null });
   }
   return { quelle: "timeSheets.tour", gefiltert: true, fahrten };
 }
@@ -2375,9 +2384,11 @@ function fpKmStaende(fahrten, abIso) {
     }
     if (!letzte) continue;
     const name = liste.map((x) => x.name).filter(Boolean).pop() || null;
-    if (liste.some((x) => x.privatfahrzeug)) continue;            // Privat-PKW (km-Abrechnung) gehören nicht in den Fuhrpark
+    const kennzeichen = fpKz(name);
+    // Privat-PKW (km-Abrechnung) gehören nicht in den Fuhrpark — in Kilanka nach der Person benannt
+    if (liste.some((x) => x.privatfahrzeug) || (name && !kennzeichen)) continue;
     ergebnis.push({
-      carId, kennzeichen: name, kmStand: Math.round(stand), datum: fpBerlinTag(letzte.zeit),
+      carId, kennzeichen, kilankaName: name, kmStand: Math.round(stand), datum: fpBerlinTag(letzte.zeit),
       fahrer: letzte.fahrer, fahrten: liste.length, verworfen, archiviert: liste.some((x) => x.archiviert),
     });
   }

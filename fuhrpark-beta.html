@@ -1347,16 +1347,30 @@ function kmFahrzeugZu(kz){
   const tr=fahrzeuge.filter(f=>normKz(f.kennzeichen)===nk);
   return tr.find(f=>f.status==='aktiv')||tr[0]||null;
 }
+/* Zuordnung: 1. Kennzeichen (sicher, wird automatisch übernommen)
+   2. ohne Kennzeichen in Kilanka: über die Fahrer:in der jüngsten Fahrt —
+      nur als Vorschlag zur Prüfung, nie automatisch gespeichert */
+function kmNachname(n){ return normName(String(n||'').split(',')[0]); }
 function kmAbgleich(){
-  const zeilen=[];
-  for(const k of (kmKilanka&&kmKilanka.fahrzeuge)||[]){
-    const f=kmFahrzeugZu(k.kennzeichen);
-    let status;
-    if(!f) status='fremd';
-    else if(f.kmStand&&k.kmStand===Math.round(f.kmStand)) status='gleich';
-    else if((!f.kmStand||k.kmStand>f.kmStand)&&(!f.kmStandDatum||k.datum>=f.kmStandDatum)) status='neuer';
-    else status='pruefen';
-    zeilen.push({k,f,status});
+  const liste=(kmKilanka&&kmKilanka.fahrzeuge)||[];
+  const zeilen=liste.map(k=>({k,f:k.kennzeichen?kmFahrzeugZu(k.kennzeichen):null,viaFahrer:false}));
+  const belegt=new Set(zeilen.filter(z=>z.f).map(z=>z.f));
+  const aktiv=fahrzeuge.filter(f=>f.status==='aktiv'&&!belegt.has(f)&&f.fahrer);
+  const jeFz=new Map();
+  for(const z of zeilen.filter(z=>!z.f&&z.k.fahrer)){
+    const nn=kmNachname(z.k.fahrer); if(!nn) continue;
+    const tr=aktiv.filter(f=>{const fn=normName(f.fahrer);return fn&&(fn===nn||fn.includes(nn)||nn.includes(fn));});
+    if(tr.length!==1) continue;
+    const bisher=jeFz.get(tr[0]);
+    if(!bisher||z.k.datum>bisher.k.datum) jeFz.set(tr[0],z);
+  }
+  for(const [f,z] of jeFz){ z.f=f; z.viaFahrer=true; }
+  for(const z of zeilen){
+    const f=z.f, k=z.k;
+    if(!f) z.status='fremd';
+    else if(f.kmStand&&k.kmStand===Math.round(f.kmStand)) z.status='gleich';
+    else if(!z.viaFahrer&&(!f.kmStand||k.kmStand>f.kmStand)&&(!f.kmStandDatum||k.datum>=f.kmStandDatum)) z.status='neuer';
+    else z.status='pruefen';
   }
   return zeilen;
 }
@@ -1400,19 +1414,21 @@ function kmDialogZeigen(){
   const label={uebernommen:['chip-ok','übernommen'],gleich:['chip-mut','aktuell'],neuer:['chip-ok','neuer'],pruefen:['chip-warn','prüfen'],fremd:['chip-mut','nicht in Liste']};
   const fehlend=fahrzeuge.filter(f=>f.status==='aktiv'&&!kmZeilen.some(z=>z.f===f));
   document.getElementById('kmErgebnis').innerHTML='<table><thead><tr><th></th><th>Kennzeichen</th><th class="num">km lt. Liste</th><th>vom</th><th class="num">km lt. Kilanka</th><th>letzte Fahrt</th><th>Fahrer:in</th><th class="num">Δ km</th><th>Status</th></tr></thead><tbody>'+
-    kmZeilen.map((z,i)=>{
+    kmZeilen.map((z,i)=>z.status==='fremd'?'':(()=>{
       const [cls,txt]=label[z.status]; const f=z.f, k=z.k;
       const delta=f&&f.kmStand!=null?k.kmStand-f.kmStand:null;
       const waehlbar=f&&(z.status==='pruefen'||z.status==='neuer');
-      return '<tr><td>'+(waehlbar?'<input type="checkbox" data-km="'+i+'"'+(z.status==='neuer'?' checked':'')+' style="accent-color:var(--accent)">':'')+'</td>'+
-        '<td><span class="kennzeichen" style="font-size:11.5px">'+esc(f?f.kennzeichen:(k.kennzeichen||'Kilanka-Fzg. '+k.carId))+'</span></td>'+
+      const vorausgewaehlt=z.status==='neuer'||(z.viaFahrer&&delta>0&&(!f.kmStandDatum||k.datum>=f.kmStandDatum));
+      return '<tr><td>'+(waehlbar?'<input type="checkbox" data-km="'+i+'"'+(vorausgewaehlt?' checked':'')+' style="accent-color:var(--accent)">':'')+'</td>'+
+        '<td><span class="kennzeichen" style="font-size:11.5px">'+esc(f?f.kennzeichen:(k.kennzeichen||'ohne Kennzeichen'))+'</span>'+(z.viaFahrer?' <span class="chip chip-mut" style="font-size:9px;padding:1px 6px" title="In Kilanka ist dieses Fahrzeug nicht nach Kennzeichen benannt — Zuordnung über die Fahrer:in, bitte prüfen">über Fahrer:in</span>':'')+'</td>'+
         '<td class="num">'+(f?fKM(f.kmStand):'—')+'</td><td>'+(f&&f.kmStandDatum?fDat(f.kmStandDatum):'—')+'</td>'+
         '<td class="num"><b>'+fKM(k.kmStand)+'</b></td><td>'+fDat(k.datum)+'</td><td>'+esc(k.fahrer||'—')+'</td>'+
         '<td class="num"'+(delta<0?' style="color:var(--error)"':'')+'>'+(delta==null?'—':(delta>0?'+':'')+delta.toLocaleString('de-DE'))+'</td>'+
         '<td><span class="chip '+cls+'" style="font-size:9.5px;padding:1px 7px" title="'+esc(k.verworfen?k.verworfen+' unplausible Fahrt(en) verworfen':'')+'">'+txt+'</span></td></tr>';
-    }).join('')+
+    })()).join('')+
     fehlend.map(f=>'<tr><td></td><td><span class="kennzeichen" style="font-size:11.5px">'+esc(f.kennzeichen)+'</span></td><td class="num">'+fKM(f.kmStand)+'</td><td>'+(f.kmStandDatum?fDat(f.kmStandDatum):'—')+'</td><td colspan="4" style="color:var(--text-hint)">keine Fahrt im Kilanka-Fahrtenbuch gefunden</td><td><span class="chip chip-warn" style="font-size:9.5px;padding:1px 7px">fehlt</span></td></tr>').join('')+
-    '</tbody></table>';
+    '</tbody></table>'+
+    (()=>{ const fr=kmZeilen.filter(z=>z.status==='fremd'); return fr.length?'<div style="font-size:11px;color:var(--text-muted);margin-top:8px">Nicht zuordenbar ('+fr.length+'): '+fr.map(z=>esc((z.k.kennzeichen||'ohne Kennzeichen')+' · '+fKM(z.k.kmStand)+' · '+(z.k.fahrer||'?'))).join(' — ')+'</div>':''; })();
   document.getElementById('kmUebernehmenBtn').style.display=kmZeilen.some(z=>z.f&&(z.status==='pruefen'||z.status==='neuer'))?'':'none';
   document.getElementById('kmOverlay').classList.add('open');
 }
