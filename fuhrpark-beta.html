@@ -1424,7 +1424,8 @@ function kmDialogZeigen(){
         '<td class="num">'+(f?fKM(f.kmStand):'—')+'</td><td>'+(f&&f.kmStandDatum?fDat(f.kmStandDatum):'—')+'</td>'+
         '<td class="num"><b>'+fKM(k.kmStand)+'</b></td><td>'+fDat(k.datum)+'</td><td>'+esc(k.fahrer||'—')+'</td>'+
         '<td class="num"'+(delta<0?' style="color:var(--error)"':'')+'>'+(delta==null?'—':(delta>0?'+':'')+delta.toLocaleString('de-DE'))+'</td>'+
-        '<td><span class="chip '+cls+'" style="font-size:9.5px;padding:1px 7px" title="'+esc(k.verworfen?k.verworfen+' unplausible Fahrt(en) verworfen':'')+'">'+txt+'</span></td></tr>';
+        '<td><span class="chip '+cls+'" style="font-size:9.5px;padding:1px 7px" title="'+esc(k.verworfen?k.verworfen+' unplausible Fahrt(en) verworfen':'')+'">'+txt+'</span>'+
+        (k.doppelt&&k.doppelt.length?' <span class="chip chip-warn" style="font-size:9px;padding:1px 6px" title="'+esc('Kennzeichen in Kilanka mehrfach angelegt — ignoriert: '+k.doppelt.map(x=>fKM(x.kmStand)+' (letzte Fahrt '+fDat(x.datum)+')').join(', '))+'">doppelt in Kilanka</span>':'')+'</td></tr>';
     })()).join('')+
     fehlend.map(f=>'<tr><td></td><td><span class="kennzeichen" style="font-size:11.5px">'+esc(f.kennzeichen)+'</span></td><td class="num">'+fKM(f.kmStand)+'</td><td>'+(f.kmStandDatum?fDat(f.kmStandDatum):'—')+'</td><td colspan="4" style="color:var(--text-hint)">keine Fahrt im Kilanka-Fahrtenbuch gefunden</td><td><span class="chip chip-warn" style="font-size:9.5px;padding:1px 7px">fehlt</span></td></tr>').join('')+
     '</tbody></table>'+

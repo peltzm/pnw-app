@@ -2392,7 +2392,19 @@ function fpKmStaende(fahrten, abIso) {
       fahrer: letzte.fahrer, fahrten: liste.length, verworfen, archiviert: liste.some((x) => x.archiviert),
     });
   }
-  return ergebnis.sort((a, b) => String(a.kennzeichen).localeCompare(String(b.kennzeichen), "de"));
+  // Mehrere Kilanka-Fahrzeuge mit demselben Kennzeichen (Doppelanlage/Altdatensatz):
+  // nur das mit der jüngsten Fahrt zählt, die anderen gehen als Hinweis mit
+  const jeKz = new Map();
+  for (const e of ergebnis) {
+    const v = e.kennzeichen && jeKz.get(e.kennzeichen);
+    if (!v) { if (e.kennzeichen) jeKz.set(e.kennzeichen, e); continue; }
+    const [neu, alt] = e.datum > v.datum ? [e, v] : [v, e];
+    neu.doppelt = [...(v.doppelt || []), ...(e.doppelt || []), { carId: alt.carId, kmStand: alt.kmStand, datum: alt.datum }];
+    delete alt.doppelt;
+    jeKz.set(e.kennzeichen, neu);
+  }
+  return [...jeKz.values(), ...ergebnis.filter((e) => !e.kennzeichen)]
+    .sort((a, b) => String(a.kennzeichen).localeCompare(String(b.kennzeichen), "de"));
 }
 
 async function buildFuhrparkKm(env, neu) {
