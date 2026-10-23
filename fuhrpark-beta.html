@@ -188,6 +188,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   <div class="demo-bar" id="demoBar">
     <strong>Demo-Modus</strong><span>— Daten aus dem Excel-Import vom 15.07.2026 (km-Stände: 01.03.2026). Änderungen werden nicht gespeichert.</span>
   </div>
+  <div class="demo-bar" id="neuzugangBar" style="display:none;background:var(--accent-light);color:var(--accent);border-color:var(--accent-mid)">
+    <strong>Neuzugänge 10/2026</strong><span id="neuzugangText"></span>
+    <button class="btn btn-solid btn-sm" style="margin-left:auto" onclick="neuzugangDialog()">Prüfen &amp; übernehmen</button>
+  </div>
   <div class="page-header">
     <div class="page-header-left">
       <h2 id="pageTitle">Flotte</h2>
@@ -271,6 +275,22 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <div class="dialog-actions">
       <button class="btn btn-solid btn-sm" onclick="fbUebernehmen()">Auswertung speichern</button>
       <button class="btn btn-ghost" onclick="fbSchliessen()" style="min-height:30px">Verwerfen</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEUZUGÄNGE -->
+<div class="overlay" id="nzOverlay">
+  <div class="dialog">
+    <h2>Neuzugänge PAF-NW 902–908 und Fahrerwechsel</h2>
+    <div class="dsub">Beschluss 23.10.2026 (Vorschlag 2, FS-NW 913 in den Pool, Notz fährt privat). Abwählen, was noch nicht gelten soll, z. B. Fahrerwechsel vor der Übergabe.</div>
+    <div id="nzListe" style="overflow-x:auto"></div>
+    <div style="font-size:10.5px;color:var(--text-hint);line-height:1.6;margin-top:10px">
+      Vertragsdaten laut KFZ Übersicht 12.10.2026 (48 Monate, 80.000 km, Vertragsende 18.10.2030), Erstzulassung PAF-NW 902 laut Zulassungsbescheinigung 23.10.2026. Mehr-/Minder-km-Satz, Rate und Versicherung sind noch nicht bekannt bzw. wie FS-NW 115 angenommen — bitte im Fahrzeugdialog nachtragen. Ordner werden in „99 Allgemeine Leitung/KFZ“ angelegt (Name = Kennzeichen).
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-solid btn-sm" id="nzStart" onclick="neuzugangAusfuehren()">Markierte übernehmen</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('nzOverlay').classList.remove('open')" style="min-height:30px">Schließen</button>
     </div>
   </div>
 </div>
@@ -552,6 +572,7 @@ async function login(){
     // wenigstens die vorhandenen Fahrernamen anbieten.
     await ladeFahrerListe();
     zeigeZuordnungsStand();
+    zeigeNeuzugangBar();
     kmKilankaLaden({auto:true});   // läuft im Hintergrund, Fehler nur als Hinweis im Kopf
   }catch(e){
     const err = document.getElementById('loginError');
@@ -1440,6 +1461,105 @@ async function kmAuswahlUebernehmen(){
     for(const b of boxen){ const z=kmZeilen[+b.dataset.km]; await kmSpeichernNur(z.f,z.k.kmStand,z.k.datum); z.status='uebernommen'; }
   }catch(e){ alert('Speichern fehlgeschlagen: '+e.message); }
   renderAll(); kmDialogZeigen();
+}
+/* ═══════════════════════════════════════════════════════════
+ * NEUZUGÄNGE 10/2026 — einmalige Übernahme (Beschluss 23.10.2026)
+ * Legt die 6 neuen Dacias in der Liste an (Abgleich über FIN),
+ * erstellt je einen Ordner im KFZ-Ordner (OneDrive Sonja) und setzt
+ * die Fahrerwechsel. Bereits Erledigtes wird übersprungen.
+ * ═══════════════════════════════════════════════════════════ */
+const NEUZUGANG = {
+  driveId: 'b!f7uxF10jA0-RUH7Gt7e1aFVimAAkpLhGqO8Zs9_BmTfQT-izV-7wRJ4sWE1h7QJD',
+  kfzOrdnerId: '01LARX5YVCK7AVMXNYLVHLP5QORTDVXONF',          // 99 Allgemeine Leitung/KFZ
+  basis: {hersteller:'Dacia', modell:'Dacia Sandero Stepway Expression Eco-G 120 Automatik', hsn:'8212', tsn:'AGA',
+          status:'aktiv', erstzulassung:'2026-10-19', rueckgabe:'2030-10-18', finanzierung:'Leasing',
+          kmVertragGesamt:80000, kmProJahr:20000, laufzeitMonate:48, satzMehrKm:0.0595, satzMinderKm:0.0238},
+  fahrzeuge: [
+    {kennzeichen:'PAF-NW 902', fin:'UU1DJF00177660968', fahrer:'Schütze, Danielle', erstzulassung:'2026-10-23'},
+    {kennzeichen:'PAF-NW 903', fin:'UU1DJF00377660969', fahrer:'Koch, Simone'},
+    {kennzeichen:'PAF-NW 905', fin:'UU1DJF00677660965', fahrer:'Schneider, Jörg'},
+    {kennzeichen:'PAF-NW 906', fin:'UU1DJF00477660964', fahrer:'Tappert, Gabriel'},
+    {kennzeichen:'PAF-NW 907', fin:'UU1DJF00X77660967', fahrer:'Lankl, Katrin'},
+    {kennzeichen:'PAF-NW 908', fin:'UU1DJF00X77660970', fahrer:'Riedl, Maximilian'}   // ab 12/2026
+  ],
+  wechsel: [
+    {kennzeichen:'FS-NW 913', fahrer:'Pool',               hinweis:'nach Übergabe Schütze → PAF-NW 902'},
+    {kennzeichen:'FS-NW 910', fahrer:'Steiger, Johanna',   hinweis:'nach Übergabe Schneider → PAF-NW 905'},
+    {kennzeichen:'FS-NW 912', fahrer:'Steinberger, Dina',  hinweis:'nach Übergabe Koch → PAF-NW 903'},
+    {kennzeichen:'FS-NW 103', fahrer:'Leurpendeur, Marie', hinweis:'ab 01.11.2026 (Požgaj ausgeschieden)'}
+  ]
+};
+const NZ_ORDNER_KEY = 'pnw-neuzugang-2026-10-ordner';
+const nzSpeicher = { get(){ try{ return localStorage.getItem(NZ_ORDNER_KEY); }catch(e){ return null; } },
+                     set(){ try{ localStorage.setItem(NZ_ORDNER_KEY,'1'); }catch(e){} } };
+function nzFahrzeugZuKz(kz){ const tr=fahrzeuge.filter(f=>normKz(f.kennzeichen)===normKz(kz)); return tr.find(f=>f.status==='aktiv')||tr[0]||null; }
+function nzOffen(){
+  const fehlend = NEUZUGANG.fahrzeuge.filter(n=>!fahrzeuge.some(f=>normKz(f.fin)===normKz(n.fin)));
+  const wechsel = NEUZUGANG.wechsel.filter(w=>{ const f=nzFahrzeugZuKz(w.kennzeichen); return f && (f.fahrer||'').trim()!==w.fahrer; });
+  return {fehlend, wechsel, ordner: !nzSpeicher.get()};
+}
+function zeigeNeuzugangBar(){
+  const bar=document.getElementById('neuzugangBar'); if(!bar) return;
+  if(!online){ bar.style.display='none'; return; }
+  const o=nzOffen(), teile=[];
+  if(o.fehlend.length) teile.push(o.fehlend.length+' Fahrzeug'+(o.fehlend.length===1?'':'e')+' anzulegen');
+  if(o.wechsel.length) teile.push(o.wechsel.length+' Fahrerwechsel offen');
+  if(o.ordner) teile.push('KFZ-Ordner anlegen');
+  bar.style.display=teile.length?'flex':'none';
+  document.getElementById('neuzugangText').textContent='— '+teile.join(' · ');
+}
+function neuzugangDialog(){
+  const o=nzOffen(); let i=0; const zeile=(txt,an,info,status)=>
+    '<tr><td><input type="checkbox" data-nz="'+(i++)+'"'+(an?' checked':' disabled')+' style="accent-color:var(--accent)"></td><td>'+txt+'</td><td style="color:var(--text-muted)">'+esc(info||'')+'</td><td>'+status+'</td></tr>';
+  const ok='<span class="chip chip-mut" style="font-size:9.5px;padding:1px 7px">erledigt</span>', off='<span class="chip chip-warn" style="font-size:9.5px;padding:1px 7px">offen</span>';
+  nzAktionen=[];
+  let html='<table><thead><tr><th></th><th>Aktion</th><th>Details</th><th>Status</th></tr></thead><tbody>';
+  for(const n of NEUZUGANG.fahrzeuge){ const offen=o.fehlend.includes(n); nzAktionen.push({art:'anlegen',n});
+    html+=zeile('Fahrzeug anlegen: <span class="kennzeichen" style="font-size:11.5px">'+esc(n.kennzeichen)+'</span>',offen,'Fahrer:in '+n.fahrer+' · FIN '+n.fin,offen?off:ok); }
+  nzAktionen.push({art:'ordner'});
+  html+=zeile('Ordner im KFZ-Ordner anlegen (6×)',o.ordner,NEUZUGANG.fahrzeuge.map(n=>n.kennzeichen).join(', '),o.ordner?off:ok);
+  for(const w of NEUZUGANG.wechsel){ const f=nzFahrzeugZuKz(w.kennzeichen), offen=o.wechsel.includes(w); nzAktionen.push({art:'wechsel',w});
+    html+=zeile('Fahrerwechsel: <span class="kennzeichen" style="font-size:11.5px">'+esc(w.kennzeichen)+'</span> '+esc((f&&f.fahrer)||'–')+' → <b>'+esc(w.fahrer)+'</b>',offen,w.hinweis,offen?off:ok); }
+  document.getElementById('nzListe').innerHTML=html+'</tbody></table>';
+  document.getElementById('nzOverlay').classList.add('open');
+}
+let nzAktionen=[];
+async function nzOrdnerAnlegen(){
+  const req={scopes:['Files.ReadWrite.All'],account:currentAccount};
+  let t; try{ t=(await msalInstance.acquireTokenSilent(req)).accessToken; }catch(e){ t=(await msalInstance.acquireTokenPopup(req)).accessToken; }
+  const url='https://graph.microsoft.com/v1.0/drives/'+encodeURIComponent(NEUZUGANG.driveId)+'/items/'+NEUZUGANG.kfzOrdnerId+'/children';
+  const fehler=[];
+  for(const n of NEUZUGANG.fahrzeuge){
+    const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},
+      body:JSON.stringify({name:n.kennzeichen,folder:{},'@microsoft.graph.conflictBehavior':'fail'})});
+    if(!r.ok && r.status!==409) fehler.push(n.kennzeichen+' ('+r.status+')');   // 409 = Ordner existiert bereits
+  }
+  if(fehler.length) throw new Error('Ordner nicht angelegt: '+fehler.join(', '));
+  nzSpeicher.set();
+}
+async function neuzugangAusfuehren(){
+  const btn=document.getElementById('nzStart'); btn.disabled=true; btn.textContent='Läuft …';
+  const gewaehlt=[...document.querySelectorAll('#nzListe input[data-nz]:checked')].map(b=>nzAktionen[+b.dataset.nz]);
+  const fehler=[]; let n=0;
+  try{ await ensureFbSpalten(); }catch(e){ console.warn('FahrerId-Spalte nicht prüfbar', e.message); }
+  for(const a of gewaehlt){
+    try{
+      if(a.art==='anlegen'){
+        if(fahrzeuge.some(f=>normKz(f.fin)===normKz(a.n.fin))) continue;
+        const f={...NEUZUGANG.basis,...a.n}; f.fahrerId=oidFuerFahrer(f.fahrer)||null;
+        await speichern(f); fahrzeuge.push(f); n++;
+      }else if(a.art==='ordner'){ await nzOrdnerAnlegen(); n++; }
+      else if(a.art==='wechsel'){
+        const f=nzFahrzeugZuKz(a.w.kennzeichen); if(!f||!f._spId) throw new Error(a.w.kennzeichen+' nicht in der Liste');
+        const oid=a.w.fahrer==='Pool'?null:(oidFuerFahrer(a.w.fahrer)||null);
+        await graph(listenBasis+'/items/'+f._spId+'/fields',{method:'PATCH',body:JSON.stringify({Fahrer:a.w.fahrer,FahrerId:oid})});
+        f.fahrer=a.w.fahrer; f.fahrerId=oid; n++;
+      }
+    }catch(e){ fehler.push(e.message); }
+  }
+  btn.disabled=false; btn.textContent='Markierte übernehmen';
+  renderAll(); zeigeZuordnungsStand(); zeigeNeuzugangBar(); neuzugangDialog();
+  alert(n+' Aktion(en) ausgeführt.'+(fehler.length?'\n\nFehler:\n'+fehler.join('\n'):''));
 }
 function kmErfassen(){
   if(!dialogFahrzeug) return;
