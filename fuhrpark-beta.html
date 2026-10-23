@@ -1475,12 +1475,12 @@ const NEUZUGANG = {
           status:'aktiv', erstzulassung:'2026-10-19', rueckgabe:'2030-10-18', finanzierung:'Leasing',
           kmVertragGesamt:80000, kmProJahr:20000, laufzeitMonate:48, satzMehrKm:0.0595, satzMinderKm:0.0238},
   fahrzeuge: [
-    {kennzeichen:'PAF-NW 902', fin:'UU1DJF00177660968', fahrer:'Schütze, Danielle', erstzulassung:'2026-10-23'},
-    {kennzeichen:'PAF-NW 903', fin:'UU1DJF00377660969', fahrer:'Koch, Simone'},
+    {kennzeichen:'PAF-NW 902', fin:'UU1DJF00177660968', fahrer:'Schütze, Danielle', erstzulassung:'2026-10-23', vers:{versicherer:'HUK',versicherungsnummer:'638/882340-Q',versPraemie:458.23,versZahlweise:'quartalsweise',versFahrleistung:20000,sfHaftpflicht:'1/2',sfKasko:'1/2',sbVollkasko:1000,sbTeilkasko:500}},
+    {kennzeichen:'PAF-NW 903', fin:'UU1DJF00377660969', fahrer:'Koch, Simone', vers:{versicherer:'HUK',versicherungsnummer:'638/881453-V',versPraemie:473.88,versZahlweise:'quartalsweise',versFahrleistung:20000,sfHaftpflicht:'1/2',sfKasko:'1/2',sbVollkasko:1000,sbTeilkasko:500}},
     {kennzeichen:'PAF-NW 905', fin:'UU1DJF00677660965', fahrer:'Schneider, Jörg'},
-    {kennzeichen:'PAF-NW 906', fin:'UU1DJF00477660964', fahrer:'Tappert, Gabriel'},
+    {kennzeichen:'PAF-NW 906', fin:'UU1DJF00477660964', fahrer:'Tappert, Gabriel', vers:{versicherer:'HUK',versicherungsnummer:'638/881572-U',versPraemie:429.65,versZahlweise:'quartalsweise',versFahrleistung:15000,sfHaftpflicht:'1/2',sfKasko:'1/2',sbVollkasko:1000,sbTeilkasko:500}},
     {kennzeichen:'PAF-NW 907', fin:'UU1DJF00X77660967', fahrer:'Lankl, Katrin'},
-    {kennzeichen:'PAF-NW 908', fin:'UU1DJF00X77660970', fahrer:'Riedl, Maximilian'}   // ab 12/2026
+    {kennzeichen:'PAF-NW 908', fin:'UU1DJF00X77660970', fahrer:'Riedl, Maximilian', vers:{versicherer:'HUK',versicherungsnummer:'638/881451-T',versPraemie:473.88,versZahlweise:'quartalsweise',versFahrleistung:20000,sfHaftpflicht:'1/2',sfKasko:'1/2',sbVollkasko:1000,sbTeilkasko:500}}   // ab 12/2026
   ],
   wechsel: [
     {kennzeichen:'FS-NW 913', fahrer:'Pool',               hinweis:'nach Übergabe Schütze → PAF-NW 902'},
@@ -1496,7 +1496,8 @@ function nzFahrzeugZuKz(kz){ const tr=fahrzeuge.filter(f=>normKz(f.kennzeichen)=
 function nzOffen(){
   const fehlend = NEUZUGANG.fahrzeuge.filter(n=>!fahrzeuge.some(f=>normKz(f.fin)===normKz(n.fin)));
   const wechsel = NEUZUGANG.wechsel.filter(w=>{ const f=nzFahrzeugZuKz(w.kennzeichen); return f && (f.fahrer||'').trim()!==w.fahrer; });
-  return {fehlend, wechsel, ordner: !nzSpeicher.get()};
+  const vers = NEUZUGANG.fahrzeuge.filter(n=>{ if(!n.vers) return false; const f=fahrzeuge.find(x=>normKz(x.fin)===normKz(n.fin)); return f && f.versicherungsnummer!==n.vers.versicherungsnummer; });
+  return {fehlend, wechsel, vers, ordner: !nzSpeicher.get()};
 }
 function zeigeNeuzugangBar(){
   const bar=document.getElementById('neuzugangBar'); if(!bar) return;
@@ -1504,6 +1505,7 @@ function zeigeNeuzugangBar(){
   const o=nzOffen(), teile=[];
   if(o.fehlend.length) teile.push(o.fehlend.length+' Fahrzeug'+(o.fehlend.length===1?'':'e')+' anzulegen');
   if(o.wechsel.length) teile.push(o.wechsel.length+' Fahrerwechsel offen');
+  if(o.vers.length) teile.push(o.vers.length+'× Versicherungsdaten nachtragen');
   if(o.ordner) teile.push('KFZ-Ordner anlegen');
   bar.style.display=teile.length?'flex':'none';
   document.getElementById('neuzugangText').textContent='— '+teile.join(' · ');
@@ -1516,6 +1518,8 @@ function neuzugangDialog(){
   let html='<table><thead><tr><th></th><th>Aktion</th><th>Details</th><th>Status</th></tr></thead><tbody>';
   for(const n of NEUZUGANG.fahrzeuge){ const offen=o.fehlend.includes(n); nzAktionen.push({art:'anlegen',n});
     html+=zeile('Fahrzeug anlegen: <span class="kennzeichen" style="font-size:11.5px">'+esc(n.kennzeichen)+'</span>',offen,'Fahrer:in '+n.fahrer+' · FIN '+n.fin,offen?off:ok); }
+  for(const n of NEUZUGANG.fahrzeuge.filter(x=>x.vers)){ const offen=o.vers.includes(n)||o.fehlend.includes(n); nzAktionen.push({art:'vers',n});
+    html+=zeile('Versicherung eintragen: <span class="kennzeichen" style="font-size:11.5px">'+esc(n.kennzeichen)+'</span>',o.vers.includes(n),'HUK '+n.vers.versicherungsnummer+' · '+n.vers.versPraemie.toLocaleString('de-DE',{minimumFractionDigits:2})+' € / Quartal · '+n.vers.versFahrleistung.toLocaleString('de-DE')+' km/Jahr'+(o.fehlend.includes(n)?' (wird beim Anlegen mitgesetzt)':''),offen?off:ok); }
   nzAktionen.push({art:'ordner'});
   html+=zeile('Ordner im KFZ-Ordner anlegen (6×)',o.ordner,NEUZUGANG.fahrzeuge.map(n=>n.kennzeichen).join(', '),o.ordner?off:ok);
   for(const w of NEUZUGANG.wechsel){ const f=nzFahrzeugZuKz(w.kennzeichen), offen=o.wechsel.includes(w); nzAktionen.push({art:'wechsel',w});
@@ -1546,8 +1550,11 @@ async function neuzugangAusfuehren(){
     try{
       if(a.art==='anlegen'){
         if(fahrzeuge.some(f=>normKz(f.fin)===normKz(a.n.fin))) continue;
-        const f={...NEUZUGANG.basis,...a.n}; f.fahrerId=oidFuerFahrer(f.fahrer)||null;
+        const f={...NEUZUGANG.basis,...a.n,...(a.n.vers||{})}; delete f.vers; f.fahrerId=oidFuerFahrer(f.fahrer)||null;
         await speichern(f); fahrzeuge.push(f); n++;
+      }else if(a.art==='vers'){
+        const f=fahrzeuge.find(x=>normKz(x.fin)===normKz(a.n.fin)); if(!f) continue;
+        Object.assign(f,a.n.vers); await speichern(f); n++;
       }else if(a.art==='ordner'){ await nzOrdnerAnlegen(); n++; }
       else if(a.art==='wechsel'){
         const f=nzFahrzeugZuKz(a.w.kennzeichen); if(!f||!f._spId) throw new Error(a.w.kennzeichen+' nicht in der Liste');
