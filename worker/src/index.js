@@ -100,7 +100,7 @@ const ALLOWED_ORIGINS = [
 const CACHE_TTL_MIN = 10;
 
 // Bei jeder Worker-Änderung hochzählen — /api/health zeigt damit, ob der Deploy angekommen ist
-const WORKER_VERSION = "2026-10-22.1 (fuhrpark-km)";
+const WORKER_VERSION = "2026-10-25.1 (op-mailversand)";
 // OP-Abgleich: Rechnungen mit Datum vor diesem Stichtag gelten als Altbestand
 const OP_STICHTAG = "2026-01-01";
 
@@ -3982,11 +3982,16 @@ export default {
           number: 1, date: 1, dueDate: 1, deletedAt: 1,
           stateType: { name: 1 },
           client: { recName: 1 },
-          recipient: { recName: 1 },
+          recipient: { id: 1, recName: 1 },
           recipientName: 1,
+          recipientResponsible: { id: 1, recName: 1 },
+          fileReference: 1,
           totalWithTax: 1, depositsTotal: 1, balance: 1, paid: 1,
           $limit: 500,
         };
+        // Mailadressen je Kontakt-ID (Adressbuch) für den Zahlungsstatus-Versand in der App
+        let kontaktMails = new Map();
+        try { const km = await fetchAmtKurznamen(env); if (km && km.mails) kontaktMails = km.mails; } catch (_) {}
         const alle = [];
         for (let offset = 0; offset < 30000; offset += 500) {
           const batch = await kilankaPost(env, "accounting/invoices", { ...graph, $offset: offset });
@@ -4028,6 +4033,11 @@ export default {
             status: inv.stateType?.name || null,
             klient: inv.client?.recName || null,
             empfaenger: inv.recipient?.recName || inv.recipientName || null,
+            empfaengerId: inv.recipient?.id != null ? String(inv.recipient.id) : null,
+            empfaengerMail: (inv.recipient?.id != null && kontaktMails.get(String(inv.recipient.id))) || null,
+            ansprechpartner: inv.recipientResponsible?.recName || null,
+            ansprechpartnerMail: (inv.recipientResponsible?.id != null && kontaktMails.get(String(inv.recipientResponsible.id))) || null,
+            aktenzeichen: inv.fileReference || null,
             summe: Number(unwrap(inv.totalWithTax)) || 0,
             gezahlt: Number(unwrap(inv.depositsTotal)) || 0,
             saldo: Number(unwrap(inv.balance)) || 0,

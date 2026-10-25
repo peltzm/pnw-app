@@ -96,6 +96,26 @@ details.mehr{margin-top:10px}
 details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);user-select:none}
 .leer{color:var(--text-muted);font-size:13px;padding:8px 0}
 
+/* Zahlungsstatus-Mails */
+.filterzeile{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12.5px;flex-wrap:wrap}
+.filterzeile select,.mailkarte input[type=text],#mailIntro{font-family:inherit;font-size:13px;border:1px solid var(--border-strong);border-radius:var(--radius);padding:6px 9px;background:#fff;color:var(--text)}
+.filterzeile select{min-width:260px;max-width:100%}
+#mailIntro{width:100%;resize:vertical;margin-top:4px}
+.lbl{font-size:12px;color:var(--text-muted)}
+.mailkarte{border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;margin-top:12px;background:var(--bg)}
+.mailkarte.fertig{border-color:var(--ok);background:var(--ok-bg)}
+.mailkarte .mk-kopf{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-weight:600;margin-bottom:8px}
+.mailkarte .mk-kopf span{font-weight:400;color:var(--text-muted);font-size:12px}
+.mailkarte .mk-feld{display:grid;grid-template-columns:70px 1fr;gap:6px 8px;align-items:center;font-size:12px;margin-bottom:6px}
+.mailkarte .mk-feld input{width:100%}
+.mailkarte .mk-warn{color:var(--warn);font-size:12px;margin:2px 0 6px}
+.mailkarte .mk-ap{font-size:11.5px;color:var(--text-muted);margin-bottom:6px}
+.mailkarte .mk-ap button{margin:2px 4px 2px 0}
+.mailkarte .mk-aktion{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.mailkarte .mk-status{font-size:12px}
+.mailkarte details{margin-top:8px}
+.mailkarte .vorschau{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto;margin-top:6px}
+
 /* Login-Gate */
 .gate{max-width:420px;margin:80px auto;text-align:center}
 .gate .g-icon{font-size:44px;margin-bottom:10px}
@@ -168,7 +188,23 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
     <div class="card">
       <h2>⏳ Offen ohne Zahlungseingang <span id="cntUnbezahlt" style="font-weight:400;color:var(--text-muted);font-size:13px"></span></h2>
       <div class="sub">Offene Kilanka-Posten, zu denen in den hochgeladenen Auszügen keine Zahlung gefunden wurde. Rot markiert = Zahlungsziel überschritten.</div>
+      <div class="filterzeile">
+        <label for="selEmpf">Rechnungsempfänger:</label>
+        <select id="selEmpf"></select>
+      </div>
       <div class="tab-scroll"><table class="tabelle" id="tblUnbezahlt"></table></div>
+    </div>
+
+    <div class="card" id="cardMail" style="display:none">
+      <h2>✉️ Zahlungsstatus-Mails <span id="cntMail" style="font-weight:400;color:var(--text-muted);font-size:13px"></span></h2>
+      <div class="sub">Pro Rechnungsempfänger eine Mail mit allen offenen Rechnungen ohne Zahlungseingang (Auswahl oben wird übernommen). Absender: rechnung@praxisneuewege.de. Empfänger, Betreff und Text sind änderbar. „Entwurf anlegen“ legt die Mail im Outlook-Entwurfsordner ab — gesendet wird erst, wenn du sie dort abschickst.</div>
+      <label class="lbl" for="mailIntro">Mailtext (vor der Tabelle)</label>
+      <textarea id="mailIntro" rows="3">Sehr geehrte Damen und Herren,
+
+anbei die Übersicht der aktuell offenen Rechnungen mit der Bitte um Prüfung und Begleichung:</textarea>
+      <div class="msg" id="mailMsg"></div>
+      <div id="mailListe"></div>
+      <div style="margin-top:12px"><button class="btn btn-primary" id="btnAlleEntwuerfe">Alle Entwürfe anlegen</button></div>
     </div>
 
     <div class="card" id="cardArchiv" style="display:none">
@@ -548,22 +584,8 @@ function malErgebnis(erg, rechnungen){
   }
   document.getElementById('btnExport').style.display = erg.ausbuchen.length ? 'inline-flex' : 'none';
 
-  // Unbezahlt-Tabelle
-  const heute = new Date().toISOString().slice(0,10);
-  const tU = document.getElementById('tblUnbezahlt');
-  document.getElementById('cntUnbezahlt').textContent = '(' + erg.unbezahlt.length + ')';
-  const sorted = erg.unbezahlt.slice().sort((a,b) => String(a.re.faellig||'9999').localeCompare(String(b.re.faellig||'9999')));
-  if (!sorted.length){ tU.innerHTML = '<tr><td class="leer">Alle offenen Posten haben einen Zahlungseingang. 🎉</td></tr>'; }
-  else {
-    tU.innerHTML = '<tr><th>Rechnung</th><th>Klient</th><th>Empfänger</th><th class="num">Offen</th><th>Fällig</th></tr>'
-      + sorted.map(x => {
-          const ueber = x.re.faellig && x.re.faellig < heute;
-          return `<tr><td><strong>${esc(x.re.nummer)}</strong></td><td>${esc(x.re.klient)}</td>
-            <td>${esc(x.re.empfaenger)}</td><td class="num">${eur(x.re.saldo)}</td>
-            <td>${esc(x.re.faellig||'–')} ${ueber?'<span class="tag mahn">überfällig</span>':''}</td></tr>`;
-        }).join('')
-      + `<tr class="summenzeile"><td colspan="3">Summe</td><td class="num">${eur(sumU)}</td><td></td></tr>`;
-  }
+  // Unbezahlt-Tabelle + Mail-Karten (mit Empfängerfilter)
+  malUnbezahlt(true);
 
   // Schon-gebucht-Tabelle
   document.getElementById('cntGebucht').textContent = erg.schonGebucht.length + ' Zahlungseingänge zeigen auf bereits gebuchte Rechnungen — anzeigen';
@@ -599,6 +621,189 @@ function exportCsv(){
   a.click(); URL.revokeObjectURL(a.href);
 }
 
+/* ═══════════════════════════════════════════════════════════
+ * OFFEN OHNE ZAHLUNGSEINGANG: Filter nach Rechnungsempfänger +
+ * Zahlungsstatus-Mails (je Empfänger eine Mail, Entwurf via Graph)
+ * ═══════════════════════════════════════════════════════════ */
+const MAIL_ABSENDER = 'rechnung@praxisneuewege.de';
+const sauber = t => String(t||'').replace(/\s+/g,' ').trim();
+const empfKey = re => cssId(re.empfaengerId || ('n_' + sauber(re.empfaenger)));
+const empfName = re => sauber(re.empfaenger) || '(ohne Empfänger)';
+let mailGruppen = {};   // key → {name, to, cc, subject, rows, mails[], entwurf}
+
+function malUnbezahlt(neu){
+  const erg = letztesErgebnis; if (!erg) return;
+  const heute = new Date().toISOString().slice(0,10);
+  const sel = document.getElementById('selEmpf');
+  if (neu){
+    const gr = new Map();
+    for (const x of erg.unbezahlt){
+      const k = empfKey(x.re); const g = gr.get(k) || { name:empfName(x.re), n:0, sum:0 };
+      g.n++; g.sum += x.re.saldo; gr.set(k, g);
+    }
+    sel.innerHTML = '<option value="">Alle Empfänger (' + gr.size + ')</option>'
+      + [...gr.entries()].sort((a,b)=>a[1].name.localeCompare(b[1].name,'de'))
+          .map(([k,g]) => `<option value="${esc(k)}">${esc(g.name)} — ${g.n} · ${eur(g.sum)}</option>`).join('');
+    mailGruppen = {};
+  }
+  const filter = sel.value;
+  const liste = erg.unbezahlt.filter(x => !filter || empfKey(x.re) === filter);
+  const sumU = liste.reduce((s,x)=>s+x.re.saldo,0);
+  document.getElementById('cntUnbezahlt').textContent = '(' + liste.length + (filter ? ' von ' + erg.unbezahlt.length : '') + ')';
+  const sorted = liste.slice().sort((a,b) => String(a.re.faellig||'9999').localeCompare(String(b.re.faellig||'9999')));
+  const tU = document.getElementById('tblUnbezahlt');
+  if (!sorted.length){ tU.innerHTML = '<tr><td class="leer">Alle offenen Posten haben einen Zahlungseingang. 🎉</td></tr>'; }
+  else {
+    tU.innerHTML = '<tr><th>Rechnung</th><th>Klient</th><th>Empfänger</th><th>Ansprechpartner</th><th class="num">Offen</th><th>Fällig</th></tr>'
+      + sorted.map(x => {
+          const ueber = x.re.faellig && x.re.faellig < heute;
+          return `<tr><td><strong>${esc(x.re.nummer)}</strong></td><td>${esc(x.re.klient)}</td>
+            <td>${esc(sauber(x.re.empfaenger))}</td><td>${esc(x.re.ansprechpartner||'–')}</td><td class="num">${eur(x.re.saldo)}</td>
+            <td>${esc(deDatum(x.re.faellig)||"–")} ${ueber?'<span class="tag mahn">überfällig</span>':''}</td></tr>`;
+        }).join('')
+      + `<tr class="summenzeile"><td colspan="4">Summe</td><td class="num">${eur(sumU)}</td><td></td></tr>`;
+  }
+  malMailKarten(liste);
+}
+
+/* Datum JJJJ-MM-TT → TT.MM.JJJJ */
+function deDatum(d){ const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d||''); return m ? m[3]+'.'+m[2]+'.'+m[1] : (d||''); }
+
+function malMailKarten(liste){
+  const card = document.getElementById('cardMail');
+  const gr = new Map();
+  for (const x of liste){
+    const k = empfKey(x.re);
+    if (!gr.has(k)) gr.set(k, { key:k, name:empfName(x.re), rows:[] });
+    gr.get(k).rows.push(x.re);
+  }
+  card.style.display = gr.size ? 'block' : 'none';
+  document.getElementById('cntMail').textContent = '(' + gr.size + ' Mail' + (gr.size===1?'':'s') + ')';
+  const arr = [...gr.values()].sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  for (const g of arr){
+    g.rows.sort((a,b) => String(a.datum).localeCompare(String(b.datum)) || String(a.nummer).localeCompare(String(b.nummer)));
+    const alt = mailGruppen[g.key];
+    const empfMail = g.rows.map(r => r.empfaengerMail).find(Boolean) || '';
+    const aps = []; const seen = new Set();
+    for (const r of g.rows){ if (r.ansprechpartnerMail && !seen.has(r.ansprechpartnerMail)){ seen.add(r.ansprechpartnerMail); aps.push({ name:r.ansprechpartner, mail:r.ansprechpartnerMail }); } }
+    mailGruppen[g.key] = {
+      ...g, aps,
+      to: alt ? alt.to : empfMail,
+      cc: alt ? alt.cc : '',
+      subject: alt ? alt.subject : 'Zahlungsstatus Praxis NeueWege ' + g.name,
+      entwurf: alt ? alt.entwurf : null,
+    };
+  }
+  const keys = arr.map(g => g.key);
+  document.getElementById('mailListe').innerHTML = keys.map(k => {
+    const g = mailGruppen[k]; const offen = g.rows.reduce((s,r)=>s+r.saldo,0);
+    const q = esc(k);
+    return `<div class="mailkarte ${g.entwurf?'fertig':''}" id="mk_${cssId(k)}">
+      <div class="mk-kopf"><div>${esc(g.name)}</div><span>${g.rows.length} Rechnung${g.rows.length===1?'':'en'} · ${eur(offen)} offen</span></div>
+      <div class="mk-feld"><label>An</label><input type="text" value="${esc(g.to)}" oninput="mailFeld('${q}','to',this.value)" placeholder="E-Mail-Adresse(n), mit ; getrennt"></div>
+      <div class="mk-feld"><label>Cc</label><input type="text" value="${esc(g.cc)}" oninput="mailFeld('${q}','cc',this.value)" placeholder="optional"></div>
+      <div class="mk-feld"><label>Betreff</label><input type="text" value="${esc(g.subject)}" oninput="mailFeld('${q}','subject',this.value)"></div>
+      ${g.to ? '' : '<div class="mk-warn">⚠ In Kilanka ist für diesen Rechnungsempfänger keine E-Mail-Adresse hinterlegt — bitte eintragen.</div>'}
+      ${g.aps.length ? `<div class="mk-ap">Ansprechpartner (Klick = in Cc übernehmen): ${g.aps.map(a => `<button class="btn btn-ghost btn-sm" onclick="addCc('${q}','${esc(a.mail)}')">${esc(a.name)} · ${esc(a.mail)}</button>`).join('')}</div>` : ''}
+      <div class="mk-aktion">
+        <button class="btn btn-primary btn-sm" onclick="entwurfAnlegen('${q}')">Entwurf in Outlook anlegen</button>
+        <button class="btn btn-ghost btn-sm" onclick="tabelleKopieren('${q}')">Tabelle kopieren</button>
+        <span class="mk-status" id="st_${cssId(k)}">${g.entwurf ? '✅ Entwurf angelegt' + (g.entwurf.link ? ' — <a href="'+esc(g.entwurf.link)+'" target="_blank" rel="noopener">in Outlook öffnen</a>' : '') : ''}</span>
+      </div>
+      <details><summary class="lbl" style="cursor:pointer">Vorschau</summary><div class="vorschau" id="vs_${cssId(k)}"></div></details>
+    </div>`;
+  }).join('');
+  keys.forEach(k => { const el = document.getElementById('vs_'+cssId(k)); if (el) el.innerHTML = mailHtml(mailGruppen[k]); });
+}
+function cssId(k){ return String(k).replace(/[^A-Za-z0-9_-]/g,'_'); }
+function mailFeld(k, feld, wert){
+  if (!mailGruppen[k]) return;
+  mailGruppen[k][feld] = wert;
+  if (feld === 'to'){
+    const w = document.querySelector('#mk_'+cssId(k)+' .mk-warn'); if (w) w.style.display = wert.trim() ? 'none' : '';
+  }
+}
+function addCc(k, mail){
+  const g = mailGruppen[k]; if (!g) return;
+  const liste = g.cc.split(/[;,]/).map(x=>x.trim()).filter(Boolean);
+  if (!liste.some(x => x.toLowerCase() === mail.toLowerCase())) liste.push(mail);
+  g.cc = liste.join('; ');
+  const inp = document.querySelectorAll('#mk_'+cssId(k)+' .mk-feld input')[1]; if (inp) inp.value = g.cc;
+}
+
+/* HTML-Tabelle wie in der Excel-Vorlage: Rechnungsdatum, Rechnungsnummer, Klient, Rechnungssumme, Bezahlt, Offen, Ansprechpartner, Aktenzeichen */
+function mailHtml(g){
+  const zell = 'border:1px solid #000;padding:2px 6px;font-size:12px;font-family:Calibri,Arial,sans-serif;';
+  const th = t => `<th style="${zell}text-align:left;font-weight:bold;">${t}</th>`;
+  const td = (t, r) => `<td style="${zell}${r?'text-align:right;white-space:nowrap;':''}">${t}</td>`;
+  const sum = (f) => g.rows.reduce((s,r)=>s+f(r),0);
+  const intro = (document.getElementById('mailIntro').value || '').trim()
+    .split(/\n{2,}/).map(p => '<p style="margin:0 0 12px 0;font-family:Calibri,Arial,sans-serif;font-size:14px;">' + esc(p).replace(/\n/g,'<br>') + '</p>').join('');
+  return intro
+    + '<table style="border-collapse:collapse;">'
+    + '<tr>' + ['Rechnungsdatum','Rechnungsnummer','Klient','Rechnungssumme','Bezahlt','Offen','Ansprechpartner','Aktenzeichen'].map(th).join('') + '</tr>'
+    + g.rows.map(r => '<tr>' + td(esc(deDatum(r.datum))) + td(esc(r.nummer)) + td(esc(r.klient||'')) + td(eur(r.summe),1) + td(eur(r.gezahlt),1) + td(eur(r.saldo),1) + td(esc(r.ansprechpartner||'')) + td(esc(r.aktenzeichen||'')) + '</tr>').join('')
+    + '<tr>' + td('') + td('') + td('<strong>Summe</strong>') + td('<strong>'+eur(sum(r=>r.summe))+'</strong>',1) + td('<strong>'+eur(sum(r=>r.gezahlt))+'</strong>',1) + td('<strong>'+eur(sum(r=>r.saldo))+'</strong>',1) + td('') + td('') + '</tr>'
+    + '</table>';
+}
+
+async function tabelleKopieren(k){
+  const g = mailGruppen[k]; if (!g) return;
+  const html = mailHtml(g);
+  const st = document.getElementById('st_'+cssId(k));
+  try{
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], {type:'text/html'}), 'text/plain': new Blob([html.replace(/<[^>]+>/g,' ')], {type:'text/plain'}) })]);
+    st.textContent = '📋 Kopiert — in die Mail einfügen';
+  }catch(e){ st.textContent = 'Kopieren nicht möglich: ' + (e.message||e); }
+}
+
+/* Graph-Token für Entwürfe (Mail.ReadWrite) erst bei Bedarf anfordern */
+async function mailToken(){
+  const req = { scopes:['Mail.ReadWrite'], account:currentAccount };
+  const r = await msalInstance.acquireTokenSilent(req).catch(async () => msalInstance.acquireTokenPopup(req));
+  return r.accessToken;
+}
+const adressen = t => String(t||'').split(/[;,]/).map(x=>x.trim()).filter(Boolean).map(a => ({ emailAddress:{ address:a } }));
+
+async function entwurfAnlegen(k){
+  const g = mailGruppen[k]; if (!g) return;
+  const st = document.getElementById('st_'+cssId(k));
+  const an = adressen(g.to);
+  if (!an.length || an.some(a => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a.emailAddress.address))){
+    st.innerHTML = '<span style="color:var(--error)">Bitte gültige Empfänger-Adresse eintragen.</span>'; return;
+  }
+  st.innerHTML = '<span class="spinner"></span>Entwurf wird angelegt …';
+  try{
+    const t = await mailToken();
+    const body = { subject:g.subject, body:{ contentType:'HTML', content:mailHtml(g) }, toRecipients:an, ccRecipients:adressen(g.cc) };
+    const senden = (b) => fetch('https://graph.microsoft.com/v1.0/me/messages', { method:'POST', headers:{ Authorization:'Bearer '+t, 'Content-Type':'application/json' }, body:JSON.stringify(b) });
+    let r = await senden({ ...body, from:{ emailAddress:{ address:MAIL_ABSENDER } } });
+    let hinweis = '';
+    if (!r.ok && r.status !== 401){   // Absender nicht erlaubt → ohne from anlegen, in Outlook Absender wählen
+      r = await senden(body); hinweis = ' (Absender bitte in Outlook auf ' + MAIL_ABSENDER + ' stellen)';
+    }
+    if (!r.ok) throw new Error('Graph ' + r.status);
+    const d = await r.json().catch(()=>({}));
+    g.entwurf = { link:d.webLink || null };
+    document.getElementById('mk_'+cssId(k)).classList.add('fertig');
+    st.innerHTML = '✅ Entwurf angelegt' + esc(hinweis) + (d.webLink ? ' — <a href="'+esc(d.webLink)+'" target="_blank" rel="noopener">in Outlook öffnen</a>' : '');
+    return true;
+  }catch(e){
+    st.innerHTML = '<span style="color:var(--error)">Fehlgeschlagen: ' + esc(e.message||e) + '</span>';
+    return false;
+  }
+}
+async function alleEntwuerfe(){
+  const keys = Object.keys(mailGruppen).filter(k => document.getElementById('mk_'+cssId(k)));
+  const todo = keys.filter(k => !mailGruppen[k].entwurf);
+  if (!todo.length){ zeige('mailMsg','Für alle angezeigten Mails existiert bereits ein Entwurf.','info'); return; }
+  const btn = document.getElementById('btnAlleEntwuerfe'); btn.disabled = true;
+  let ok = 0;
+  for (const k of todo){ if (await entwurfAnlegen(k)) ok++; }
+  btn.disabled = false;
+  zeige('mailMsg', ok + ' von ' + todo.length + ' Entwürfen angelegt — bitte im Outlook-Entwurfsordner prüfen und senden.', ok === todo.length ? 'ok' : 'fehler');
+}
+
 /* Events */
 const dz = document.getElementById('dropzone');
 dz.onclick = () => document.getElementById('fileInput').click();
@@ -609,6 +814,9 @@ dz.addEventListener('drop', e => dateiHinzu(e.dataTransfer.files));
 document.getElementById('btnStart').onclick = starten;
 document.getElementById('btnReset').onclick = () => { dateien = []; malDateien(); document.getElementById('ergebnis').style.display='none'; verstecke('parseMsg'); verstecke('runMsg'); };
 document.getElementById('btnExport').onclick = exportCsv;
+document.getElementById('selEmpf').onchange = () => malUnbezahlt(false);
+document.getElementById('btnAlleEntwuerfe').onclick = alleEntwuerfe;
+document.getElementById('mailIntro').oninput = () => { for (const k of Object.keys(mailGruppen)){ const el = document.getElementById('vs_'+cssId(k)); if (el) el.innerHTML = mailHtml(mailGruppen[k]); } };
 document.getElementById('btnLogin').onclick = login;
 if (initMsal()){
   const accts = msalInstance.getAllAccounts();
