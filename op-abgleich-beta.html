@@ -749,7 +749,6 @@ function mailHtml(g){
     + g.rows.map(r => { const c = farbe(r); return '<tr>' + td(esc(deDatum(r.datum)),0,c) + td(esc(r.nummer),0,c) + td(esc(r.klient||''),0,c) + td(eur(r.summe),1,c) + td(eur(r.gezahlt),1,c) + td(eur(r.saldo),1,c) + td(esc(r.ansprechpartner||''),0,c) + td(esc(r.aktenzeichen||''),0,c) + '</tr>'; }).join('')
     + '<tr>' + td('') + td('') + td('<strong>Summe</strong>') + td('<strong>'+eur(sum(r=>r.summe))+'</strong>',1) + td('<strong>'+eur(sum(r=>r.gezahlt))+'</strong>',1) + td('<strong>'+eur(sum(r=>r.saldo))+'</strong>',1) + td('') + td('') + '</tr>'
     + '</table>'
-    + '<p style="margin:6px 0 0 0;font-family:Calibri,Arial,sans-serif;font-size:11px;color:#6b6860;"><span style="background-color:#fff0a8;">&nbsp;gelb&nbsp;</span> = Rechnung älter als 4 Wochen, <span style="background-color:#f4b6b6;">&nbsp;rot&nbsp;</span> = älter als 6 Wochen.</p>'
     + '<p style="margin:14px 0 18px 0;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#6b6860;"><em>Hinweis: Diese E-Mail wurde automatisch erstellt. Bei Rückfragen antworten Sie bitte einfach auf diese Nachricht.</em></p>'
     + signaturHtml();
 }
@@ -768,7 +767,7 @@ async function ladeSignatur(){
     let t = await r.text();
     const m = t.match(/<body[^>]*>([\s\S]*)<\/body>/i); if (m) t = m[1];
     t = t.replace(/<!--WB_START-->[\s\S]*?<!--WB_END-->/g, '')
-         .split('Tel. {{TELEFON}} &middot; ').join('')
+         .split('Tel. {{TELEFON}} &middot; Fax +49 8756 9691 332<br>').join('')
          .split('{{NAME}}').join('Rechnungswesen')
          .split('{{POSITION}}').join('Praxis NeueWege GmbH')
          .split('{{EMAIL}}').join(MAIL_ABSENDER);
