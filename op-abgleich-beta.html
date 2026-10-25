@@ -632,6 +632,7 @@ const empfName = re => sauber(re.empfaenger) || '(ohne Empfänger)';
 let mailGruppen = {};   // key → {name, to, cc, subject, rows, mails[], entwurf}
 
 function malUnbezahlt(neu){
+  ladeSignatur();
   const erg = letztesErgebnis; if (!erg) return;
   const heute = new Date().toISOString().slice(0,10);
   const sel = document.getElementById('selEmpf');
@@ -735,16 +736,45 @@ function addCc(k, mail){
 function mailHtml(g){
   const zell = 'border:1px solid #000;padding:2px 6px;font-size:12px;font-family:Calibri,Arial,sans-serif;';
   const th = t => `<th style="${zell}text-align:left;font-weight:bold;">${t}</th>`;
-  const td = (t, r) => `<td style="${zell}${r?'text-align:right;white-space:nowrap;':''}">${t}</td>`;
+  const td = (t, r, bg) => `<td style="${zell}${r?'text-align:right;white-space:nowrap;':''}${bg?'background-color:'+bg+';':''}">${t}</td>`;
+  // Alter nach Rechnungsdatum: > 4 Wochen gelb, > 6 Wochen rot
+  const heute = new Date(); heute.setHours(12,0,0,0);
+  const farbe = r => { const d = new Date(String(r.datum).slice(0,10)+'T12:00:00'); if (isNaN(d)) return ''; const tage = Math.round((heute-d)/864e5); return tage > 42 ? '#f4b6b6' : tage > 28 ? '#fff0a8' : ''; };
   const sum = (f) => g.rows.reduce((s,r)=>s+f(r),0);
   const intro = (document.getElementById('mailIntro').value || '').trim()
     .split(/\n{2,}/).map(p => '<p style="margin:0 0 12px 0;font-family:Calibri,Arial,sans-serif;font-size:14px;">' + esc(p).replace(/\n/g,'<br>') + '</p>').join('');
   return intro
     + '<table style="border-collapse:collapse;">'
     + '<tr>' + ['Rechnungsdatum','Rechnungsnummer','Klient','Rechnungssumme','Bezahlt','Offen','Ansprechpartner','Aktenzeichen'].map(th).join('') + '</tr>'
-    + g.rows.map(r => '<tr>' + td(esc(deDatum(r.datum))) + td(esc(r.nummer)) + td(esc(r.klient||'')) + td(eur(r.summe),1) + td(eur(r.gezahlt),1) + td(eur(r.saldo),1) + td(esc(r.ansprechpartner||'')) + td(esc(r.aktenzeichen||'')) + '</tr>').join('')
+    + g.rows.map(r => { const c = farbe(r); return '<tr>' + td(esc(deDatum(r.datum)),0,c) + td(esc(r.nummer),0,c) + td(esc(r.klient||''),0,c) + td(eur(r.summe),1,c) + td(eur(r.gezahlt),1,c) + td(eur(r.saldo),1,c) + td(esc(r.ansprechpartner||''),0,c) + td(esc(r.aktenzeichen||''),0,c) + '</tr>'; }).join('')
     + '<tr>' + td('') + td('') + td('<strong>Summe</strong>') + td('<strong>'+eur(sum(r=>r.summe))+'</strong>',1) + td('<strong>'+eur(sum(r=>r.gezahlt))+'</strong>',1) + td('<strong>'+eur(sum(r=>r.saldo))+'</strong>',1) + td('') + td('') + '</tr>'
-    + '</table>';
+    + '</table>'
+    + '<p style="margin:6px 0 0 0;font-family:Calibri,Arial,sans-serif;font-size:11px;color:#6b6860;"><span style="background-color:#fff0a8;">&nbsp;gelb&nbsp;</span> = Rechnung älter als 4 Wochen, <span style="background-color:#f4b6b6;">&nbsp;rot&nbsp;</span> = älter als 6 Wochen.</p>'
+    + '<p style="margin:14px 0 18px 0;font-family:Calibri,Arial,sans-serif;font-size:12px;color:#6b6860;"><em>Hinweis: Diese E-Mail wurde automatisch erstellt. Bei Rückfragen antworten Sie bitte einfach auf diese Nachricht.</em></p>'
+    + signaturHtml();
+}
+
+/* Signatur aus der PNW-Vorlage (assets/signatur-vorlage.htm) für das Postfach rechnung@ */
+let sigVorlage = null;
+function signaturHtml(){
+  if (!sigVorlage) return '<p style="font-family:Calibri,Arial,sans-serif;font-size:14px;">Viele Grüße<br>Praxis NeueWege GmbH · Rechnungswesen</p>';
+  return sigVorlage;
+}
+async function ladeSignatur(){
+  if (sigVorlage) return;
+  try{
+    const r = await fetch('assets/signatur-vorlage.htm?t=' + Date.now(), { cache:'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    let t = await r.text();
+    const m = t.match(/<body[^>]*>([\s\S]*)<\/body>/i); if (m) t = m[1];
+    t = t.replace(/<!--WB_START-->[\s\S]*?<!--WB_END-->/g, '')
+         .split('Tel. {{TELEFON}} &middot; ').join('')
+         .split('{{NAME}}').join('Rechnungswesen')
+         .split('{{POSITION}}').join('Praxis NeueWege GmbH')
+         .split('{{EMAIL}}').join(MAIL_ABSENDER);
+    sigVorlage = t;
+    for (const k of Object.keys(mailGruppen)){ const el = document.getElementById('vs_'+cssId(k)); if (el) el.innerHTML = mailHtml(mailGruppen[k]); }
+  }catch(e){ /* Fallback-Signatur bleibt */ }
 }
 
 async function tabelleKopieren(k){
