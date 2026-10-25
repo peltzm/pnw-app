@@ -353,6 +353,20 @@ function reTeile(nr){
   const m = /^RE(\d{4})-(\d{2})-(\d+)$/.exec(String(nr||'').trim());
   return m ? { jahr:m[1], monat:m[2], serie:parseInt(m[3],10) } : null;
 }
+/* Bankdatum (TT.MM.JJJJ, TT.MM.JJ oder JJJJ-MM-TT) → 'JJJJ-MM-TT' oder null. */
+function bankDatum(s){
+  s = String(s||'').trim();
+  let m = /^(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})/.exec(s);
+  if (m){ const j = m[3].length===2 ? '20'+m[3] : m[3]; return j+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); }
+  m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return m ? m[0] : null;
+}
+/* Plausibilität: Zahlung darf nicht vor dem Rechnungsdatum liegen. Unbekannte Daten → nicht blockieren. */
+function zeitPlausibel(g, re){
+  const gd = bankDatum(g.datum), rd = String(re.datum||'').slice(0,10);
+  if (!gd || !/^\d{4}-\d{2}-\d{2}$/.test(rd)) return true;
+  return gd >= rd;
+}
 function abgleichen(gutschriften, rechnungen){
   const offene   = rechnungen.filter(r => r.saldo > 0.005 && r.status !== 'Storniert');
   const gebuchte = rechnungen.filter(r => !(r.saldo > 0.005) && r.status !== 'Storniert');
@@ -364,7 +378,7 @@ function abgleichen(gutschriften, rechnungen){
     if (!t){ unbezahlt.push({re}); continue; }
     // 1) Rechnungsnummern-Muster im Verwendungszweck (tolerant ggü. Tippfehlern/Kürzungen)
     const pat = new RegExp(t.monat + '\\s*[-/]?\\s*0*' + t.serie + '(?!\\d)');
-    const kand = gutschriften.filter((g,i) => !belegt.has(i) && pat.test(g.vz)).map(g => g);
+    const kand = gutschriften.filter((g,i) => !belegt.has(i) && pat.test(g.vz) && zeitPlausibel(g, re));
     let treffer = null, art = null;
     if (kand.length){
       const exakt = kand.find(g => Math.abs(g.betrag - re.saldo) < 0.02 || Math.abs(g.betrag - re.summe) < 0.02);
@@ -379,6 +393,11 @@ function abgleichen(gutschriften, rechnungen){
           if (belegt.has(gi)) continue;
           if (Math.abs(g.betrag - re.summe) >= 0.02 && Math.abs(g.betrag - re.saldo) >= 0.02) continue;
           if (!normName(g.vz).includes(nach)) continue;
+          if (!zeitPlausibel(g, re)) continue;   // Zahlung vor Rechnungsdatum kann nicht passen
+          // Leistungsmonat im Text (z. B. "08/26") muss zum Monat der Rechnungsnummer passen
+          const mj = [...g.vz.matchAll(/(?<![\d.\/])(0[1-9]|1[0-2])\/(\d{2}|\d{4})(?!\d)/g)]
+            .filter(m => (m[2].length===2 ? '20'+m[2] : m[2]) === t.jahr).map(m => m[1]);
+          if (mj.length && !mj.includes(t.monat)) continue;
           const zitiert = [...g.vz.matchAll(/20\d{2,3}-(\d{2})-\d{3,5}/g)].map(m => m[1]);
           if (zitiert.length && !zitiert.includes(t.monat)) continue;
           treffer = g; art = zitiert.length ? 'Betrag + Klient (Re-Nr. im VZ weicht ab!)' : 'Betrag + Klient';
