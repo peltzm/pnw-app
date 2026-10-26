@@ -880,9 +880,12 @@ async function graphGet(t, url){
 }
 async function suchePostfach(t, pfad, bestellnr){
   const q = encodeURIComponent('"' + bestellnr + '"');
-  const d = await graphGet(t, 'https://graph.microsoft.com/v1.0' + pfad + '/messages?$search=' + q + '&$top=15&$select=id,subject,from,receivedDateTime,hasAttachments,webLink');
+  const d = await graphGet(t, 'https://graph.microsoft.com/v1.0' + pfad + '/messages?$search=' + q + '&$top=25&$select=id,subject,from,receivedDateTime,hasAttachments,webLink');
   const treffer = [];
   for (const m of (d.value||[])){
+    // nur Mails von Amazon selbst (keine Weiterleitungen/Notizen, die die Bestellnummer nur erwähnen)
+    const absender = String((m.from && m.from.emailAddress && m.from.emailAddress.address) || '');
+    if (!/@([a-z0-9.-]+\.)?amazon\.[a-z.]+$/i.test(absender)) continue;
     let pdfs = [];
     if (m.hasAttachments){
       const a = await graphGet(t, 'https://graph.microsoft.com/v1.0' + pfad + '/messages/' + encodeURIComponent(m.id) + '/attachments?$select=id,name,contentType,size');
