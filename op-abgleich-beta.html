@@ -175,6 +175,24 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
     <div class="msg" id="runMsg"></div>
   </div>
 
+  <div class="card" id="cardAmazon">
+    <h2>📦 Amazon-Rechnungen ↔ Abbuchungen</h2>
+    <div class="sub">Amazon-Rechnungs-PDFs hier ablegen. Sie werden im Browser ausgelesen (Bestellnummer, Rechnungsnummer, Datum, Betrag) und den Lastschriften aus den oben hochgeladenen Kontoauszügen zugeordnet — wie die Bank-CSVs bleiben die Dateien im Browser.</div>
+    <div class="dropzone" id="dzAmazon" style="padding:18px 16px">
+      <div class="dz-main">PDF-Rechnungen hierher ziehen oder klicken</div>
+      <div class="dz-hint">beliebig viele PDFs · Amazon.de, Amazon Business, Marketplace-Händler</div>
+      <input type="file" id="pdfInput" accept=".pdf,application/pdf" multiple style="display:none">
+    </div>
+    <div class="msg" id="amzMsg"></div>
+    <div id="amzRechnungen"></div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btnAmzMatch" disabled>Zuordnen</button>
+      <button class="btn btn-ghost" id="btnAmzReset" style="display:none">PDFs entfernen</button>
+      <button class="btn btn-ghost" id="btnAmzExport" style="display:none">⬇ Ergebnis als CSV</button>
+    </div>
+    <div id="amzErgebnis"></div>
+  </div>
+
   <div id="ergebnis" style="display:none">
     <div class="kpis" id="kpis"></div>
 
@@ -360,11 +378,18 @@ function parseDatei(name, text){
   if (!rows.length) return { format:null, gutschriften:[] };
   const fmt = erkenneFormat(rows[0]);
   if (!fmt) return { format:null, gutschriften:[] };
-  const out = [];
+  const out = [], abb = [];
   for (let i = 1; i < rows.length; i++){
     const r = rows[i];
     const betrag = parseBetrag(r[fmt.betrag]);
-    if (!isFinite(betrag) || betrag <= 0) continue; // nur Eingänge
+    if (!isFinite(betrag) || betrag === 0) continue;
+    if (betrag < 0){   // Abbuchung (z. B. Amazon-Lastschrift) → Betrag positiv ablegen
+      const vzA = [fmt.vz2 >= 0 ? r[fmt.vz2] : '', fmt.vz1 >= 0 ? r[fmt.vz1] : '', fmt.zahler >= 0 ? r[fmt.zahler] : '']
+        .filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+      abb.push({ datum:String(r[fmt.datum]||'').trim(), betrag:Math.round(-betrag*100)/100,
+                 zahler:fmt.zahler >= 0 ? String(r[fmt.zahler]||'').trim() : '', vz:vzA, datei:name });
+      continue;
+    }
     const vz = [fmt.vz2 >= 0 ? r[fmt.vz2] : '', fmt.vz1 >= 0 ? r[fmt.vz1] : '']
       .filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     out.push({
@@ -374,7 +399,7 @@ function parseDatei(name, text){
       vz, datei: name
     });
   }
-  return { format: fmt.name, gutschriften: out };
+  return { format: fmt.name, gutschriften: out, abbuchungen: abb };
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -833,6 +858,187 @@ async function alleEntwuerfe(){
   zeige('mailMsg', ok + ' von ' + todo.length + ' Entwürfen angelegt — bitte im Outlook-Entwurfsordner prüfen und senden.', ok === todo.length ? 'ok' : 'fehler');
 }
 
+/* ═══════════════════════════════════════════════════════════
+ * AMAZON: Rechnungs-PDFs ↔ Lastschriften (Abbuchungen im Kontoauszug)
+ * Bank-VZ enthält die Bestellnummer (306-1234567-1234567) → Hauptschlüssel.
+ * ═══════════════════════════════════════════════════════════ */
+const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const RE_BESTELL = /\b(?:\d{3}|D\d{2})-\d{7}-\d{7}\b/g;
+let amzRechnungen = [];   // {datei, bestellnr[], rechnungsnr, datum(ISO), betrag, sicher, warn}
+let amzErgebnis = null;
+
+function ladePdfJs(){
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise((ok, fail) => {
+    const sc = document.createElement('script'); sc.src = PDFJS_URL;
+    sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; ok(window.pdfjsLib); };
+    sc.onerror = () => fail(new Error('PDF-Bibliothek konnte nicht geladen werden'));
+    document.head.appendChild(sc);
+  });
+}
+async function pdfText(file){
+  const lib = await ladePdfJs();
+  const pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let text = '';
+  for (let n = 1; n <= pdf.numPages; n++){
+    const tc = await (await pdf.getPage(n)).getTextContent();
+    let y = null, zeile = '';
+    for (const it of tc.items){
+      const yy = Math.round(it.transform[5]);
+      if (y !== null && Math.abs(yy - y) > 3){ text += zeile + '\n'; zeile = ''; }
+      zeile += (zeile ? ' ' : '') + it.str; y = yy;
+    }
+    text += zeile + '\n\n';
+  }
+  return text;
+}
+const MONATE = { januar:1,februar:2,märz:3,maerz:3,april:4,mai:5,juni:6,juli:7,august:8,september:9,oktober:10,november:11,dezember:12 };
+function amzDatum(t){
+  let m = /Rechnungsdatum[^0-9]{0,40}(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})/i.exec(t);
+  if (m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m = /(?:Rechnungsdatum|Bestelldatum)[^0-9]{0,40}(\d{1,2})\.?\s+([A-Za-zäöüÄÖÜ]+)\s+(\d{4})/i.exec(t);
+  if (m && MONATE[m[2].toLowerCase()]) return m[3]+'-'+String(MONATE[m[2].toLowerCase()]).padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m = /(\d{1,2})\.(\d{1,2})\.(\d{4})/.exec(t);
+  return m ? m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0') : null;
+}
+function amzBetrag(t){
+  const zahl = '(-?\\s?\\d{1,3}(?:\\.\\d{3})*,\\d{2}|-?\\d+,\\d{2})';
+  const lab = new RegExp('(Gesamtsumme|Gesamtbetrag|Rechnungsbetrag|Rechnungssumme|Zahlbetrag|Zu zahlender Betrag|Endbetrag|Gesamt\\s*\\(brutto\\)|Brutto(?:summe|betrag)?|Summe\\s*brutto|Gesamt|Total)[^0-9\\-]{0,40}(?:EUR\\s*|€\\s*)?' + zahl, 'gi');
+  const funde = []; let m;
+  while ((m = lab.exec(t))){ const v = parseBetrag(m[2].replace(/\s/g,'')); if (isFinite(v)) funde.push(v); }
+  if (funde.length){ return { betrag: funde.reduce((a,b) => Math.abs(b) > Math.abs(a) ? b : a), sicher:true }; }
+  const alle = [...t.matchAll(/(-?\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:€|EUR)/g)].map(x => parseBetrag(x[1])).filter(isFinite);
+  return alle.length ? { betrag: alle.reduce((a,b) => Math.abs(b) > Math.abs(a) ? b : a), sicher:false } : { betrag:NaN, sicher:false };
+}
+function parseAmazonText(text, datei){
+  const t = text.replace(/ /g,' ');
+  const bestell = [...new Set((t.match(RE_BESTELL) || []))];
+  const mr = /Rechnungs(?:nummer|nr\.?)\s*(?:\/[^\s:]*)?\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{5,})/i.exec(t);
+  const b = amzBetrag(t);
+  let betrag = b.betrag;
+  if (/Gutschrift|Erstattung|Stornorechnung/i.test(t) && isFinite(betrag) && betrag > 0 && /Gutschrift/i.test(t.slice(0,600))) betrag = -betrag;
+  const warn = [];
+  if (!bestell.length) warn.push('keine Bestellnummer');
+  if (!isFinite(betrag)) warn.push('Betrag nicht erkannt'); else if (!b.sicher) warn.push('Betrag unsicher');
+  return { datei, bestellnr:bestell, rechnungsnr: mr ? mr[1] : '', datum: amzDatum(t), betrag, warn };
+}
+async function pdfsHinzu(fileList){
+  const neu = Array.from(fileList).filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+  if (!neu.length){ zeige('amzMsg','Bitte PDF-Dateien auswählen.','fehler'); return; }
+  zeige('amzMsg','<span class="spinner"></span>' + neu.length + ' PDF(s) werden gelesen …','info');
+  let fehler = 0;
+  for (const f of neu){
+    try{
+      const r = parseAmazonText(await pdfText(f), f.name);
+      const dup = amzRechnungen.some(x => x.datei === f.name && x.betrag === r.betrag);
+      if (!dup) amzRechnungen.push(r);
+    }catch(e){ fehler++; amzRechnungen.push({ datei:f.name, bestellnr:[], rechnungsnr:'', datum:null, betrag:NaN, warn:['nicht lesbar: ' + (e.message||e)] }); }
+  }
+  if (fehler) zeige('amzMsg', fehler + ' Datei(en) nicht lesbar.','fehler'); else verstecke('amzMsg');
+  malAmzRechnungen();
+}
+function malAmzRechnungen(){
+  const el = document.getElementById('amzRechnungen');
+  document.getElementById('btnAmzReset').style.display = amzRechnungen.length ? 'inline-flex' : 'none';
+  document.getElementById('btnAmzMatch').disabled = !amzRechnungen.length;
+  if (!amzRechnungen.length){ el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="tab-scroll" style="margin-top:12px"><table class="tabelle"><tr><th>Datei</th><th>Bestellnummer</th><th>Rechnungsnr.</th><th>Datum</th><th class="num">Betrag</th><th>Hinweis</th></tr>'
+    + amzRechnungen.map((r,i) => `<tr><td>${esc(r.datei)}</td><td>${esc(r.bestellnr.join(', ')||'–')}</td><td>${esc(r.rechnungsnr||'–')}</td><td>${esc(deDatum(r.datum)||'–')}</td>
+        <td class="num"><input type="text" value="${isFinite(r.betrag) ? r.betrag.toFixed(2).replace('.',',') : ''}" style="width:90px;text-align:right;font-family:inherit;font-size:12.5px;border:1px solid var(--border-strong);border-radius:6px;padding:3px 6px" onchange="amzBetragSetzen(${i},this.value)"></td>
+        <td>${r.warn.length ? '<span class="tag abw">'+esc(r.warn.join(', '))+'</span>' : ''}</td></tr>`).join('')
+    + '</table></div>';
+}
+function amzBetragSetzen(i, v){
+  const b = parseBetrag(v); amzRechnungen[i].betrag = b;
+  amzRechnungen[i].warn = amzRechnungen[i].warn.filter(w => !/^Betrag/.test(w)); malAmzRechnungen();
+}
+
+/* Teilmengen (≤ 4 Rechnungen) einer Kandidatenliste, deren Summe den Betrag ergibt. */
+function teilsumme(kand, ziel){
+  const n = kand.length;
+  for (let mask = 1; mask < (1 << Math.min(n, 12)); mask++){
+    let cnt = 0, sum = 0; for (let i = 0; i < n && i < 12; i++) if (mask & (1<<i)){ cnt++; sum += kand[i].betrag; }
+    if (cnt >= 2 && cnt <= 4 && Math.abs(sum - ziel) < 0.02) return kand.filter((_,i) => mask & (1<<i));
+  }
+  return null;
+}
+function tageZwischen(a, b){ return Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00')) / 864e5); }
+
+function amazonAbgleich(abbuchungen, rechnungen){
+  const deb = abbuchungen.filter(a => /amazon|amzn/i.test(a.vz) || (a.vz.match(RE_BESTELL)||[]).length);
+  const benutzt = new Set(); const zugeordnet = [], ohneRechnung = [];
+  const frei = () => rechnungen.filter((r,i) => !benutzt.has(i) && isFinite(r.betrag));
+  const nutze = list => list.forEach(r => benutzt.add(rechnungen.indexOf(r)));
+  for (const a of deb){
+    const nrn = [...new Set(a.vz.match(RE_BESTELL) || [])];
+    const ad = bankDatum(a.datum);
+    let treffer = null, art = null;
+    if (nrn.length){
+      const kand = frei().filter(r => r.bestellnr.some(n => nrn.includes(n)));
+      const ex = kand.find(r => Math.abs(Math.abs(r.betrag) - a.betrag) < 0.02);
+      if (ex){ treffer = [ex]; art = 'Bestellnr. + Betrag'; }
+      else { const ts = teilsumme(kand, a.betrag); if (ts){ treffer = ts; art = 'Bestellnr. + Summe mehrerer Rechnungen'; } else if (kand.length){ treffer = [kand[0]]; art = 'Bestellnr. (Betrag weicht ab!)'; } }
+    }
+    if (!treffer){
+      const rn = frei().filter(r => r.rechnungsnr && a.vz.includes(r.rechnungsnr));
+      if (rn.length){ treffer = [rn[0]]; art = 'Rechnungsnr.'; }
+    }
+    if (!treffer && ad){
+      // Fallback: exakter Betrag, Rechnungsdatum höchstens 3 Tage nach, 30 Tage vor der Abbuchung — nur bei eindeutigem Kandidaten
+      const kand = frei().filter(r => Math.abs(Math.abs(r.betrag) - a.betrag) < 0.02 && r.datum && tageZwischen(r.datum, ad) >= -3 && tageZwischen(r.datum, ad) <= 30);
+      if (kand.length === 1){ treffer = kand; art = 'Betrag + Datum (ohne Bestellnr.)'; }
+    }
+    if (treffer){ nutze(treffer); zugeordnet.push({ a, rechnungen:treffer, art }); }
+    else ohneRechnung.push(a);
+  }
+  const ohneAbbuchung = rechnungen.filter((r,i) => !benutzt.has(i));
+  return { zugeordnet, ohneRechnung, ohneAbbuchung, anzahlAbbuchungen: deb.length };
+}
+
+function amazonStarten(){
+  const abb = []; const gesehen = new Set();
+  for (const d of dateien) for (const a of (d.abbuchungen||[])){
+    const key = a.datum + '|' + a.betrag.toFixed(2) + '|' + a.vz.slice(0,100);
+    if (gesehen.has(key)) continue; gesehen.add(key); abb.push(a);
+  }
+  if (!abb.length){ zeige('amzMsg','Keine Abbuchungen vorhanden — bitte oben zuerst Kontoauszüge (CSV) hochladen.','fehler'); return; }
+  verstecke('amzMsg');
+  amzErgebnis = amazonAbgleich(abb, amzRechnungen);
+  malAmazonErgebnis();
+}
+function malAmazonErgebnis(){
+  const e = amzErgebnis; if (!e) return;
+  const sumOhne = e.ohneRechnung.reduce((s,a)=>s+a.betrag,0);
+  const tag = a => a.includes('weicht') ? '<span class="tag abw">'+esc(a)+'</span>' : a.startsWith('Betrag + Datum') ? '<span class="tag betrag">'+esc(a)+'</span>' : '<span class="tag renr">'+esc(a)+'</span>';
+  const tab = (kopf, zeilen, leer) => zeilen.length ? '<div class="tab-scroll"><table class="tabelle"><tr>'+kopf.map(k=>'<th'+(k.startsWith('#')?' class="num"':'')+'>'+esc(k.replace(/^#/,''))+'</th>').join('')+'</tr>'+zeilen.join('')+'</table></div>' : '<div class="leer">'+leer+'</div>';
+  document.getElementById('amzErgebnis').innerHTML = `
+    <div class="kpis" style="margin-top:16px">
+      <div class="kpi gruen"><div class="k-label">Zugeordnet</div><div class="k-val">${e.zugeordnet.length}</div><div class="k-sub">von ${e.anzahlAbbuchungen} Amazon-Abbuchungen</div></div>
+      <div class="kpi orange"><div class="k-label">Abbuchung ohne Rechnung</div><div class="k-val">${e.ohneRechnung.length}</div><div class="k-sub">${eur(sumOhne)} — Beleg fehlt</div></div>
+      <div class="kpi"><div class="k-label">Rechnung ohne Abbuchung</div><div class="k-val">${e.ohneAbbuchung.length}</div><div class="k-sub">noch nicht abgebucht / andere Zahlart</div></div>
+    </div>
+    <h3 style="font-size:13.5px;margin:14px 0 6px">⏳ Abbuchungen ohne Rechnung (Beleg fehlt)</h3>
+    ${tab(['Datum','#Betrag','Verwendungszweck'], e.ohneRechnung.map(a=>`<tr class="kuerzung"><td>${esc(a.datum)}</td><td class="num">${eur(a.betrag)}</td><td class="vz" title="${esc(a.vz)}">${esc(a.vz)}</td></tr>`), 'Alle Amazon-Abbuchungen haben eine Rechnung. 🎉')}
+    <h3 style="font-size:13.5px;margin:14px 0 6px">📄 Rechnungen ohne Abbuchung</h3>
+    ${tab(['Datei','Bestellnummer','Datum','#Betrag'], e.ohneAbbuchung.map(r=>`<tr><td>${esc(r.datei)}</td><td>${esc(r.bestellnr.join(', ')||'–')}</td><td>${esc(deDatum(r.datum)||'–')}</td><td class="num">${eur(r.betrag)}</td></tr>`), 'Keine.')}
+    <details class="mehr" open><summary>✅ Zugeordnet (${e.zugeordnet.length})</summary><div style="margin-top:8px">
+    ${tab(['Datum','#Abbuchung','Rechnung (Datei)','Bestellnummer','Zuordnung'], e.zugeordnet.map(z=>`<tr><td>${esc(z.a.datum)}</td><td class="num">${eur(z.a.betrag)}</td><td>${esc(z.rechnungen.map(r=>r.datei).join(' + '))}</td><td>${esc([...new Set(z.rechnungen.flatMap(r=>r.bestellnr))].join(', '))}</td><td>${tag(z.art)}</td></tr>`), 'Keine Zuordnung.')}
+    </div></details>`;
+  document.getElementById('btnAmzExport').style.display = 'inline-flex';
+}
+function amazonCsv(){
+  const e = amzErgebnis; if (!e) return;
+  const de = n => isFinite(n) ? n.toFixed(2).replace('.',',') : '';
+  const z = [['Status','Buchungsdatum','Abbuchung','Rechnung (Datei)','Rechnungsnr.','Bestellnummer','Rechnungsdatum','Rechnungsbetrag','Zuordnung','Verwendungszweck']];
+  e.zugeordnet.forEach(x => x.rechnungen.forEach(r => z.push(['zugeordnet', x.a.datum, de(x.a.betrag), r.datei, r.rechnungsnr, r.bestellnr.join(' '), deDatum(r.datum), de(r.betrag), x.art, x.a.vz])));
+  e.ohneRechnung.forEach(a => z.push(['Abbuchung ohne Rechnung', a.datum, de(a.betrag), '', '', '', '', '', '', a.vz]));
+  e.ohneAbbuchung.forEach(r => z.push(['Rechnung ohne Abbuchung', '', '', r.datei, r.rechnungsnr, r.bestellnr.join(' '), deDatum(r.datum), de(r.betrag), '', '']));
+  const csv = z.map(r => r.map(f => '"'+String(f==null?'':f).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'}));
+  a.download = 'Amazon-Zuordnung_' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
 /* Events */
 const dz = document.getElementById('dropzone');
 dz.onclick = () => document.getElementById('fileInput').click();
@@ -846,6 +1052,16 @@ document.getElementById('btnExport').onclick = exportCsv;
 document.getElementById('selEmpf').onchange = () => malUnbezahlt(false);
 document.getElementById('btnAlleEntwuerfe').onclick = alleEntwuerfe;
 document.getElementById('mailIntro').oninput = () => { for (const k of Object.keys(mailGruppen)){ const el = document.getElementById('vs_'+cssId(k)); if (el) el.innerHTML = mailHtml(mailGruppen[k]); } };
+
+const dzA = document.getElementById('dzAmazon');
+dzA.onclick = () => document.getElementById('pdfInput').click();
+document.getElementById('pdfInput').onchange = e => { pdfsHinzu(e.target.files); e.target.value=''; };
+['dragenter','dragover'].forEach(ev => dzA.addEventListener(ev, e => { e.preventDefault(); dzA.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => dzA.addEventListener(ev, e => { e.preventDefault(); dzA.classList.remove('drag'); }));
+dzA.addEventListener('drop', e => pdfsHinzu(e.dataTransfer.files));
+document.getElementById('btnAmzMatch').onclick = amazonStarten;
+document.getElementById('btnAmzReset').onclick = () => { amzRechnungen = []; amzErgebnis = null; malAmzRechnungen(); document.getElementById('amzErgebnis').innerHTML=''; document.getElementById('btnAmzExport').style.display='none'; };
+document.getElementById('btnAmzExport').onclick = amazonCsv;
 document.getElementById('btnLogin').onclick = login;
 if (initMsal()){
   const accts = msalInstance.getAllAccounts();
