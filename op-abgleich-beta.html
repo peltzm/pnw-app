@@ -175,6 +175,21 @@ details.mehr summary{cursor:pointer;font-size:12.5px;color:var(--text-muted);use
     <div class="msg" id="runMsg"></div>
   </div>
 
+  <div class="card" id="cardBelege">
+    <h2>📎 Amazon-Belege in den Postfächern suchen</h2>
+    <div class="sub">Sucht zu jeder Amazon-Lastschrift aus den oben hochgeladenen Kontoauszügen die Rechnungs-Mail (über die Bestellnummer) und zeigt die PDF-Anhänge zum Download. Es wird nur gelesen — nichts wird verschoben oder verändert.</div>
+    <div class="filterzeile">
+      <label><input type="checkbox" id="mbMarkus" checked> Postfach markus.peltz@</label>
+      <label><input type="checkbox" id="mbRechnung" checked> Postfach rechnung@</label>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="btnBelege">Belege suchen</button>
+      <button class="btn btn-ghost" id="btnBelegCsv" style="display:none">⬇ Liste als CSV</button>
+    </div>
+    <div class="msg" id="belegMsg"></div>
+    <div id="belegErgebnis"></div>
+  </div>
+
   <div id="ergebnis" style="display:none">
     <div class="kpis" id="kpis"></div>
 
@@ -360,11 +375,18 @@ function parseDatei(name, text){
   if (!rows.length) return { format:null, gutschriften:[] };
   const fmt = erkenneFormat(rows[0]);
   if (!fmt) return { format:null, gutschriften:[] };
-  const out = [];
+  const out = [], abb = [];
   for (let i = 1; i < rows.length; i++){
     const r = rows[i];
     const betrag = parseBetrag(r[fmt.betrag]);
-    if (!isFinite(betrag) || betrag <= 0) continue; // nur Eingänge
+    if (!isFinite(betrag) || betrag === 0) continue;
+    if (betrag < 0){   // Abbuchung (z. B. Amazon-Lastschrift) → Betrag positiv ablegen
+      const vzA = [fmt.vz2 >= 0 ? r[fmt.vz2] : '', fmt.vz1 >= 0 ? r[fmt.vz1] : '', fmt.zahler >= 0 ? r[fmt.zahler] : '']
+        .filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+      abb.push({ datum:String(r[fmt.datum]||'').trim(), betrag:Math.round(-betrag*100)/100,
+                 zahler:fmt.zahler >= 0 ? String(r[fmt.zahler]||'').trim() : '', vz:vzA, datei:name });
+      continue;
+    }
     const vz = [fmt.vz2 >= 0 ? r[fmt.vz2] : '', fmt.vz1 >= 0 ? r[fmt.vz1] : '']
       .filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
     out.push({
@@ -374,7 +396,7 @@ function parseDatei(name, text){
       vz, datei: name
     });
   }
-  return { format: fmt.name, gutschriften: out };
+  return { format: fmt.name, gutschriften: out, abbuchungen: abb };
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -833,6 +855,136 @@ async function alleEntwuerfe(){
   zeige('mailMsg', ok + ' von ' + todo.length + ' Entwürfen angelegt — bitte im Outlook-Entwurfsordner prüfen und senden.', ok === todo.length ? 'ok' : 'fehler');
 }
 
+/* ═══════════════════════════════════════════════════════════
+ * AMAZON-BELEGE: Lastschriften → Rechnungs-Mails (Microsoft Graph, nur lesen)
+ * Schlüssel ist die Bestellnummer aus dem Verwendungszweck (306-1234567-1234567).
+ * ═══════════════════════════════════════════════════════════ */
+const RE_BESTELL = /\b(?:\d{3}|D\d{2})-\d{7}-\d{7}\b/g;
+const POSTFAECHER = { markus:{ label:'Markus', pfad:'/me' }, rechnung:{ label:'rechnung@', pfad:'/users/rechnung@praxisneuewege.de' } };
+let belegErgebnis = null;
+
+async function leseToken(mitShared){
+  const scopes = mitShared ? ['Mail.Read','Mail.Read.Shared'] : ['Mail.Read'];
+  const req = { scopes, account:currentAccount };
+  const r = await msalInstance.acquireTokenSilent(req).catch(async () => msalInstance.acquireTokenPopup(req));
+  return r.accessToken;
+}
+async function graphGet(t, url){
+  for (let versuch = 0; versuch < 3; versuch++){
+    const r = await fetch(url, { headers:{ Authorization:'Bearer '+t } });
+    if (r.status === 429 || r.status >= 500){ await new Promise(ok => setTimeout(ok, 1500*(versuch+1))); continue; }
+    if (!r.ok){ const e = new Error('Graph ' + r.status); e.status = r.status; throw e; }
+    return r.json();
+  }
+  throw new Error('Graph nicht erreichbar');
+}
+async function suchePostfach(t, pfad, bestellnr){
+  const q = encodeURIComponent('"' + bestellnr + '"');
+  const d = await graphGet(t, 'https://graph.microsoft.com/v1.0' + pfad + '/messages?$search=' + q + '&$top=15&$select=id,subject,from,receivedDateTime,hasAttachments,webLink');
+  const treffer = [];
+  for (const m of (d.value||[])){
+    let pdfs = [];
+    if (m.hasAttachments){
+      const a = await graphGet(t, 'https://graph.microsoft.com/v1.0' + pfad + '/messages/' + encodeURIComponent(m.id) + '/attachments?$select=id,name,contentType,size');
+      pdfs = (a.value||[]).filter(x => /pdf/i.test(x.contentType||'') || /\.pdf$/i.test(x.name||'')).map(x => ({ id:x.id, name:x.name }));
+    }
+    treffer.push({ msgId:m.id, pfad, betreff:m.subject||'', von:(m.from&&m.from.emailAddress&&m.from.emailAddress.address)||'', datum:String(m.receivedDateTime||'').slice(0,10), link:m.webLink, pdfs });
+  }
+  return treffer;
+}
+async function belegeSuchen(){
+  const abb = []; const gesehen = new Set();
+  for (const d of dateien) for (const a of (d.abbuchungen||[])){
+    const key = a.datum + '|' + a.betrag.toFixed(2) + '|' + a.vz.slice(0,100);
+    if (gesehen.has(key)) continue; gesehen.add(key);
+    if (/amazon|amzn/i.test(a.vz)) abb.push(a);
+  }
+  if (!abb.length){ zeige('belegMsg','Keine Amazon-Abbuchungen gefunden — bitte oben zuerst Kontoauszüge (CSV) hochladen.','fehler'); return; }
+  const boxen = Object.entries({ markus:'mbMarkus', rechnung:'mbRechnung' }).filter(([k,id]) => document.getElementById(id).checked).map(([k]) => k);
+  if (!boxen.length){ zeige('belegMsg','Bitte mindestens ein Postfach auswählen.','fehler'); return; }
+  const btn = document.getElementById('btnBelege'); btn.disabled = true;
+  const hinweise = [];
+  try{
+    let t, sharedOk = true;
+    try{ t = await leseToken(boxen.includes('rechnung')); }
+    catch(e){
+      if (boxen.includes('rechnung')){ sharedOk = false; hinweise.push('Für rechnung@ fehlt die Berechtigung „Mail.Read.Shared“ (in der Entra-App-Registrierung ergänzen) — es wurde nur dein Postfach durchsucht.'); t = await leseToken(false); }
+      else throw e;
+    }
+    const aktiv = boxen.filter(k => k !== 'rechnung' || sharedOk);
+    const ergebnis = [];
+    let i = 0;
+    for (const a of abb.sort((x,y) => (bankDatum(y.datum)||'').localeCompare(bankDatum(x.datum)||''))){
+      i++; zeige('belegMsg','<span class="spinner"></span>Suche Beleg ' + i + ' von ' + abb.length + ' …','info');
+      const nrn = [...new Set(a.vz.match(RE_BESTELL) || [])];
+      let treffer = [];
+      for (const k of aktiv){
+        for (const nr of nrn){
+          try{ treffer = treffer.concat((await suchePostfach(t, POSTFAECHER[k].pfad, nr)).map(x => ({...x, box:POSTFAECHER[k].label}))); }
+          catch(e){ if (e.status === 403 && k === 'rechnung'){ hinweise.push('Kein Zugriff auf rechnung@ (HTTP 403).'); aktiv.splice(aktiv.indexOf('rechnung'),1); } else throw e; }
+        }
+      }
+      const einmalig = []; const ids = new Set();
+      for (const x of treffer){ if (!ids.has(x.msgId)){ ids.add(x.msgId); einmalig.push(x); } }
+      ergebnis.push({ a, nrn, treffer:einmalig });
+    }
+    belegErgebnis = ergebnis;
+    malBelege(hinweise);
+    verstecke('belegMsg');
+  }catch(e){
+    zeige('belegMsg','Suche fehlgeschlagen: ' + esc(e.message||e) + (/AADSTS|consent|interaction/i.test(String(e.message||e)) ? ' — vermutlich fehlt die Berechtigung „Mail.Read“ in der Entra-App-Registrierung.' : ''),'fehler');
+  }finally{ btn.disabled = false; }
+}
+function malBelege(hinweise){
+  const e = belegErgebnis || [];
+  const mitPdf = e.filter(x => x.treffer.some(t => t.pdfs.length));
+  const nurMail = e.filter(x => !x.treffer.some(t => t.pdfs.length) && x.treffer.length);
+  const fehlt = e.filter(x => !x.treffer.length);
+  const summe = l => l.reduce((s,x)=>s+x.a.betrag,0);
+  const amz = nr => 'https://www.amazon.de/gp/your-account/order-details?orderID=' + encodeURIComponent(nr);
+  const zeile = (x, art) => {
+    const pdfs = x.treffer.flatMap((t,ti) => t.pdfs.map((p,pi) => `<a href="#" onclick="pdfLaden(${e.indexOf(x)},${ti},${pi});return false">⬇ ${esc(p.name)}</a>`));
+    const mails = x.treffer.map(t => `<a href="${esc(t.link)}" target="_blank" rel="noopener">${esc((t.betreff||'(ohne Betreff)').slice(0,60))}</a> <span style="color:var(--text-muted)">· ${esc(deDatum(t.datum))} · ${esc(t.box)}</span>`);
+    const nrs = x.nrn.length ? x.nrn.map(n => art === 'fehlt' ? `<a href="${amz(n)}" target="_blank" rel="noopener">${esc(n)}</a>` : esc(n)).join(', ') : '<span class="tag abw">keine Bestellnr.</span>';
+    return `<tr><td>${esc(x.a.datum)}</td><td class="num">${eur(x.a.betrag)}</td><td>${nrs}</td><td>${art==='fehlt' ? '<span style="color:var(--text-muted)">Bestellnr. anklicken → Rechnung im Amazon-Konto laden</span>' : (art==='pdf' ? pdfs.join('<br>') + '<br>' : '') + mails.join('<br>')}</td></tr>`;
+  };
+  const tab = (l, art, leer) => l.length ? '<div class="tab-scroll"><table class="tabelle"><tr><th>Buchung</th><th class="num">Betrag</th><th>Bestellnummer</th><th>' + (art==='fehlt' ? 'Hinweis' : art==='pdf' ? 'PDF / Mail' : 'Mail') + '</th></tr>' + l.map(x => zeile(x, art)).join('') + '</table></div>' : '<div class="leer">'+leer+'</div>';
+  document.getElementById('belegErgebnis').innerHTML = `
+    ${hinweise.map(h => '<div class="msg zeigen fehler">'+esc(h)+'</div>').join('')}
+    <div class="kpis" style="margin-top:16px">
+      <div class="kpi gruen"><div class="k-label">Beleg mit PDF</div><div class="k-val">${mitPdf.length}</div><div class="k-sub">${eur(summe(mitPdf))}</div></div>
+      <div class="kpi orange"><div class="k-label">Nur Mail, kein PDF</div><div class="k-val">${nurMail.length}</div><div class="k-sub">${eur(summe(nurMail))}</div></div>
+      <div class="kpi"><div class="k-label">Nichts gefunden</div><div class="k-val">${fehlt.length}</div><div class="k-sub">${eur(summe(fehlt))} — Beleg im Amazon-Konto holen</div></div>
+    </div>
+    <h3 style="font-size:13.5px;margin:14px 0 6px">⏳ Nichts im Postfach — Rechnung bei Amazon herunterladen</h3>
+    ${tab(fehlt,'fehlt','Zu allen Abbuchungen gibt es einen Beleg im Postfach. 🎉')}
+    <h3 style="font-size:13.5px;margin:14px 0 6px">✉️ Mail gefunden, aber ohne PDF</h3>
+    ${tab(nurMail,'mail','Keine.')}
+    <details class="mehr" open><summary>✅ Beleg mit PDF (${mitPdf.length})</summary><div style="margin-top:8px">${tab(mitPdf,'pdf','Keine.')}</div></details>`;
+  document.getElementById('btnBelegCsv').style.display = e.length ? 'inline-flex' : 'none';
+}
+async function pdfLaden(xi, ti, pi){
+  const t = belegErgebnis[xi].treffer[ti]; const p = t.pdfs[pi];
+  try{
+    const tok = await leseToken(true).catch(() => leseToken(false));
+    const d = await graphGet(tok, 'https://graph.microsoft.com/v1.0' + t.pfad + '/messages/' + encodeURIComponent(t.msgId) + '/attachments/' + encodeURIComponent(p.id));
+    const bin = atob(d.contentBytes); const buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], {type:'application/pdf'})); a.download = p.name || 'Beleg.pdf'; a.click(); URL.revokeObjectURL(a.href);
+  }catch(e){ zeige('belegMsg','Download fehlgeschlagen: ' + esc(e.message||e),'fehler'); }
+}
+function belegCsv(){
+  if (!belegErgebnis) return;
+  const z = [['Buchungsdatum','Betrag','Bestellnummer','Status','Mail-Betreff','Mail-Datum','Postfach','PDF-Anhänge','Link']];
+  for (const x of belegErgebnis){
+    const b = x.a.betrag.toFixed(2).replace('.',',');
+    if (!x.treffer.length) z.push([x.a.datum, b, x.nrn.join(' '), 'nichts gefunden','','','','','']);
+    for (const t of x.treffer) z.push([x.a.datum, b, x.nrn.join(' '), t.pdfs.length ? 'PDF vorhanden' : 'Mail ohne PDF', t.betreff, deDatum(t.datum), t.box, t.pdfs.map(p=>p.name).join(' | '), t.link]);
+  }
+  const csv = z.map(r => r.map(f => '"'+String(f==null?'':f).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'}));
+  a.download = 'Amazon-Belege_' + new Date().toISOString().slice(0,10) + '.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
 /* Events */
 const dz = document.getElementById('dropzone');
 dz.onclick = () => document.getElementById('fileInput').click();
@@ -846,6 +998,8 @@ document.getElementById('btnExport').onclick = exportCsv;
 document.getElementById('selEmpf').onchange = () => malUnbezahlt(false);
 document.getElementById('btnAlleEntwuerfe').onclick = alleEntwuerfe;
 document.getElementById('mailIntro').oninput = () => { for (const k of Object.keys(mailGruppen)){ const el = document.getElementById('vs_'+cssId(k)); if (el) el.innerHTML = mailHtml(mailGruppen[k]); } };
+document.getElementById('btnBelege').onclick = belegeSuchen;
+document.getElementById('btnBelegCsv').onclick = belegCsv;
 document.getElementById('btnLogin').onclick = login;
 if (initMsal()){
   const accts = msalInstance.getAllAccounts();
