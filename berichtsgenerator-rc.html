@@ -467,7 +467,7 @@
               <div class="field" style="margin:8px 0 0;"><label>Text der E-Mail an das Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(änderbar — die Anrede wird automatisch vorangestellt)</span></label>
                 <div id="ASD_AnredeVorschau" style="font-size:13px; padding:6px 10px; background:#f6f6f4; border:1px solid #ddd; border-bottom:none; border-radius:6px 6px 0 0;"></div>
                 <textarea id="ASD_Text" rows="9" style="border-radius:0 0 6px 6px; font-family:inherit; font-size:13px; line-height:1.45;" oninput="this.dataset.geaendert = (this.value !== asdStandardText()) ? '1' : ''; if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></textarea>
-                <button type="button" class="btn btn-secondary" onclick="asdTextZuruecksetzen()" style="margin-top:6px; min-height:32px; font-size:12px; padding:0 12px; width:auto; display:inline-flex;">↺ Standardtext</button>
+                <button type="button" class="btn btn-secondary" onclick="asdTextZuruecksetzen()" style="margin-top:6px; min-height:32px; font-size:12px; padding:0 12px; align-self:flex-start;">↺ Standardtext</button>
               </div>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
