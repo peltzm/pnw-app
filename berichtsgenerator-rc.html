@@ -461,9 +461,14 @@
             <div id="asdVersandBlock" style="border-top:1px solid #e8c4a8; margin:12px 0 14px; padding-top:12px;">
               <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Versand an das Jugendamt</div>
               <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Mit der finalen Freigabe wird das PDF in SharePoint abgelegt und an die Sachbearbeitung (ASD) gesendet – kennwortgeschützt, das Kennwort folgt in einer zweiten E-Mail aus Ihrem Postfach.</div>
-              <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Name für die Anrede, änderbar)</span></label><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
+              <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Anrede und Name für die E-Mail, änderbar)</span></label><div style="display:flex; gap:6px; align-items:center;"><select id="ASD_Anrede" onchange="asdAnredeVorschau(); if (typeof scheduleAutoSave==='function') scheduleAutoSave();" style="width:auto; min-width:90px;"><option value="">–</option><option value="Frau">Frau</option><option value="Herr">Herr</option></select><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" style="flex:1;" oninput="asdAnredeAusKilanka(true); asdAnredeVorschau(); if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div></div>
               <div class="field" style="margin-bottom:8px;"><label>E-Mail der ASD-Sachbearbeitung <span style="font-weight:normal; color:var(--text-muted);">(aus Kilanka, änderbar)</span></label><input type="email" id="ASD_Mail" placeholder="vorname.nachname@landkreis-xy.de" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(Vorschlag nach Schema PNW-NaVo*JJ_MM, änderbar — wird nicht gespeichert)</span></label><div style="display:flex; gap:6px; align-items:center;"><input type="password" id="ASD_Kennwort" autocomplete="new-password" placeholder="Kennwort" style="flex:1;"><button type="button" id="btnKennwortAuge" onclick="kennwortAnzeigen()" title="Kennwort anzeigen" aria-label="Kennwort anzeigen" style="min-height:36px; padding:0 10px; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; font-size:16px; line-height:1;">&#128065;</button></div></div>
+              <div class="field" style="margin:8px 0 0;"><label>Text der E-Mail an das Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(änderbar — die Anrede wird automatisch vorangestellt)</span></label>
+                <div id="ASD_AnredeVorschau" style="font-size:13px; padding:6px 10px; background:#f6f6f4; border:1px solid #ddd; border-bottom:none; border-radius:6px 6px 0 0;"></div>
+                <textarea id="ASD_Text" rows="9" style="border-radius:0 0 6px 6px; font-family:inherit; font-size:13px; line-height:1.45;" oninput="this.dataset.geaendert = (this.value !== asdStandardText()) ? '1' : ''; if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></textarea>
+                <button type="button" class="btn btn-secondary" onclick="asdTextZuruecksetzen()" style="margin-top:6px; min-height:32px; font-size:12px; padding:0 10px;">↺ Standardtext</button>
+              </div>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
               <button class="btn" id="btnTlFreigeben" onclick="tlFinalFreigeben()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
@@ -840,10 +845,12 @@ function _setSelect(id, val) {
 let _asdMailMap = {};          // Sachbearbeitung -> Mailadresse (aus Kilanka)
 let _asdKontakte = [];         // alle Ansprechpartner aller Ämter [{amt, name, mail}] — für die Prüfansicht der TL
 let _asdVersandInfo = null;    // { an, datum, von } nach erfolgtem Versand (im FormularDaten-JSON persistiert)
+let _asdAnredeMap = {};        // Sachbearbeitung -> "Frau"/"Herr" (aus dem Kilanka-Adressbuch)
 function merkeAsdMails(k) {
   if (!k) return;
   if (k.Ansprechpartner_JA_Mails && typeof k.Ansprechpartner_JA_Mails === 'object') Object.assign(_asdMailMap, k.Ansprechpartner_JA_Mails);
   if (k.Sachbearbeitung_JA && k.Sachbearbeitung_JA_Mail) _asdMailMap[k.Sachbearbeitung_JA] = k.Sachbearbeitung_JA_Mail;
+  if (k.Ansprechpartner_JA_Anreden && typeof k.Ansprechpartner_JA_Anreden === 'object') Object.assign(_asdAnredeMap, k.Ansprechpartner_JA_Anreden);
   // Kilanka kommt asynchron: liegt der TL-Freigabeblock schon offen, Adresse jetzt nachtragen
   if (document.getElementById('tlAktionen')?.style.display === 'block') fuelleAsdVersandBlock();
 }
@@ -859,6 +866,64 @@ function fuelleAsdVersandBlock() {
   // Kennwort vorschlagen (überschreibbar): PNW-<Nachname 2 Buchstaben><Vorname 2 Buchstaben>*<JJ>_<MM>
   const kwEl = document.getElementById('ASD_Kennwort');
   if (kwEl && !kwEl.value.trim()) { const v = kennwortVorschlag(); if (v) { kwEl.value = v; kwEl.placeholder = v; } }
+  asdAnredeAusKilanka(false);
+  // Mailtext: ein von der Teamleitung geänderter Text bleibt, sonst immer der aktuelle Standardtext
+  const txEl = document.getElementById('ASD_Text');
+  if (txEl && (!txEl.value.trim() || !txEl.dataset.geaendert)) { txEl.value = asdStandardText(); txEl.dataset.geaendert = ''; }
+  asdAnredeVorschau();
+}
+
+// Anrede (Frau/Herr) aus Kilanka vorbelegen. nameGeaendert=true: beim Tippen im Namensfeld neu ermitteln.
+function asdAnredeAusKilanka(nameGeaendert) {
+  const sel = document.getElementById('ASD_Anrede'); if (!sel) return;
+  if (sel.value && !nameGeaendert) return;
+  const name = (document.getElementById('ASD_Name')?.value || '').trim();
+  const glatt = v => String(v || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  let a = _asdAnredeMap[name] || '';
+  if (!a) { const k = _asdKontakte.find(x => glatt(x.name) === glatt(name) && x.anrede); if (k) a = k.anrede; }
+  if (!a) { const m = /^(frau|herr)\b/i.exec(name); if (m) a = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase(); }
+  if (a || nameGeaendert) sel.value = a || sel.value;
+}
+// Nachname aus "Nachname, Vorname" / "Frau Häusler" / "Manuela Häusler"
+function asdNachname(name) {
+  const n = String(name || '').trim().replace(/^(frau|herr|hr\.|fr\.)\s+/i, '');
+  if (!n || n === '__custom__') return '';
+  if (n.includes(',')) return n.split(',')[0].trim();
+  const t = n.split(/\s+/).filter(Boolean); return t[t.length - 1] || '';
+}
+// Anredezeile: "Hallo Frau Häusler" — ohne Anrede "Hallo Manuela Häusler", ohne Namen "Sehr geehrte Damen und Herren"
+function asdAnredeZeile(anrede, name) {
+  const nach = asdNachname(name);
+  if (anrede && nach) return `Hallo ${anrede} ${nach}`;
+  const n = String(name || '').trim();
+  if (!n || n === '__custom__') return 'Sehr geehrte Damen und Herren';
+  const voll = n.includes(',') ? (n.split(',').slice(1).join(',').trim() + ' ' + n.split(',')[0].trim()).trim() : n;
+  return 'Hallo ' + voll;
+}
+function asdAnredeVorschau() {
+  const el = document.getElementById('ASD_AnredeVorschau'); if (!el) return;
+  el.textContent = asdAnredeZeile(document.getElementById('ASD_Anrede')?.value || '', document.getElementById('ASD_Name')?.value || '') + ',';
+}
+// Standardtext der Mail 1 (ohne Anredezeile), inkl. Gruß der angemeldeten Teamleitung
+function asdStandardText() {
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  const typ = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
+  const kind = `${v('Kind_Vorname')} ${v('Kind_Familienname')}`.trim() || 'Unbekannt';
+  const zeitraum = (v('BZ_Von') && v('BZ_Bis')) ? `${deDatum(v('BZ_Von'))} – ${deDatum(v('BZ_Bis'))}` : v('Betreuungszeitraum');
+  return `anbei erhalten Sie den ${typ} zu ${kind}${zeitraum ? ' für den Zeitraum ' + zeitraum : ''}.\n\n` +
+    `Das Dokument ist kennwortgeschützt. Das Kennwort erhalten Sie in einer separaten E-Mail.\n\n` +
+    `Mit freundlichen Grüßen\n${currentAccount?.name || ''}\nTeamleitung – Praxis NeueWege GmbH`;
+}
+function asdTextZuruecksetzen() {
+  const el = document.getElementById('ASD_Text'); if (!el) return;
+  if (el.dataset.geaendert && !confirm('Eigenen Text verwerfen und den Standardtext einsetzen?')) return;
+  el.value = asdStandardText(); el.dataset.geaendert = '';
+  if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
+}
+// Freitext -> HTML: Leerzeile = neuer Absatz, Zeilenumbruch = <br>
+function textZuHtml(t) {
+  return String(t || '').replace(/\r/g, '').split(/\n\s*\n/).map(a => a.trim()).filter(Boolean)
+    .map(a => `<p>${escHtml(a).replace(/\n/g, '<br>')}</p>`).join('');
 }
 
 // Vorschlag nach dem mit den Ämtern vereinbarten Schema, z. B. PNW-EmMa*26_09 (Emadi, Marwa, 09/2026).
@@ -1516,6 +1581,8 @@ function collectData() {
   data._anhangName = _anhangPDF ? _anhangPDF.name : null;
   { const am = document.getElementById('ASD_Mail'); data._asdMail = am ? am.value.trim().toLowerCase() : (data._asdMail || ''); }
   { const an = document.getElementById('ASD_Name'); data._asdName = an ? an.value.trim() : (data._asdName || ''); }
+  { const aa = document.getElementById('ASD_Anrede'); data._asdAnrede = aa ? aa.value : (data._asdAnrede || ''); }
+  { const at = document.getElementById('ASD_Text'); data._asdText = at ? (at.dataset.geaendert ? at.value : '') : (data._asdText || ''); }
   if (_asdVersandInfo) data._asdVersand = _asdVersandInfo;
   data._anhangTitel = _anhangPDF ? (_anhangPDF.titel || '') : null;
   // Unterschrift-Fachkräfte: Name + Qualifikationen als flache Tokens
@@ -2504,6 +2571,8 @@ async function loadDraft(id) {
     toggleBesprochenDatum();
     { const am = document.getElementById('ASD_Mail'); if (am) am.value = data._asdMail || ''; }
     { const an = document.getElementById('ASD_Name'); if (an) an.value = data._asdName || ''; }
+    { const aa = document.getElementById('ASD_Anrede'); if (aa) aa.value = data._asdAnrede || ''; }
+    { const at = document.getElementById('ASD_Text'); if (at) { at.value = data._asdText || ''; at.dataset.geaendert = data._asdText ? '1' : ''; } }
     _asdVersandInfo = data._asdVersand || null;
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
@@ -4090,6 +4159,9 @@ async function tlFinalFreigeben() {
   const sb = (document.getElementById('ASD_Name')?.value || '').trim() || document.getElementById('Sachbearbeitung_JA')?.value || '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { alert('Bitte eine gültige E-Mail-Adresse der ASD-Sachbearbeitung eintragen.'); document.getElementById('ASD_Mail')?.focus(); return; }
   if (kennwort.length < 6) { alert('Bitte das mit dem Jugendamt vereinbarte Kennwort eintragen (mindestens 6 Zeichen).'); document.getElementById('ASD_Kennwort')?.focus(); return; }
+  const asdAnrede = document.getElementById('ASD_Anrede')?.value || '';
+  const asdText = (document.getElementById('ASD_Text')?.value || '').trim() || asdStandardText();
+  const anredeZeile = asdAnredeZeile(asdAnrede, sb);
   const data = collectData();
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // HPG-Vorlaufzeit als Hinweis in die Bestaetigung (frueher Warnbox in der Mail an Sonja)
@@ -4103,12 +4175,12 @@ async function tlFinalFreigeben() {
   const ok = confirm(
     `Bericht final freigeben und an das Jugendamt senden?\n\n` +
     `Kind/Jugendliche*r: ${kind}\nJugendamt: ${data.Jugendamt || '–'}\nSachbearbeitung: ${sb || '–'}\n\n` +
-    `E-Mail ASD: ${mail}\nKennwort: ${kennwort}\n\n` +
+    `E-Mail ASD: ${mail}\nKennwort: ${kennwort}\nAnrede: ${anredeZeile},\n\n` +
     `Absender: ${currentAccount?.username || ''}${hpgHinweis}\n\n` +
     `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) an die ASD.`
   );
   if (!ok) return;
-  await approveReport({ asdMail: mail, kennwort, sachbearbeitung: sb });
+  await approveReport({ asdMail: mail, kennwort, sachbearbeitung: sb, anrede: asdAnrede, text: asdText });
 }
 
 // Zwei Mails an die ASD: 1) kennwortgeschuetztes PDF als Anhang, 2) Kennwort. Absender = angemeldete Teamleitung.
@@ -4119,7 +4191,7 @@ async function sendeBerichtAnAsd(token, data, opts, pdfBytes) {
   const kuerzel = (`${data.Kind_Vorname || ''}`.substring(0,1) + '. ' + `${data.Kind_Familienname || ''}`).trim();   // Betreff datensparsam
   const zeitraum = (data.BZ_Von && data.BZ_Bis) ? `${deDatum(data.BZ_Von)} – ${deDatum(data.BZ_Bis)}` : (data.Betreuungszeitraum || '');
   const absender = currentAccount?.name || '';
-  const anrede = anredeAusName(opts.sachbearbeitung);
+  const anrede = escHtml(asdAnredeZeile(opts.anrede || '', opts.sachbearbeitung));
   const dateiname = berichtsDateiname(data);
   const gruss = `<p style="margin-top:16px;">Mit freundlichen Grüßen<br>${escHtml(absender)}<br>Teamleitung – Praxis NeueWege GmbH</p>`;
   const kopf = `<html><body style="font-family:Arial,sans-serif; color:#333; font-size:14px; max-width:640px;">`;
@@ -4135,9 +4207,7 @@ async function sendeBerichtAnAsd(token, data, opts, pdfBytes) {
     subject: `[RC]${berichtstyp} ${kuerzel} – Praxis NeueWege${zeitraum ? ' – ' + zeitraum : ''}`,
     body: { contentType: 'HTML', content: kopf +
       `<p>${anrede},</p>` +
-      `<p>anbei erhalten Sie den ${escHtml(berichtstyp)} zu ${escHtml(kind)}${zeitraum ? ' für den Zeitraum ' + escHtml(zeitraum) : ''}.</p>` +
-      `<p>Das Dokument ist kennwortgeschützt. Das Kennwort erhalten Sie in einer separaten E-Mail.</p>` +
-      gruss + `</body></html>` },
+      textZuHtml(opts.text || asdStandardText()) + `</body></html>` },
     toRecipients: [{ emailAddress: { address: opts.asdMail } }],
     attachments: [{ '@odata.type': '#microsoft.graph.fileAttachment', name: dateiname, contentType: 'application/pdf', contentBytes: b64 }]
   }, saveToSentItems: true };

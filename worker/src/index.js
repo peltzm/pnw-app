@@ -696,6 +696,7 @@ function clientsForUser(allClients, upn, now, qualiMap, ansprechpartnerMap, amtK
       profil.aktiv = isCurrent(m.action.validFrom, m.action.validUntil, now);
       profil.Ansprechpartner_JA = (ansprechpartnerMap && ansprechpartnerMap.get(String(m.action.department?.id ?? ""))) || [];
       profil.Ansprechpartner_JA_Mails = (ansprechpartnerMap && ansprechpartnerMap.mails && ansprechpartnerMap.mails.get(String(m.action.department?.id ?? ""))) || {};
+      profil.Ansprechpartner_JA_Anreden = (ansprechpartnerMap && ansprechpartnerMap.anreden && ansprechpartnerMap.anreden.get(String(m.action.department?.id ?? ""))) || {};
       // Jugendamt: Kurzname aus Kilanka (Behörden-Stammdaten), Langname als Referenz mitliefern
       profil.Jugendamt_Lang = m.action.department?.name || "";
       profil.Jugendamt = m.action.department?.shortName
@@ -739,8 +740,9 @@ function aemterListe(allClients, amtKurz) {
   return [...map].map(([lang, kurz]) => ({ lang, kurz })).sort((a, b) => a.kurz.localeCompare(b.kurz, "de"));
 }
 
-function ansprechpartnerJeAmt(allClients, kontaktMails) {
+function ansprechpartnerJeAmt(allClients, kontaktMails, kontaktAnreden) {
   const map = new Map();
+  const anr = new Map();   // Amt -> (Name -> Anrede "Frau"/"Herr" aus dem Kilanka-Adressbuch)
   for (const client of allClients) {
     if (kDate(client.deletedAt)) continue;
     for (const action of client.actions || []) {
@@ -751,6 +753,9 @@ function ansprechpartnerJeAmt(allClients, kontaktMails) {
       if (!map.has(amt)) map.set(amt, new Map());
       const mail = (kontaktMails && kontaktMails.get(String(action.departmentResponsible?.id ?? ""))) || "";
       if (!map.get(amt).get(name)) map.get(amt).set(name, mail);   // Name -> Mailadresse (erste gefundene)
+      const anrede = (kontaktAnreden && kontaktAnreden.get(String(action.departmentResponsible?.id ?? ""))) || "";
+      if (!anr.has(amt)) anr.set(amt, new Map());
+      if (anrede && !anr.get(amt).get(name)) anr.get(amt).set(name, anrede);
     }
   }
   const out = new Map();
@@ -759,6 +764,10 @@ function ansprechpartnerJeAmt(allClients, kontaktMails) {
   const mails = new Map();
   for (const [amt, m] of map) mails.set(amt, Object.fromEntries(m));
   out.mails = mails;
+  // Anreden je Amt als Objekt Name -> "Frau"/"Herr" (fuer "Hallo Frau Nachname" in der ASD-Mail)
+  const anreden = new Map();
+  for (const [amt, m] of anr) anreden.set(amt, Object.fromEntries(m));
+  out.anreden = anreden;
   return out;
 }
 
@@ -1237,12 +1246,31 @@ async function fetchAmtKurznamen(env) {
       }
       if (page.length < 1000) break;
     }
-    amtKurznameCache = { map, fetchedAt: Date.now() };
   } catch (e) {
     // Kurznamen sind nice-to-have: bei Fehler (z. B. contacts nicht im
     // Token-Scope) mit vollen Amtsnamen weiterarbeiten
     console.warn("Kurzname-Abruf (contacts) fehlgeschlagen:", e.message);
   }
+  // Anrede (Frau/Herr) je Kontakt-ID in eigener Abfrage: fehlt contactTitle im freigegebenen Graphen,
+  // bleiben Kurznamen und Mailadressen davon unberuehrt
+  map.anreden = new Map();
+  try {
+    for (let offset = 0; ; offset += 1000) {
+      const page = await kilankaPost(env, "contacts", {
+        id: 1, contactTitle: { name: 1 }, $limit: 1000, $offset: offset,
+      });
+      if (!Array.isArray(page)) break;
+      for (const k of page) {
+        const t = String(k?.contactTitle?.name || "").trim();
+        if (/^frau$/i.test(t)) map.anreden.set(String(k.id), "Frau");
+        else if (/^herr(n)?$/i.test(t)) map.anreden.set(String(k.id), "Herr");
+      }
+      if (page.length < 1000) break;
+    }
+  } catch (e) {
+    console.warn("Anrede-Abruf (contacts.contactTitle) fehlgeschlagen:", e.message);
+  }
+  if (map.size || map.mails.size) amtKurznameCache = { map, fetchedAt: Date.now() };
   return map;
 }
 
@@ -4070,14 +4098,14 @@ export default {
           fetchQualiMap(env, now),
           fetchAmtKurznamen(env),
         ]);
-        const apMap = ansprechpartnerJeAmt(all, amtKurz && amtKurz.mails);
+        const apMap = ansprechpartnerJeAmt(all, amtKurz && amtKurz.mails, amtKurz && amtKurz.anreden);
         const klienten = clientsForUser(all, auth.upn, now, qualiMap, apMap, amtKurz);
         // Alle Ansprechpartner aller Jugendämter mit Mailadresse — unabhängig von der eigenen Klientenzuordnung,
         // damit auch eine prüfende Teamleitung die ASD-Adresse für den Versand bekommt
         const amtName = new Map();
         for (const c of all) for (const a of (c.actions || [])) { const d = a.department; if (d && d.id != null && !amtName.has(String(d.id))) amtName.set(String(d.id), d.shortName || (amtKurz && amtKurz.get(String(d.id))) || d.name || ""); }
         const ansprechpartner = [];
-        for (const [amtId, obj] of apMap.mails) for (const [name, mail] of Object.entries(obj)) ansprechpartner.push({ amt: amtName.get(amtId) || "", name, mail: mail || "" });
+        for (const [amtId, obj] of apMap.mails) for (const [name, mail] of Object.entries(obj)) ansprechpartner.push({ amt: amtName.get(amtId) || "", name, mail: mail || "", anrede: (apMap.anreden.get(amtId) || {})[name] || "" });
         // Alle vergebenen Qualifikationen als Auswahlliste (ohne "NICHT verwenden"-Alteintraege)
         const qualifikationen = [...new Set(Object.values(qualiMap))]
           .filter((q) => !/^\s*nicht\s/i.test(q))
