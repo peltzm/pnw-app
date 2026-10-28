@@ -461,12 +461,12 @@
             <div id="asdVersandBlock" style="border-top:1px solid #e8c4a8; margin:12px 0 14px; padding-top:12px;">
               <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Versand an das Jugendamt</div>
               <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Mit der finalen Freigabe wird das PDF in SharePoint abgelegt und an die Sachbearbeitung (ASD) gesendet – kennwortgeschützt, das Kennwort folgt in einer zweiten E-Mail aus Ihrem Postfach.</div>
-              <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Anrede und Name für die E-Mail, änderbar)</span></label><div style="display:flex; gap:6px; align-items:center;"><select id="ASD_Anrede" onchange="asdAnredeVorschau(); if (typeof scheduleAutoSave==='function') scheduleAutoSave();" style="width:auto; min-width:90px;"><option value="">–</option><option value="Frau">Frau</option><option value="Herr">Herr</option></select><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" style="flex:1;" oninput="asdAnredeAusKilanka(true); asdAnredeVorschau(); if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div></div>
+              <div class="field" style="display:none;"><label>Sachbearbeitung Jugendamt</label><div style="display:flex; gap:6px; align-items:center;"><select id="ASD_Anrede" onchange="asdAnredeVorschau(); if (typeof scheduleAutoSave==='function') scheduleAutoSave();" style="width:auto; min-width:90px;"><option value="">–</option><option value="Frau">Frau</option><option value="Herr">Herr</option></select><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" style="flex:1;" oninput="asdAnredeAusKilanka(true); asdAnredeVorschau(); if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div></div>
               <div class="field" style="margin-bottom:8px;"><label>E-Mail der ASD-Sachbearbeitung <span style="font-weight:normal; color:var(--text-muted);">(aus Kilanka, änderbar)</span></label><input type="email" id="ASD_Mail" placeholder="vorname.nachname@landkreis-xy.de" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(Vorschlag nach Schema PNW-NaVo*JJ_MM, änderbar — wird nicht gespeichert)</span></label><div style="display:flex; gap:6px; align-items:center;"><input type="password" id="ASD_Kennwort" autocomplete="new-password" placeholder="Kennwort" style="flex:1;"><button type="button" id="btnKennwortAuge" onclick="kennwortAnzeigen()" title="Kennwort anzeigen" aria-label="Kennwort anzeigen" style="min-height:36px; padding:0 10px; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; font-size:16px; line-height:1;">&#128065;</button></div></div>
-              <div class="field" style="margin:8px 0 0;"><label>Text der E-Mail an das Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Anrede und Text änderbar — die Anrede wird aus Frau/Herr und Name vorgeschlagen)</span></label>
-                <input type="text" id="ASD_AnredeVorschau" autocomplete="off" placeholder="Hallo Frau Mustermann," title="Anrede der E-Mail (änderbar)" style="background:#f6f6f4; border-bottom:none; border-radius:6px 6px 0 0;" oninput="this.dataset.geaendert = (this.value.trim() !== asdAnredeAuto()) ? '1' : ''; if (typeof scheduleAutoSave==='function') scheduleAutoSave();">
-                <textarea id="ASD_Text" rows="9" style="border-radius:0 0 6px 6px; font-family:inherit; font-size:13px; line-height:1.45;" oninput="this.dataset.geaendert = (this.value !== asdStandardText()) ? '1' : ''; if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></textarea>
+              <div class="field" style="margin:8px 0 0;"><label>Text der E-Mail an das Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Vorschlag inkl. Anrede aus Kilanka — frei änderbar)</span></label>
+                
+                <textarea id="ASD_Text" rows="11" style="font-family:inherit; font-size:13px; line-height:1.45;" oninput="this.dataset.geaendert = (this.value !== asdStandardText()) ? '1' : ''; if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></textarea>
                 <button type="button" class="btn btn-secondary" onclick="asdTextZuruecksetzen()" style="margin-top:6px; min-height:32px; font-size:12px; padding:0 12px; align-self:flex-start;">↺ Standardtext</button>
               </div>
             </div>
@@ -905,13 +905,15 @@ function asdAnredeAuto() {
   return asdAnredeZeile(document.getElementById('ASD_Anrede')?.value || '', document.getElementById('ASD_Name')?.value || '') + ',';
 }
 // Anredefeld aktualisieren — eine von Hand angepasste Anrede bleibt stehen
+// Ungeänderten Mailtext an neue Anrede/Name anpassen — ein von Hand geänderter Text bleibt stehen
 function asdAnredeVorschau() {
-  const el = document.getElementById('ASD_AnredeVorschau'); if (!el) return;
-  if (!el.dataset.geaendert || !el.value.trim()) { el.value = asdAnredeAuto(); el.dataset.geaendert = ''; }
+  const el = document.getElementById('ASD_Text'); if (!el) return;
+  if (!el.dataset.geaendert || !el.value.trim()) { el.value = asdStandardText(); el.dataset.geaendert = ''; }
 }
-// Anrede für den Versand: Eingabe ohne abschließendes Satzzeichen (das Komma setzt die Mail)
-function asdAnredeFinal() {
-  const v = (document.getElementById('ASD_AnredeVorschau')?.value || '').trim() || asdAnredeAuto();
+// Anrede für Mail 2 (Kennwort): erste Zeile des Mailtexts, wenn sie wie eine Anrede aussieht, sonst Vorschlag
+function asdAnredeFinal(text) {
+  const erste = String(text || '').replace(/\r/g, '').split('\n')[0].trim();
+  const v = (erste && erste.length <= 80 && /,$/.test(erste)) ? erste : asdAnredeAuto();
   return v.replace(/[\s,;:!.]+$/, '');
 }
 // Standardtext der Mail 1 (ohne Anredezeile), inkl. Gruß der angemeldeten Teamleitung
@@ -920,15 +922,14 @@ function asdStandardText() {
   const typ = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
   const kind = `${v('Kind_Vorname')} ${v('Kind_Familienname')}`.trim() || 'Unbekannt';
   const zeitraum = (v('BZ_Von') && v('BZ_Bis')) ? `${deDatum(v('BZ_Von'))} – ${deDatum(v('BZ_Bis'))}` : v('Betreuungszeitraum');
-  return `anbei erhalten Sie den ${typ} zu ${kind}${zeitraum ? ' für den Zeitraum ' + zeitraum : ''}.\n\n` +
+  return `${asdAnredeAuto()}\n\nanbei erhalten Sie den ${typ} zu ${kind}${zeitraum ? ' für den Zeitraum ' + zeitraum : ''}.\n\n` +
     `Das Dokument ist kennwortgeschützt. Das Kennwort erhalten Sie in einer separaten E-Mail.\n\n` +
     `Mit freundlichen Grüßen\n${currentAccount?.name || ''}\nTeamleitung – Praxis NeueWege GmbH`;
 }
 function asdTextZuruecksetzen() {
   const el = document.getElementById('ASD_Text'); if (!el) return;
-  if ((el.dataset.geaendert || document.getElementById('ASD_AnredeVorschau')?.dataset.geaendert) && !confirm('Eigene Anrede und eigenen Text verwerfen und den Standard einsetzen?')) return;
+  if (el.dataset.geaendert && !confirm('Eigenen Text verwerfen und den Vorschlag einsetzen?')) return;
   el.value = asdStandardText(); el.dataset.geaendert = '';
-  const an = document.getElementById('ASD_AnredeVorschau'); if (an) { an.dataset.geaendert = ''; asdAnredeVorschau(); }
   if (typeof scheduleAutoSave === 'function') scheduleAutoSave();
 }
 // Freitext -> HTML: Leerzeile = neuer Absatz, Zeilenumbruch = <br>
@@ -1594,7 +1595,6 @@ function collectData() {
   { const an = document.getElementById('ASD_Name'); data._asdName = an ? an.value.trim() : (data._asdName || ''); }
   { const aa = document.getElementById('ASD_Anrede'); data._asdAnrede = aa ? aa.value : (data._asdAnrede || ''); }
   { const at = document.getElementById('ASD_Text'); data._asdText = at ? (at.dataset.geaendert ? at.value : '') : (data._asdText || ''); }
-  { const az = document.getElementById('ASD_AnredeVorschau'); data._asdAnredeText = az ? (az.dataset.geaendert ? az.value.trim() : '') : (data._asdAnredeText || ''); }
   if (_asdVersandInfo) data._asdVersand = _asdVersandInfo;
   data._anhangTitel = _anhangPDF ? (_anhangPDF.titel || '') : null;
   // Unterschrift-Fachkräfte: Name + Qualifikationen als flache Tokens
@@ -2585,7 +2585,6 @@ async function loadDraft(id) {
     { const an = document.getElementById('ASD_Name'); if (an) an.value = data._asdName || ''; }
     { const aa = document.getElementById('ASD_Anrede'); if (aa) aa.value = data._asdAnrede || ''; }
     { const at = document.getElementById('ASD_Text'); if (at) { at.value = data._asdText || ''; at.dataset.geaendert = data._asdText ? '1' : ''; } }
-    { const az = document.getElementById('ASD_AnredeVorschau'); if (az) { az.value = data._asdAnredeText || ''; az.dataset.geaendert = data._asdAnredeText ? '1' : ''; } }
     _asdVersandInfo = data._asdVersand || null;
     // TL-Kommentare wiederherstellen und anzeigen
     _tlKommentare = (data._tlKommentare && typeof data._tlKommentare === 'object') ? data._tlKommentare : {};
@@ -4174,7 +4173,7 @@ async function tlFinalFreigeben() {
   if (kennwort.length < 6) { alert('Bitte das mit dem Jugendamt vereinbarte Kennwort eintragen (mindestens 6 Zeichen).'); document.getElementById('ASD_Kennwort')?.focus(); return; }
   const asdAnrede = document.getElementById('ASD_Anrede')?.value || '';
   const asdText = (document.getElementById('ASD_Text')?.value || '').trim() || asdStandardText();
-  const anredeZeile = asdAnredeFinal();
+  const anredeZeile = asdAnredeFinal(asdText);
   const data = collectData();
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // HPG-Vorlaufzeit als Hinweis in die Bestaetigung (frueher Warnbox in der Mail an Sonja)
@@ -4188,7 +4187,7 @@ async function tlFinalFreigeben() {
   const ok = confirm(
     `Bericht final freigeben und an das Jugendamt senden?\n\n` +
     `Kind/Jugendliche*r: ${kind}\nJugendamt: ${data.Jugendamt || '–'}\nSachbearbeitung: ${sb || '–'}\n\n` +
-    `E-Mail ASD: ${mail}\nKennwort: ${kennwort}\nAnrede: ${anredeZeile},\n\n` +
+    `E-Mail ASD: ${mail}\nKennwort: ${kennwort}\n\n` +
     `Absender: ${currentAccount?.username || ''}${hpgHinweis}\n\n` +
     `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) an die ASD.`
   );
@@ -4219,7 +4218,6 @@ async function sendeBerichtAnAsd(token, data, opts, pdfBytes) {
   const mail1 = { message: {
     subject: `[RC]${berichtstyp} ${kuerzel} – Praxis NeueWege${zeitraum ? ' – ' + zeitraum : ''}`,
     body: { contentType: 'HTML', content: kopf +
-      `<p>${anrede},</p>` +
       textZuHtml(opts.text || asdStandardText()) + `</body></html>` },
     toRecipients: [{ emailAddress: { address: opts.asdMail } }],
     attachments: [{ '@odata.type': '#microsoft.graph.fileAttachment', name: dateiname, contentType: 'application/pdf', contentBytes: b64 }]
