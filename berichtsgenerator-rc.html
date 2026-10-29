@@ -4097,8 +4097,6 @@ const _SCOPES_ENTWURF = ['Mail.ReadWrite'];
 function asdEntwurfModusGeaendert() {
   const an = !!document.getElementById('ASD_AlsEntwurf')?.checked;
   try { localStorage.setItem('pnw_asd_als_entwurf', an ? '1' : ''); } catch(e) {}
-  const btn = document.getElementById('btnTlFreigeben');
-  if (btn && !btn.disabled) btn.textContent = an ? '✓ Final freigeben, PDF ablegen & Entwürfe anlegen' : '✓ Final freigeben, PDF ablegen & senden';
 }
 function asdEntwurfModusLaden() {
   const cb = document.getElementById('ASD_AlsEntwurf'); if (!cb) return;
@@ -4589,7 +4587,7 @@ function activateReviewMode() {
   // Seit 09/2026 gibt die Teamleitung selbst final frei (kein Umweg ueber die GF);
   // die GF behaelt ueber die Statusuebersicht und die Fertigstellungs-Mail den Ueberblick.
   if (btnTlF) {
-    btnTlF.textContent = '✓ Final freigeben, PDF ablegen & senden';
+    btnTlF.textContent = '✓ Final freigeben';
     btnTlF.onclick = function() { tlFinalFreigeben(); };
   }
   if (hinweis) hinweis.textContent = 'Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann unten Adresse und Kennwort prüfen und final freigeben – oder an die Fachkraft zurückweisen.';
