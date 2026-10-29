@@ -464,6 +464,7 @@
               <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Name für die Anrede, änderbar)</span></label><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:8px;"><label>E-Mail der ASD-Sachbearbeitung <span style="font-weight:normal; color:var(--text-muted);">(aus Kilanka, änderbar)</span></label><input type="email" id="ASD_Mail" placeholder="vorname.nachname@landkreis-xy.de" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(Vorschlag nach Schema PNW-NaVo*JJ_MM, änderbar — wird nicht gespeichert)</span></label><div style="display:flex; gap:6px; align-items:center;"><input type="password" id="ASD_Kennwort" autocomplete="new-password" placeholder="Kennwort" style="flex:1;"><button type="button" id="btnKennwortAuge" onclick="kennwortAnzeigen()" title="Kennwort anzeigen" aria-label="Kennwort anzeigen" style="min-height:36px; padding:0 10px; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; font-size:16px; line-height:1;">&#128065;</button></div></div>
+              <label id="ASD_EntwurfZeile" style="display:flex; gap:8px; align-items:flex-start; margin-top:10px; font-size:12px; color:var(--text); cursor:pointer;"><input type="checkbox" id="ASD_AlsEntwurf" onchange="asdEntwurfModusGeaendert()" style="margin-top:2px; width:auto;"><span><strong>Als Entwurf in mein Outlook legen statt direkt senden</strong><br><span style="color:var(--text-muted);">Beide Mails (PDF und Kennwort) liegen danach in Ihren Outlook-Entwürfen. Dort können Sie den Text ergänzen und weitere Anhänge hinzufügen. Bitte zuerst die Mail mit dem PDF senden, danach die Kennwort-Mail.</span></span></label>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
               <button class="btn" id="btnTlFreigeben" onclick="tlFinalFreigeben()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
@@ -3666,17 +3667,24 @@ async function approveReport(opts) {
       catch(e) { console.warn('Fertigstellungs-Mail fehlgeschlagen:', e.message); }
       const anhangHinweis = anhangName ? ` — Anhang: ${anhangName}` : '';
       // Versand an die ASD (nur bei Freigabe durch die Teamleitung mit eingetragener Adresse + Kennwort)
-      let asdText = '', asdOk = true;
+      let asdText = '', asdOk = true, asdLinks = [];
       if (opts.asdMail && opts.kennwort) {
-        setStatus('uploading', 'Kennwortgeschütztes PDF wird erstellt und an die ASD gesendet...');
+        setStatus('uploading', opts.alsEntwurf ? 'Kennwortgeschütztes PDF wird erstellt und als Entwurf in Outlook abgelegt...' : 'Kennwortgeschütztes PDF wird erstellt und an die ASD gesendet...');
         try {
           const geschuetzt = await erzeugePdfBytes(data, { freigegebenVon: freigeber, freigabeLeitung, kennwort: opts.kennwort, anhangAlsSeiten: true });
           const res = await sendeBerichtAnAsd(token, data, opts, geschuetzt);
-          asdText = ' — ' + res.text; asdOk = res.ok;
+          asdText = ' — ' + res.text; asdOk = res.ok; asdLinks = res.links || [];
           if (res.ok) { try { data._asdVersand = _asdVersandInfo; await saveToList(data, currentListId); } catch(e) { console.warn('Versandvermerk nicht gespeichert:', e.message); } }
         } catch(e) { asdText = ' — Versand an ASD fehlgeschlagen: ' + e.message; asdOk = false; }
       }
       setStatus(asdOk ? 'done' : 'error', `${asdOk ? '✓' : '⚠️'} Freigegeben — PDF gespeichert: ${pdfName}${anhangHinweis}${infoMailOk ? ' — Fertigstellungs-Mail gesendet.' : ''}${asdText}`);
+      // Links zu den Outlook-Entwürfen (öffnen Outlook im Web; in Outlook Desktop liegen sie unter "Entwürfe")
+      { const bar = document.getElementById('statusBar');
+        asdLinks.filter(l => l && l.url).forEach(l => {
+          const a = document.createElement('a'); a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = l.text;
+          a.style.cssText = 'margin-left:12px; font-weight:600; color:inherit; text-decoration:underline; white-space:nowrap;';
+          bar.appendChild(a);
+        }); }
     } else {
       // Freigabe ist in der Liste gespeichert; das PDF kann per Download-Button erneut erzeugt werden
       setStatus('error', '✓ Freigabe gespeichert — aber der PDF-Upload ist fehlgeschlagen. Bitte „PDF herunterladen" nutzen und das PDF manuell nach SharePoint legen.');
@@ -4081,6 +4089,34 @@ async function tlUebernehmenAusListe(itemId) {
   if (ok && typeof goToStatusBerichte === 'function') goToStatusBerichte();
 }
 
+// ─── ASD-VERSAND ALS OUTLOOK-ENTWURF ──────────────────────────────────────────
+// Option im Freigabedialog: statt direkt zu senden werden beide Mails als Entwurf im Postfach der Teamleitung
+// angelegt (Graph POST /me/messages). Dafuer ist Mail.ReadWrite noetig — wird nur bei Nutzung der Option angefragt,
+// damit die normale Anmeldung keine neue Zustimmung braucht. Die letzte Wahl merkt sich der Browser.
+const _SCOPES_ENTWURF = ['Mail.ReadWrite'];
+function asdEntwurfModusGeaendert() {
+  const an = !!document.getElementById('ASD_AlsEntwurf')?.checked;
+  try { localStorage.setItem('pnw_asd_als_entwurf', an ? '1' : ''); } catch(e) {}
+  const btn = document.getElementById('btnTlFreigeben');
+  if (btn && !btn.disabled) btn.textContent = an ? '✓ Final freigeben, PDF ablegen & Entwürfe anlegen' : '✓ Final freigeben, PDF ablegen & senden';
+}
+function asdEntwurfModusLaden() {
+  const cb = document.getElementById('ASD_AlsEntwurf'); if (!cb) return;
+  try { cb.checked = localStorage.getItem('pnw_asd_als_entwurf') === '1'; } catch(e) { cb.checked = false; }
+  asdEntwurfModusGeaendert();
+}
+async function getEntwurfToken() {
+  if (!currentAccount) throw new Error('Nicht angemeldet');
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: _SCOPES_ENTWURF, account: currentAccount });
+    return r.accessToken;
+  } catch(e) {
+    // Einmalige Zustimmung "E-Mails lesen und schreiben" (bzw. Admin-Zustimmung in Entra)
+    const r2 = await msalInstance.acquireTokenPopup({ scopes: _SCOPES_ENTWURF, account: currentAccount });
+    return r2.accessToken;
+  }
+}
+
 // ─── TL: FINALE FREIGABE MIT VERSAND AN DIE ASD ──────────────────────────────
 // Ersetzt seit 09/2026 die Weiterleitung an Sonja: Status "Genehmigt", PDF-Ablage, Fertigstellungs-Mail an GF/TL/FK,
 // danach zwei Mails an die ASD-Sachbearbeitung (kennwortgeschuetztes PDF + Kennwort) aus dem Postfach der Teamleitung.
@@ -4092,6 +4128,15 @@ async function tlFinalFreigeben() {
   const sb = (document.getElementById('ASD_Name')?.value || '').trim() || document.getElementById('Sachbearbeitung_JA')?.value || '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { alert('Bitte eine gültige E-Mail-Adresse der ASD-Sachbearbeitung eintragen.'); document.getElementById('ASD_Mail')?.focus(); return; }
   if (kennwort.length < 6) { alert('Bitte das mit dem Jugendamt vereinbarte Kennwort eintragen (mindestens 6 Zeichen).'); document.getElementById('ASD_Kennwort')?.focus(); return; }
+  const alsEntwurf = !!document.getElementById('ASD_AlsEntwurf')?.checked;
+  let entwurfToken = null;
+  if (alsEntwurf) {
+    try { entwurfToken = await getEntwurfToken(); }
+    catch(e) {
+      alert('Die Berechtigung zum Anlegen von Outlook-Entwürfen wurde nicht erteilt (' + (e.errorMessage || e.message) + ').\n\nBitte erneut versuchen oder die Option „Als Entwurf“ abwählen, um direkt zu senden.');
+      return;
+    }
+  }
   const data = collectData();
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // HPG-Vorlaufzeit als Hinweis in die Bestaetigung (frueher Warnbox in der Mail an Sonja)
@@ -4103,14 +4148,16 @@ async function tlFinalFreigeben() {
     if (diff < 14) hpgHinweis = `\n\n⚠ Berichtsvorlaufzeit unterschritten: nächstes HPG in ${diff} Tag${diff === 1 ? '' : 'en'}.`;
   }
   const ok = confirm(
-    `Bericht final freigeben und an das Jugendamt senden?\n\n` +
+    (alsEntwurf ? `Bericht final freigeben und die Mails an das Jugendamt als Entwurf in Outlook anlegen?\n\n` : `Bericht final freigeben und an das Jugendamt senden?\n\n`) +
     `Kind/Jugendliche*r: ${kind}\nJugendamt: ${data.Jugendamt || '–'}\nSachbearbeitung: ${sb || '–'}\n\n` +
     `E-Mail ASD: ${mail}\nKennwort: ${kennwort}\n\n` +
     `Absender: ${currentAccount?.username || ''}${hpgHinweis}\n\n` +
-    `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) an die ASD.`
+    (alsEntwurf
+      ? `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) als Entwurf in Ihrem Outlook – der Versand erfolgt erst durch Sie aus Outlook.`
+      : `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) an die ASD.`)
   );
   if (!ok) return;
-  await approveReport({ asdMail: mail, kennwort, sachbearbeitung: sb });
+  await approveReport({ asdMail: mail, kennwort, sachbearbeitung: sb, alsEntwurf, entwurfToken });
 }
 
 // Zwei Mails an die ASD: 1) kennwortgeschuetztes PDF als Anhang, 2) Kennwort. Absender = angemeldete Teamleitung.
@@ -4154,13 +4201,30 @@ async function sendeBerichtAnAsd(token, data, opts, pdfBytes) {
     toRecipients: [{ emailAddress: { address: opts.asdMail } }]
   }, saveToSentItems: true };
 
+  if (opts.alsEntwurf) {
+    // Beide Mails als Entwurf im Postfach der Teamleitung (Ordner "Entwürfe"); Versand erfolgt durch die TL aus Outlook
+    let etoken = opts.entwurfToken;
+    try { etoken = await getEntwurfToken(); } catch(e) { /* vorab geholtes Token verwenden */ }
+    const entwurf = async (m) => {
+      const r = await fetch('https://graph.microsoft.com/v1.0/me/messages', { method: 'POST', headers: { Authorization: 'Bearer ' + etoken, 'Content-Type': 'application/json' }, body: JSON.stringify(m.message) });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e?.error?.message || ('HTTP ' + r.status)); }
+      return r.json();
+    };
+    let e1, e2;
+    try { e1 = await entwurf(mail1); } catch(e) { return { ok: false, text: 'Entwurf in Outlook konnte nicht angelegt werden (Mail mit PDF): ' + e.message + ' – bitte manuell aus SharePoint versenden.' }; }
+    try { e2 = await entwurf(mail2); } catch(e) { return { ok: false, text: 'Entwurf mit PDF liegt in Outlook, aber der Kennwort-Entwurf ist fehlgeschlagen: ' + e.message + ' – bitte Kennwort manuell mitteilen.', links: [{ text: 'Entwurf mit PDF öffnen', url: e1?.webLink }] }; }
+    _asdVersandInfo = { an: opts.asdMail, datum: new Date().toISOString(), von: currentAccount?.username || '', art: 'entwurf' };
+    return { ok: true, text: `Entwürfe in Outlook angelegt (an ${opts.asdMail}): bitte zuerst die Mail mit dem PDF, danach die Kennwort-Mail aus Outlook senden.`,
+             links: [{ text: '1) Entwurf mit PDF öffnen', url: e1?.webLink }, { text: '2) Kennwort-Entwurf öffnen', url: e2?.webLink }] };
+  }
+
   const post = async (m) => {
     const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(m) });
     if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e?.error?.message || ('HTTP ' + r.status)); }
   };
   try { await post(mail1); } catch(e) { return { ok: false, text: 'Versand an ASD fehlgeschlagen (Mail mit PDF): ' + e.message }; }
   try { await post(mail2); } catch(e) { return { ok: false, text: 'PDF an ASD gesendet, aber die Kennwort-Mail ist fehlgeschlagen: ' + e.message + ' – bitte Kennwort manuell mitteilen.' }; }
-  _asdVersandInfo = { an: opts.asdMail, datum: new Date().toISOString(), von: currentAccount?.username || '' };
+  _asdVersandInfo = { an: opts.asdMail, datum: new Date().toISOString(), von: currentAccount?.username || '', art: 'gesendet' };
   return { ok: true, text: `An ASD gesendet (${opts.asdMail}): PDF + Kennwort.` };
 }
 
@@ -4530,6 +4594,7 @@ function activateReviewMode() {
   }
   if (hinweis) hinweis.textContent = 'Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann unten Adresse und Kennwort prüfen und final freigeben – oder an die Fachkraft zurückweisen.';
   fuelleAsdVersandBlock();
+  asdEntwurfModusLaden();
 
   // ── Deutliche optische Kennzeichnung des Prüfmodus ──
   // 1. Gelber Rahmen um den gesamten Bildschirm
