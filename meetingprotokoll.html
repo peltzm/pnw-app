@@ -3136,13 +3136,15 @@ async function freigabeAction(itemId, newStatus) {
         }
       } catch(e) { console.warn('Ersteller-Mail:', e); }
 
-      // 5b. Sammelmail an alle TL Ambulant + Nordstern + nordsternteam@
+      // 5b. Sammelmail an alle TL Ambulant + Nordstern
+      // Verteiler Team Nordstern (nordsternteam@) bewusst NICHT mehr enthalten (29.10.2026:
+      // Leitungsteam-Protokoll ging über diese Sammelmail an das gesamte Nordstern-Team)
       try {
         const tlMailSet = new Set();
         [...(TL_LISTS.ambulant || []), ...(TL_LISTS.nordstern || [])].forEach(tl => {
           if (tl.mail) tlMailSet.add(tl.mail.toLowerCase());
         });
-        tlMailSet.add('nordsternteam@praxisneuewege.de');
+        tlMailSet.delete('nordsternteam@praxisneuewege.de');
         if (erstellerMail) tlMailSet.delete(erstellerMail.toLowerCase());
         const tlMails = [...tlMailSet];
         if (tlMails.length) {
