@@ -1927,7 +1927,8 @@ async function uploadToSharePoint() {
       const freigeber = (currentBerichtstyp === 'stationaer') ? _stationaerFreigeber : _tlMembers;
       const _empfaenger = freigeber.length > 0
         ? (currentBerichtstyp === 'stationaer' ? 'Stationär-Freigabe' : 'alle TL Ambulant') +
-          ' (' + freigeber.map(m => m.displayName || m.mail).join(', ') + ')'
+          ' (' + freigeber.map(m => m.displayName || m.mail).join(', ') + ')' +
+          (FREIGABE_ANFRAGE_ZUSATZ.length ? ' sowie Sonja Peltz' : '')
         : 'Freigabe-Team';
       if (emailOk) {
         setStatus('done', `✓ Hochgeladen: ${name} — Freigabeanfrage wurde an ${_empfaenger} gesendet.`);
@@ -3426,6 +3427,9 @@ function getFalleitungMail() {
   return selected?.dataset?.mail || '';
 }
 
+// Testweise: diese Adressen erhalten jede Freigabeanfrage zusätzlich zu den Teamleitungen
+const FREIGABE_ANFRAGE_ZUSATZ = ['sonja.peltz@praxisneuewege.de'];
+
 async function sendApprovalEmail(listItemId, data, filename) {
   const token = await getToken();
   const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
@@ -3520,6 +3524,8 @@ async function sendApprovalEmail(listItemId, data, filename) {
         // Bei stationaer: Jessica Hermann + Kilian Freundl; sonst alle TL Ambulant
         const freigeber = (currentBerichtstyp === 'stationaer') ? _stationaerFreigeber : _tlMembers;
         const mails = freigeber.map(m => m.mail).filter(Boolean);
+        // Testweise zusätzliche Empfänger (z. B. Sonja) — Liste leeren, um den Test zu beenden
+        FREIGABE_ANFRAGE_ZUSATZ.forEach(z => { if (!mails.some(m => m.toLowerCase() === z)) mails.push(z); });
         if (mails.length > 0) return mails.map(address => ({ emailAddress: { address } }));
         // Fallback
         return [
