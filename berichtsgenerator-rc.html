@@ -4771,8 +4771,19 @@ async function loadGroupMembers() {
     const flSelect = document.getElementById('Fallleitung');
     if (flSelect) {
       const managerName = manager ? sortName(manager) : '';
+      // Geschäftsführung (Sonja) ist immer als Teamleitung wählbar, obwohl sie nicht mehr
+      // in der TL-Gruppe ist. Nur für diese Auswahl — die Freigabe-Sammelmail an alle TL
+      // (_tlMembers) bleibt unverändert ohne sie.
+      const flListe = [..._tlMembers];
+      const sonjaMail = 'sonja.peltz@praxisneuewege.de';
+      if (!flListe.some(m => (m.mail || '').toLowerCase() === sonjaMail)) {
+        const sonja = _teamMembers.find(m => (m.mail || '').toLowerCase() === sonjaMail)
+          || { displayName: 'Sonja Peltz', mail: sonjaMail };
+        flListe.push(sonja);
+        flListe.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
+      }
       flSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
-        _tlMembers.map(m => {
+        flListe.map(m => {
           const name = m.displayName || '';
           const isManager = manager && (m.mail === manager.mail || m.displayName === manager.displayName);
           return `<option value="${name}" data-mail="${m.mail || ''}" ${isManager ? 'selected' : ''}>${name}</option>`;
