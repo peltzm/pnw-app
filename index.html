@@ -230,6 +230,13 @@
           <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Übersicht & Freigabe-Workflow</div>
         </div>
 
+        <!-- Zweimonatliche Rückmeldung der Teamleitung: nur TL Ambulant / GF (eigene Seite, gleiches Backend) -->
+        <div id="rueckmeldungTile" onclick="window.location.href='rueckmeldung.html'" style="display:none; background:var(--surface); border:2px solid var(--accent-mid); border-radius:var(--radius-lg); padding:1.5rem; cursor:pointer; text-align:center; transition:all 0.15s;" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='var(--surface)'">
+          <div style="font-size:28px; margin-bottom:10px;">🧭</div>
+          <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Rückmeldung Teamleitung</div>
+          <div style="font-size:11px; color:var(--text-muted); line-height:1.5;">Zweimonatlicher Überblick mit Kennzahlen aus Kilanka</div>
+        </div>
+
       </div>
 
       <!-- Draft list -->
@@ -453,10 +460,11 @@
             <div id="tlAktionenHinweis" style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann an Sonja weiterleiten oder zurückweisen.</div>
             <div id="asdVersandBlock" style="border-top:1px solid #e8c4a8; margin:12px 0 14px; padding-top:12px;">
               <div style="font-size:13px; font-weight:600; color:var(--accent); margin-bottom:6px;">Versand an das Jugendamt</div>
-              <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Mit der finalen Freigabe wird das PDF in SharePoint abgelegt und an die Sachbearbeitung (ASD) gesendet – kennwortgeschützt, das Kennwort folgt in einer zweiten E-Mail aus Ihrem Postfach.</div>
+              <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Mit der finalen Freigabe wird das PDF in SharePoint abgelegt und an die Sachbearbeitung (ASD) gesendet – kennwortgeschützt, das Kennwort folgt in einer zweiten E-Mail aus deinem Postfach.</div>
               <div class="field" style="margin-bottom:8px;"><label>Sachbearbeitung Jugendamt <span style="font-weight:normal; color:var(--text-muted);">(Name für die Anrede, änderbar)</span></label><input type="text" id="ASD_Name" placeholder="Nachname, Vorname" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:8px;"><label>E-Mail der ASD-Sachbearbeitung <span style="font-weight:normal; color:var(--text-muted);">(aus Kilanka, änderbar)</span></label><input type="email" id="ASD_Mail" placeholder="vorname.nachname@landkreis-xy.de" autocomplete="off" oninput="if (typeof scheduleAutoSave==='function') scheduleAutoSave();"></div>
               <div class="field" style="margin-bottom:0;"><label>Kennwort für das PDF <span style="font-weight:normal; color:var(--text-muted);">(Vorschlag nach Schema PNW-NaVo*JJ_MM, änderbar — wird nicht gespeichert)</span></label><div style="display:flex; gap:6px; align-items:center;"><input type="password" id="ASD_Kennwort" autocomplete="new-password" placeholder="Kennwort" style="flex:1;"><button type="button" id="btnKennwortAuge" onclick="kennwortAnzeigen()" title="Kennwort anzeigen" aria-label="Kennwort anzeigen" style="min-height:36px; padding:0 10px; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; font-size:16px; line-height:1;">&#128065;</button></div></div>
+              <label id="ASD_EntwurfZeile" style="display:flex; gap:8px; align-items:flex-start; margin-top:10px; font-size:12px; color:var(--text); cursor:pointer;"><input type="checkbox" id="ASD_AlsEntwurf" onchange="asdEntwurfModusGeaendert()" style="margin-top:2px; width:auto;"><span><strong>Als Entwurf in mein Outlook legen statt direkt senden</strong><br><span style="color:var(--text-muted);">Beide Mails (PDF und Kennwort) liegen danach in deinen Outlook-Entwürfen. Dort kannst du den Text ergänzen und weitere Anhänge hinzufügen. Bitte zuerst die Mail mit dem PDF senden, danach die Kennwort-Mail.</span></span></label>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
               <button class="btn" id="btnTlFreigeben" onclick="tlFinalFreigeben()" style="background:var(--success); color:white; min-height:44px;">✓ Freigabe</button>
@@ -590,7 +598,7 @@ async function pruefeAufNeueVersion() {
   }
 }
 
-const APP_VERSION = 'veb3acd6'; // auto-updated on deploy
+const APP_VERSION = 'v20b0861'; // auto-updated on deploy
 
 let msalInstance = null;
 let currentAccount = null;
@@ -833,10 +841,12 @@ function _setSelect(id, val) {
 let _asdMailMap = {};          // Sachbearbeitung -> Mailadresse (aus Kilanka)
 let _asdKontakte = [];         // alle Ansprechpartner aller Ämter [{amt, name, mail}] — für die Prüfansicht der TL
 let _asdVersandInfo = null;    // { an, datum, von } nach erfolgtem Versand (im FormularDaten-JSON persistiert)
+let _asdAnredeMap = {};        // Sachbearbeitung -> "Frau"/"Herr" (aus dem Kilanka-Adressbuch, fuer die Anrede der ASD-Mails)
 function merkeAsdMails(k) {
   if (!k) return;
   if (k.Ansprechpartner_JA_Mails && typeof k.Ansprechpartner_JA_Mails === 'object') Object.assign(_asdMailMap, k.Ansprechpartner_JA_Mails);
   if (k.Sachbearbeitung_JA && k.Sachbearbeitung_JA_Mail) _asdMailMap[k.Sachbearbeitung_JA] = k.Sachbearbeitung_JA_Mail;
+  if (k.Ansprechpartner_JA_Anreden && typeof k.Ansprechpartner_JA_Anreden === 'object') Object.assign(_asdAnredeMap, k.Ansprechpartner_JA_Anreden);
   // Kilanka kommt asynchron: liegt der TL-Freigabeblock schon offen, Adresse jetzt nachtragen
   if (document.getElementById('tlAktionen')?.style.display === 'block') fuelleAsdVersandBlock();
 }
@@ -1132,6 +1142,8 @@ function showApp() {
       if (nav7) nav7.style.display = 'flex';
       const tile = document.getElementById('statusBerichteTile');
       if (tile) tile.style.display = 'block';
+      const rmTile = document.getElementById('rueckmeldungTile');
+      if (rmTile) rmTile.style.display = 'block';
       const grid = document.getElementById('startGrid');
       if (grid) grid.style.gridTemplateColumns = '1fr 1fr';
     }
@@ -1822,7 +1834,8 @@ async function uploadToSharePoint() {
       const freigeber = (currentBerichtstyp === 'stationaer') ? _stationaerFreigeber : _tlMembers;
       const _empfaenger = freigeber.length > 0
         ? (currentBerichtstyp === 'stationaer' ? 'Stationär-Freigabe' : 'alle TL Ambulant') +
-          ' (' + freigeber.map(m => m.displayName || m.mail).join(', ') + ')'
+          ' (' + freigeber.map(m => m.displayName || m.mail).join(', ') + ')' +
+          (FREIGABE_ANFRAGE_ZUSATZ.length ? ' sowie Sonja Peltz' : '')
         : 'Freigabe-Team';
       if (emailOk) {
         setStatus('done', `✓ Hochgeladen: ${name} — Freigabeanfrage wurde an ${_empfaenger} gesendet.`);
@@ -3321,6 +3334,9 @@ function getFalleitungMail() {
   return selected?.dataset?.mail || '';
 }
 
+// Testweise: diese Adressen erhalten jede Freigabeanfrage zusätzlich zu den Teamleitungen
+const FREIGABE_ANFRAGE_ZUSATZ = ['sonja.peltz@praxisneuewege.de'];
+
 async function sendApprovalEmail(listItemId, data, filename) {
   const token = await getToken();
   const berichtstyp = {verlauf:'Verlaufsbericht', abschluss:'Abschlussbericht', clearing:'Clearingbericht', stationaer:'Verlaufsbericht stationär', monat:'Monatsbericht'}[currentBerichtstyp] || 'Bericht';
@@ -3415,6 +3431,8 @@ async function sendApprovalEmail(listItemId, data, filename) {
         // Bei stationaer: Jessica Hermann + Kilian Freundl; sonst alle TL Ambulant
         const freigeber = (currentBerichtstyp === 'stationaer') ? _stationaerFreigeber : _tlMembers;
         const mails = freigeber.map(m => m.mail).filter(Boolean);
+        // Testweise zusätzliche Empfänger (z. B. Sonja) — Liste leeren, um den Test zu beenden
+        FREIGABE_ANFRAGE_ZUSATZ.forEach(z => { if (!mails.some(m => m.toLowerCase() === z)) mails.push(z); });
         if (mails.length > 0) return mails.map(address => ({ emailAddress: { address } }));
         // Fallback
         return [
@@ -3562,17 +3580,24 @@ async function approveReport(opts) {
       catch(e) { console.warn('Fertigstellungs-Mail fehlgeschlagen:', e.message); }
       const anhangHinweis = anhangName ? ` — Anhang: ${anhangName}` : '';
       // Versand an die ASD (nur bei Freigabe durch die Teamleitung mit eingetragener Adresse + Kennwort)
-      let asdText = '', asdOk = true;
+      let asdText = '', asdOk = true, asdLinks = [];
       if (opts.asdMail && opts.kennwort) {
-        setStatus('uploading', 'Kennwortgeschütztes PDF wird erstellt und an die ASD gesendet...');
+        setStatus('uploading', opts.alsEntwurf ? 'Kennwortgeschütztes PDF wird erstellt und als Entwurf in Outlook abgelegt...' : 'Kennwortgeschütztes PDF wird erstellt und an die ASD gesendet...');
         try {
           const geschuetzt = await erzeugePdfBytes(data, { freigegebenVon: freigeber, freigabeLeitung, kennwort: opts.kennwort, anhangAlsSeiten: true });
           const res = await sendeBerichtAnAsd(token, data, opts, geschuetzt);
-          asdText = ' — ' + res.text; asdOk = res.ok;
+          asdText = ' — ' + res.text; asdOk = res.ok; asdLinks = res.links || [];
           if (res.ok) { try { data._asdVersand = _asdVersandInfo; await saveToList(data, currentListId); } catch(e) { console.warn('Versandvermerk nicht gespeichert:', e.message); } }
         } catch(e) { asdText = ' — Versand an ASD fehlgeschlagen: ' + e.message; asdOk = false; }
       }
       setStatus(asdOk ? 'done' : 'error', `${asdOk ? '✓' : '⚠️'} Freigegeben — PDF gespeichert: ${pdfName}${anhangHinweis}${infoMailOk ? ' — Fertigstellungs-Mail gesendet.' : ''}${asdText}`);
+      // Links zu den Outlook-Entwürfen (öffnen Outlook im Web; in Outlook Desktop liegen sie unter "Entwürfe")
+      { const bar = document.getElementById('statusBar');
+        asdLinks.filter(l => l && l.url).forEach(l => {
+          const a = document.createElement('a'); a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = l.text;
+          a.style.cssText = 'margin-left:12px; font-weight:600; color:inherit; text-decoration:underline; white-space:nowrap;';
+          bar.appendChild(a);
+        }); }
     } else {
       // Freigabe ist in der Liste gespeichert; das PDF kann per Download-Button erneut erzeugt werden
       setStatus('error', '✓ Freigabe gespeichert — aber der PDF-Upload ist fehlgeschlagen. Bitte „PDF herunterladen" nutzen und das PDF manuell nach SharePoint legen.');
@@ -3977,6 +4002,32 @@ async function tlUebernehmenAusListe(itemId) {
   if (ok && typeof goToStatusBerichte === 'function') goToStatusBerichte();
 }
 
+// ─── ASD-VERSAND ALS OUTLOOK-ENTWURF ──────────────────────────────────────────
+// Option im Freigabedialog: statt direkt zu senden werden beide Mails als Entwurf im Postfach der Teamleitung
+// angelegt (Graph POST /me/messages). Dafuer ist Mail.ReadWrite noetig — wird nur bei Nutzung der Option angefragt,
+// damit die normale Anmeldung keine neue Zustimmung braucht. Die letzte Wahl merkt sich der Browser.
+const _SCOPES_ENTWURF = ['Mail.ReadWrite'];
+function asdEntwurfModusGeaendert() {
+  const an = !!document.getElementById('ASD_AlsEntwurf')?.checked;
+  try { localStorage.setItem('pnw_asd_als_entwurf', an ? '1' : ''); } catch(e) {}
+}
+function asdEntwurfModusLaden() {
+  const cb = document.getElementById('ASD_AlsEntwurf'); if (!cb) return;
+  try { cb.checked = localStorage.getItem('pnw_asd_als_entwurf') === '1'; } catch(e) { cb.checked = false; }
+  asdEntwurfModusGeaendert();
+}
+async function getEntwurfToken() {
+  if (!currentAccount) throw new Error('Nicht angemeldet');
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: _SCOPES_ENTWURF, account: currentAccount });
+    return r.accessToken;
+  } catch(e) {
+    // Einmalige Zustimmung "E-Mails lesen und schreiben" (bzw. Admin-Zustimmung in Entra)
+    const r2 = await msalInstance.acquireTokenPopup({ scopes: _SCOPES_ENTWURF, account: currentAccount });
+    return r2.accessToken;
+  }
+}
+
 // ─── TL: FINALE FREIGABE MIT VERSAND AN DIE ASD ──────────────────────────────
 // Ersetzt seit 09/2026 die Weiterleitung an Sonja: Status "Genehmigt", PDF-Ablage, Fertigstellungs-Mail an GF/TL/FK,
 // danach zwei Mails an die ASD-Sachbearbeitung (kennwortgeschuetztes PDF + Kennwort) aus dem Postfach der Teamleitung.
@@ -3988,6 +4039,15 @@ async function tlFinalFreigeben() {
   const sb = (document.getElementById('ASD_Name')?.value || '').trim() || document.getElementById('Sachbearbeitung_JA')?.value || '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { alert('Bitte eine gültige E-Mail-Adresse der ASD-Sachbearbeitung eintragen.'); document.getElementById('ASD_Mail')?.focus(); return; }
   if (kennwort.length < 6) { alert('Bitte das mit dem Jugendamt vereinbarte Kennwort eintragen (mindestens 6 Zeichen).'); document.getElementById('ASD_Kennwort')?.focus(); return; }
+  const alsEntwurf = !!document.getElementById('ASD_AlsEntwurf')?.checked;
+  let entwurfToken = null;
+  if (alsEntwurf) {
+    try { entwurfToken = await getEntwurfToken(); }
+    catch(e) {
+      alert('Die Berechtigung zum Anlegen von Outlook-Entwürfen wurde nicht erteilt (' + (e.errorMessage || e.message) + ').\n\nBitte erneut versuchen oder die Option „Als Entwurf“ abwählen, um direkt zu senden.');
+      return;
+    }
+  }
   const data = collectData();
   const kind = `${data.Kind_Vorname || ''} ${data.Kind_Familienname || ''}`.trim() || 'Unbekannt';
   // HPG-Vorlaufzeit als Hinweis in die Bestaetigung (frueher Warnbox in der Mail an Sonja)
@@ -3999,14 +4059,16 @@ async function tlFinalFreigeben() {
     if (diff < 14) hpgHinweis = `\n\n⚠ Berichtsvorlaufzeit unterschritten: nächstes HPG in ${diff} Tag${diff === 1 ? '' : 'en'}.`;
   }
   const ok = confirm(
-    `Bericht final freigeben und an das Jugendamt senden?\n\n` +
+    (alsEntwurf ? `Bericht final freigeben und die Mails an das Jugendamt als Entwurf in Outlook anlegen?\n\n` : `Bericht final freigeben und an das Jugendamt senden?\n\n`) +
     `Kind/Jugendliche*r: ${kind}\nJugendamt: ${data.Jugendamt || '–'}\nSachbearbeitung: ${sb || '–'}\n\n` +
     `E-Mail ASD: ${mail}\nKennwort: ${kennwort}\n\n` +
     `Absender: ${currentAccount?.username || ''}${hpgHinweis}\n\n` +
-    `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) an die ASD.`
+    (alsEntwurf
+      ? `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) als Entwurf in deinem Outlook – den Versand machst du selbst aus Outlook.`
+      : `Nach OK: Status „Genehmigt“, PDF-Ablage in SharePoint, Mail 1 (PDF) und Mail 2 (Kennwort) an die ASD.`)
   );
   if (!ok) return;
-  await approveReport({ asdMail: mail, kennwort, sachbearbeitung: sb });
+  await approveReport({ asdMail: mail, kennwort, sachbearbeitung: sb, alsEntwurf, entwurfToken });
 }
 
 // Zwei Mails an die ASD: 1) kennwortgeschuetztes PDF als Anhang, 2) Kennwort. Absender = angemeldete Teamleitung.
@@ -4050,23 +4112,49 @@ async function sendeBerichtAnAsd(token, data, opts, pdfBytes) {
     toRecipients: [{ emailAddress: { address: opts.asdMail } }]
   }, saveToSentItems: true };
 
+  if (opts.alsEntwurf) {
+    // Beide Mails als Entwurf im Postfach der Teamleitung (Ordner "Entwürfe"); Versand erfolgt durch die TL aus Outlook
+    let etoken = opts.entwurfToken;
+    try { etoken = await getEntwurfToken(); } catch(e) { /* vorab geholtes Token verwenden */ }
+    const entwurf = async (m) => {
+      const r = await fetch('https://graph.microsoft.com/v1.0/me/messages', { method: 'POST', headers: { Authorization: 'Bearer ' + etoken, 'Content-Type': 'application/json' }, body: JSON.stringify(m.message) });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e?.error?.message || ('HTTP ' + r.status)); }
+      return r.json();
+    };
+    let e1, e2;
+    try { e1 = await entwurf(mail1); } catch(e) { return { ok: false, text: 'Entwurf in Outlook konnte nicht angelegt werden (Mail mit PDF): ' + e.message + ' – bitte manuell aus SharePoint versenden.' }; }
+    try { e2 = await entwurf(mail2); } catch(e) { return { ok: false, text: 'Entwurf mit PDF liegt in Outlook, aber der Kennwort-Entwurf ist fehlgeschlagen: ' + e.message + ' – bitte Kennwort manuell mitteilen.', links: [{ text: 'Entwurf mit PDF öffnen', url: e1?.webLink }] }; }
+    _asdVersandInfo = { an: opts.asdMail, datum: new Date().toISOString(), von: currentAccount?.username || '', art: 'entwurf' };
+    return { ok: true, text: `Entwürfe in Outlook angelegt (an ${opts.asdMail}): bitte zuerst die Mail mit dem PDF, danach die Kennwort-Mail aus Outlook senden.`,
+             links: [{ text: '1) Entwurf mit PDF öffnen', url: e1?.webLink }, { text: '2) Kennwort-Entwurf öffnen', url: e2?.webLink }] };
+  }
+
   const post = async (m) => {
     const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(m) });
     if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e?.error?.message || ('HTTP ' + r.status)); }
   };
   try { await post(mail1); } catch(e) { return { ok: false, text: 'Versand an ASD fehlgeschlagen (Mail mit PDF): ' + e.message }; }
   try { await post(mail2); } catch(e) { return { ok: false, text: 'PDF an ASD gesendet, aber die Kennwort-Mail ist fehlgeschlagen: ' + e.message + ' – bitte Kennwort manuell mitteilen.' }; }
-  _asdVersandInfo = { an: opts.asdMail, datum: new Date().toISOString(), von: currentAccount?.username || '' };
+  _asdVersandInfo = { an: opts.asdMail, datum: new Date().toISOString(), von: currentAccount?.username || '', art: 'gesendet' };
   return { ok: true, text: `An ASD gesendet (${opts.asdMail}): PDF + Kennwort.` };
 }
 
 function deDatum(iso) { return /^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? iso.split('-').reverse().join('.') : (iso || ''); }
-// Anrede aus "Nachname, Vorname" bzw. "Vorname Nachname"; ohne Geschlechtsangabe neutral mit "Guten Tag"
+// Anrede der ASD-Mails: "Hallo Frau/Herr <Nachname>". Frau/Herr kommt aus dem Kilanka-Adressbuch
+// (contactTitle) oder aus dem Namen selbst ("Frau Häusler"); ist sie unbekannt: "Hallo <Vorname> <Nachname>".
 function anredeAusName(name) {
   const n = String(name || '').trim();
   if (!n || n === '__custom__') return 'Sehr geehrte Damen und Herren';
-  const voll = n.includes(',') ? (n.split(',').slice(1).join(',').trim() + ' ' + n.split(',')[0].trim()).trim() : n;
-  return 'Guten Tag ' + escHtml(voll);
+  const glatt = v => String(v || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  let titel = _asdAnredeMap[n] || '';
+  if (!titel) { const k = _asdKontakte.find(x => glatt(x.name) === glatt(n) && x.anrede); if (k) titel = k.anrede; }
+  const m = /^(frau|herr)\s+/i.exec(n);
+  if (!titel && m) titel = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+  const ohne = n.replace(/^(frau|herr|hr\.|fr\.)\s+/i, '');
+  const nachname = ohne.includes(',') ? ohne.split(',')[0].trim() : (ohne.split(/\s+/).pop() || '');
+  if (titel && nachname) return 'Hallo ' + escHtml(titel + ' ' + nachname);
+  const voll = ohne.includes(',') ? (ohne.split(',').slice(1).join(',').trim() + ' ' + ohne.split(',')[0].trim()).trim() : ohne;
+  return 'Hallo ' + escHtml(voll);
 }
 
 // ─── TL FREIGEBEN AN SONJA (Altweg – nur noch fuer Bestandsberichte, die bereits bei der GF liegen) ───
@@ -4412,11 +4500,12 @@ function activateReviewMode() {
   // Seit 09/2026 gibt die Teamleitung selbst final frei (kein Umweg ueber die GF);
   // die GF behaelt ueber die Statusuebersicht und die Fertigstellungs-Mail den Ueberblick.
   if (btnTlF) {
-    btnTlF.textContent = '✓ Final freigeben, PDF ablegen & senden';
+    btnTlF.textContent = '✓ Final freigeben';
     btnTlF.onclick = function() { tlFinalFreigeben(); };
   }
   if (hinweis) hinweis.textContent = 'Bericht geprüft? Bei Bedarf oben Korrekturen vornehmen, dann unten Adresse und Kennwort prüfen und final freigeben – oder an die Fachkraft zurückweisen.';
   fuelleAsdVersandBlock();
+  asdEntwurfModusLaden();
 
   // ── Deutliche optische Kennzeichnung des Prüfmodus ──
   // 1. Gelber Rahmen um den gesamten Bildschirm
@@ -4595,8 +4684,19 @@ async function loadGroupMembers() {
     const flSelect = document.getElementById('Fallleitung');
     if (flSelect) {
       const managerName = manager ? sortName(manager) : '';
+      // Geschäftsführung (Sonja) ist immer als Teamleitung wählbar, obwohl sie nicht mehr
+      // in der TL-Gruppe ist. Nur für diese Auswahl — die Freigabe-Sammelmail an alle TL
+      // (_tlMembers) bleibt unverändert ohne sie.
+      const flListe = [..._tlMembers];
+      const sonjaMail = 'sonja.peltz@praxisneuewege.de';
+      if (!flListe.some(m => (m.mail || '').toLowerCase() === sonjaMail)) {
+        const sonja = _teamMembers.find(m => (m.mail || '').toLowerCase() === sonjaMail)
+          || { displayName: 'Sonja Peltz', mail: sonjaMail };
+        flListe.push(sonja);
+        flListe.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||'', 'de', {sensitivity:'base'}));
+      }
       flSelect.innerHTML = '<option value="">— bitte wählen —</option>' +
-        _tlMembers.map(m => {
+        flListe.map(m => {
           const name = m.displayName || '';
           const isManager = manager && (m.mail === manager.mail || m.displayName === manager.displayName);
           return `<option value="${name}" data-mail="${m.mail || ''}" ${isManager ? 'selected' : ''}>${name}</option>`;
