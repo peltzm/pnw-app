@@ -90,6 +90,11 @@ tr.kuerzung td{background:var(--warn-bg)}
 .tag.betrag{background:var(--blue-bg);color:var(--blue)}
 .tag.abw{background:var(--warn-bg);color:var(--warn)}
 .tag.mahn{background:var(--error-bg);color:var(--error)}
+/* Rechnungsnummer mit Kopier-Knopf */
+.renr-zelle{display:flex;align-items:flex-start;gap:4px}
+.kopier{flex:none;border:none;background:none;padding:1px 3px;margin-top:-1px;border-radius:4px;cursor:pointer;color:var(--text-muted);font-family:inherit;font-size:12px;line-height:1.2;opacity:.55}
+.kopier:hover{opacity:1;background:var(--border);color:var(--text)}
+.kopier.ok{opacity:1;color:var(--ok)}
 .tab-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .summenzeile td{font-weight:700;border-top:2px solid var(--border-strong);background:var(--bg)}
 details.mehr{margin-top:10px}
@@ -597,7 +602,7 @@ function malErgebnis(erg, rechnungen){
   else {
     tA.innerHTML = '<tr><th>Rechnung</th><th>Klient</th><th class="num">Offen lt. Kilanka</th><th class="num">Zahlbetrag</th><th class="num">Differenz</th><th>Zahldatum</th><th>Zahler</th><th>Match</th><th>Verwendungszweck</th></tr>'
       + erg.ausbuchen.map(x => `<tr class="${Math.abs(x.diff)>0.01?'kuerzung':''}">
-          <td><strong>${esc(x.re.nummer)}</strong></td><td>${esc(x.re.klient)}</td>
+          <td>${reNr(x.re.nummer)}</td><td>${esc(x.re.klient)}</td>
           <td class="num">${eur(x.re.saldo)}</td><td class="num">${eur(x.g.betrag)}</td>
           <td class="num">${Math.abs(x.diff)>0.01 ? '<strong>'+eur(x.diff)+'</strong>' : '–'}</td>
           <td>${esc(x.g.datum)}</td><td>${esc(x.g.zahler)}</td><td>${tagFor(x.art)}</td>
@@ -614,9 +619,26 @@ function malErgebnis(erg, rechnungen){
   const tG = document.getElementById('tblGebucht');
   tG.innerHTML = erg.schonGebucht.length
     ? '<tr><th>Rechnung</th><th>Klient</th><th class="num">Zahlbetrag</th><th>Zahldatum</th><th>Zahler</th></tr>'
-      + erg.schonGebucht.map(x => `<tr><td>${esc(x.re.nummer)}</td><td>${esc(x.re.klient)}</td><td class="num">${eur(x.g.betrag)}</td><td>${esc(x.g.datum)}</td><td>${esc(x.g.zahler)}</td></tr>`).join('')
+      + erg.schonGebucht.map(x => `<tr><td>${reNr(x.re.nummer, false)}</td><td>${esc(x.re.klient)}</td><td class="num">${eur(x.g.betrag)}</td><td>${esc(x.g.datum)}</td><td>${esc(x.g.zahler)}</td></tr>`).join('')
     : '<tr><td class="leer">Keine.</td></tr>';
 }
+
+/* Rechnungsnummer + Knopf, der die Nummer in die Zwischenablage kopiert */
+function reNr(nr, fett){
+  const t = esc(nr).replace(/"/g,'&quot;');
+  return `<span class="renr-zelle">${fett === false ? `<span>${t}</span>` : `<strong>${t}</strong>`}<button type="button" class="kopier" data-kopie="${t}" title="Rechnungsnummer kopieren" aria-label="Rechnungsnummer ${t} kopieren">⧉</button></span>`;
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('.kopier'); if (!b) return;
+  const text = b.dataset.kopie || '';
+  try { await navigator.clipboard.writeText(text); }
+  catch(e){ // Ausweichweg, falls die Zwischenablage-API gesperrt ist
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  b.textContent = '✓'; b.classList.add('ok');
+  clearTimeout(b._t); b._t = setTimeout(() => { b.textContent = '⧉'; b.classList.remove('ok'); }, 1200);
+});
 
 function malHinweise(hinweise){
   const card = document.getElementById('cardArchiv');
@@ -624,7 +646,7 @@ function malHinweise(hinweise){
   if (!hinweise.length) return;
   document.getElementById('tblArchiv').innerHTML =
     '<tr><th>Rechnung</th><th>Klient</th><th>Empfänger</th><th class="num">Offener Saldo</th><th>Rechnungsdatum</th><th>Fällig</th></tr>'
-    + hinweise.map(x => `<tr><td><strong>${esc(x.nummer)}</strong></td><td>${esc(x.klient)}</td><td>${esc(x.empfaenger)}</td><td class="num">${eur(x.saldo)}</td><td>${esc(x.datum)}</td><td>${esc(x.faellig||'–')}</td></tr>`).join('')
+    + hinweise.map(x => `<tr><td>${reNr(x.nummer)}</td><td>${esc(x.klient)}</td><td>${esc(x.empfaenger)}</td><td class="num">${eur(x.saldo)}</td><td>${esc(x.datum)}</td><td>${esc(x.faellig||'–')}</td></tr>`).join('')
     + `<tr class="summenzeile"><td colspan="3">Summe</td><td class="num">${eur(hinweise.reduce((s,x)=>s+x.saldo,0))}</td><td colspan="2"></td></tr>`;
 }
 
@@ -680,7 +702,7 @@ function malUnbezahlt(neu){
     tU.innerHTML = '<tr><th>Rechnung</th><th>Klient</th><th>Empfänger</th><th>Ansprechpartner</th><th class="num">Offen</th><th>Fällig</th></tr>'
       + sorted.map(x => {
           const ueber = x.re.faellig && x.re.faellig < heute;
-          return `<tr><td><strong>${esc(x.re.nummer)}</strong></td><td>${esc(x.re.klient)}</td>
+          return `<tr><td>${reNr(x.re.nummer)}</td><td>${esc(x.re.klient)}</td>
             <td>${esc(sauber(x.re.empfaenger))}</td><td>${esc(x.re.ansprechpartner||'–')}</td><td class="num">${eur(x.re.saldo)}</td>
             <td>${esc(deDatum(x.re.faellig)||"–")} ${ueber?'<span class="tag mahn">überfällig</span>':''}</td></tr>`;
         }).join('')
