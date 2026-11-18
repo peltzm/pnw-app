@@ -787,6 +787,8 @@ const CFG = {
 // For private groups, Graph $filter on displayName fails — use mail address instead
 const GROUP_MAP = {
   allTeam:   { name: 'Ambulante Familienhilfe',   mail: 'familienhilfe@praxisneuewege.de' },
+  // Entra-Gruppe „Team" = alle Mitarbeitenden (ambulant, stationär, Stabsstellen) — Quelle der Protokollführung
+  team:      { name: 'Team',                       mail: null },
   nordstern: { name: 'Team Nordstern',             mail: 'nordsternteam@praxisneuewege.de' },
   leitungNS: { name: 'Leitungskonferenz Nordstern', mail: null },
   // Kleinteam: E-Mail-aktivierte Sicherheitsgruppen je Teamleitung (Adressen in M365 verifiziert, 06/2026)
@@ -1576,7 +1578,8 @@ async function zeigeOffeneEntwuerfeHinweis(type, themaKey) {
 }
 
 /* ──────────────────────────────────────
-   PROTOKOLLFÜHRER — immer aus Ambulante Familienhilfe
+   PROTOKOLLFÜHRER — aus der Entra-Gruppe „Team" (alle Mitarbeitenden);
+   Nordstern-Meetings weiterhin nur aus Team Nordstern
 ────────────────────────────────────── */
 let _scribeMembers = null; // cached
 
@@ -1587,7 +1590,7 @@ async function populateScribeSelect() {
   // Determine which group to load based on current meeting context
   const _isNordstern = S.type === 'konferenz' ||
     (S.type === 'team' && (S.thema === 'stationaer' || S.thema === 'nordstern'));
-  const _scribeGroupKey = _isNordstern ? 'nordstern' : 'allTeam';
+  const _scribeGroupKey = _isNordstern ? 'nordstern' : 'team';
 
   // Load group (cache per group key)
   if (!_scribeMembers || _scribeMembers._groupKey !== _scribeGroupKey) {
@@ -1595,7 +1598,9 @@ async function populateScribeSelect() {
     try {
       loaded = _isNordstern
         ? await loadGroupFromM365('nordstern')
-        : await loadGroupFromM365('allTeam');
+        : await loadGroupFromM365('team');
+      // Rückfall, falls die Gruppe „Team" nicht gefunden wird: bisherige Quelle
+      if ((!loaded || !loaded.length) && !_isNordstern) loaded = await loadAllTeam();
     } catch(e) {
       console.warn('Scribe list load failed, using fallback:', e);
     }
@@ -1609,13 +1614,31 @@ async function populateScribeSelect() {
   const me      = (currentAccount?.username || '').toLowerCase();
   const myName  = (currentAccount?.name     || '').toLowerCase();
 
+  // Zusätzlich wählbar: alle Teilnehmenden dieses Meetings (inkl. manuell
+  // hinzugefügter) und die angemeldete Person selbst — damit z. B. Stabsstellen,
+  // die nicht in der Gruppe „Ambulante Familienhilfe" stehen, Protokoll führen können.
+  const _pool = [..._scribeMembers];
+  (S.participants || []).forEach(p => {
+    const n = p && (p.fullName || p.name);
+    if (n) _pool.push({ name: p.name || n, fullName: n, mail: (p.mail || '').toLowerCase() });
+  });
+  if (currentAccount?.name) _pool.push({ name: abbrevName(currentAccount.name), fullName: currentAccount.name, mail: me });
+  const _seen = new Set();
+  const _uniq = _pool.filter(p => {
+    const k1 = (p.mail || '').toLowerCase();
+    const k2 = (p.fullName || p.name || '').toLowerCase();
+    if ((k1 && _seen.has(k1)) || _seen.has(k2)) return false;
+    if (k1) _seen.add(k1); _seen.add(k2); return true;
+  });
+
   // Sort by last name
-  const sorted = [..._scribeMembers].sort((a, b) => {
+  const sorted = [..._uniq].sort((a, b) => {
     const la = lastFirst(a.fullName || a.name).toLowerCase();
     const lb = lastFirst(b.fullName || b.name).toLowerCase();
     return la.localeCompare(lb, 'de');
   });
 
+  const _prevScribe = sel.value; // bestehende Auswahl beim Neuaufbau erhalten
   sel.innerHTML = '<option value="">— bitte auswählen —</option>';
   let defaultSet = false;
 
@@ -1646,6 +1669,7 @@ async function populateScribeSelect() {
       }
     }
   }
+  if (_prevScribe && [...sel.options].some(o => o.value === _prevScribe)) sel.value = _prevScribe;
 }
 
 async function onThemaChange(themaKey) {
@@ -1698,7 +1722,7 @@ async function onThemaChange(themaKey) {
 
   S.participants = members.map(p => ({ ...p, present: true }));
 
-  // Populate Protokollführer — Nordstern meetings: nur Nordstern-Gruppe; andere: allTeam
+  // Populate Protokollführer — Nordstern meetings: nur Nordstern-Gruppe; andere: Gruppe „Team"
   _scribeMembers = null; // reset cache so group reloads for new context
   await populateScribeSelect();
 
@@ -2029,6 +2053,7 @@ function addInternalParticipant() {
   if (!p) return;
   S.participants.push({ ...p, present: true, guest: false, internal: true });
   renderParticipants();
+  populateScribeSelect().catch(e => console.warn('scribe refresh:', e));
   showToast('Teilnehmer hinzugefügt: ' + p.name, 'success');
 }
 
@@ -2054,6 +2079,7 @@ function confirmGuest(btn) {
   S.participants.push({ name, fullName: name, mail, role: 'Gast', ini: initials(name), scribe: false, present: true, guest: true });
   row.remove();
   renderParticipants();
+  populateScribeSelect().catch(e => console.warn('scribe refresh:', e));
   showToast('Teilnehmer hinzugefügt: ' + name, 'success');
 }
 
