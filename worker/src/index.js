@@ -4028,7 +4028,6 @@ export default {
           if (arr.length < 500) break;
         }
         const rechnungen = [];
-        const hinweise = []; // archivierte Klienten mit offenem Saldo ab Stichtag
         for (const inv of alle) {
           if (unwrap(inv.deletedAt)) continue;
           // Altbestand nicht mitliefern: Rechnungen vor dem Stichtag (Einzelunternehmen,
@@ -4036,30 +4035,21 @@ export default {
           // RE2023/12/00003).
           const invDatum = String(unwrap(inv.date) || "").slice(0, 10);
           if (!invDatum || invDatum < OP_STICHTAG) continue;
-          // Archivierte Klienten: wie in der Kilanka-GUI nicht in den Abgleich —
-          // mit offenem Saldo aber als Hinweis mitgeben statt still zu verschlucken.
+          // Archivierte Klienten (Vorgabe 21.11.2026): keine eigene Hinweisliste mehr,
+          // sondern ganz normal beim jeweiligen Rechnungsempfänger — aber nur mit offenem
+          // Saldo (bezahlte Altfälle bleiben wie in der Kilanka-GUI draußen).
           const istArchiviert = String(inv.client?.recName || "").startsWith("[archiviert]");
           if (istArchiviert) {
             const saldo = Number(unwrap(inv.balance)) || 0;
-            if (saldo > 0.005 && inv.stateType?.name !== "Storniert") {
-              hinweise.push({
-                nummer: inv.number,
-                datum: invDatum,
-                faellig: String(unwrap(inv.dueDate) || "").slice(0, 10),
-                klient: inv.client?.recName || null,
-                empfaenger: inv.recipient?.recName || inv.recipientName || null,
-                summe: Number(unwrap(inv.totalWithTax)) || 0,
-                saldo,
-              });
-            }
-            continue;
+            if (!(saldo > 0.005) || inv.stateType?.name === "Storniert") continue;
           }
           rechnungen.push({
             nummer: inv.number,
             datum: String(unwrap(inv.date) || "").slice(0, 10),
             faellig: String(unwrap(inv.dueDate) || "").slice(0, 10),
             status: inv.stateType?.name || null,
-            klient: inv.client?.recName || null,
+            klient: inv.client?.recName ? String(inv.client.recName).replace(/^\[archiviert\]\s*/i, "") : null,
+            archiviert: istArchiviert,
             empfaenger: inv.recipient?.recName || inv.recipientName || null,
             empfaengerId: inv.recipient?.id != null ? String(inv.recipient.id) : null,
             empfaengerMail: (inv.recipient?.id != null && kontaktMails.get(String(inv.recipient.id))) || null,
@@ -4072,7 +4062,7 @@ export default {
             bezahlt: !!inv.paid,
           });
         }
-        return json({ ok: true, stand: new Date().toISOString(), anzahl: rechnungen.length, rechnungen, hinweise }, 200, origin);
+        return json({ ok: true, stand: new Date().toISOString(), anzahl: rechnungen.length, rechnungen, hinweise: [] }, 200, origin);
       } catch (e) {
         return json({ error: `Kilanka-Abruf fehlgeschlagen: ${e.message}` }, 502, origin);
       }
