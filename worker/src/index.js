@@ -4014,6 +4014,7 @@ export default {
           recipientName: 1,
           recipientResponsible: { id: 1, recName: 1 },
           fileReference: 1,
+          invoiceSet: { id: 1 },
           totalWithTax: 1, depositsTotal: 1, balance: 1, paid: 1,
           $limit: 500,
         };
@@ -4026,6 +4027,38 @@ export default {
           const arr = Array.isArray(batch) ? batch : [];
           alle.push(...arr);
           if (arr.length < 500) break;
+        }
+        // Ansprechpartner/Aktenzeichen nachtragen (Vorgabe 21.11.2026): Steht beides bei
+        // Rechnungsstellung noch nicht im Rechnungssatz, fehlt es auf der Rechnung. Ist es
+        // inzwischen im Rechnungssatz nachgepflegt, kommt es von dort.
+        const satzInfo = new Map(); // invoiceSet-ID -> { ap: Kontakt-ID, az }
+        const kontaktNamen = new Map(); // Kontakt-ID -> "Nachname, Vorname"
+        try {
+          const braucht = alle.some((i) => !i.recipientResponsible || !i.fileReference);
+          if (braucht) {
+            for (let offset = 0; offset < 20000; offset += 1000) {
+              const page = await kilankaPost(env, "accounting/invoiceSets", {
+                id: 1, fileReference: 1, recipientResponsible: { id: 1 }, $limit: 1000, $offset: offset,
+              });
+              const arr = Array.isArray(page) ? page : [];
+              for (const st of arr) {
+                satzInfo.set(String(st.id), {
+                  ap: st.recipientResponsible?.id != null ? String(st.recipientResponsible.id) : null,
+                  az: String(st.fileReference || "").trim() || null,
+                });
+              }
+              if (arr.length < 1000) break;
+            }
+            for (let offset = 0; offset < 20000; offset += 1000) {
+              const page = await kilankaPost(env, "contacts", { id: 1, recName: 1, $limit: 1000, $offset: offset });
+              const arr = Array.isArray(page) ? page : [];
+              for (const k of arr) if (k?.recName) kontaktNamen.set(String(k.id), String(k.recName));
+              if (arr.length < 1000) break;
+            }
+          }
+        } catch (e) {
+          // Nachtragen ist Komfort: bei Fehler mit den Rechnungsdaten weiterarbeiten
+          console.warn("OP-Liste: Rechnungssätze/Kontakte nicht abrufbar:", e.message);
         }
         const rechnungen = [];
         for (const inv of alle) {
@@ -4053,9 +4086,19 @@ export default {
             empfaenger: inv.recipient?.recName || inv.recipientName || null,
             empfaengerId: inv.recipient?.id != null ? String(inv.recipient.id) : null,
             empfaengerMail: (inv.recipient?.id != null && kontaktMails.get(String(inv.recipient.id))) || null,
-            ansprechpartner: inv.recipientResponsible?.recName || null,
-            ansprechpartnerMail: (inv.recipientResponsible?.id != null && kontaktMails.get(String(inv.recipientResponsible.id))) || null,
-            aktenzeichen: inv.fileReference || null,
+            ...(() => {
+              const satz = satzInfo.get(String(inv.invoiceSet?.id ?? "")) || {};
+              const apId = inv.recipientResponsible?.id != null ? String(inv.recipientResponsible.id) : satz.ap;
+              const apName = inv.recipientResponsible?.recName || (satz.ap && kontaktNamen.get(satz.ap)) || null;
+              const az = inv.fileReference || satz.az || null;
+              return {
+                ansprechpartner: apName,
+                ansprechpartnerMail: (apId && kontaktMails.get(apId)) || null,
+                aktenzeichen: az,
+                // true = nicht auf der Rechnung, aus dem aktuellen Rechnungssatz ergänzt
+                nachgetragen: (!inv.recipientResponsible && !!apName) || (!inv.fileReference && !!az),
+              };
+            })(),
             summe: Number(unwrap(inv.totalWithTax)) || 0,
             gezahlt: Number(unwrap(inv.depositsTotal)) || 0,
             saldo: Number(unwrap(inv.balance)) || 0,

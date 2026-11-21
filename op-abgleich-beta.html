@@ -692,7 +692,7 @@ function malUnbezahlt(neu){
       + sorted.map(x => {
           const ueber = x.re.faellig && x.re.faellig < heute;
           return `<tr><td>${reNr(x.re.nummer)}</td><td>${klientZelle(x.re)}</td>
-            <td>${esc(sauber(x.re.empfaenger))}</td><td>${esc(x.re.ansprechpartner||'–')}</td><td class="num">${eur(x.re.saldo)}</td>
+            <td>${esc(sauber(x.re.empfaenger))}</td><td>${esc(x.re.ansprechpartner||'–')}${x.re.nachgetragen?' <span class="tag archiv" title="Steht nicht auf der Rechnung — aus dem aktuellen Rechnungssatz in Kilanka ergänzt">nachgetragen</span>':''}</td><td class="num">${eur(x.re.saldo)}</td>
             <td>${esc(deDatum(x.re.faellig)||"–")} ${ueber?'<span class="tag mahn">überfällig</span>':''}</td></tr>`;
         }).join('')
       + `<tr class="summenzeile"><td colspan="4">Summe</td><td class="num">${eur(sumU)}</td><td></td></tr>`;
